@@ -103,8 +103,13 @@ class RunnerSupervisor:
                     self._record_error_locked(str(exc))
                     raise
 
-            self._record_error_locked("runner unavailable after restart")
-            raise RunnerUnavailableError("runner unavailable after restart") from last_unavailable
+            final_message = (
+                str(last_unavailable)
+                if last_unavailable is not None
+                else "runner unavailable after restart"
+            )
+            self._record_error_locked(final_message)
+            raise RunnerUnavailableError(final_message) from last_unavailable
 
     def get_status(self, *, family: str | None = None) -> dict[str, Any]:
         """Return current runner process status without starting the process."""

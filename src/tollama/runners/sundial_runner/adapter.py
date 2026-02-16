@@ -320,24 +320,25 @@ def generate_sundial_samples(
     num_samples: int,
     torch_module: Any,
 ) -> Any:
-    """Call Sundial generation with a single-series input tensor."""
+    """Run Sundial inference and return [batch, num_samples, horizon] samples."""
     inputs = _torch_tensor(torch_module=torch_module, values=[list(target_values)])
     inference_mode = getattr(torch_module, "inference_mode", None)
     context_manager = inference_mode() if callable(inference_mode) else nullcontext()
     with context_manager:
-        try:
-            return model.generate(inputs, max_new_tokens=horizon, num_samples=num_samples)
-        except TypeError:
-            try:
-                return model.generate(
-                    inputs=inputs,
-                    max_new_tokens=horizon,
-                    num_samples=num_samples,
-                )
-            except TypeError as exc:
-                raise AdapterInputError(
-                    "Sundial model.generate does not support max_new_tokens and num_samples",
-                ) from exc
+        output = _run_forward_inference(
+            model=model,
+            inputs=inputs,
+            horizon=horizon,
+            num_samples=num_samples,
+        )
+    logits = getattr(output, "logits", None)
+    if logits is not None:
+        return logits
+    if isinstance(output, dict) and "logits" in output:
+        return output["logits"]
+    if isinstance(output, (list, tuple)) and output:
+        return output[0]
+    raise AdapterInputError("Sundial forward output does not contain sample logits")
 
 
 def normalize_generated_samples(*, generated: Any, horizon: int) -> list[list[float]]:
@@ -442,7 +443,7 @@ def generate_future_timestamps(
         raise AdapterInputError("horizon must be greater than zero")
 
     parsed = pandas_module.to_datetime([last_timestamp], utc=True, errors="raise")
-    if not parsed:
+    if len(parsed) == 0:
         raise AdapterInputError("series timestamp parsing returned no values")
     start = parsed[0]
     try:
@@ -604,3 +605,53 @@ def _int_or_none(value: Any) -> int | None:
     if value <= 0:
         return None
     return value
+
+
+def _run_forward_inference(*, model: Any, inputs: Any, horizon: int, num_samples: int) -> Any:
+    """Call Sundial forward with progressively simpler signatures for compatibility."""
+    call_variants = (
+        {
+            "input_ids": inputs,
+            "return_dict": True,
+            "num_samples": num_samples,
+            "max_output_length": horizon,
+            "revin": True,
+            "use_cache": False,
+        },
+        {
+            "input_ids": inputs,
+            "return_dict": True,
+            "num_samples": num_samples,
+            "max_output_length": horizon,
+            "revin": True,
+        },
+        {
+            "input_ids": inputs,
+            "return_dict": True,
+            "num_samples": num_samples,
+            "max_output_length": horizon,
+        },
+    )
+
+    last_signature_error: TypeError | None = None
+    for kwargs in call_variants:
+        try:
+            return model(**kwargs)
+        except TypeError as exc:
+            if not _looks_like_signature_error(exc):
+                raise
+            last_signature_error = exc
+
+    raise AdapterInputError(
+        "Sundial model forward signature is incompatible with expected arguments "
+        "(input_ids, max_output_length, num_samples)",
+    ) from last_signature_error
+
+
+def _looks_like_signature_error(exc: TypeError) -> bool:
+    message = str(exc)
+    return (
+        "unexpected keyword argument" in message
+        or "positional arguments but" in message
+        or "required positional argument" in message
+    )

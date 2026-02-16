@@ -317,7 +317,27 @@ def test_runner_manager_get_all_statuses_does_not_start_missing_supervisors(monk
         "tollama.runners.torch_runner.main",
     ]
     assert by_family["torch"]["installed"] is True
+    assert by_family["timesfm"]["command"] == [
+        sys.executable,
+        "-m",
+        "tollama.runners.timesfm_runner.main",
+    ]
     assert by_family["timesfm"]["running"] is False
+    assert by_family["uni2ts"]["command"] == [
+        sys.executable,
+        "-m",
+        "tollama.runners.uni2ts_runner.main",
+    ]
     assert by_family["uni2ts"]["running"] is False
+    assert by_family["sundial"]["command"] == [
+        sys.executable,
+        "-m",
+        "tollama.runners.sundial_runner.main",
+    ]
     assert by_family["sundial"]["running"] is False
+    assert by_family["toto"]["command"] == [
+        sys.executable,
+        "-m",
+        "tollama.runners.toto_runner.main",
+    ]
     assert by_family["toto"]["running"] is False

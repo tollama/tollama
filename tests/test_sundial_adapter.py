@@ -8,6 +8,8 @@ from datetime import UTC, datetime, timedelta
 from tollama.runners.sundial_runner.adapter import (
     compute_sample_statistics,
     generate_future_timestamps,
+    generate_sundial_samples,
+    normalize_generated_samples,
     truncate_target_to_max_context,
 )
 
@@ -24,6 +26,28 @@ class _FakePandas:
         if freq != "D":
             raise ValueError("unsupported frequency in fake pandas")
         return [start + timedelta(days=index) for index in range(periods)]
+
+
+class _AmbiguousDatetimeIndex:
+    def __init__(self, values):  # noqa: ANN001
+        self._values = list(values)
+
+    def __len__(self) -> int:
+        return len(self._values)
+
+    def __getitem__(self, index: int):  # noqa: ANN001
+        return self._values[index]
+
+    def __bool__(self) -> bool:
+        raise ValueError("ambiguous")
+
+
+class _AmbiguousPandas(_FakePandas):
+    @staticmethod
+    def to_datetime(values, *, utc: bool, errors: str):  # noqa: ANN001
+        assert utc is True
+        assert errors == "raise"
+        return _AmbiguousDatetimeIndex([datetime.fromisoformat(values[0]).replace(tzinfo=UTC)])
 
 
 class _FakeTensor:
@@ -76,6 +100,47 @@ class _FakeTorch:
         return _FakeTensor(result)
 
 
+class _FakeTorchInference(_FakeTorch):
+    @staticmethod
+    def as_tensor(values, dtype=None):  # noqa: ANN001
+        del dtype
+        return _FakeTensor(values)
+
+    @staticmethod
+    def inference_mode():
+        class _Ctx:
+            def __enter__(self):  # noqa: ANN001
+                return None
+
+            def __exit__(self, exc_type, exc, tb):  # noqa: ANN001
+                del exc_type, exc, tb
+                return False
+
+        return _Ctx()
+
+
+class _ForwardOutput:
+    def __init__(self, logits):  # noqa: ANN001
+        self.logits = logits
+
+
+class _ForwardModel:
+    def __call__(self, **kwargs):  # noqa: ANN003
+        assert kwargs["max_output_length"] == 3
+        assert kwargs["num_samples"] == 2
+        assert kwargs.get("use_cache") is False
+        return _ForwardOutput(_FakeTensor([[[10.0, 11.0, 12.0], [20.0, 21.0, 22.0]]]))
+
+
+class _FallbackForwardModel:
+    def __call__(self, **kwargs):  # noqa: ANN003
+        if "use_cache" in kwargs:
+            raise TypeError("got an unexpected keyword argument 'use_cache'")
+        if "revin" in kwargs:
+            raise TypeError("got an unexpected keyword argument 'revin'")
+        return _ForwardOutput(_FakeTensor([[[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]]))
+
+
 def test_truncate_target_to_max_context_keeps_latest_window() -> None:
     result = truncate_target_to_max_context([1, 2, 3, 4, 5], 3)
     assert result == [3.0, 4.0, 5.0]
@@ -114,6 +179,43 @@ def test_generate_future_timestamps_daily_frequency() -> None:
         "2025-02-02T00:00:00Z",
         "2025-02-03T00:00:00Z",
     ]
+
+
+def test_generate_future_timestamps_does_not_require_truthy_datetime_index() -> None:
+    future = generate_future_timestamps(
+        last_timestamp="2025-01-31",
+        freq="D",
+        horizon=2,
+        pandas_module=_AmbiguousPandas(),
+    )
+    assert future == [
+        "2025-02-01T00:00:00Z",
+        "2025-02-02T00:00:00Z",
+    ]
+
+
+def test_generate_sundial_samples_uses_forward_logits() -> None:
+    generated = generate_sundial_samples(
+        model=_ForwardModel(),
+        target_values=[1.0, 2.0, 3.0, 4.0],
+        horizon=3,
+        num_samples=2,
+        torch_module=_FakeTorchInference(),
+    )
+    rows = normalize_generated_samples(generated=generated, horizon=3)
+    assert rows == [[10.0, 11.0, 12.0], [20.0, 21.0, 22.0]]
+
+
+def test_generate_sundial_samples_retries_with_simpler_forward_signature() -> None:
+    generated = generate_sundial_samples(
+        model=_FallbackForwardModel(),
+        target_values=[1.0, 2.0, 3.0, 4.0],
+        horizon=3,
+        num_samples=2,
+        torch_module=_FakeTorchInference(),
+    )
+    rows = normalize_generated_samples(generated=generated, horizon=3)
+    assert rows == [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]
 
 
 def _deep_copy(value):  # noqa: ANN001

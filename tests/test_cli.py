@@ -10,7 +10,7 @@ import pytest
 from typer.testing import CliRunner
 
 from tollama.cli.client import DaemonHTTPError
-from tollama.cli.main import _resolve_default_request_path, app
+from tollama.cli.main import _RUN_TIMEOUT_SECONDS, _resolve_default_request_path, app
 
 
 def _sample_request_payload() -> dict[str, object]:
@@ -251,7 +251,7 @@ def test_run_auto_pulls_when_model_not_installed(monkeypatch, tmp_path: Path) ->
     )
 
     assert result.exit_code == 0
-    assert captured["timeout"] == 120.0
+    assert captured["timeout"] == _RUN_TIMEOUT_SECONDS
     assert captured["pull"] == {"name": "mock", "stream": False, "accept_license": False}
     assert captured["forecast"]["stream"] is False
     assert captured["forecast"]["payload"]["model"] == "mock"
@@ -451,7 +451,7 @@ def test_run_help_mentions_input_and_stream_flags() -> None:
     assert "stdin" in result.stdout
 
 
-def test_run_warns_for_uni2ts_models_on_python_313_plus(monkeypatch, tmp_path: Path) -> None:
+def test_run_warns_for_uni2ts_models_on_python_312_plus(monkeypatch, tmp_path: Path) -> None:
     request_path = tmp_path / "request.json"
     request_path.write_text(json.dumps(_sample_request_payload()), encoding="utf-8")
 
@@ -472,7 +472,7 @@ def test_run_warns_for_uni2ts_models_on_python_313_plus(monkeypatch, tmp_path: P
             return {"model": payload["model"], "forecasts": []}
 
     monkeypatch.setattr("tollama.cli.main.TollamaClient", _FakeClient)
-    monkeypatch.setattr("tollama.cli.main._is_python_313_or_newer", lambda: True)
+    monkeypatch.setattr("tollama.cli.main._is_python_312_or_newer", lambda: True)
     monkeypatch.setattr(
         "tollama.cli.main.get_model_spec",
         lambda _: SimpleNamespace(family="uni2ts"),
@@ -486,7 +486,7 @@ def test_run_warns_for_uni2ts_models_on_python_313_plus(monkeypatch, tmp_path: P
 
     assert result.exit_code == 0
     assert (
-        "warning: Uni2TS/Moirai dependencies may fail to install on Python 3.13+"
+        "warning: Uni2TS/Moirai dependencies may fail to install on Python 3.12+"
         in result.stdout
     )
 
@@ -522,3 +522,25 @@ def test_resolve_default_request_path_uses_implementation_aliases(
     resolved = _resolve_default_request_path(model)
 
     assert resolved == expected
+
+
+def test_resolve_default_request_path_prefers_specific_moirai_alias(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    examples_dir = tmp_path / "examples"
+    examples_dir.mkdir(parents=True, exist_ok=True)
+    preferred = examples_dir / "moirai_2p0_request.json"
+    fallback = examples_dir / "moirai_request.json"
+    preferred.write_text("{}", encoding="utf-8")
+    fallback.write_text("{}", encoding="utf-8")
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr("tollama.cli.main._project_root_from_module", lambda: None)
+    monkeypatch.setattr(
+        "tollama.cli.main.get_model_spec",
+        lambda _: SimpleNamespace(metadata={"implementation": "moirai_2p0"}),
+    )
+
+    resolved = _resolve_default_request_path("moirai-2.0-R-small")
+    assert resolved == preferred

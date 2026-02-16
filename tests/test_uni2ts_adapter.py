@@ -7,8 +7,9 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from tollama.core.schemas import SeriesInput
+from tollama.core.schemas import ForecastRequest, SeriesInput
 from tollama.runners.uni2ts_runner.adapter import (
+    MoiraiAdapter,
     build_pandas_dataset,
     build_quantile_payload,
     generate_future_timestamps,
@@ -73,6 +74,25 @@ def _series(length: int) -> SeriesInput:
             "freq": "D",
             "timestamps": [(start + timedelta(days=i)).date().isoformat() for i in range(length)],
             "target": [100.0 + float(i) for i in range(length)],
+        },
+    )
+
+
+def _forecast_request(*, options: dict[str, object]) -> ForecastRequest:
+    return ForecastRequest.model_validate(
+        {
+            "model": "moirai-2.0-R-small",
+            "horizon": 2,
+            "quantiles": [0.1, 0.9],
+            "series": [
+                {
+                    "id": "s1",
+                    "freq": "D",
+                    "timestamps": ["2025-01-01", "2025-01-02", "2025-01-03"],
+                    "target": [10.0, 11.0, 12.0],
+                }
+            ],
+            "options": options,
         },
     )
 
@@ -168,3 +188,15 @@ def test_build_pandas_dataset_maps_dynamic_and_past_dynamic_covariates() -> None
     assert len(frame["target"]) == 5
     assert frame["promo"] == [0.0, 1.0, 0.0, 1.0, 1.0]
     assert frame["temperature"][:3] == [20.0, 21.0, 22.0]
+
+
+def test_forecast_rejects_unsupported_options_before_model_loading(monkeypatch) -> None:
+    adapter = MoiraiAdapter()
+    monkeypatch.setattr(
+        adapter,
+        "_resolve_dependencies",
+        lambda: (_ for _ in ()).throw(AssertionError("dependency resolution should not run")),
+    )
+
+    with pytest.raises(AdapterInputError, match="num_samples"):
+        adapter.forecast(_forecast_request(options={"num_samples": 20}))

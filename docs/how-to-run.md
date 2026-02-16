@@ -17,6 +17,9 @@ This guide targets the current TSFM-capable registry entries in `model-registry/
 | `sundial-base-128m` | `sundial` | `thuml/sundial-base-128m` | `main` | `apache-2.0` | No | `runner_sundial` |
 | `toto-open-base-1.0` | `toto` | `Datadog/Toto-Open-Base-1.0` | `main` | `apache-2.0` | No | `runner_toto` |
 
+> [!NOTE]
+> `timesfm` models may take several minutes to compile on the first run. The default timeout has been increased to 5 minutes to accommodate this, but slower machines may require even more time.
+
 Sundial is target-only in the current runner; do not include covariates in Sundial requests.
 Toto supports target + past numeric covariates; known-future/static/categorical covariates are unsupported.
 
@@ -36,7 +39,8 @@ Recommended:
 - A dedicated virtual environment
 - A Hugging Face token (`TOLLAMA_HF_TOKEN`) for gated/private models
 - Preinstalled PyTorch wheel for your platform if you need GPU acceleration
-- Python `3.11` or `3.12` for Uni2TS/Moirai (`runner_uni2ts`) installs
+- Python `3.11` for one environment covering all model families
+- Python `3.12+` may fail to resolve/install `gluonts` required by `runner_uni2ts` + `runner_toto`
 
 ## Dependency Matrix
 
@@ -60,7 +64,7 @@ Optional extras:
 From repository root:
 
 ```bash
-python -m venv .venv
+python3.11 -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip setuptools wheel
 ```
@@ -77,13 +81,40 @@ If you only need runtime (no lint/test tooling):
 python -m pip install -e ".[runner_torch,runner_timesfm,runner_uni2ts,runner_sundial,runner_toto]"
 ```
 
+## Single-Environment Checklist (Recommended)
+
+Use this checklist to avoid mixed Conda/system/venv runners:
+
+1. Create `.venv` with Python `3.11` and activate it.
+2. Install all required extras in that same environment.
+3. Verify all command paths come from `.venv`.
+4. Start daemon and CLI from `.venv` binaries.
+
+```bash
+python3.11 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip setuptools wheel
+python -m pip install -e ".[dev,runner_torch,runner_timesfm,runner_uni2ts,runner_sundial,runner_toto]"
+
+which python
+which tollama
+which tollama-runner-uni2ts
+# each should be under .../tollama/.venv/bin/
+
+./.venv/bin/tollama serve
+./.venv/bin/tollama run moirai-2.0-R-small --accept-license --input examples/moirai_2p0_request.json --no-stream --timeout 600
+
+# optional: verify daemon reports runner commands using the same interpreter
+curl -s http://127.0.0.1:11435/api/info | rg '"command"|uni2ts|timesfm|sundial|toto'
+```
+
 ## Environment Variables and Paths
 
 Important variables:
 
 - `TOLLAMA_HOME`: overrides default state root (`~/.tollama`)
 - `TOLLAMA_HOST`: bind host and port in `host:port` format for daemon process
-- `TOLLAMA_FORECAST_TIMEOUT_SECONDS`: daemon runner-call timeout for forecast/unload (default `120`)
+- `TOLLAMA_FORECAST_TIMEOUT_SECONDS`: daemon runner-call timeout for forecast/unload (default `300`)
 - `TOLLAMA_HF_TOKEN`: Hugging Face token used by pull operations
 - `HTTP_PROXY`, `HTTPS_PROXY`, `NO_PROXY`: optional proxy settings for pulls
 
@@ -185,7 +216,7 @@ Run one forecast per family:
 tollama run chronos2 --input examples/chronos2_request.json --no-stream
 tollama run granite-ttm-r2 --input examples/granite_ttm_request.json --no-stream
 tollama run timesfm-2.5-200m --input examples/timesfm_2p5_request.json --no-stream
-tollama run moirai-2.0-R-small --input examples/moirai_request.json --no-stream
+tollama run moirai-2.0-R-small --input examples/moirai_2p0_request.json --no-stream
 tollama run sundial-base-128m --input examples/sundial_request.json --no-stream
 tollama run toto-open-base-1.0 --input examples/toto_request.json --no-stream
 ```
@@ -225,8 +256,14 @@ Missing runner dependency errors:
   - `python -m pip install -e ".[runner_uni2ts]"`
   - `python -m pip install -e ".[runner_sundial]"`
   - `python -m pip install -e ".[runner_toto]"`
-- If `runner_uni2ts` install fails on Python 3.13 (build backend/dependency issues),
-  recreate the venv with Python 3.11 or 3.12 and reinstall.
+- If `runner_uni2ts` install fails on Python 3.12+ (build backend/dependency issues),
+  recreate the venv with Python 3.11 and reinstall.
+
+Dependency resolver says `gluonts` has no matching distribution / install conflict:
+
+- This usually means the environment is Python `3.12+`.
+- Recreate the virtual environment with Python `3.11` and reinstall extras.
+
 
 Offline/local-files-only pull failures:
 
@@ -243,12 +280,23 @@ Daemon unreachable:
 - Confirm host/port (`http://localhost:11435` by default).
 - Use `tollama info --remote` to force daemon diagnostics.
 
+Runner unavailable after restart:
+
+- Most commonly caused by mixed environments (for example daemon in one Python, runner scripts in another).
+- Recreate one `.venv` with Python 3.11, reinstall all runner extras, and launch with `./.venv/bin/tollama`.
+- Also restart the daemon after dependency upgrades so stale runner subprocesses are not reused.
+
+Sundial `shape '[-1, 2]' is invalid for input of size 1`:
+
+- Use latest `tollama` code and restart `tollama serve` (this was caused by legacy generation-path compatibility).
+- Verify the running daemon is from the same `.venv` as your CLI: `which python`, `which tollama`.
+
 Forecast timeout (`failed: timed out` / runner timeout):
 
 - Increase CLI timeout for slower first-run inference:
-  - `tollama run moirai-2.0-R-small --input examples/moirai_request.json --no-stream --timeout 120`
+  - `tollama run moirai-2.0-R-small --input examples/moirai_2p0_request.json --no-stream --timeout 600`
 - If needed, increase daemon runner timeout:
-  - `export TOLLAMA_FORECAST_TIMEOUT_SECONDS=240`
+  - `export TOLLAMA_FORECAST_TIMEOUT_SECONDS=600`
   - restart `tollama serve`
 
 ## Development Checks

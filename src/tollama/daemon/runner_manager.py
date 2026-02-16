@@ -14,10 +14,10 @@ from .supervisor import RunnerCallError, RunnerSupervisor, RunnerUnavailableErro
 DEFAULT_RUNNER_COMMANDS: dict[str, tuple[str, ...]] = {
     "mock": (sys.executable, "-m", "tollama.runners.mock.main"),
     "torch": (sys.executable, "-m", "tollama.runners.torch_runner.main"),
-    "timesfm": ("tollama-runner-timesfm",),
-    "uni2ts": ("tollama-runner-uni2ts",),
-    "sundial": ("tollama-runner-sundial",),
-    "toto": ("tollama-runner-toto",),
+    "timesfm": (sys.executable, "-m", "tollama.runners.timesfm_runner.main"),
+    "uni2ts": (sys.executable, "-m", "tollama.runners.uni2ts_runner.main"),
+    "sundial": (sys.executable, "-m", "tollama.runners.sundial_runner.main"),
+    "toto": (sys.executable, "-m", "tollama.runners.toto_runner.main"),
 }
 
 FAMILY_EXTRAS: dict[str, str] = {

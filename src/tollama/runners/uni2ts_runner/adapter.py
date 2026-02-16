@@ -100,6 +100,11 @@ class MoiraiAdapter:
         model_metadata: dict[str, Any] | None = None,
     ) -> ForecastResponse:
         """Generate probabilistic Moirai forecasts mapped to canonical response schema."""
+        if "num_samples" in request.options:
+            raise AdapterInputError("moirai-2.0 does not support 'num_samples' execution option")
+        if "patch_size" in request.options:
+            raise AdapterInputError("moirai-2.0 does not support 'patch_size' execution option")
+
         runtime = _resolve_runtime_config(
             model_name=request.model,
             model_source=model_source,
@@ -107,11 +112,6 @@ class MoiraiAdapter:
         )
         dependencies = self._resolve_dependencies()
         module = self._get_or_load_module(runtime=runtime, model_local_dir=model_local_dir)
-
-        if "num_samples" in request.options:
-            raise AdapterInputError("moirai-2.0 does not support 'num_samples' execution option")
-        if "patch_size" in request.options:
-            raise AdapterInputError("moirai-2.0 does not support 'patch_size' execution option")
 
         context_length = resolve_context_length(
             option_value=request.options.get("context_length"),

@@ -112,7 +112,7 @@ def test_runner_supervisor_records_last_error_and_restarts(monkeypatch) -> None:
     assert status["restarts"] == 2
     assert status["last_used_at"] is not None
     assert status["last_error"] == {
-        "message": "runner unavailable after restart",
+        "message": "boom",
         "at": status["last_error"]["at"],
     }
     assert isinstance(status["last_error"]["at"], str)

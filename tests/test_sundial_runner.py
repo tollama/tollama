@@ -42,6 +42,19 @@ class _MissingDependencyAdapter(_NoopAdapter):
         )
 
 
+class _CrashAdapter(_NoopAdapter):
+    def forecast(
+        self,
+        request,
+        *,
+        model_local_dir: str | None = None,
+        model_source: dict[str, object] | None = None,
+        model_metadata: dict[str, object] | None = None,
+    ):
+        del request, model_local_dir, model_source, model_metadata
+        raise RuntimeError("unexpected crash")
+
+
 def test_sundial_runner_hello_reports_supported_family() -> None:
     response = handle_request_line(
         json.dumps({"id": "req-1", "method": "hello", "params": {}}),
@@ -92,6 +105,36 @@ def test_sundial_runner_forecast_returns_dependency_missing_error() -> None:
     assert payload["id"] == "req-3"
     assert payload["error"]["code"] == "DEPENDENCY_MISSING"
     assert "runner_sundial" in payload["error"]["message"]
+
+
+def test_sundial_runner_forecast_maps_unexpected_exceptions() -> None:
+    response = handle_request_line(
+        json.dumps(
+            {
+                "id": "req-3b",
+                "method": "forecast",
+                "params": {
+                    "model": "sundial-base-128m",
+                    "horizon": 2,
+                    "series": [
+                        {
+                            "id": "s1",
+                            "freq": "D",
+                            "timestamps": ["2025-01-01", "2025-01-02"],
+                            "target": [1.0, 2.0],
+                        }
+                    ],
+                    "quantiles": [0.1, 0.9],
+                    "options": {},
+                },
+            },
+        ),
+        _CrashAdapter(),
+    )
+    payload = response.model_dump(mode="json", exclude_none=True)
+    assert payload["id"] == "req-3b"
+    assert payload["error"]["code"] == "FORECAST_ERROR"
+    assert payload["error"]["message"] == "RuntimeError: unexpected crash"
 
 
 def test_sundial_runner_unload_calls_adapter() -> None:

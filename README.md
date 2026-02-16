@@ -17,7 +17,7 @@ This repository provides a structured forecasting stack:
 ## Quickstart
 
 ```bash
-python -m venv .venv
+python3.11 -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip
 python -m pip install -e ".[dev]"
@@ -45,6 +45,24 @@ ruff check .
 pytest -q
 ```
 
+For one environment that supports all current model families, use Python `3.11` and install
+all runner extras into the same `.venv`.
+
+```bash
+python3.11 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip setuptools wheel
+python -m pip install -e ".[dev,runner_torch,runner_timesfm,runner_uni2ts,runner_sundial,runner_toto]"
+
+which python
+which tollama
+which tollama-runner-uni2ts
+# all paths should resolve under .../tollama/.venv/bin/
+# daemon now launches all runner families with the same Python interpreter (`sys.executable`)
+
+./.venv/bin/tollama serve
+```
+
 For a full setup/run walkthrough with dependency breakdown and commands to install every TSFM model in the registry, see `docs/how-to-run.md`.
 
 ## Daemon Base URL and Host Config
@@ -54,7 +72,7 @@ For a full setup/run walkthrough with dependency breakdown and commands to insta
 - Default daemon port remains `11435`.
 - Configure bind host and port with `TOLLAMA_HOST` in `host:port` format.
   - Example: `TOLLAMA_HOST=0.0.0.0:11435 tollamad`
-- Override daemon runner forecast timeout with `TOLLAMA_FORECAST_TIMEOUT_SECONDS` (default `120`).
+- Override daemon runner forecast timeout with `TOLLAMA_FORECAST_TIMEOUT_SECONDS` (default `300`).
 - Local tollama state lives under `~/.tollama` by default.
   - Override with `TOLLAMA_HOME=/custom/path` (config, models, runtimes all use this base).
 - Primary lifecycle endpoints are under `/api/*`.
@@ -220,7 +238,7 @@ curl -s http://localhost:11435/api/forecast \
 # install optional Uni2TS runner dependencies
 python -m pip install -e ".[dev,runner_uni2ts]"
 # note: install a compatible torch build first for your platform when needed
-# note: Python 3.13+ may fail to build Uni2TS dependencies; prefer Python 3.11/3.12
+# note: Python 3.12+ may fail to build Uni2TS dependencies; prefer Python 3.11
 
 # run daemon (default http://127.0.0.1:11435)
 tollama serve
@@ -229,15 +247,15 @@ tollama serve
 tollama pull moirai-2.0-R-small --accept-license
 
 # run forecast
-tollama run moirai-2.0-R-small --input examples/moirai_request.json --no-stream
+tollama run moirai-2.0-R-small --input examples/moirai_2p0_request.json --no-stream
 # if you hit timeout on first run, increase CLI timeout
-tollama run moirai-2.0-R-small --input examples/moirai_request.json --no-stream --timeout 120
+tollama run moirai-2.0-R-small --input examples/moirai_2p0_request.json --no-stream --timeout 120
 ```
 
 ```bash
 curl -s http://localhost:11435/api/forecast \
   -H 'content-type: application/json' \
-  -d @examples/moirai_request.json
+  -d @examples/moirai_2p0_request.json
 ```
 
 ## Sundial Forecasting (separate sundial runner family)
@@ -259,6 +277,9 @@ tollama pull sundial-base-128m
 # run forecast
 tollama run sundial-base-128m --input examples/sundial_request.json --no-stream
 ```
+
+If you upgraded dependencies or switched Python environments, restart `tollama serve`
+before re-running Sundial so the daemon does not reuse stale runner subprocesses.
 
 ```bash
 curl -s http://localhost:11435/api/forecast \

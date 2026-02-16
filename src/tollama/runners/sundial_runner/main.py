@@ -159,6 +159,12 @@ def _handle_forecast(request: ProtocolRequest, adapter: SundialAdapter) -> Proto
             code="FORECAST_ERROR",
             message=str(exc),
         )
+    except Exception as exc:  # noqa: BLE001
+        return _error_response(
+            request.id,
+            code="FORECAST_ERROR",
+            message=f"{type(exc).__name__}: {exc}",
+        )
 
     return ProtocolResponse(
         id=request.id,

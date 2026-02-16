@@ -46,10 +46,10 @@ _BOOL_CONFIG_KEYS = {
 _INT_CONFIG_KEYS = {"pull.max_workers"}
 
 _UNI2TS_PYTHON_WARNING = (
-    "Uni2TS/Moirai dependencies may fail to install on Python 3.13+; "
-    "use Python 3.11 or 3.12 when running model family 'uni2ts'"
+    "Uni2TS/Moirai dependencies may fail to install on Python 3.12+; "
+    "use Python 3.11 when running model family 'uni2ts'"
 )
-_RUN_TIMEOUT_SECONDS = 120.0
+_RUN_TIMEOUT_SECONDS = 300.0
 
 
 @app.command("serve")
@@ -411,7 +411,7 @@ def run(
 
 
 def _emit_uni2ts_python_runtime_warning(model: str) -> None:
-    if not _is_python_313_or_newer():
+    if not _is_python_312_or_newer():
         return
 
     try:
@@ -423,8 +423,8 @@ def _emit_uni2ts_python_runtime_warning(model: str) -> None:
     typer.echo(f"warning: {_UNI2TS_PYTHON_WARNING}", err=True)
 
 
-def _is_python_313_or_newer() -> bool:
-    return (sys.version_info.major, sys.version_info.minor) >= (3, 13)
+def _is_python_312_or_newer() -> bool:
+    return (sys.version_info.major, sys.version_info.minor) >= (3, 12)
 
 
 def _emit_result(result: dict[str, Any] | list[dict[str, Any]]) -> None:
