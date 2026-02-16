@@ -10,7 +10,9 @@ readme = "README.md"
 requires-python = ">=3.11"
 license = { file = "LICENSE" }
 authors = [{ name = "tollama contributors" }]
-dependencies = []
+dependencies = [
+  "pydantic>=2.0,<3.0",
+]
 
 [project.optional-dependencies]
 dev = [
