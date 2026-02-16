@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import shutil
 import threading
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
@@ -41,6 +42,40 @@ class RunnerManager:
         self._runner_configs = _build_runner_configs(runner_commands)
         self._supervisors: dict[str, RunnerSupervisor] = dict(supervisors or {})
         self._lock = threading.Lock()
+
+    def list_families(self) -> list[str]:
+        """List all configured runner families without starting runners."""
+        return list(self._runner_configs.keys())
+
+    def get_all_statuses(self) -> list[dict[str, Any]]:
+        """Return runner statuses for all families without starting runners."""
+        with self._lock:
+            runner_configs = dict(self._runner_configs)
+            supervisors = dict(self._supervisors)
+
+        statuses: list[dict[str, Any]] = []
+        for family in runner_configs:
+            supervisor = supervisors.get(family)
+            if supervisor is not None:
+                statuses.append(supervisor.get_status(family=family))
+                continue
+
+            command = list(runner_configs[family].command)
+            installed = bool(command) and shutil.which(command[0]) is not None
+            statuses.append(
+                {
+                    "family": family,
+                    "command": command,
+                    "installed": installed,
+                    "running": False,
+                    "pid": None,
+                    "started_at": None,
+                    "last_used_at": None,
+                    "restarts": 0,
+                    "last_error": None,
+                },
+            )
+        return statuses
 
     def call(
         self,

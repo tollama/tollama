@@ -163,6 +163,120 @@ def test_version_endpoint_returns_string_version() -> None:
     assert isinstance(body.get("version"), str)
 
 
+def test_api_info_returns_redacted_diagnostics(monkeypatch, tmp_path) -> None:
+    paths = TollamaPaths(base_dir=tmp_path / ".tollama")
+    monkeypatch.setenv("TOLLAMA_HOME", str(paths.base_dir))
+    monkeypatch.setenv("HTTP_PROXY", "http://alice:secret@proxy.internal:3128")
+    monkeypatch.setenv("TOLLAMA_HF_TOKEN", "top-secret-token")
+
+    config_path = paths.config_path
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    config_path.write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "pull": {
+                    "offline": True,
+                    "http_proxy": "http://bob:hunter2@proxy.config:8080",
+                    "token": "config-token",
+                },
+            },
+        ),
+        encoding="utf-8",
+    )
+
+    manifest = {
+        "name": "dummy",
+        "family": "mock",
+        "resolved": {"commit_sha": "local", "snapshot_path": None},
+        "size_bytes": 7,
+        "pulled_at": "2026-02-16T00:00:00Z",
+        "installed_at": "2026-02-16T00:00:00Z",
+    }
+    manifest_path = paths.manifest_path("dummy")
+    manifest_path.parent.mkdir(parents=True, exist_ok=True)
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    runner_statuses = [
+        {
+            "family": "mock",
+            "command": ["tollama-runner-mock"],
+            "installed": True,
+            "running": False,
+            "pid": None,
+            "started_at": None,
+            "last_used_at": None,
+            "restarts": 0,
+            "last_error": None,
+        },
+        {
+            "family": "torch",
+            "command": ["tollama-runner-torch"],
+            "installed": False,
+            "running": False,
+            "pid": None,
+            "started_at": None,
+            "last_used_at": None,
+            "restarts": 0,
+            "last_error": None,
+        },
+        {
+            "family": "timesfm",
+            "command": ["tollama-runner-timesfm"],
+            "installed": False,
+            "running": False,
+            "pid": None,
+            "started_at": None,
+            "last_used_at": None,
+            "restarts": 0,
+            "last_error": None,
+        },
+        {
+            "family": "uni2ts",
+            "command": ["tollama-runner-uni2ts"],
+            "installed": False,
+            "running": False,
+            "pid": None,
+            "started_at": None,
+            "last_used_at": None,
+            "restarts": 0,
+            "last_error": None,
+        },
+    ]
+
+    app = create_app()
+    monkeypatch.setattr(app.state.runner_manager, "get_all_statuses", lambda: runner_statuses)
+
+    with TestClient(app) as client:
+        response = client.get("/api/info")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert {
+        "daemon",
+        "paths",
+        "config",
+        "env",
+        "pull_defaults",
+        "models",
+        "runners",
+    } <= set(payload)
+
+    assert payload["paths"]["config_exists"] is True
+    assert payload["env"]["HTTP_PROXY"] == "http://***:***@proxy.internal:3128"
+    assert payload["config"]["pull"]["http_proxy"] == "http://***:***@proxy.config:8080"
+    assert payload["pull_defaults"]["http_proxy"]["value"] == "http://***:***@proxy.internal:3128"
+    assert payload["env"]["TOLLAMA_HF_TOKEN_present"] is True
+    assert "TOLLAMA_HF_TOKEN" not in payload["env"]
+    assert payload["models"]["installed"][0]["name"] == "dummy"
+    assert payload["runners"] == runner_statuses
+    assert isinstance(payload["daemon"]["uptime_seconds"], int)
+
+    serialized = json.dumps(payload, sort_keys=True)
+    assert "top-secret-token" not in serialized
+    assert "config-token" not in serialized
+
+
 def test_ollama_tags_and_show_endpoints_from_installed_manifest(monkeypatch, tmp_path) -> None:
     paths = TollamaPaths(base_dir=tmp_path / ".tollama")
     monkeypatch.setenv("TOLLAMA_HOME", str(paths.base_dir))

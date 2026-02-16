@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import select
+import shutil
 import subprocess
 import sys
 import threading
 from collections.abc import Sequence
+from datetime import UTC, datetime
 from typing import Any
 
 from tollama.core.protocol import (
@@ -50,6 +52,11 @@ class RunnerSupervisor:
         self._runner_command = list(runner_command or default_command)
         self._process: subprocess.Popen[str] | None = None
         self._lock = threading.Lock()
+        self._started_at: datetime | None = None
+        self._last_used_at: datetime | None = None
+        self._restarts = 0
+        self._last_error_message: str | None = None
+        self._last_error_at: datetime | None = None
 
     def start(self) -> None:
         """Start the runner process if it is not currently running."""
@@ -64,6 +71,7 @@ class RunnerSupervisor:
     def restart(self) -> None:
         """Restart the runner process."""
         with self._lock:
+            self._restarts += 1
             self._stop_locked()
             self._start_locked()
 
@@ -83,13 +91,53 @@ class RunnerSupervisor:
             last_unavailable: RunnerUnavailableError | None = None
             for _attempt in range(2):
                 process = self._ensure_running_locked()
+                self._last_used_at = datetime.now(UTC)
                 try:
                     return self._call_once_locked(process, request, timeout)
                 except RunnerUnavailableError as exc:
+                    self._record_error_locked(str(exc))
                     last_unavailable = exc
                     self._restart_locked_for_failure()
+                except (RunnerCallError, RunnerProtocolError) as exc:
+                    self._record_error_locked(str(exc))
+                    raise
 
+            self._record_error_locked("runner unavailable after restart")
             raise RunnerUnavailableError("runner unavailable after restart") from last_unavailable
+
+    def get_status(self, *, family: str | None = None) -> dict[str, Any]:
+        """Return current runner process status without starting the process."""
+        with self._lock:
+            process = self._process
+            if process is not None and process.poll() is not None:
+                self._clear_process_locked()
+                process = None
+
+            running = process is not None and process.poll() is None
+            pid = process.pid if running else None
+            started_at = _to_utc_iso(self._started_at) if running else None
+            last_used_at = _to_utc_iso(self._last_used_at)
+            command = list(self._runner_command)
+            installed = bool(command) and shutil.which(command[0]) is not None
+            if self._last_error_message is not None and self._last_error_at is not None:
+                last_error: dict[str, Any] | None = {
+                    "message": self._last_error_message,
+                    "at": _to_utc_iso(self._last_error_at),
+                }
+            else:
+                last_error = None
+
+            return {
+                "family": family,
+                "command": command,
+                "installed": installed,
+                "running": running,
+                "pid": pid,
+                "started_at": started_at,
+                "last_used_at": last_used_at,
+                "restarts": self._restarts,
+                "last_error": last_error,
+            }
 
     def _call_once_locked(
         self,
@@ -182,8 +230,11 @@ class RunnerSupervisor:
                 text=True,
                 bufsize=1,
             )
+            self._started_at = datetime.now(UTC)
         except OSError as exc:
             self._process = None
+            self._started_at = None
+            self._record_error_locked(f"failed to start runner: {exc}")
             raise RunnerUnavailableError(f"failed to start runner: {exc}") from exc
 
     def _stop_locked(self) -> None:
@@ -202,6 +253,7 @@ class RunnerSupervisor:
         self._clear_process_locked()
 
     def _restart_locked_for_failure(self) -> None:
+        self._restarts += 1
         self._stop_locked()
         self._start_locked()
 
@@ -215,6 +267,7 @@ class RunnerSupervisor:
                 stream.close()
 
         self._process = None
+        self._started_at = None
 
     def _dead_process_message(self, process: subprocess.Popen[str]) -> str:
         returncode = process.poll()
@@ -232,3 +285,14 @@ class RunnerSupervisor:
 
     def _new_request_id(self) -> str:
         return generate_message_id()
+
+    def _record_error_locked(self, message: str) -> None:
+        normalized = message.strip()
+        self._last_error_message = normalized if normalized else "runner error"
+        self._last_error_at = datetime.now(UTC)
+
+
+def _to_utc_iso(value: datetime | None) -> str | None:
+    if value is None:
+        return None
+    return value.astimezone(UTC).isoformat().replace("+00:00", "Z")

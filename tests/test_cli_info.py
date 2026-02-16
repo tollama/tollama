@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 import httpx
+import pytest
 from typer.testing import CliRunner
 
 from tollama.cli.info import collect_info
@@ -29,7 +30,7 @@ def _write_manifest(paths: TollamaPaths, *, name: str) -> None:
     manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
 
 
-def test_collect_info_with_daemon_unreachable_falls_back_to_local(
+def test_collect_info_auto_falls_back_to_local_when_api_info_unreachable(
     monkeypatch,
     tmp_path: Path,
 ) -> None:
@@ -48,52 +49,41 @@ def test_collect_info_with_daemon_unreachable_falls_back_to_local(
     )
     _write_manifest(paths, name="mock")
 
-    info = collect_info(base_url="http://127.0.0.1:1", paths=paths, timeout_s=0.1)
+    info = collect_info(base_url="http://127.0.0.1:1", paths=paths, timeout_s=0.1, mode="auto")
 
     assert info["daemon"]["reachable"] is False
-    assert info["filesystem"]["config"]["pull"]["offline"] is True
-    assert info["models"]["installed_source"] == "local"
+    assert info["config"]["pull"]["offline"] is True
     assert [item["name"] for item in info["models"]["installed"]] == ["mock"]
     assert info["models"]["loaded"] == []
+    assert info["client"]["source"] == "local"
 
 
-def test_collect_info_with_daemon_reachable_uses_daemon_models(monkeypatch, tmp_path: Path) -> None:
+def test_collect_info_remote_mode_uses_api_info_payload(monkeypatch, tmp_path: Path) -> None:
     paths = TollamaPaths(base_dir=tmp_path / ".tollama")
     monkeypatch.setenv("TOLLAMA_HOME", str(paths.base_dir))
 
+    remote_payload = {
+        "daemon": {
+            "version": "0.0.1",
+            "started_at": "2026-02-16T00:00:00Z",
+            "uptime_seconds": 20,
+            "host_binding": "127.0.0.1:11435",
+        },
+        "paths": {
+            "tollama_home": str(paths.base_dir),
+            "config_path": str(paths.config_path),
+            "config_exists": False,
+        },
+        "config": None,
+        "env": {"TOLLAMA_HF_TOKEN_present": False},
+        "pull_defaults": {"offline": {"value": False, "source": "default"}},
+        "models": {"installed": [{"name": "chronos2"}], "loaded": [{"model": "chronos2"}]},
+        "runners": [],
+    }
+
     def _handler(request: httpx.Request) -> httpx.Response:
-        if request.url.path == "/api/version":
-            return httpx.Response(200, json={"version": "0.0.1"})
-        if request.url.path == "/api/tags":
-            return httpx.Response(
-                200,
-                json={
-                    "models": [
-                        {
-                            "name": "chronos2",
-                            "model": "chronos2",
-                            "digest": "fake-digest",
-                            "size": 128,
-                            "modified_at": "2026-02-16T00:00:00Z",
-                            "details": {"family": "torch"},
-                        }
-                    ]
-                },
-            )
-        if request.url.path == "/api/ps":
-            return httpx.Response(
-                200,
-                json={
-                    "models": [
-                        {
-                            "name": "chronos2",
-                            "model": "chronos2",
-                            "expires_at": None,
-                            "details": {"family": "torch"},
-                        }
-                    ]
-                },
-            )
+        if request.url.path == "/api/info":
+            return httpx.Response(200, json=remote_payload)
         return httpx.Response(404, json={"detail": "not found"})
 
     transport = httpx.MockTransport(_handler)
@@ -103,13 +93,24 @@ def test_collect_info_with_daemon_reachable_uses_daemon_models(monkeypatch, tmp_
 
     monkeypatch.setattr("tollama.cli.info._make_http_client", _mock_client_factory)
 
-    info = collect_info(base_url="http://localhost:11435", paths=paths, timeout_s=0.2)
+    info = collect_info(
+        base_url="http://localhost:11435",
+        paths=paths,
+        timeout_s=0.2,
+        mode="remote",
+    )
 
     assert info["daemon"]["reachable"] is True
     assert info["daemon"]["version"] == "0.0.1"
-    assert info["models"]["installed_source"] == "daemon"
     assert [item["name"] for item in info["models"]["installed"]] == ["chronos2"]
     assert [item["model"] for item in info["models"]["loaded"]] == ["chronos2"]
+    assert info["client"]["source"] == "remote"
+
+
+def test_collect_info_remote_mode_raises_when_unreachable(tmp_path: Path) -> None:
+    paths = TollamaPaths(base_dir=tmp_path / ".tollama")
+    with pytest.raises(RuntimeError):
+        collect_info(base_url="http://127.0.0.1:1", paths=paths, timeout_s=0.1, mode="remote")
 
 
 def test_collect_info_never_exposes_token_value(monkeypatch, tmp_path: Path) -> None:
@@ -123,31 +124,40 @@ def test_collect_info_never_exposes_token_value(monkeypatch, tmp_path: Path) -> 
         encoding="utf-8",
     )
 
-    info = collect_info(base_url="http://127.0.0.1:1", paths=paths, timeout_s=0.1)
+    info = collect_info(base_url="http://127.0.0.1:1", paths=paths, timeout_s=0.1, mode="local")
     payload = json.dumps(info, sort_keys=True)
 
-    assert info["client"]["env"]["TOLLAMA_HF_TOKEN_present"] is True
+    assert info["env"]["TOLLAMA_HF_TOKEN_present"] is True
     assert "secret-token" not in payload
     assert "secret-from-config" not in payload
 
 
-def test_info_command_json_output(monkeypatch) -> None:
+def test_info_command_json_output_contains_collected_payload(monkeypatch) -> None:
     snapshot: dict[str, Any] = {
         "client": {
             "base_url": "http://localhost:11435",
             "api_base_url": "http://localhost:11435/api",
-            "env": {"TOLLAMA_HF_TOKEN_present": False},
+            "source": "remote",
+            "version": "0.1.0",
         },
-        "filesystem": {
+        "daemon": {
+            "version": "0.1.0",
+            "started_at": "2026-02-16T00:00:00Z",
+            "uptime_seconds": 10,
+            "host_binding": "127.0.0.1:11435",
+            "reachable": True,
+            "error": None,
+        },
+        "paths": {
             "tollama_home": "/tmp/tollama",
             "config_path": "/tmp/tollama/config.json",
             "config_exists": False,
-            "config": {"version": 1, "pull": {}, "daemon": {}},
-            "config_error": None,
         },
-        "daemon": {"reachable": False, "version": None, "error": "connection refused"},
+        "config": None,
+        "env": {"TOLLAMA_HF_TOKEN_present": False},
         "pull_defaults": {"offline": {"value": False, "source": "default"}},
-        "models": {"installed_source": "local", "installed": [], "loaded": []},
+        "models": {"installed": [], "loaded": []},
+        "runners": [],
     }
     monkeypatch.setattr("tollama.cli.main.collect_info", lambda **_: snapshot)
 
@@ -156,5 +166,49 @@ def test_info_command_json_output(monkeypatch) -> None:
 
     assert result.exit_code == 0
     parsed = json.loads(result.stdout)
-    assert parsed["client"]["base_url"] == "http://localhost:11435"
-    assert parsed["daemon"]["reachable"] is False
+    assert parsed["daemon"]["version"] == "0.1.0"
+    assert parsed["paths"]["tollama_home"] == "/tmp/tollama"
+
+
+def test_info_command_remote_flag_errors_when_daemon_unreachable(monkeypatch) -> None:
+    def _raise_error(**kwargs: Any) -> dict[str, Any]:
+        raise RuntimeError("connection refused")
+
+    monkeypatch.setattr("tollama.cli.main.collect_info", _raise_error)
+
+    runner = CliRunner()
+    result = runner.invoke(app, ["info", "--remote"])
+
+    assert result.exit_code == 1
+    assert "connection refused" in result.stdout
+
+
+def test_info_command_local_flag_forces_local_mode(monkeypatch) -> None:
+    captured: dict[str, Any] = {}
+
+    snapshot: dict[str, Any] = {
+        "client": {"base_url": "http://localhost:11435", "api_base_url": "", "source": "local"},
+        "daemon": {"reachable": False, "error": None},
+        "paths": {
+            "tollama_home": "/tmp",
+            "config_path": "/tmp/config.json",
+            "config_exists": False,
+        },
+        "config": None,
+        "env": {},
+        "pull_defaults": {},
+        "models": {"installed": [], "loaded": []},
+        "runners": [],
+    }
+
+    def _fake_collect_info(*, mode: str, **kwargs: Any) -> dict[str, Any]:
+        captured["mode"] = mode
+        return snapshot
+
+    monkeypatch.setattr("tollama.cli.main.collect_info", _fake_collect_info)
+
+    runner = CliRunner()
+    result = runner.invoke(app, ["info", "--local", "--json"])
+
+    assert result.exit_code == 0
+    assert captured["mode"] == "local"

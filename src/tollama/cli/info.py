@@ -2,136 +2,194 @@
 
 from __future__ import annotations
 
+import json
 import os
-from typing import Any
+from collections.abc import Mapping
+from typing import Any, Literal
 
 import httpx
 
-from tollama.core.config import ConfigFileError, load_config
+from tollama import __version__ as CLI_VERSION
+from tollama.core.config import ConfigFileError, TollamaConfig, load_config
+from tollama.core.pull_defaults import resolve_effective_pull_defaults
+from tollama.core.redact import redact_config_dict, redact_env_dict, redact_proxy_url
 from tollama.core.storage import TollamaPaths, list_installed
 
-_REDACTED_VALUE = "<redacted>"
-_SENSITIVE_KEY_TOKENS = ("token", "secret", "password", "authorization", "api_key", "apikey")
+InfoMode = Literal["auto", "local", "remote"]
+
+_INFO_ENV_KEYS = (
+    "TOLLAMA_HOME",
+    "TOLLAMA_HOST",
+    "HF_HOME",
+    "HF_HUB_OFFLINE",
+    "HTTP_PROXY",
+    "HTTPS_PROXY",
+    "NO_PROXY",
+)
+_TOKEN_ENV_KEYS = (
+    "TOLLAMA_HF_TOKEN",
+    "HF_TOKEN",
+    "HUGGINGFACE_HUB_TOKEN",
+    "HUGGING_FACE_HUB_TOKEN",
+    "HF_HUB_TOKEN",
+)
 
 
-def collect_info(base_url: str, paths: TollamaPaths, timeout_s: float = 2.0) -> dict[str, Any]:
+def collect_info(
+    base_url: str,
+    paths: TollamaPaths,
+    timeout_s: float = 2.0,
+    *,
+    mode: InfoMode = "auto",
+) -> dict[str, Any]:
     """Collect one diagnostics snapshot for `tollama info`."""
-    resolved_base_url = base_url.rstrip("/")
-    if not resolved_base_url:
-        resolved_base_url = base_url
-
-    client_env = _collect_env()
-    filesystem = _collect_filesystem(paths)
-    daemon, daemon_tags, daemon_loaded = _collect_daemon_state(
-        base_url=resolved_base_url,
-        timeout_s=timeout_s,
-    )
-
-    installed_source = "daemon"
-    installed_models = daemon_tags
-    if not daemon["reachable"] or daemon_tags is None:
-        installed_source = "local"
-        installed_models = _local_installed_models(paths)
-
-    loaded_models = daemon_loaded if daemon["reachable"] else []
-    pull_defaults = _effective_pull_defaults(
-        env=client_env,
-        config=filesystem.get("config"),
-    )
-
-    return {
-        "client": {
-            "base_url": resolved_base_url,
-            "api_base_url": f"{resolved_base_url}/api",
-            "env": client_env,
-        },
-        "filesystem": filesystem,
-        "daemon": daemon,
-        "pull_defaults": pull_defaults,
-        "models": {
-            "installed_source": installed_source,
-            "installed": installed_models,
-            "loaded": loaded_models,
-        },
-    }
-
-
-def _collect_env() -> dict[str, Any]:
-    return {
-        "TOLLAMA_HOST": _env_or_none("TOLLAMA_HOST"),
-        "TOLLAMA_HOME": _env_or_none("TOLLAMA_HOME"),
-        "HF_HOME": _env_or_none("HF_HOME"),
-        "HF_HUB_OFFLINE": _env_or_none("HF_HUB_OFFLINE"),
-        "HTTP_PROXY": _env_or_none("HTTP_PROXY"),
-        "HTTPS_PROXY": _env_or_none("HTTPS_PROXY"),
-        "NO_PROXY": _env_or_none("NO_PROXY"),
-        "TOLLAMA_HF_TOKEN_present": _env_or_none("TOLLAMA_HF_TOKEN") is not None,
-    }
-
-
-def _collect_filesystem(paths: TollamaPaths) -> dict[str, Any]:
-    config_path = paths.config_path
-    config_exists = config_path.exists()
-    filesystem: dict[str, Any] = {
-        "tollama_home": str(paths.base_dir),
-        "config_path": str(config_path),
-        "config_exists": config_exists,
-        "config": None,
-        "config_error": None,
-    }
+    resolved_base_url = base_url.rstrip("/") or base_url
+    if mode == "local":
+        return _collect_local_snapshot(
+            base_url=resolved_base_url,
+            paths=paths,
+            daemon_error=None,
+        )
 
     try:
-        config = load_config(paths)
-        filesystem["config"] = _redact_sensitive(config.model_dump(mode="json"))
-        return filesystem
-    except ConfigFileError:
-        filesystem["config_error"] = f"invalid config file: {config_path}"
-    except OSError as exc:
-        filesystem["config_error"] = f"unable to read config file {config_path}: {exc}"
+        remote_payload = _collect_remote_snapshot(base_url=resolved_base_url, timeout_s=timeout_s)
+    except Exception as exc:  # noqa: BLE001
+        if mode == "remote":
+            raise RuntimeError(str(exc)) from exc
+        return _collect_local_snapshot(
+            base_url=resolved_base_url,
+            paths=paths,
+            daemon_error=str(exc),
+        )
 
-    return filesystem
+    return _normalize_remote_snapshot(base_url=resolved_base_url, payload=remote_payload)
 
 
-def _collect_daemon_state(
+def _collect_remote_snapshot(*, base_url: str, timeout_s: float) -> dict[str, Any]:
+    with _make_http_client(base_url=base_url, timeout_s=timeout_s) as client:
+        return _get_json(client, "/api/info")
+
+
+def _normalize_remote_snapshot(*, base_url: str, payload: dict[str, Any]) -> dict[str, Any]:
+    snapshot = dict(payload)
+    daemon = snapshot.get("daemon")
+    daemon_payload = dict(daemon) if isinstance(daemon, dict) else {}
+    daemon_payload["reachable"] = True
+    daemon_payload["error"] = None
+    snapshot["daemon"] = daemon_payload
+
+    env_payload = snapshot.get("env")
+    if isinstance(env_payload, dict):
+        snapshot["env"] = redact_env_dict(env_payload)
+    else:
+        snapshot["env"] = {}
+
+    config_payload = snapshot.get("config")
+    if isinstance(config_payload, dict) and "error" not in config_payload:
+        snapshot["config"] = redact_config_dict(config_payload)
+
+    pull_defaults = snapshot.get("pull_defaults")
+    snapshot["pull_defaults"] = _redact_pull_defaults(pull_defaults)
+
+    snapshot["client"] = {
+        "base_url": base_url,
+        "api_base_url": f"{base_url}/api",
+        "version": CLI_VERSION,
+        "source": "remote",
+    }
+    return snapshot
+
+
+def _collect_local_snapshot(
     *,
     base_url: str,
-    timeout_s: float,
-) -> tuple[dict[str, Any], list[dict[str, Any]] | None, list[dict[str, Any]]]:
-    daemon_info: dict[str, Any] = {
-        "reachable": False,
-        "version": None,
-        "error": None,
+    paths: TollamaPaths,
+    daemon_error: str | None,
+) -> dict[str, Any]:
+    config_payload = _collect_redacted_config_payload(paths)
+    config_for_defaults = _load_config_or_default(paths)
+    return {
+        "daemon": {
+            "version": None,
+            "started_at": None,
+            "uptime_seconds": None,
+            "host_binding": None,
+            "reachable": False,
+            "error": daemon_error,
+        },
+        "paths": {
+            "tollama_home": str(paths.base_dir),
+            "config_path": str(paths.config_path),
+            "config_exists": paths.config_path.exists(),
+        },
+        "config": config_payload,
+        "env": _collect_env_payload(),
+        "pull_defaults": _collect_pull_defaults(config_for_defaults),
+        "models": {
+            "installed": _local_installed_models(paths),
+            "loaded": [],
+        },
+        "runners": [],
+        "client": {
+            "base_url": base_url,
+            "api_base_url": f"{base_url}/api",
+            "version": CLI_VERSION,
+            "source": "local",
+        },
     }
-    installed_models: list[dict[str, Any]] | None = None
-    loaded_models: list[dict[str, Any]] = []
+
+
+def _collect_redacted_config_payload(paths: TollamaPaths) -> dict[str, Any] | None:
+    config_path = paths.config_path
+    if not config_path.exists():
+        return None
 
     try:
-        with _make_http_client(base_url=base_url, timeout_s=timeout_s) as client:
-            version_payload = _get_json(client, "/api/version")
-            version_value = version_payload.get("version")
-            daemon_info["version"] = str(version_value) if version_value is not None else None
-            daemon_info["reachable"] = True
+        payload = json.loads(config_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        return {"error": f"invalid JSON in {config_path}: {exc.msg}"}
+    except OSError as exc:
+        return {"error": f"unable to read {config_path}: {exc}"}
 
-            try:
-                tags_payload = _get_json(client, "/api/tags")
-                installed_models = _models_from_daemon_tags(tags_payload)
-            except Exception as exc:  # noqa: BLE001
-                daemon_info["error"] = f"failed to read /api/tags: {exc}"
+    if not isinstance(payload, dict):
+        return {"error": f"invalid config in {config_path}: top-level JSON must be an object"}
+    return redact_config_dict(payload)
 
-            try:
-                ps_payload = _get_json(client, "/api/ps")
-                loaded_models = _models_from_daemon_ps(ps_payload)
-            except Exception as exc:  # noqa: BLE001
-                error_message = f"failed to read /api/ps: {exc}"
-                daemon_info["error"] = (
-                    f"{daemon_info['error']}; {error_message}"
-                    if daemon_info["error"]
-                    else error_message
-                )
-    except Exception as exc:  # noqa: BLE001
-        daemon_info["error"] = str(exc)
 
-    return daemon_info, installed_models, loaded_models
+def _load_config_or_default(paths: TollamaPaths) -> TollamaConfig:
+    try:
+        return load_config(paths)
+    except ConfigFileError:
+        return TollamaConfig()
+
+
+def _collect_env_payload() -> dict[str, Any]:
+    payload = {key: _env_or_none(key) for key in _INFO_ENV_KEYS}
+    for key in _TOKEN_ENV_KEYS:
+        payload[f"{key}_present"] = _env_or_none(key) is not None
+    return redact_env_dict(payload)
+
+
+def _collect_pull_defaults(config: TollamaConfig) -> dict[str, dict[str, Any]]:
+    defaults = resolve_effective_pull_defaults(env=os.environ, config=config)
+    return _redact_pull_defaults(defaults)
+
+
+def _redact_pull_defaults(payload: Any) -> dict[str, dict[str, Any]]:
+    if not isinstance(payload, Mapping):
+        return {}
+
+    redacted: dict[str, dict[str, Any]] = {}
+    for raw_key, detail in payload.items():
+        key = str(raw_key)
+        if isinstance(detail, Mapping):
+            value = detail.get("value")
+            if isinstance(value, str) and "proxy" in key:
+                value = redact_proxy_url(value)
+            redacted[key] = {"value": value, "source": detail.get("source")}
+            continue
+        redacted[key] = {"value": None, "source": "unknown"}
+    return redacted
 
 
 def _local_installed_models(paths: TollamaPaths) -> list[dict[str, Any]]:
@@ -140,185 +198,40 @@ def _local_installed_models(paths: TollamaPaths) -> list[dict[str, Any]]:
     except Exception:  # noqa: BLE001
         return []
 
-    models: list[dict[str, Any]] = []
+    entries: list[dict[str, Any]] = []
     for manifest in manifests:
-        if not isinstance(manifest, dict):
-            continue
-        models.append(_model_from_manifest(manifest))
-    return models
-
-
-def _models_from_daemon_tags(payload: dict[str, Any]) -> list[dict[str, Any]]:
-    models = payload.get("models")
-    if not isinstance(models, list):
-        return []
-
-    entries: list[dict[str, Any]] = []
-    for item in models:
-        if not isinstance(item, dict):
-            continue
-        details = item.get("details")
-        family = details.get("family") if isinstance(details, dict) else None
-        entries.append(
-            {
-                "name": _str_or_none(item.get("name")),
-                "family": _str_or_none(family),
-                "digest": _str_or_none(item.get("digest")),
-                "size": _int_or_none(item.get("size")),
-                "modified_at": _str_or_none(item.get("modified_at")),
-                "raw": _redact_sensitive(item),
-            },
-        )
+        if isinstance(manifest, dict):
+            entries.append(_model_from_manifest(manifest))
     return entries
-
-
-def _models_from_daemon_ps(payload: dict[str, Any]) -> list[dict[str, Any]]:
-    models = payload.get("models")
-    if not isinstance(models, list):
-        return []
-
-    entries: list[dict[str, Any]] = []
-    for item in models:
-        if not isinstance(item, dict):
-            continue
-        entries.append(
-            {
-                "name": _str_or_none(item.get("name")),
-                "model": _str_or_none(item.get("model")),
-                "family": _str_or_none(_extract_family(item)),
-                "expires_at": _str_or_none(item.get("expires_at")),
-                "raw": _redact_sensitive(item),
-            },
-        )
-    return entries
-
-
-def _extract_family(payload: dict[str, Any]) -> str | None:
-    details = payload.get("details")
-    if isinstance(details, dict):
-        return _str_or_none(details.get("family"))
-    return None
 
 
 def _model_from_manifest(manifest: dict[str, Any]) -> dict[str, Any]:
-    resolved = manifest.get("resolved")
-    resolved_map = resolved if isinstance(resolved, dict) else {}
-    digest = _str_or_none(resolved_map.get("commit_sha")) or _str_or_none(manifest.get("digest"))
-    size = _int_or_none(manifest.get("size_bytes"))
-    if size is None:
-        size = _int_or_none(manifest.get("size"))
-
-    modified_at = _str_or_none(manifest.get("pulled_at")) or _str_or_none(
-        manifest.get("installed_at"),
-    )
     return {
         "name": _str_or_none(manifest.get("name")),
         "family": _str_or_none(manifest.get("family")),
-        "digest": digest,
-        "size": size,
-        "modified_at": modified_at,
-        "raw": _redact_sensitive(manifest),
+        "digest": _manifest_digest(manifest),
+        "size": _manifest_size(manifest),
+        "modified_at": _str_or_none(manifest.get("pulled_at") or manifest.get("installed_at")),
     }
 
 
-def _effective_pull_defaults(
-    *,
-    env: dict[str, Any],
-    config: dict[str, Any] | None,
-) -> dict[str, dict[str, Any]]:
-    config_pull = config.get("pull") if isinstance(config, dict) else None
-    pull_defaults = config_pull if isinstance(config_pull, dict) else {}
-
-    resolved: dict[str, dict[str, Any]] = {}
-    offline_value, offline_source = _resolve_pull_default_bool(
-        env_var=_optional_bool_str(env.get("HF_HUB_OFFLINE")),
-        config_value=pull_defaults.get("offline"),
-        hard_default=False,
-    )
-    resolved["offline"] = {"value": offline_value, "source": offline_source}
-
-    local_files_only_value, local_files_only_source = _resolve_pull_default_bool(
-        env_var=None,
-        config_value=pull_defaults.get("local_files_only"),
-        hard_default=False,
-    )
-    if offline_value and not local_files_only_value:
-        local_files_only_value = True
-        local_files_only_source = f"{offline_source} (offline)"
-    resolved["local_files_only"] = {
-        "value": local_files_only_value,
-        "source": local_files_only_source,
-    }
-
-    insecure_value, insecure_source = _resolve_pull_default_bool(
-        env_var=None,
-        config_value=pull_defaults.get("insecure"),
-        hard_default=False,
-    )
-    resolved["insecure"] = {"value": insecure_value, "source": insecure_source}
-
-    hf_home_value, hf_home_source = _resolve_pull_default_str(
-        env_var=_optional_nonempty_str(env.get("HF_HOME")),
-        config_value=pull_defaults.get("hf_home"),
-    )
-    resolved["hf_home"] = {"value": hf_home_value, "source": hf_home_source}
-
-    http_proxy_value, http_proxy_source = _resolve_pull_default_str(
-        env_var=_optional_nonempty_str(env.get("HTTP_PROXY")),
-        config_value=pull_defaults.get("http_proxy"),
-    )
-    resolved["http_proxy"] = {"value": http_proxy_value, "source": http_proxy_source}
-
-    https_proxy_value, https_proxy_source = _resolve_pull_default_str(
-        env_var=_optional_nonempty_str(env.get("HTTPS_PROXY")),
-        config_value=pull_defaults.get("https_proxy"),
-    )
-    resolved["https_proxy"] = {"value": https_proxy_value, "source": https_proxy_source}
-
-    no_proxy_value, no_proxy_source = _resolve_pull_default_str(
-        env_var=_optional_nonempty_str(env.get("NO_PROXY")),
-        config_value=pull_defaults.get("no_proxy"),
-    )
-    resolved["no_proxy"] = {"value": no_proxy_value, "source": no_proxy_source}
-
-    max_workers_value, max_workers_source = _resolve_pull_default_int(
-        config_value=pull_defaults.get("max_workers"),
-        hard_default=8,
-    )
-    resolved["max_workers"] = {"value": max_workers_value, "source": max_workers_source}
-    return resolved
+def _manifest_digest(manifest: dict[str, Any]) -> str | None:
+    resolved = manifest.get("resolved")
+    if isinstance(resolved, dict):
+        digest = _str_or_none(resolved.get("commit_sha"))
+        if digest is not None:
+            return digest
+    return _str_or_none(manifest.get("digest"))
 
 
-def _resolve_pull_default_bool(
-    *,
-    env_var: bool | None,
-    config_value: Any,
-    hard_default: bool,
-) -> tuple[bool, str]:
-    if env_var is not None:
-        return env_var, "env"
-    if isinstance(config_value, bool):
-        return config_value, "config"
-    return hard_default, "default"
-
-
-def _resolve_pull_default_str(
-    *,
-    env_var: str | None,
-    config_value: Any,
-) -> tuple[str | None, str]:
-    if env_var is not None:
-        return env_var, "env"
-    config_value_normalized = _optional_nonempty_str(config_value)
-    if config_value_normalized is not None:
-        return config_value_normalized, "config"
-    return None, "default"
-
-
-def _resolve_pull_default_int(*, config_value: Any, hard_default: int) -> tuple[int, str]:
-    if isinstance(config_value, int) and config_value > 0:
-        return config_value, "config"
-    return hard_default, "default"
+def _manifest_size(manifest: dict[str, Any]) -> int | None:
+    size_bytes = manifest.get("size_bytes")
+    if isinstance(size_bytes, int) and not isinstance(size_bytes, bool):
+        return size_bytes
+    size = manifest.get("size")
+    if isinstance(size, int) and not isinstance(size, bool):
+        return size
+    return None
 
 
 def _get_json(client: httpx.Client, path: str) -> dict[str, Any]:
@@ -334,51 +247,8 @@ def _make_http_client(*, base_url: str, timeout_s: float) -> httpx.Client:
     return httpx.Client(base_url=base_url, timeout=timeout_s)
 
 
-def _redact_sensitive(value: Any) -> Any:
-    if isinstance(value, dict):
-        redacted: dict[str, Any] = {}
-        for key, item in value.items():
-            key_text = str(key)
-            if _looks_sensitive_key(key_text):
-                redacted[key_text] = _REDACTED_VALUE
-                continue
-            redacted[key_text] = _redact_sensitive(item)
-        return redacted
-    if isinstance(value, list):
-        return [_redact_sensitive(item) for item in value]
-    return value
-
-
-def _looks_sensitive_key(key: str) -> bool:
-    lowered = key.lower()
-    return any(token in lowered for token in _SENSITIVE_KEY_TOKENS)
-
-
 def _env_or_none(name: str) -> str | None:
-    return _optional_nonempty_str(os.environ.get(name))
-
-
-def _optional_nonempty_str(value: Any) -> str | None:
-    if not isinstance(value, str):
-        return None
-    normalized = value.strip()
-    if not normalized:
-        return None
-    return normalized
-
-
-def _optional_bool_str(value: Any) -> bool | None:
-    if isinstance(value, bool):
-        return value
-    if not isinstance(value, str):
-        return None
-
-    normalized = value.strip().lower()
-    if normalized in {"1", "true", "yes", "on"}:
-        return True
-    if normalized in {"0", "false", "no", "off"}:
-        return False
-    return None
+    return _str_or_none(os.environ.get(name))
 
 
 def _str_or_none(value: Any) -> str | None:
@@ -387,10 +257,3 @@ def _str_or_none(value: Any) -> str | None:
         return normalized if normalized else None
     return None
 
-
-def _int_or_none(value: Any) -> int | None:
-    if isinstance(value, bool):
-        return None
-    if isinstance(value, int):
-        return value
-    return None

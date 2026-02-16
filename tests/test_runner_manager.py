@@ -59,3 +59,48 @@ def test_missing_torch_runner_command_returns_install_hint(monkeypatch, tmp_path
     detail = response.json()["detail"]
     assert "runner_torch" in detail
     assert "pip install -e" in detail
+
+
+def test_runner_manager_list_families_includes_expected_defaults() -> None:
+    manager = RunnerManager()
+    assert manager.list_families() == ["mock", "torch", "timesfm", "uni2ts"]
+
+
+def test_runner_manager_get_all_statuses_does_not_start_missing_supervisors(monkeypatch) -> None:
+    class _FakeSupervisor:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def get_status(self, *, family: str) -> dict[str, object]:
+            self.calls += 1
+            return {
+                "family": family,
+                "command": ["tollama-runner-mock"],
+                "installed": True,
+                "running": True,
+                "pid": 1234,
+                "started_at": "2026-02-16T00:00:00Z",
+                "last_used_at": "2026-02-16T00:00:01Z",
+                "restarts": 0,
+                "last_error": None,
+            }
+
+        def stop(self) -> None:
+            return
+
+    fake = _FakeSupervisor()
+    manager = RunnerManager(supervisors={"mock": fake})
+    monkeypatch.setattr(
+        "tollama.daemon.runner_manager.shutil.which",
+        lambda command: "/usr/bin/runner" if command == "tollama-runner-torch" else None,
+    )
+
+    statuses = manager.get_all_statuses()
+    by_family = {item["family"]: item for item in statuses}
+
+    assert fake.calls == 1
+    assert set(by_family) == {"mock", "torch", "timesfm", "uni2ts"}
+    assert by_family["mock"]["running"] is True
+    assert by_family["torch"]["installed"] is True
+    assert by_family["timesfm"]["running"] is False
+    assert by_family["uni2ts"]["running"] is False

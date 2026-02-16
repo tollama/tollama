@@ -46,13 +46,21 @@ def main() -> int:
     """Run the HTTP daemon with uvicorn."""
     host, port = _resolve_bind()
     log_level = os.environ.get("TOLLAMA_LOG_LEVEL", "info")
+    previous_binding = os.environ.get("TOLLAMA_EFFECTIVE_HOST_BINDING")
+    os.environ["TOLLAMA_EFFECTIVE_HOST_BINDING"] = f"{host}:{port}"
 
-    uvicorn.run(
-        "tollama.daemon.app:app",
-        host=host,
-        port=port,
-        log_level=log_level,
-    )
+    try:
+        uvicorn.run(
+            "tollama.daemon.app:app",
+            host=host,
+            port=port,
+            log_level=log_level,
+        )
+    finally:
+        if previous_binding is None:
+            os.environ.pop("TOLLAMA_EFFECTIVE_HOST_BINDING", None)
+        else:
+            os.environ["TOLLAMA_EFFECTIVE_HOST_BINDING"] = previous_binding
     return 0
 
 

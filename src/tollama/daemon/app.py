@@ -37,6 +37,8 @@ from tollama.core.hf_pull import (
     PullError,
     pull_snapshot_to_local_dir,
 )
+from tollama.core.pull_defaults import resolve_effective_pull_defaults
+from tollama.core.redact import redact_config_dict, redact_env_dict, redact_proxy_url
 from tollama.core.registry import get_model_spec, list_registry_models
 from tollama.core.schemas import ForecastRequest, ForecastResponse
 from tollama.core.storage import (
@@ -59,6 +61,22 @@ from .supervisor import (
 
 DEFAULT_FORECAST_TIMEOUT_SECONDS = 10.0
 DEFAULT_MODIFIED_AT = "1970-01-01T00:00:00Z"
+INFO_ENV_KEYS = (
+    "TOLLAMA_HOME",
+    "TOLLAMA_HOST",
+    "HF_HOME",
+    "HF_HUB_OFFLINE",
+    "HTTP_PROXY",
+    "HTTPS_PROXY",
+    "NO_PROXY",
+)
+TOKEN_ENV_KEYS = (
+    "TOLLAMA_HF_TOKEN",
+    "HF_TOKEN",
+    "HUGGINGFACE_HUB_TOKEN",
+    "HUGGING_FACE_HUB_TOKEN",
+    "HF_HUB_TOKEN",
+)
 
 
 @dataclass(frozen=True)
@@ -181,6 +199,7 @@ class ApiForecastRequest(ForecastRequestWithKeepAlive):
 
 @asynccontextmanager
 async def _lifespan(app: FastAPI):
+    app.state.started_at = datetime.now(UTC)
     yield
     app.state.runner_manager.stop()
     app.state.loaded_model_tracker.clear()
@@ -193,6 +212,8 @@ def create_app(*, runner_manager: RunnerManager | None = None) -> FastAPI:
     app.state.runner_manager = runner_manager or RunnerManager()
     app.state.loaded_model_tracker = LoadedModelTracker()
     app.state.config_provider = ConfigProvider()
+    app.state.started_at = datetime.now(UTC)
+    app.state.host_binding = _resolve_host_binding_from_env()
 
     @app.exception_handler(RequestValidationError)
     async def _request_validation_handler(
@@ -204,6 +225,38 @@ def create_app(*, runner_manager: RunnerManager | None = None) -> FastAPI:
     @app.get("/api/version")
     def version() -> dict[str, str]:
         return {"version": package_version}
+
+    @app.get("/api/info")
+    def info() -> dict[str, Any]:
+        _unload_expired_models(app)
+        started_at = _optional_datetime(getattr(app.state, "started_at", None))
+        now = datetime.now(UTC)
+        uptime_seconds = _uptime_seconds(started_at=started_at, now=now)
+        paths = TollamaPaths.default()
+        config_payload = _collect_redacted_config_payload(paths)
+        config_defaults = _load_config_or_default(paths)
+
+        return {
+            "daemon": {
+                "version": package_version,
+                "started_at": to_utc_iso(started_at),
+                "uptime_seconds": uptime_seconds,
+                "host_binding": _optional_nonempty_str(getattr(app.state, "host_binding", None)),
+            },
+            "paths": {
+                "tollama_home": str(paths.base_dir),
+                "config_path": str(paths.config_path),
+                "config_exists": paths.config_path.exists(),
+            },
+            "config": config_payload,
+            "env": _collect_info_env(),
+            "pull_defaults": _collect_pull_defaults(config=config_defaults),
+            "models": {
+                "installed": _collect_installed_model_entries(paths=paths),
+                "loaded": _collect_loaded_model_entries(app),
+            },
+            "runners": app.state.runner_manager.get_all_statuses(),
+        }
 
     @app.get("/api/tags")
     def tags() -> dict[str, list[dict[str, Any]]]:
@@ -979,6 +1032,123 @@ def _optional_bool_str(value: Any) -> bool | None:
     if normalized in {"0", "false", "no", "off"}:
         return False
     return None
+
+
+def _collect_redacted_config_payload(paths: TollamaPaths) -> dict[str, Any] | None:
+    config_path = paths.config_path
+    if not config_path.exists():
+        return None
+
+    try:
+        payload = json.loads(config_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        return {"error": f"invalid JSON in {config_path}: {exc.msg}"}
+    except OSError as exc:
+        return {"error": f"unable to read {config_path}: {exc}"}
+
+    if not isinstance(payload, dict):
+        return {"error": f"invalid config in {config_path}: top-level JSON must be an object"}
+    return redact_config_dict(payload)
+
+
+def _load_config_or_default(paths: TollamaPaths) -> TollamaConfig:
+    try:
+        return load_config(paths)
+    except ConfigFileError:
+        return TollamaConfig()
+
+
+def _collect_info_env() -> dict[str, Any]:
+    payload = {key: _env_or_none(key) for key in INFO_ENV_KEYS}
+    for key in TOKEN_ENV_KEYS:
+        payload[f"{key}_present"] = _env_or_none(key) is not None
+    return redact_env_dict(payload)
+
+
+def _collect_pull_defaults(*, config: TollamaConfig) -> dict[str, dict[str, Any]]:
+    defaults = resolve_effective_pull_defaults(env=os.environ, config=config)
+    redacted: dict[str, dict[str, Any]] = {}
+    for key, detail in defaults.items():
+        value = detail.get("value")
+        if isinstance(value, str) and "proxy" in key:
+            value = redact_proxy_url(value)
+        redacted[key] = {
+            "value": value,
+            "source": detail.get("source"),
+        }
+    return redacted
+
+
+def _collect_installed_model_entries(*, paths: TollamaPaths) -> list[dict[str, Any]]:
+    entries: list[dict[str, Any]] = []
+    try:
+        manifests = list_installed(paths=paths)
+    except Exception:  # noqa: BLE001
+        return []
+
+    for manifest in manifests:
+        if isinstance(manifest, dict):
+            entries.append(_model_from_manifest_for_info(manifest))
+    return entries
+
+
+def _collect_loaded_model_entries(app: FastAPI) -> list[dict[str, Any]]:
+    tracker: LoadedModelTracker = app.state.loaded_model_tracker
+    models: list[dict[str, Any]] = []
+    for loaded in tracker.list_models():
+        models.append(
+            {
+                "name": loaded.name,
+                "model": loaded.model,
+                "family": loaded.family,
+                "expires_at": to_utc_iso(loaded.expires_at),
+            },
+        )
+    return models
+
+
+def _model_from_manifest_for_info(manifest: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "name": _optional_nonempty_str(manifest.get("name")),
+        "family": _optional_nonempty_str(manifest.get("family")),
+        "digest": _manifest_digest(manifest) or None,
+        "size": _manifest_size_bytes(manifest),
+        "modified_at": _optional_nonempty_str(
+            manifest.get("pulled_at") or manifest.get("installed_at"),
+        ),
+    }
+
+
+def _optional_datetime(value: Any) -> datetime | None:
+    if isinstance(value, datetime):
+        return value
+    return None
+
+
+def _uptime_seconds(*, started_at: datetime | None, now: datetime) -> int:
+    if started_at is None:
+        return 0
+    seconds = (now - started_at).total_seconds()
+    return max(0, int(seconds))
+
+
+def _resolve_host_binding_from_env() -> str | None:
+    effective = _env_or_none("TOLLAMA_EFFECTIVE_HOST_BINDING")
+    if effective is not None:
+        return effective
+
+    host_binding = _env_or_none("TOLLAMA_HOST")
+    if host_binding is not None:
+        return host_binding
+
+    port_value = _env_or_none("TOLLAMA_PORT")
+    if port_value is not None:
+        return f"127.0.0.1:{port_value}"
+    return None
+
+
+def _env_or_none(name: str) -> str | None:
+    return _optional_nonempty_str(os.environ.get(name))
 
 
 def _utc_now_iso() -> str:

@@ -49,6 +49,7 @@ pytest -q
 - Local tollama state lives under `~/.tollama` by default.
   - Override with `TOLLAMA_HOME=/custom/path` (config, models, runtimes all use this base).
 - Primary lifecycle endpoints are under `/api/*`.
+  - `GET /api/info`
   - `GET /api/tags`
   - `GET /api/ps`
   - `POST /api/show`
@@ -129,6 +130,31 @@ tollama pull chronos2
 
 Tokens are intentionally not persisted in config. Use `TOLLAMA_HF_TOKEN` or `--token`.
 
+## Diagnostics Endpoint: `/api/info`
+
+`GET /api/info` returns one fast diagnostics payload for server-side integrations.
+It includes:
+- daemon metadata (`version`, `started_at`, `uptime_seconds`, `host_binding`)
+- local paths and config presence (`tollama_home`, `config_path`, `config_exists`)
+- redacted config and safe env subset
+- effective pull defaults with value source (`env`/`config`/`default`)
+- installed + loaded models
+- runner statuses for `mock`, `torch`, `timesfm`, and `uni2ts`
+
+Example shape:
+
+```json
+{
+  "daemon": {"version": "0.1.0", "started_at": "...", "uptime_seconds": 42},
+  "paths": {"tollama_home": "...", "config_path": "...", "config_exists": true},
+  "config": {"pull": {"https_proxy": "http://***:***@proxy:3128"}},
+  "env": {"HTTP_PROXY": "http://***:***@proxy:3128", "TOLLAMA_HF_TOKEN_present": false},
+  "pull_defaults": {"offline": {"value": false, "source": "default"}},
+  "models": {"installed": [], "loaded": []},
+  "runners": []
+}
+```
+
 ## Debugging: `tollama info`
 
 Use `tollama info` for one diagnostics view of daemon reachability, local config, effective pull
@@ -137,6 +163,8 @@ defaults, and installed/loaded models.
 ```bash
 tollama info
 tollama info --json
+tollama info --local   # force local-only
+tollama info --remote  # require daemon /api/info
 ```
 
 Example output excerpt:
@@ -152,7 +180,8 @@ Pull defaults (effective)
   https_proxy: http://proxy:3128 (source=config)
 ```
 
-`tollama info` still reports local config and locally installed models even when the daemon is down.
+`tollama info` prefers `GET /api/info` when the daemon is reachable, and automatically falls back
+to local collection when the daemon is down (unless `--remote` is set).
 
 ## Architecture
 
