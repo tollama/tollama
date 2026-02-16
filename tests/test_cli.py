@@ -103,3 +103,40 @@ def test_forecast_rejects_non_json_input(tmp_path: Path) -> None:
 
     assert result.exit_code != 0
     assert "input file is not valid JSON" in result.stdout
+
+
+def test_pull_list_and_rm_model(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("TOLLAMA_HOME", str(tmp_path / ".tollama"))
+    runner = CliRunner()
+
+    pulled = runner.invoke(app, ["pull", "mock"])
+    assert pulled.exit_code == 0
+    pulled_payload = json.loads(pulled.stdout)
+    assert pulled_payload["name"] == "mock"
+
+    listed = runner.invoke(app, ["list"])
+    assert listed.exit_code == 0
+    listed_payload = json.loads(listed.stdout)
+    assert [item["name"] for item in listed_payload] == ["mock"]
+
+    removed = runner.invoke(app, ["rm", "mock"])
+    assert removed.exit_code == 0
+    assert "removed mock" in removed.stdout
+
+    listed_again = runner.invoke(app, ["list"])
+    assert listed_again.exit_code == 0
+    assert json.loads(listed_again.stdout) == []
+
+
+def test_pull_requires_license_acceptance(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("TOLLAMA_HOME", str(tmp_path / ".tollama"))
+    runner = CliRunner()
+
+    denied = runner.invoke(app, ["pull", "chronos2"])
+    assert denied.exit_code != 0
+    assert "requires license acceptance" in denied.stdout
+
+    accepted = runner.invoke(app, ["pull", "chronos2", "--accept-license"])
+    assert accepted.exit_code == 0
+    payload = json.loads(accepted.stdout)
+    assert payload["name"] == "chronos2"

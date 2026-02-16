@@ -1,0 +1,52 @@
+models:
+  - name: mock
+    family: mock
+    source:
+      type: local
+      repo_id: tollama/mock-runner
+      revision: main
+    license:
+      type: mit
+      needs_acceptance: false
+    defaults:
+      runner: mock
+
+  - name: chronos2
+    family: torch
+    source:
+      type: huggingface
+      repo_id: amazon/chronos-2
+      revision: main
+    license:
+      type: apache-2.0
+      needs_acceptance: true
+
+  - name: timesfm2p5
+    family: timesfm
+    source:
+      type: huggingface
+      repo_id: google/timesfm-2.5
+      revision: main
+    license:
+      type: apache-2.0
+      needs_acceptance: true
+
+  - name: moirai1p1-base
+    family: uni2ts
+    source:
+      type: huggingface
+      repo_id: salesforce/moirai-1.1-base
+      revision: main
+    license:
+      type: apache-2.0
+      needs_acceptance: true
+
+  - name: granite-ttm-r2
+    family: torch
+    source:
+      type: huggingface
+      repo_id: ibm/granite-ttm-r2
+      revision: main
+    license:
+      type: apache-2.0
+      needs_acceptance: true

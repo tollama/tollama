@@ -10,7 +10,9 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 
+from tollama.core.registry import list_registry_models
 from tollama.core.schemas import ForecastRequest, ForecastResponse
+from tollama.core.storage import list_installed
 
 from .supervisor import (
     RunnerCallError,
@@ -43,6 +45,15 @@ def create_app(supervisor: RunnerSupervisor | None = None) -> FastAPI:
     @app.get("/v1/health")
     def health() -> dict[str, str]:
         return {"status": "ok"}
+
+    @app.get("/v1/models")
+    def models() -> dict[str, list[dict[str, Any]]]:
+        available = [
+            spec.model_dump(mode="json", exclude_none=True)
+            for spec in list_registry_models()
+        ]
+        installed = list_installed()
+        return {"available": available, "installed": installed}
 
     @app.post("/v1/forecast", response_model=ForecastResponse)
     def forecast(payload: ForecastRequest) -> ForecastResponse:

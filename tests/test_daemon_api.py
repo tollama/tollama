@@ -6,6 +6,7 @@ from typing import Any
 
 from fastapi.testclient import TestClient
 
+from tollama.core.storage import TollamaPaths, install_from_registry
 from tollama.daemon.app import create_app
 from tollama.daemon.supervisor import RunnerCallError, RunnerUnavailableError
 
@@ -71,6 +72,23 @@ def test_forecast_invalid_payload_returns_400() -> None:
 
     assert response.status_code == 400
     assert "detail" in response.json()
+
+
+def test_models_endpoint_returns_available_and_installed(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("TOLLAMA_HOME", str(tmp_path / ".tollama"))
+    install_from_registry(
+        "mock",
+        accept_license=False,
+        paths=TollamaPaths(base_dir=tmp_path / ".tollama"),
+    )
+
+    with TestClient(create_app()) as client:
+        response = client.get("/v1/models")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert any(spec["name"] == "mock" for spec in body["available"])
+    assert [item["name"] for item in body["installed"]] == ["mock"]
 
 
 class _UnavailableSupervisor:

@@ -9,6 +9,9 @@ from typing import Any
 import typer
 import uvicorn
 
+from tollama.core.registry import list_registry_models
+from tollama.core.storage import install_from_registry, list_installed, remove_model
+
 from .client import DEFAULT_BASE_URL, DEFAULT_DAEMON_HOST, DEFAULT_DAEMON_PORT, TollamaClient
 
 app = typer.Typer(help="Command-line interface for tollama.")
@@ -46,6 +49,84 @@ def forecast(
         raise typer.Exit(code=1) from exc
 
     typer.echo(json.dumps(response, indent=2, sort_keys=True))
+
+
+@app.command("models")
+def models(
+    base_url: str = typer.Option(
+        DEFAULT_BASE_URL,
+        help="Daemon base URL. Defaults to http://127.0.0.1:11435.",
+    ),
+    timeout: float = typer.Option(10.0, min=0.1, help="HTTP timeout in seconds."),
+) -> None:
+    """List available and installed models reported by the daemon."""
+    client = TollamaClient(base_url=base_url, timeout=timeout)
+    try:
+        response = client.list_models()
+    except RuntimeError as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+
+    typer.echo(json.dumps(response, indent=2, sort_keys=True))
+
+
+@app.command("pull")
+def pull(
+    name: str = typer.Argument(..., help="Model name from model-registry/registry.yaml."),
+    accept_license: bool = typer.Option(
+        False,
+        "--accept-license",
+        help="Accept the model license terms if required.",
+    ),
+) -> None:
+    """Install a model manifest into the local store."""
+    try:
+        manifest = install_from_registry(name, accept_license=accept_license)
+    except PermissionError as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+    except (KeyError, ValueError) as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+
+    typer.echo(json.dumps(manifest, indent=2, sort_keys=True))
+
+
+@app.command("list")
+def list_models(
+    available: bool = typer.Option(
+        False,
+        "--available",
+        help="Show available models from the local registry instead of installed manifests.",
+    ),
+) -> None:
+    """List installed models in local storage or available registry models."""
+    if available:
+        payload = [
+            spec.model_dump(mode="json", exclude_none=True)
+            for spec in list_registry_models()
+        ]
+    else:
+        payload = list_installed()
+    typer.echo(json.dumps(payload, indent=2, sort_keys=True))
+
+
+@app.command("rm")
+def rm(
+    name: str = typer.Argument(..., help="Installed model name to remove."),
+) -> None:
+    """Remove one installed model from local storage."""
+    try:
+        removed = remove_model(name)
+    except ValueError as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+
+    if not removed:
+        typer.echo(f"Error: model {name!r} is not installed", err=True)
+        raise typer.Exit(code=1)
+
+    typer.echo(f"removed {name}")
 
 
 def _load_request_payload(path: Path) -> dict[str, Any]:

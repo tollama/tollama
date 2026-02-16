@@ -27,22 +27,31 @@ class TollamaClient:
         """Submit a forecast request payload and return response JSON."""
         with httpx.Client(base_url=self._base_url, timeout=self._timeout) as client:
             response = client.post("/v1/forecast", json=payload)
+        return _handle_json_response(response, action="forecast request")
 
-        try:
-            response.raise_for_status()
-        except httpx.HTTPStatusError as exc:
-            detail = exc.response.text
-            raise RuntimeError(
-                f"forecast request failed with HTTP {exc.response.status_code}: {detail}",
-            ) from exc
-        except httpx.HTTPError as exc:
-            raise RuntimeError(f"forecast request failed: {exc}") from exc
+    def list_models(self) -> dict[str, Any]:
+        """Fetch available and installed models from the daemon."""
+        with httpx.Client(base_url=self._base_url, timeout=self._timeout) as client:
+            response = client.get("/v1/models")
+        return _handle_json_response(response, action="list models")
 
-        try:
-            data = response.json()
-        except ValueError as exc:
-            raise RuntimeError("daemon returned non-JSON response") from exc
 
-        if not isinstance(data, dict):
-            raise RuntimeError("daemon returned unexpected JSON payload")
-        return data
+def _handle_json_response(response: httpx.Response, *, action: str) -> dict[str, Any]:
+    try:
+        response.raise_for_status()
+    except httpx.HTTPStatusError as exc:
+        detail = exc.response.text
+        raise RuntimeError(
+            f"{action} failed with HTTP {exc.response.status_code}: {detail}",
+        ) from exc
+    except httpx.HTTPError as exc:
+        raise RuntimeError(f"{action} failed: {exc}") from exc
+
+    try:
+        data = response.json()
+    except ValueError as exc:
+        raise RuntimeError("daemon returned non-JSON response") from exc
+
+    if not isinstance(data, dict):
+        raise RuntimeError("daemon returned unexpected JSON payload")
+    return data

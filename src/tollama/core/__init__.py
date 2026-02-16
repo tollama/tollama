@@ -15,11 +15,29 @@ from .protocol import (
     validate_request,
     validate_response,
 )
+from .registry import (
+    DEFAULT_REGISTRY_PATH,
+    ModelLicense,
+    ModelSource,
+    ModelSpec,
+    list_registry_models,
+)
 from .schemas import ForecastRequest, ForecastResponse, SeriesForecast, SeriesInput
+from .storage import (
+    TollamaPaths,
+    install_from_registry,
+    is_installed,
+    list_installed,
+    remove_model,
+)
 
 __all__ = [
+    "DEFAULT_REGISTRY_PATH",
     "ForecastRequest",
     "ForecastResponse",
+    "ModelLicense",
+    "ModelSource",
+    "ModelSpec",
     "ProtocolDecodeError",
     "ProtocolErrorMessage",
     "ProtocolRequest",
@@ -27,11 +45,17 @@ __all__ = [
     "SUPPORTED_METHODS",
     "SeriesForecast",
     "SeriesInput",
+    "TollamaPaths",
     "decode_line",
     "decode_request_line",
     "decode_response_line",
     "encode_line",
     "generate_message_id",
+    "install_from_registry",
+    "is_installed",
+    "list_installed",
+    "list_registry_models",
+    "remove_model",
     "validate_message",
     "validate_request",
     "validate_response",
