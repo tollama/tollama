@@ -70,6 +70,7 @@ def test_pull_no_config_sends_neutral_defaults(monkeypatch) -> None:
             name: str,
             *,
             stream: bool,
+            accept_license: bool = False,
             insecure: bool | None,
             offline: bool | None,
             local_files_only: bool | None,
@@ -84,6 +85,7 @@ def test_pull_no_config_sends_neutral_defaults(monkeypatch) -> None:
             captured["pull"] = {
                 "name": name,
                 "stream": stream,
+                "accept_license": accept_license,
                 "insecure": insecure,
                 "offline": offline,
                 "local_files_only": local_files_only,
@@ -106,6 +108,7 @@ def test_pull_no_config_sends_neutral_defaults(monkeypatch) -> None:
     assert captured["pull"] == {
         "name": "mock",
         "stream": False,
+        "accept_license": False,
         "insecure": False,
         "offline": False,
         "local_files_only": False,

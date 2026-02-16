@@ -64,6 +64,7 @@ def test_pull_supports_streaming_and_non_stream(monkeypatch) -> None:
             name: str,
             *,
             stream: bool,
+            accept_license: bool = False,
             insecure: bool | None,
             offline: bool | None,
             local_files_only: bool | None,
@@ -78,6 +79,7 @@ def test_pull_supports_streaming_and_non_stream(monkeypatch) -> None:
             captured["pull"] = {
                 "name": name,
                 "stream": stream,
+                "accept_license": accept_license,
                 "insecure": insecure,
                 "offline": offline,
                 "local_files_only": local_files_only,
@@ -105,6 +107,7 @@ def test_pull_supports_streaming_and_non_stream(monkeypatch) -> None:
     assert captured["pull"] == {
         "name": "mock",
         "stream": True,
+        "accept_license": False,
         "insecure": None,
         "offline": None,
         "local_files_only": None,
@@ -121,6 +124,10 @@ def test_pull_supports_streaming_and_non_stream(monkeypatch) -> None:
     assert non_stream.exit_code == 0
     assert json.loads(non_stream.stdout) == {"status": "success", "model": "mock"}
     assert captured["pull"]["stream"] is False
+
+    with_accept = runner.invoke(app, ["pull", "mock", "--accept-license"])
+    assert with_accept.exit_code == 0
+    assert captured["pull"]["accept_license"] is True
 
     with_flags = runner.invoke(
         app,
@@ -146,6 +153,7 @@ def test_pull_supports_streaming_and_non_stream(monkeypatch) -> None:
     assert captured["pull"] == {
         "name": "mock",
         "stream": True,
+        "accept_license": False,
         "insecure": True,
         "offline": True,
         "local_files_only": True,

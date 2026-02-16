@@ -67,6 +67,11 @@ def serve(
 def pull(
     model: str = typer.Argument(..., help="Model name to pull."),
     no_stream: bool = typer.Option(False, "--no-stream", help="Disable streaming pull output."),
+    accept_license: bool = typer.Option(
+        False,
+        "--accept-license",
+        help="Accept model license terms when required.",
+    ),
     insecure: bool | None = typer.Option(
         None,
         "--insecure/--no-insecure",
@@ -129,6 +134,7 @@ def pull(
         result = client.pull_model(
             name=model,
             stream=stream,
+            accept_license=accept_license,
             insecure=pull_insecure,
             offline=pull_offline,
             local_files_only=pull_local_files_only,

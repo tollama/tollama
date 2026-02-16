@@ -56,6 +56,22 @@ models:
       type: apache-2.0
       needs_acceptance: true
 
+  - name: moirai-1.1-R-base
+    family: uni2ts
+    source:
+      type: huggingface
+      repo_id: Salesforce/moirai-1.1-R-base
+      revision: main
+    license:
+      id: cc-by-nc-4.0
+      needs_acceptance: true
+      notice: Non-commercial; research-only weight license. You must accept before pulling.
+    metadata:
+      implementation: moirai_1p1
+      default_num_samples: 200
+      default_context_length: 200
+      default_patch_size: auto
+
   - name: granite-ttm-r2
     family: torch
     source:

@@ -141,6 +141,7 @@ def remove_model(name: str, *, paths: TollamaPaths | None = None) -> bool:
 
 def _build_manifest(spec: ModelSpec, *, accepted: bool) -> dict[str, Any]:
     license_accepted = accepted or (not spec.license.needs_acceptance)
+    accepted_at = datetime.now(UTC).isoformat().replace("+00:00", "Z") if license_accepted else None
     manifest: dict[str, Any] = {
         "name": spec.name,
         "family": spec.family,
@@ -156,8 +157,11 @@ def _build_manifest(spec: ModelSpec, *, accepted: bool) -> dict[str, Any]:
             "type": spec.license.type,
             "needs_acceptance": spec.license.needs_acceptance,
             "accepted": license_accepted,
+            "accepted_at": accepted_at,
         },
     }
+    if spec.license.notice is not None:
+        manifest["license"]["notice"] = spec.license.notice
     if spec.metadata is not None:
         manifest["metadata"] = spec.metadata
     return manifest

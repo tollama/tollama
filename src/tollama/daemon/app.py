@@ -389,12 +389,13 @@ def create_app(*, runner_manager: RunnerManager | None = None) -> FastAPI:
 
         installed = []
         for manifest in installed_manifests:
+            manifest_license = manifest.get("license")
             installed.append(
                 {
                     "name": manifest.get("name"),
                     "family": manifest.get("family"),
                     "installed": True,
-                    "license": manifest.get("license"),
+                    "license": _public_license_view(manifest_license),
                 },
             )
         return {"available": available, "installed": installed}
@@ -845,6 +846,11 @@ def _prepare_pull_manifest(
         and existing.get("size_bytes") >= 0
         else 0
     )
+    existing_license = existing.get("license") if isinstance(existing, dict) else {}
+    existing_license_map = existing_license if isinstance(existing_license, dict) else {}
+    accepted_at = _optional_nonempty_str(existing_license_map.get("accepted_at"))
+    if accepted and accepted_at is None:
+        accepted_at = _utc_now_iso()
 
     manifest = {
         "name": spec.name,
@@ -861,8 +867,11 @@ def _prepare_pull_manifest(
             "type": spec.license.type,
             "needs_acceptance": spec.license.needs_acceptance,
             "accepted": accepted,
+            "accepted_at": accepted_at,
         },
     }
+    if spec.license.notice is not None:
+        manifest["license"]["notice"] = spec.license.notice
     if spec.metadata is not None:
         manifest["metadata"] = spec.metadata
     return spec, manifest, paths
@@ -1033,6 +1042,18 @@ def _manifest_license_accepted(manifest: dict[str, Any] | None) -> bool:
     if not isinstance(license_info, dict):
         return False
     return bool(license_info.get("accepted"))
+
+
+def _public_license_view(license_payload: Any) -> dict[str, Any]:
+    if not isinstance(license_payload, dict):
+        return {}
+    normalized: dict[str, Any] = {}
+    for key in ("type", "needs_acceptance", "accepted"):
+        if key in license_payload:
+            normalized[key] = license_payload[key]
+    if "notice" in license_payload:
+        normalized["notice"] = license_payload["notice"]
+    return normalized
 
 
 def _optional_nonempty_str(value: Any) -> str | None:

@@ -71,6 +71,7 @@ class TollamaClient:
         name: str,
         *,
         stream: bool = True,
+        accept_license: bool = False,
         insecure: bool | None = None,
         offline: bool | None = None,
         local_files_only: bool | None = None,
@@ -87,6 +88,7 @@ class TollamaClient:
         payload: dict[str, Any] = {
             "model": name,
             "stream": stream,
+            "accept_license": accept_license,
         }
         if insecure is not None or "insecure" in null_fields:
             payload["insecure"] = insecure

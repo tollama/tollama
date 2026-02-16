@@ -534,6 +534,52 @@ def test_ollama_pull_timesfm_uses_registry_repo_and_revision(monkeypatch, tmp_pa
     assert manifest["size_bytes"] == 128
 
 
+def test_ollama_pull_moirai_requires_license_acceptance(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("TOLLAMA_HOME", str(tmp_path / ".tollama"))
+
+    with TestClient(create_app()) as client:
+        response = client.post("/api/pull", json={"model": "moirai-1.1-R-base", "stream": False})
+
+    assert response.status_code == 409
+    assert "requires license acceptance" in response.json()["detail"]
+
+
+def test_ollama_pull_moirai_with_accept_license_records_acceptance(monkeypatch, tmp_path) -> None:
+    paths = TollamaPaths(base_dir=tmp_path / ".tollama")
+    monkeypatch.setenv("TOLLAMA_HOME", str(paths.base_dir))
+    captures: dict[str, Any] = {}
+    _patch_fake_hf_download(monkeypatch, captures=captures)
+
+    with TestClient(create_app()) as client:
+        response = client.post(
+            "/api/pull",
+            json={
+                "model": "moirai-1.1-R-base",
+                "stream": False,
+                "accept_license": True,
+            },
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "success"
+    assert body["model"] == "moirai-1.1-R-base"
+    assert captures["model_info"] == {
+        "repo_id": "Salesforce/moirai-1.1-R-base",
+        "revision": "main",
+        "token": None,
+    }
+
+    manifest = json.loads(paths.manifest_path("moirai-1.1-R-base").read_text(encoding="utf-8"))
+    assert manifest["license"]["type"] == "cc-by-nc-4.0"
+    assert manifest["license"]["needs_acceptance"] is True
+    assert manifest["license"]["accepted"] is True
+    assert isinstance(manifest["license"]["accepted_at"], str)
+    assert "Non-commercial" in manifest["license"]["notice"]
+    assert isinstance(manifest["resolved"]["snapshot_path"], str)
+    assert manifest["resolved"]["commit_sha"] == "fake-commit-sha"
+
+
 def test_ollama_pull_stream_reports_file_count_progress(monkeypatch, tmp_path) -> None:
     paths = TollamaPaths(base_dir=tmp_path / ".tollama")
     monkeypatch.setenv("TOLLAMA_HOME", str(paths.base_dir))

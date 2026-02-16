@@ -33,6 +33,7 @@ class ModelLicense(BaseModel):
         serialization_alias="type",
     )
     needs_acceptance: StrictBool
+    notice: StrictStr | None = None
 
 
 class ModelSpec(BaseModel):

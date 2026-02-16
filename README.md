@@ -21,6 +21,7 @@ python -m pip install --upgrade pip
 python -m pip install -e ".[dev]"
 python -m pip install -e ".[dev,runner_torch]"  # optional: torch runner (Chronos + Granite TTM)
 python -m pip install -e ".[dev,runner_timesfm]"  # optional: TimesFM runner
+python -m pip install -e ".[dev,runner_uni2ts]"  # optional: Uni2TS/Moirai runner
 
 # Terminal 1: run daemon (default http://127.0.0.1:11435)
 tollama serve
@@ -156,6 +157,29 @@ tollama run timesfm-2.5-200m --input examples/timesfm_2p5_request.json --no-stre
 curl -s http://localhost:11435/api/forecast \
   -H 'content-type: application/json' \
   -d @examples/timesfm_2p5_request.json
+```
+
+## Uni2TS/Moirai Forecasting (separate uni2ts runner family)
+
+```bash
+# install optional Uni2TS runner dependencies
+python -m pip install -e ".[dev,runner_uni2ts]"
+# note: install a compatible torch build first for your platform when needed
+
+# run daemon (default http://127.0.0.1:11435)
+tollama serve
+
+# Moirai model requires explicit license acceptance
+tollama pull moirai-1.1-R-base --accept-license
+
+# run forecast
+tollama run moirai-1.1-R-base --input examples/moirai_request.json --no-stream
+```
+
+```bash
+curl -s http://localhost:11435/api/forecast \
+  -H 'content-type: application/json' \
+  -d @examples/moirai_request.json
 ```
 
 ## Persistent Pull Defaults
