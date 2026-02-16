@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field, JsonValue, StrictBool, StrictStr
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, JsonValue, StrictBool, StrictStr
 
 NonEmptyStr = StrictStr
 
@@ -27,7 +27,11 @@ class ModelLicense(BaseModel):
 
     model_config = ConfigDict(extra="forbid", strict=True)
 
-    type: NonEmptyStr = Field(min_length=1)
+    type: NonEmptyStr = Field(
+        min_length=1,
+        validation_alias=AliasChoices("type", "id"),
+        serialization_alias="type",
+    )
     needs_acceptance: StrictBool
 
 

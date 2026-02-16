@@ -497,6 +497,43 @@ def test_ollama_pull_granite_uses_registry_repo_and_revision(monkeypatch, tmp_pa
     assert manifest["size_bytes"] == 128
 
 
+def test_ollama_pull_timesfm_uses_registry_repo_and_revision(monkeypatch, tmp_path) -> None:
+    paths = TollamaPaths(base_dir=tmp_path / ".tollama")
+    monkeypatch.setenv("TOLLAMA_HOME", str(paths.base_dir))
+    captures: dict[str, Any] = {}
+    _patch_fake_hf_download(monkeypatch, captures=captures)
+
+    with TestClient(create_app()) as client:
+        response = client.post("/api/pull", json={"model": "timesfm-2.5-200m", "stream": False})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "success"
+    assert body["model"] == "timesfm-2.5-200m"
+    assert captures["model_info"] == {
+        "repo_id": "google/timesfm-2.5-200m-pytorch",
+        "revision": "main",
+        "token": None,
+    }
+
+    manifest = json.loads(paths.manifest_path("timesfm-2.5-200m").read_text(encoding="utf-8"))
+    assert manifest["source"] == {
+        "type": "huggingface",
+        "repo_id": "google/timesfm-2.5-200m-pytorch",
+        "revision": "main",
+    }
+    assert manifest["metadata"] == {
+        "implementation": "timesfm_2p5_torch",
+        "max_context": 1024,
+        "max_horizon": 256,
+        "use_quantiles_by_default": True,
+    }
+    assert manifest["resolved"]["commit_sha"] == "fake-commit-sha"
+    assert isinstance(manifest["resolved"]["snapshot_path"], str)
+    assert isinstance(manifest["pulled_at"], str)
+    assert manifest["size_bytes"] == 128
+
+
 def test_ollama_pull_stream_reports_file_count_progress(monkeypatch, tmp_path) -> None:
     paths = TollamaPaths(base_dir=tmp_path / ".tollama")
     monkeypatch.setenv("TOLLAMA_HOME", str(paths.base_dir))

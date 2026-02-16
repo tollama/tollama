@@ -20,6 +20,7 @@ source .venv/bin/activate
 python -m pip install --upgrade pip
 python -m pip install -e ".[dev]"
 python -m pip install -e ".[dev,runner_torch]"  # optional: torch runner (Chronos + Granite TTM)
+python -m pip install -e ".[dev,runner_timesfm]"  # optional: TimesFM runner
 
 # Terminal 1: run daemon (default http://127.0.0.1:11435)
 tollama serve
@@ -132,6 +133,29 @@ tollama run granite-ttm-r2 --input examples/granite_ttm_request.json --no-stream
 curl -s http://localhost:11435/api/forecast \
   -H 'content-type: application/json' \
   -d @examples/granite_ttm_request.json
+```
+
+## TimesFM 2.5 Forecasting (separate timesfm runner family)
+
+```bash
+# install optional TimesFM runner dependencies
+python -m pip install -e ".[dev,runner_timesfm]"
+# note: for GPU builds, install a compatible torch build first if needed
+
+# run daemon (default http://127.0.0.1:11435)
+tollama serve
+
+# pull TimesFM 2.5 model snapshot from Hugging Face
+tollama pull timesfm-2.5-200m
+
+# run forecast
+tollama run timesfm-2.5-200m --input examples/timesfm_2p5_request.json --no-stream
+```
+
+```bash
+curl -s http://localhost:11435/api/forecast \
+  -H 'content-type: application/json' \
+  -d @examples/timesfm_2p5_request.json
 ```
 
 ## Persistent Pull Defaults

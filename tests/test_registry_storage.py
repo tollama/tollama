@@ -18,7 +18,14 @@ from tollama.core.storage import (
 
 def test_registry_loads_required_model_specs() -> None:
     registry = load_registry()
-    assert {"mock", "chronos2", "timesfm2p5", "moirai1p1-base", "granite-ttm-r2"} <= set(registry)
+    assert {
+        "mock",
+        "chronos2",
+        "timesfm2p5",
+        "timesfm-2.5-200m",
+        "moirai1p1-base",
+        "granite-ttm-r2",
+    } <= set(registry)
 
     mock = registry["mock"]
     assert mock.family == "mock"
@@ -34,6 +41,19 @@ def test_registry_loads_required_model_specs() -> None:
         "context_length": 90,
         "prediction_length": 30,
         "license": "apache-2.0",
+    }
+
+    timesfm = registry["timesfm-2.5-200m"]
+    assert timesfm.family == "timesfm"
+    assert timesfm.source.repo_id == "google/timesfm-2.5-200m-pytorch"
+    assert timesfm.source.revision == "main"
+    assert timesfm.license.type == "apache-2.0"
+    assert timesfm.license.needs_acceptance is False
+    assert timesfm.metadata == {
+        "implementation": "timesfm_2p5_torch",
+        "max_context": 1024,
+        "max_horizon": 256,
+        "use_quantiles_by_default": True,
     }
 
 

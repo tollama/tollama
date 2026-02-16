@@ -31,6 +31,21 @@ models:
       type: apache-2.0
       needs_acceptance: true
 
+  - name: timesfm-2.5-200m
+    family: timesfm
+    source:
+      type: huggingface
+      repo_id: google/timesfm-2.5-200m-pytorch
+      revision: main
+    license:
+      id: apache-2.0
+      needs_acceptance: false
+    metadata:
+      implementation: timesfm_2p5_torch
+      max_context: 1024
+      max_horizon: 256
+      use_quantiles_by_default: true
+
   - name: moirai1p1-base
     family: uni2ts
     source:

@@ -20,9 +20,10 @@ DEFAULT_RUNNER_COMMANDS: dict[str, tuple[str, ...]] = {
 
 FAMILY_EXTRAS: dict[str, str] = {
     "torch": "runner_torch",
+    "timesfm": "runner_timesfm",
 }
 
-UNIMPLEMENTED_FAMILIES = frozenset({"timesfm", "uni2ts"})
+UNIMPLEMENTED_FAMILIES = frozenset({"uni2ts"})
 
 
 @dataclass(frozen=True)

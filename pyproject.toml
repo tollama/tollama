@@ -26,6 +26,7 @@ tollama = "tollama.cli.main:main"
 tollamad = "tollama.daemon.main:main"
 tollama-runner-mock = "tollama.runners.mock.main:main"
 tollama-runner-torch = "tollama.runners.torch_runner.main:main"
+tollama-runner-timesfm = "tollama.runners.timesfm_runner.main:main"
 
 [project.optional-dependencies]
 dev = [
@@ -37,6 +38,12 @@ runner_torch = [
   "granite-tsfm>=0.3.0,<0.4",
   "pandas>=2.0,<3.0",
   "numpy>=1.26,<3.0",
+]
+runner_timesfm = [
+  "numpy>=1.26,<3.0",
+  "pandas>=2.0,<3.0",
+  "huggingface_hub>=0.20,<1.0",
+  "timesfm[torch] @ git+https://github.com/google-research/timesfm.git",
 ]
 
 [tool.setuptools]
