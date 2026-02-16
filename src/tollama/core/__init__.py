@@ -28,7 +28,9 @@ from .storage import (
     install_from_registry,
     is_installed,
     list_installed,
+    read_manifest,
     remove_model,
+    write_manifest,
 )
 
 __all__ = [
@@ -55,8 +57,10 @@ __all__ = [
     "is_installed",
     "list_installed",
     "list_registry_models",
+    "read_manifest",
     "remove_model",
     "validate_message",
     "validate_request",
     "validate_response",
+    "write_manifest",
 ]

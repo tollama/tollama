@@ -66,8 +66,8 @@ def test_pull_supports_streaming_and_non_stream(monkeypatch) -> None:
         ) -> dict[str, object] | list[dict[str, object]]:
             captured["pull"] = {"name": name, "stream": stream}
             if stream:
-                return [{"status": "pulling model manifest"}, {"done": True, "model": name}]
-            return {"name": name, "family": "mock"}
+                return [{"status": "pulling manifest"}, {"status": "success", "model": name}]
+            return {"status": "success", "model": name}
 
     monkeypatch.setattr("tollama.cli.main.TollamaClient", _FakeClient)
     runner = CliRunner()
@@ -75,14 +75,14 @@ def test_pull_supports_streaming_and_non_stream(monkeypatch) -> None:
     streamed = runner.invoke(app, ["pull", "mock"])
     assert streamed.exit_code == 0
     lines = [line for line in streamed.stdout.splitlines() if line.strip()]
-    assert json.loads(lines[0]) == {"status": "pulling model manifest"}
-    assert json.loads(lines[-1]) == {"done": True, "model": "mock"}
+    assert json.loads(lines[0]) == {"status": "pulling manifest"}
+    assert json.loads(lines[-1]) == {"status": "success", "model": "mock"}
     assert captured["base_url"] == "http://127.0.0.1:11435"
     assert captured["pull"] == {"name": "mock", "stream": True}
 
     non_stream = runner.invoke(app, ["pull", "mock", "--no-stream"])
     assert non_stream.exit_code == 0
-    assert json.loads(non_stream.stdout)["name"] == "mock"
+    assert json.loads(non_stream.stdout) == {"status": "success", "model": "mock"}
     assert captured["pull"] == {"name": "mock", "stream": False}
 
 

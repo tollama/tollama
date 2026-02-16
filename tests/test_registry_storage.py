@@ -42,6 +42,9 @@ def test_install_list_and_remove_model_manifest_in_temp_store(tmp_path) -> None:
     assert manifest["family"] == "mock"
     assert manifest["source"]["repo_id"] == "tollama/mock-runner"
     assert manifest["license"]["accepted"] is True
+    assert manifest["resolved"] == {"commit_sha": None, "snapshot_path": None}
+    assert manifest["size_bytes"] == 0
+    assert manifest["pulled_at"] is None
     assert isinstance(manifest["installed_at"], str)
 
     installed = list_installed(paths=paths)

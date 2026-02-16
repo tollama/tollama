@@ -78,6 +78,13 @@ curl -s http://127.0.0.1:11435/api/forecast \
   -d @examples/chronos2_request.json
 ```
 
+`/api/pull` now performs a real Hugging Face snapshot pull for registry models with `source.type=huggingface`,
+streams NDJSON progress by default, and writes resolved pull metadata into the local manifest:
+- `resolved.commit_sha`
+- `resolved.snapshot_path`
+- `size_bytes`
+- `pulled_at`
+
 ## Architecture
 
 - `tollama.daemon`: Public API layer (`/api/*`, `/v1/health`, `/v1/forecast`) and runner supervision.

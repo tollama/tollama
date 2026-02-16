@@ -63,16 +63,8 @@ def install_from_registry(
             f"model {validated_name!r} requires license acceptance; pass accept_license=True",
         )
 
-    resolved_paths = paths or TollamaPaths.default()
-    manifest_path = resolved_paths.manifest_path(validated_name)
-    manifest_path.parent.mkdir(parents=True, exist_ok=True)
-
     manifest = _build_manifest(spec, accepted=accept_license)
-    manifest_path.write_text(
-        json.dumps(manifest, indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
-    )
-    return manifest
+    return write_manifest(validated_name, manifest, paths=paths)
 
 
 def list_installed(*, paths: TollamaPaths | None = None) -> list[dict[str, Any]]:
@@ -93,6 +85,40 @@ def list_installed(*, paths: TollamaPaths | None = None) -> list[dict[str, Any]]
     return manifests
 
 
+def read_manifest(name: str, *, paths: TollamaPaths | None = None) -> dict[str, Any] | None:
+    """Read one installed manifest by model name."""
+    validated_name = _validate_name(name)
+    resolved_paths = paths or TollamaPaths.default()
+    manifest_path = resolved_paths.manifest_path(validated_name)
+    if not manifest_path.exists():
+        return None
+
+    payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise ValueError(f"invalid manifest content: {manifest_path}")
+    return payload
+
+
+def write_manifest(
+    name: str,
+    manifest: dict[str, Any],
+    *,
+    paths: TollamaPaths | None = None,
+) -> dict[str, Any]:
+    """Atomically write one model manifest."""
+    validated_name = _validate_name(name)
+    resolved_paths = paths or TollamaPaths.default()
+    manifest_path = resolved_paths.manifest_path(validated_name)
+    manifest_path.parent.mkdir(parents=True, exist_ok=True)
+    temp_path = manifest_path.with_suffix(".tmp")
+    temp_path.write_text(
+        json.dumps(manifest, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    temp_path.replace(manifest_path)
+    return manifest
+
+
 def remove_model(name: str, *, paths: TollamaPaths | None = None) -> bool:
     """Remove a locally installed model directory."""
     validated_name = _validate_name(name)
@@ -111,6 +137,12 @@ def _build_manifest(spec: ModelSpec, *, accepted: bool) -> dict[str, Any]:
         "name": spec.name,
         "family": spec.family,
         "source": spec.source.model_dump(mode="json"),
+        "resolved": {
+            "commit_sha": None,
+            "snapshot_path": None,
+        },
+        "size_bytes": 0,
+        "pulled_at": None,
         "installed_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
         "license": {
             "type": spec.license.type,

@@ -3,10 +3,14 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Iterator
+import shutil
+from collections.abc import Callable, Iterator
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from importlib import metadata
+from pathlib import Path
+from queue import Queue
+from threading import Thread
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Request
@@ -23,9 +27,17 @@ from pydantic import (
     ValidationError,
 )
 
-from tollama.core.registry import list_registry_models
+from tollama.core.hf_pull import pull_snapshot_to_local_dir
+from tollama.core.registry import get_model_spec, list_registry_models
 from tollama.core.schemas import ForecastRequest, ForecastResponse
-from tollama.core.storage import install_from_registry, list_installed, remove_model
+from tollama.core.storage import (
+    TollamaPaths,
+    install_from_registry,
+    list_installed,
+    read_manifest,
+    remove_model,
+    write_manifest,
+)
 
 from .loaded_models import LoadedModelTracker, parse_keep_alive, to_utc_iso
 from .runner_manager import RunnerManager
@@ -129,6 +141,7 @@ def create_app(*, runner_manager: RunnerManager | None = None) -> FastAPI:
         family = manifest.get("family")
         family_name = family if isinstance(family, str) else ""
         source = manifest.get("source")
+        resolved = manifest.get("resolved")
         license_data = manifest.get("license")
 
         return {
@@ -136,6 +149,10 @@ def create_app(*, runner_manager: RunnerManager | None = None) -> FastAPI:
             "model": model_name,
             "family": family_name,
             "source": source if isinstance(source, dict) else {},
+            "resolved": resolved if isinstance(resolved, dict) else {},
+            "digest": _manifest_digest(manifest),
+            "size": _manifest_size_bytes(manifest),
+            "snapshot_path": _manifest_snapshot_path(manifest),
             "license": license_data if isinstance(license_data, dict) else {},
             "modelfile": "",
             "parameters": "",
@@ -143,11 +160,18 @@ def create_app(*, runner_manager: RunnerManager | None = None) -> FastAPI:
 
     @app.post("/api/pull", response_model=None)
     def pull(payload: ApiPullRequest) -> Any:
-        manifest = _install_model(name=payload.model, accept_license=payload.accept_license)
         if not payload.stream:
-            return manifest
+            return _pull_model_snapshot(
+                name=payload.model,
+                accept_license=payload.accept_license,
+            )
+
+        _validate_pull_request(name=payload.model, accept_license=payload.accept_license)
         return StreamingResponse(
-            _pull_stream_lines(name=payload.model, manifest=manifest),
+            _pull_stream_lines(
+                name=payload.model,
+                accept_license=payload.accept_license,
+            ),
             media_type="application/x-ndjson",
         )
 
@@ -259,7 +283,9 @@ def _execute_forecast(
 ) -> ForecastResponse:
     _unload_expired_models(app)
     request_now = datetime.now(UTC)
-    model_family = _resolve_model_family(payload.model)
+    model_manifest = _require_installed_manifest(payload.model)
+    model_family = _manifest_family_or_500(model_manifest, payload.model)
+    model_local_dir = _manifest_snapshot_path(model_manifest)
 
     try:
         keep_alive_policy = parse_keep_alive(payload.keep_alive, now=request_now)
@@ -270,6 +296,10 @@ def _execute_forecast(
     if extra_exclude is not None:
         exclude_fields.update(extra_exclude)
     params = payload.model_dump(mode="json", exclude_none=True, exclude=exclude_fields)
+    params["model_name"] = payload.model
+    params["model_family"] = model_family
+    if model_local_dir is not None:
+        params["model_local_dir"] = model_local_dir
 
     try:
         raw_result = app.state.runner_manager.call(
@@ -333,10 +363,153 @@ def _to_ndjson_line(payload: dict[str, Any]) -> str:
     return json.dumps(payload, separators=(",", ":"), sort_keys=True) + "\n"
 
 
-def _pull_stream_lines(name: str, manifest: dict[str, Any]) -> Iterator[str]:
-    yield _to_ndjson_line({"status": "pulling model manifest", "model": name})
-    yield _to_ndjson_line({"status": "writing model files", "model": name})
-    yield _to_ndjson_line({"done": True, "model": name, "manifest": manifest})
+def _pull_stream_lines(*, name: str, accept_license: bool) -> Iterator[str]:
+    event_queue: Queue[dict[str, Any] | object] = Queue()
+    done = object()
+
+    def _run_pull() -> None:
+        try:
+            result = _pull_model_snapshot(
+                name=name,
+                accept_license=accept_license,
+                progress_cb=event_queue.put,
+            )
+            event_queue.put(result)
+        except HTTPException as exc:
+            event_queue.put({"error": {"message": str(exc.detail)}})
+        except Exception as exc:  # noqa: BLE001
+            event_queue.put({"error": {"message": str(exc)}})
+        finally:
+            event_queue.put(done)
+
+    thread = Thread(target=_run_pull, daemon=True)
+    thread.start()
+
+    while True:
+        item = event_queue.get()
+        if item is done:
+            break
+        if not isinstance(item, dict):
+            continue
+        yield _to_ndjson_line(item)
+
+
+def _validate_pull_request(*, name: str, accept_license: bool) -> None:
+    _prepare_pull_manifest(name=name, accept_license=accept_license)
+
+
+def _pull_model_snapshot(
+    *,
+    name: str,
+    accept_license: bool,
+    progress_cb: Callable[[dict[str, Any]], None] | None = None,
+) -> dict[str, Any]:
+    spec, manifest, paths = _prepare_pull_manifest(
+        name=name,
+        accept_license=accept_license,
+    )
+
+    model_dir = paths.model_dir(spec.name)
+    model_dir.mkdir(parents=True, exist_ok=True)
+    snapshot_tmp = model_dir / "snapshot.tmp"
+    snapshot_dir = model_dir / "snapshot"
+    _remove_path(snapshot_tmp)
+
+    try:
+        if spec.source.type == "huggingface":
+            commit_sha, _snapshot_path, size_bytes = pull_snapshot_to_local_dir(
+                repo_id=spec.source.repo_id,
+                revision=spec.source.revision,
+                local_dir=snapshot_tmp,
+                progress_cb=progress_cb,
+            )
+            _replace_directory(source=snapshot_tmp, destination=snapshot_dir)
+        else:
+            _emit_pull_event(progress_cb, {"status": "pulling manifest"})
+            commit_sha = "local"
+            _emit_pull_event(progress_cb, {"status": "resolving digest", "digest": commit_sha})
+            snapshot_dir.mkdir(parents=True, exist_ok=True)
+            size_bytes = 0
+
+        manifest["resolved"] = {
+            "commit_sha": commit_sha,
+            "snapshot_path": str(snapshot_dir.resolve()),
+        }
+        manifest["size_bytes"] = size_bytes
+        manifest["pulled_at"] = _utc_now_iso()
+        write_manifest(spec.name, manifest, paths=paths)
+        return {
+            "status": "success",
+            "model": spec.name,
+            "digest": commit_sha,
+            "size": size_bytes,
+        }
+    except Exception:
+        _remove_path(snapshot_tmp)
+        raise
+
+
+def _prepare_pull_manifest(
+    *,
+    name: str,
+    accept_license: bool,
+) -> tuple[Any, dict[str, Any], TollamaPaths]:
+    try:
+        spec = get_model_spec(name)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    paths = TollamaPaths.default()
+    existing = read_manifest(spec.name, paths=paths)
+    previously_accepted = _manifest_license_accepted(existing)
+    accepted = accept_license or previously_accepted or (not spec.license.needs_acceptance)
+    if spec.license.needs_acceptance and not accepted:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"model {spec.name!r} requires license acceptance; "
+                "pass accept_license=True"
+            ),
+        )
+
+    resolved_existing = existing.get("resolved") if isinstance(existing, dict) else {}
+    resolved_map = resolved_existing if isinstance(resolved_existing, dict) else {}
+    installed_at = (
+        existing.get("installed_at")
+        if isinstance(existing, dict) and isinstance(existing.get("installed_at"), str)
+        else _utc_now_iso()
+    )
+    pulled_at = (
+        existing.get("pulled_at")
+        if isinstance(existing, dict) and isinstance(existing.get("pulled_at"), str)
+        else None
+    )
+    size_bytes = (
+        existing.get("size_bytes")
+        if isinstance(existing, dict)
+        and isinstance(existing.get("size_bytes"), int)
+        and existing.get("size_bytes") >= 0
+        else 0
+    )
+
+    manifest = {
+        "name": spec.name,
+        "family": spec.family,
+        "source": spec.source.model_dump(mode="json"),
+        "resolved": {
+            "commit_sha": _optional_nonempty_str(resolved_map.get("commit_sha")),
+            "snapshot_path": _optional_nonempty_str(resolved_map.get("snapshot_path")),
+        },
+        "size_bytes": size_bytes,
+        "pulled_at": pulled_at,
+        "installed_at": installed_at,
+        "license": {
+            "type": spec.license.type,
+            "needs_acceptance": spec.license.needs_acceptance,
+            "accepted": accepted,
+        },
+    }
+    return spec, manifest, paths
 
 
 def _runner_error_detail(exc: RunnerCallError | RunnerProtocolError) -> dict[str, Any] | str:
@@ -377,20 +550,23 @@ def _find_installed_manifest(name: str) -> dict[str, Any] | None:
     return None
 
 
-def _resolve_model_family(name: str) -> str:
+def _require_installed_manifest(name: str) -> dict[str, Any]:
     manifest = _find_installed_manifest(name)
     if manifest is None:
         raise HTTPException(
             status_code=404,
             detail=f"model {name!r} is not installed",
         )
+    return manifest
 
+
+def _manifest_family_or_500(manifest: dict[str, Any], model_name: str) -> str:
     family = manifest.get("family")
     if isinstance(family, str) and family:
         return family
     raise HTTPException(
         status_code=500,
-        detail=f"model {name!r} has invalid family metadata",
+        detail=f"model {model_name!r} has invalid family metadata",
     )
 
 
@@ -402,16 +578,15 @@ def _to_ollama_tag_model(manifest: dict[str, Any]) -> dict[str, Any]:
     family_name = family if isinstance(family, str) else ""
     families = [family_name] if family_name else []
 
-    digest = manifest.get("digest")
-    digest_value = digest if isinstance(digest, str) else ""
-
-    size = manifest.get("size")
-    size_value = size if isinstance(size, int) and size >= 0 else 0
+    digest_value = _manifest_digest(manifest)
+    size_value = _manifest_size_bytes(manifest)
 
     return {
         "name": model_name,
         "model": model_name,
-        "modified_at": _normalize_modified_at(manifest.get("installed_at")),
+        "modified_at": _normalize_modified_at(
+            manifest.get("pulled_at") or manifest.get("installed_at"),
+        ),
         "size": size_value,
         "digest": digest_value,
         "details": {
@@ -438,6 +613,98 @@ def _normalize_modified_at(value: Any) -> str:
     except ValueError:
         return DEFAULT_MODIFIED_AT
     return normalized
+
+
+def _manifest_digest(manifest: dict[str, Any]) -> str:
+    resolved = manifest.get("resolved")
+    if isinstance(resolved, dict):
+        commit_sha = resolved.get("commit_sha")
+        if isinstance(commit_sha, str):
+            normalized = commit_sha.strip()
+            if normalized:
+                return normalized
+
+    digest = manifest.get("digest")
+    if isinstance(digest, str):
+        return digest
+    return ""
+
+
+def _manifest_snapshot_path(manifest: dict[str, Any]) -> str | None:
+    resolved = manifest.get("resolved")
+    if not isinstance(resolved, dict):
+        return None
+    raw_path = resolved.get("snapshot_path")
+    if not isinstance(raw_path, str):
+        return None
+    normalized = raw_path.strip()
+    if not normalized:
+        return None
+    if not Path(normalized).exists():
+        return None
+    return normalized
+
+
+def _manifest_size_bytes(manifest: dict[str, Any]) -> int:
+    size_bytes = manifest.get("size_bytes")
+    if isinstance(size_bytes, int) and size_bytes >= 0:
+        return size_bytes
+
+    size = manifest.get("size")
+    if isinstance(size, int) and size >= 0:
+        return size
+    return 0
+
+
+def _manifest_license_accepted(manifest: dict[str, Any] | None) -> bool:
+    if not isinstance(manifest, dict):
+        return False
+    license_info = manifest.get("license")
+    if not isinstance(license_info, dict):
+        return False
+    return bool(license_info.get("accepted"))
+
+
+def _optional_nonempty_str(value: Any) -> str | None:
+    if not isinstance(value, str):
+        return None
+    normalized = value.strip()
+    if not normalized:
+        return None
+    return normalized
+
+
+def _utc_now_iso() -> str:
+    return datetime.now(UTC).isoformat().replace("+00:00", "Z")
+
+
+def _emit_pull_event(
+    progress_cb: Callable[[dict[str, Any]], None] | None,
+    payload: dict[str, Any],
+) -> None:
+    if progress_cb is None:
+        return
+    progress_cb(payload)
+
+
+def _replace_directory(*, source: Path, destination: Path) -> None:
+    _remove_path(destination)
+    if source.exists():
+        source.replace(destination)
+        return
+    destination.mkdir(parents=True, exist_ok=True)
+
+
+def _remove_path(path: Path) -> None:
+    if not path.exists():
+        return
+    if path.is_dir():
+        shutil.rmtree(path, ignore_errors=True)
+        return
+    try:
+        path.unlink()
+    except OSError:
+        return
 
 
 def _unload_expired_models(app: FastAPI) -> None:

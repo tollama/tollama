@@ -25,6 +25,7 @@ RUNNER_NAME = "tollama-torch"
 RUNNER_VERSION = "0.1.0"
 UNKNOWN_REQUEST_ID = "unknown"
 CAPABILITIES = ("hello", "load", "unload", "forecast")
+_FORECAST_REQUEST_FIELDS = frozenset({"model", "horizon", "quantiles", "series", "options"})
 
 
 def _extract_request_id(payload: Mapping[str, Any] | None) -> str:
@@ -113,8 +114,22 @@ def _handle_unload(request: ProtocolRequest, adapter: ChronosAdapter) -> Protoco
 
 
 def _handle_forecast(request: ProtocolRequest, adapter: ChronosAdapter) -> ProtocolResponse:
+    canonical_params = {
+        key: value for key, value in request.params.items() if key in _FORECAST_REQUEST_FIELDS
+    }
+    model_local_dir = request.params.get("model_local_dir")
+    if model_local_dir is not None and (
+        not isinstance(model_local_dir, str) or not model_local_dir
+    ):
+        return _error_response(
+            request.id,
+            code=-32602,
+            message="invalid params",
+            data={"details": "model_local_dir must be a non-empty string when provided"},
+        )
+
     try:
-        forecast_request = ForecastRequest.model_validate(request.params)
+        forecast_request = ForecastRequest.model_validate(canonical_params)
     except ValidationError as exc:
         return _error_response(
             request.id,
@@ -124,7 +139,10 @@ def _handle_forecast(request: ProtocolRequest, adapter: ChronosAdapter) -> Proto
         )
 
     try:
-        response = adapter.forecast(forecast_request)
+        response = adapter.forecast(
+            forecast_request,
+            model_local_dir=model_local_dir if isinstance(model_local_dir, str) else None,
+        )
     except DependencyMissingError as exc:
         return _error_response(
             request.id,

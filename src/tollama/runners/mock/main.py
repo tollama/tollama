@@ -23,6 +23,7 @@ RUNNER_NAME = "tollama-mock"
 RUNNER_VERSION = "0.1.0"
 UNKNOWN_REQUEST_ID = "unknown"
 CAPABILITIES = ("hello", "forecast")
+_FORECAST_REQUEST_FIELDS = frozenset({"model", "horizon", "quantiles", "series", "options"})
 
 
 def _extract_request_id(payload: Mapping[str, Any] | None) -> str:
@@ -83,8 +84,11 @@ def _series_forecast_payload(request: ForecastRequest) -> list[dict[str, Any]]:
 
 
 def _handle_forecast(request: ProtocolRequest) -> ProtocolResponse:
+    canonical_params = {
+        key: value for key, value in request.params.items() if key in _FORECAST_REQUEST_FIELDS
+    }
     try:
-        forecast_request = ForecastRequest.model_validate(request.params)
+        forecast_request = ForecastRequest.model_validate(canonical_params)
     except ValidationError as exc:
         return _error_response(
             request.id,

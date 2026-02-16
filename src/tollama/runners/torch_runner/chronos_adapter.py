@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 
 from tollama.core.schemas import ForecastRequest, ForecastResponse, SeriesForecast, SeriesInput
@@ -37,21 +38,26 @@ class ChronosAdapter:
         self._dependencies: _ChronosDependencies | None = None
         self._pipelines: dict[str, Any] = {}
 
-    def load(self, model_name: str) -> None:
+    def load(self, model_name: str, *, model_local_dir: str | None = None) -> None:
         """Load one model pipeline into memory if needed."""
-        model_source = _source_for_model(model_name)
         if model_name in self._pipelines:
             return
 
         dependencies = self._resolve_dependencies()
         pipeline_cls = dependencies.chronos_pipeline
-        try:
-            pipeline = pipeline_cls.from_pretrained(
-                model_source["repo_id"],
-                revision=model_source["revision"],
-            )
-        except TypeError:
-            pipeline = pipeline_cls.from_pretrained(model_source["repo_id"])
+
+        local_path = _existing_local_model_path(model_local_dir)
+        if local_path is not None:
+            pipeline = pipeline_cls.from_pretrained(local_path)
+        else:
+            model_source = _source_for_model(model_name)
+            try:
+                pipeline = pipeline_cls.from_pretrained(
+                    model_source["repo_id"],
+                    revision=model_source["revision"],
+                )
+            except TypeError:
+                pipeline = pipeline_cls.from_pretrained(model_source["repo_id"])
         self._pipelines[model_name] = pipeline
 
     def unload(self, model_name: str | None = None) -> None:
@@ -61,9 +67,14 @@ class ChronosAdapter:
             return
         self._pipelines.pop(model_name, None)
 
-    def forecast(self, request: ForecastRequest) -> ForecastResponse:
+    def forecast(
+        self,
+        request: ForecastRequest,
+        *,
+        model_local_dir: str | None = None,
+    ) -> ForecastResponse:
         """Generate a forecast from canonical request data."""
-        self.load(request.model)
+        self.load(request.model, model_local_dir=model_local_dir)
         dependencies = self._resolve_dependencies()
         pandas = dependencies.pandas
         pipeline = self._pipelines[request.model]
@@ -288,3 +299,15 @@ def _to_python_number(value: Any) -> int | float:
         if isinstance(scalar, (int, float)):
             return scalar
     raise ValueError(f"non-numeric value in forecast payload: {value!r}")
+
+
+def _existing_local_model_path(model_local_dir: str | None) -> str | None:
+    if not model_local_dir:
+        return None
+    normalized = model_local_dir.strip()
+    if not normalized:
+        return None
+    path = Path(normalized)
+    if not path.exists():
+        return None
+    return str(path)

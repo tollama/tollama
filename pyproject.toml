@@ -12,9 +12,11 @@ license = { file = "LICENSE" }
 authors = [{ name = "tollama contributors" }]
 dependencies = [
   "fastapi>=0.111.0,<1.0.0",
+  "huggingface_hub>=0.20,<1.0",
   "httpx>=0.27.0,<1.0.0",
   "pydantic>=2.0,<3.0",
   "pyyaml>=6.0,<7.0",
+  "tqdm>=4.60,<5.0",
   "typer>=0.12.0,<1.0.0",
   "uvicorn>=0.30.0,<1.0.0",
 ]

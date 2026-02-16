@@ -15,12 +15,12 @@ class _NoopAdapter:
     def unload(self, model_name: str | None = None) -> None:
         return None
 
-    def forecast(self, request):  # pragma: no cover - only used in one test path.
+    def forecast(self, request, *, model_local_dir: str | None = None):  # pragma: no cover
         raise AssertionError("unexpected call")
 
 
 class _MissingDependencyAdapter(_NoopAdapter):
-    def forecast(self, request):
+    def forecast(self, request, *, model_local_dir: str | None = None):
         raise DependencyMissingError("install with pip install -e \".[dev,runner_torch]\"")
 
 

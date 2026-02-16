@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from typing import Any
 
 from fastapi.testclient import TestClient
@@ -39,6 +40,52 @@ def _install_model(monkeypatch, tmp_path, name: str = "mock") -> None:
     paths = TollamaPaths(base_dir=tmp_path / ".tollama")
     monkeypatch.setenv("TOLLAMA_HOME", str(paths.base_dir))
     install_from_registry(name, accept_license=True, paths=paths)
+
+
+def _patch_fake_hf_download(monkeypatch) -> None:
+    class _FakeModelInfo:
+        sha = "fake-commit-sha"
+
+    def _fake_model_info(*, repo_id: str, revision: str, token: str | None) -> _FakeModelInfo:
+        assert repo_id
+        assert revision
+        return _FakeModelInfo()
+
+    def _fake_snapshot_download(
+        *,
+        repo_id: str,
+        revision: str,
+        local_dir: str,
+        token: str | None,
+        max_workers: int,
+        tqdm_class,
+    ) -> str:
+        assert repo_id
+        assert revision
+        assert max_workers == 8
+        _ = token
+
+        pull_root = Path(local_dir)
+        pull_root.mkdir(parents=True, exist_ok=True)
+
+        progress = tqdm_class(
+            total=100,
+            initial=0,
+            unit="B",
+            desc="huggingface_hub.snapshot_download",
+        )
+        progress.update(10)
+        progress.update(90)
+        progress.set_description("Download complete")
+        progress.close()
+
+        (pull_root / "weights.bin").write_bytes(b"x" * 128)
+        (pull_root / ".cache").mkdir(parents=True, exist_ok=True)
+        (pull_root / ".cache" / "ignored.bin").write_bytes(b"x" * 1024)
+        return str(pull_root)
+
+    monkeypatch.setattr("tollama.core.hf_pull._hf_model_info", _fake_model_info)
+    monkeypatch.setattr("tollama.core.hf_pull._hf_snapshot_download", _fake_snapshot_download)
 
 
 def test_health_endpoint_returns_ok() -> None:
@@ -111,6 +158,10 @@ def test_ollama_tags_and_show_endpoints_from_installed_manifest(monkeypatch, tmp
             "revision": "main",
             "entrypoint": "tollama-runner-mock",
         },
+        "resolved": {},
+        "digest": "sha256:abc123",
+        "size": 1234,
+        "snapshot_path": None,
         "license": {"type": "mit", "needs_acceptance": False, "accepted": True},
         "modelfile": "",
         "parameters": "",
@@ -133,7 +184,8 @@ def test_ollama_pull_non_stream_and_delete_flow(monkeypatch, tmp_path) -> None:
     with TestClient(create_app()) as client:
         pulled = client.post("/api/pull", json={"model": "mock", "stream": False})
         assert pulled.status_code == 200
-        assert pulled.json()["name"] == "mock"
+        assert pulled.json()["status"] == "success"
+        assert pulled.json()["model"] == "mock"
 
         tags = client.get("/api/tags")
         assert tags.status_code == 200
@@ -158,9 +210,91 @@ def test_ollama_pull_stream_returns_ndjson(monkeypatch, tmp_path) -> None:
     lines = [line for line in response.text.splitlines() if line.strip()]
     assert len(lines) >= 2
     payloads = [json.loads(line) for line in lines]
-    assert payloads[0].get("status") == "pulling model manifest"
-    assert payloads[-1].get("done") is True
-    assert payloads[-1].get("model") == "mock"
+    assert payloads[0].get("status") == "pulling manifest"
+    assert payloads[-1] == {
+        "status": "success",
+        "model": "mock",
+        "digest": "local",
+        "size": 0,
+    }
+
+
+def test_ollama_pull_stream_downloads_hf_snapshot_with_progress(monkeypatch, tmp_path) -> None:
+    paths = TollamaPaths(base_dir=tmp_path / ".tollama")
+    monkeypatch.setenv("TOLLAMA_HOME", str(paths.base_dir))
+    _patch_fake_hf_download(monkeypatch)
+
+    with TestClient(create_app()) as client:
+        response = client.post("/api/pull", json={"model": "chronos2"})
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("application/x-ndjson")
+    payloads = [json.loads(line) for line in response.text.splitlines() if line.strip()]
+
+    assert payloads[0]["status"] == "pulling manifest"
+    assert any(entry.get("status") == "downloading" for entry in payloads)
+    assert payloads[-1]["status"] == "success"
+    assert payloads[-1]["digest"] == "fake-commit-sha"
+    assert payloads[-1]["size"] == 128
+
+    manifest = json.loads(paths.manifest_path("chronos2").read_text(encoding="utf-8"))
+    assert manifest["resolved"]["commit_sha"] == "fake-commit-sha"
+    assert isinstance(manifest["resolved"]["snapshot_path"], str)
+    assert manifest["size_bytes"] == 128
+    assert isinstance(manifest["pulled_at"], str)
+
+    with TestClient(create_app()) as client:
+        tags_response = client.get("/api/tags")
+        show_response = client.post("/api/show", json={"model": "chronos2"})
+
+    assert tags_response.status_code == 200
+    chronos_tag = next(
+        item for item in tags_response.json()["models"] if item["name"] == "chronos2"
+    )
+    assert chronos_tag["digest"] == "fake-commit-sha"
+    assert chronos_tag["size"] == 128
+
+    assert show_response.status_code == 200
+    show_body = show_response.json()
+    assert show_body["digest"] == "fake-commit-sha"
+    assert show_body["size"] == 128
+    assert show_body["snapshot_path"] == manifest["resolved"]["snapshot_path"]
+
+
+def test_ollama_pull_non_stream_returns_success_and_updates_manifest(monkeypatch, tmp_path) -> None:
+    paths = TollamaPaths(base_dir=tmp_path / ".tollama")
+    monkeypatch.setenv("TOLLAMA_HOME", str(paths.base_dir))
+    _patch_fake_hf_download(monkeypatch)
+
+    with TestClient(create_app()) as client:
+        response = client.post("/api/pull", json={"model": "chronos2", "stream": False})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body == {
+        "status": "success",
+        "model": "chronos2",
+        "digest": "fake-commit-sha",
+        "size": 128,
+    }
+
+    manifest = json.loads(paths.manifest_path("chronos2").read_text(encoding="utf-8"))
+    assert manifest["resolved"]["commit_sha"] == "fake-commit-sha"
+    assert manifest["size_bytes"] == 128
+
+
+def test_ollama_pull_prevalidation_errors_are_raised_before_streaming(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    monkeypatch.setenv("TOLLAMA_HOME", str(tmp_path / ".tollama"))
+
+    with TestClient(create_app()) as client:
+        missing = client.post("/api/pull", json={"model": "does-not-exist"})
+        assert missing.status_code == 404
+
+        conflict = client.post("/api/pull", json={"model": "timesfm2p5"})
+        assert conflict.status_code == 409
 
 
 def test_api_ps_omits_model_after_forecast_keep_alive_zero(monkeypatch, tmp_path) -> None:
