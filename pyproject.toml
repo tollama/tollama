@@ -23,11 +23,17 @@ dependencies = [
 tollama = "tollama.cli.main:main"
 tollamad = "tollama.daemon.main:main"
 tollama-runner-mock = "tollama.runners.mock.main:main"
+tollama-runner-torch = "tollama.runners.torch_runner.main:main"
 
 [project.optional-dependencies]
 dev = [
   "pytest>=8.0",
   "ruff>=0.6.0",
+]
+runner_torch = [
+  "chronos-forecasting>=2.0",
+  "pandas>=2.0,<3.0",
+  "numpy>=1.26,<3.0",
 ]
 
 [tool.setuptools]
@@ -46,3 +52,6 @@ select = ["E", "F", "I", "UP"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
+markers = [
+  "integration: marks tests requiring optional integration dependencies and network downloads",
+]

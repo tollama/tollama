@@ -45,7 +45,7 @@ def test_serve_runs_uvicorn_with_expected_defaults(monkeypatch) -> None:
     assert captured == {
         "target": "tollama.daemon.app:app",
         "host": "127.0.0.1",
-        "port": 11434,
+        "port": 11435,
         "log_level": "info",
     }
 
@@ -77,7 +77,7 @@ def test_pull_supports_streaming_and_non_stream(monkeypatch) -> None:
     lines = [line for line in streamed.stdout.splitlines() if line.strip()]
     assert json.loads(lines[0]) == {"status": "pulling model manifest"}
     assert json.loads(lines[-1]) == {"done": True, "model": "mock"}
-    assert captured["base_url"] == "http://localhost:11434"
+    assert captured["base_url"] == "http://127.0.0.1:11435"
     assert captured["pull"] == {"name": "mock", "stream": True}
 
     non_stream = runner.invoke(app, ["pull", "mock", "--no-stream"])

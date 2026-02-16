@@ -35,7 +35,7 @@ class RunnerProtocolError(RunnerError):
 class RunnerCallError(RunnerError):
     """Raised when the runner returns a structured error response."""
 
-    def __init__(self, code: int, message: str, data: Any | None = None) -> None:
+    def __init__(self, code: int | str, message: str, data: Any | None = None) -> None:
         super().__init__(message)
         self.code = code
         self.message = message

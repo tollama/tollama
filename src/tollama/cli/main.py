@@ -36,7 +36,7 @@ def pull(
     no_stream: bool = typer.Option(False, "--no-stream", help="Disable streaming pull output."),
     base_url: str = typer.Option(
         DEFAULT_BASE_URL,
-        help="Daemon base URL. Defaults to http://localhost:11434.",
+        help="Daemon base URL. Defaults to http://127.0.0.1:11435.",
     ),
     timeout: float = typer.Option(10.0, min=0.1, help="HTTP timeout in seconds."),
 ) -> None:
@@ -55,7 +55,7 @@ def pull(
 def list_models(
     base_url: str = typer.Option(
         DEFAULT_BASE_URL,
-        help="Daemon base URL. Defaults to http://localhost:11434.",
+        help="Daemon base URL. Defaults to http://127.0.0.1:11435.",
     ),
     timeout: float = typer.Option(10.0, min=0.1, help="HTTP timeout in seconds."),
 ) -> None:
@@ -73,7 +73,7 @@ def list_models(
 def ps(
     base_url: str = typer.Option(
         DEFAULT_BASE_URL,
-        help="Daemon base URL. Defaults to http://localhost:11434.",
+        help="Daemon base URL. Defaults to http://127.0.0.1:11435.",
     ),
     timeout: float = typer.Option(10.0, min=0.1, help="HTTP timeout in seconds."),
 ) -> None:
@@ -92,7 +92,7 @@ def show(
     model: str = typer.Argument(..., help="Model name to inspect."),
     base_url: str = typer.Option(
         DEFAULT_BASE_URL,
-        help="Daemon base URL. Defaults to http://localhost:11434.",
+        help="Daemon base URL. Defaults to http://127.0.0.1:11435.",
     ),
     timeout: float = typer.Option(10.0, min=0.1, help="HTTP timeout in seconds."),
 ) -> None:
@@ -111,7 +111,7 @@ def rm(
     model: str = typer.Argument(..., help="Installed model name to remove."),
     base_url: str = typer.Option(
         DEFAULT_BASE_URL,
-        help="Daemon base URL. Defaults to http://localhost:11434.",
+        help="Daemon base URL. Defaults to http://127.0.0.1:11435.",
     ),
     timeout: float = typer.Option(10.0, min=0.1, help="HTTP timeout in seconds."),
 ) -> None:
@@ -133,7 +133,7 @@ def run(
     no_stream: bool = typer.Option(False, "--no-stream", help="Disable streaming forecast output."),
     base_url: str = typer.Option(
         DEFAULT_BASE_URL,
-        help="Daemon base URL. Defaults to http://localhost:11434.",
+        help="Daemon base URL. Defaults to http://127.0.0.1:11435.",
     ),
     timeout: float = typer.Option(10.0, min=0.1, help="HTTP timeout in seconds."),
 ) -> None:

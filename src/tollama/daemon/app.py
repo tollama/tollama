@@ -28,16 +28,16 @@ from tollama.core.schemas import ForecastRequest, ForecastResponse
 from tollama.core.storage import install_from_registry, list_installed, remove_model
 
 from .loaded_models import LoadedModelTracker, parse_keep_alive, to_utc_iso
+from .runner_manager import RunnerManager
 from .supervisor import (
     RunnerCallError,
+    RunnerError,
     RunnerProtocolError,
-    RunnerSupervisor,
     RunnerUnavailableError,
 )
 
 DEFAULT_FORECAST_TIMEOUT_SECONDS = 10.0
 DEFAULT_MODIFIED_AT = "1970-01-01T00:00:00Z"
-DEFAULT_RUNNER_ID = "default"
 
 
 class ModelPullRequest(BaseModel):
@@ -90,15 +90,15 @@ class ApiForecastRequest(ForecastRequestWithKeepAlive):
 @asynccontextmanager
 async def _lifespan(app: FastAPI):
     yield
-    app.state.supervisor.stop()
+    app.state.runner_manager.stop()
     app.state.loaded_model_tracker.clear()
 
 
-def create_app(supervisor: RunnerSupervisor | None = None) -> FastAPI:
+def create_app(*, runner_manager: RunnerManager | None = None) -> FastAPI:
     """Create a configured FastAPI daemon app."""
     package_version = _resolve_package_version()
     app = FastAPI(title="tollama daemon", version=package_version, lifespan=_lifespan)
-    app.state.supervisor = supervisor or RunnerSupervisor()
+    app.state.runner_manager = runner_manager or RunnerManager()
     app.state.loaded_model_tracker = LoadedModelTracker()
 
     @app.exception_handler(RequestValidationError)
@@ -259,6 +259,7 @@ def _execute_forecast(
 ) -> ForecastResponse:
     _unload_expired_models(app)
     request_now = datetime.now(UTC)
+    model_family = _resolve_model_family(payload.model)
 
     try:
         keep_alive_policy = parse_keep_alive(payload.keep_alive, now=request_now)
@@ -271,14 +272,18 @@ def _execute_forecast(
     params = payload.model_dump(mode="json", exclude_none=True, exclude=exclude_fields)
 
     try:
-        raw_result = app.state.supervisor.call(
+        raw_result = app.state.runner_manager.call(
+            family=model_family,
             method="forecast",
             params=params,
             timeout=DEFAULT_FORECAST_TIMEOUT_SECONDS,
         )
     except RunnerUnavailableError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
-    except (RunnerCallError, RunnerProtocolError) as exc:
+    except RunnerCallError as exc:
+        status_code = 503 if exc.code == "DEPENDENCY_MISSING" else 502
+        raise HTTPException(status_code=status_code, detail=_runner_error_detail(exc)) from exc
+    except RunnerProtocolError as exc:
         raise HTTPException(status_code=502, detail=_runner_error_detail(exc)) from exc
 
     try:
@@ -291,15 +296,22 @@ def _execute_forecast(
 
     tracker: LoadedModelTracker = app.state.loaded_model_tracker
     if keep_alive_policy.unload_immediately:
-        app.state.supervisor.stop()
-        tracker.unload_runner(DEFAULT_RUNNER_ID)
+        try:
+            app.state.runner_manager.unload(
+                family=model_family,
+                model=payload.model,
+                timeout=DEFAULT_FORECAST_TIMEOUT_SECONDS,
+            )
+        except RunnerError:
+            app.state.runner_manager.stop(family=model_family)
+        tracker.unload_runner(model_family)
         return response
 
     tracker.upsert(
         name=payload.model,
         model=payload.model,
-        family=_resolve_loaded_model_family(payload.model),
-        runner=DEFAULT_RUNNER_ID,
+        family=model_family,
+        runner=model_family,
         expires_at=keep_alive_policy.expires_at,
         device=None,
     )
@@ -365,15 +377,21 @@ def _find_installed_manifest(name: str) -> dict[str, Any] | None:
     return None
 
 
-def _resolve_loaded_model_family(name: str) -> str:
+def _resolve_model_family(name: str) -> str:
     manifest = _find_installed_manifest(name)
     if manifest is None:
-        return name
+        raise HTTPException(
+            status_code=404,
+            detail=f"model {name!r} is not installed",
+        )
 
     family = manifest.get("family")
     if isinstance(family, str) and family:
         return family
-    return name
+    raise HTTPException(
+        status_code=500,
+        detail=f"model {name!r} has invalid family metadata",
+    )
 
 
 def _to_ollama_tag_model(manifest: dict[str, Any]) -> dict[str, Any]:
@@ -427,7 +445,7 @@ def _unload_expired_models(app: FastAPI) -> None:
     now = datetime.now(UTC)
     expired_runners = tracker.expired_runners(now)
     for runner in expired_runners:
-        app.state.supervisor.stop()
+        app.state.runner_manager.stop(family=runner)
         tracker.unload_runner(runner)
 
 

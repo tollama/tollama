@@ -19,8 +19,9 @@ python -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip
 python -m pip install -e ".[dev]"
+python -m pip install -e ".[dev,runner_torch]"  # optional: Chronos torch runner
 
-# Terminal 1: run daemon (default http://localhost:11434)
+# Terminal 1: run daemon (default http://127.0.0.1:11435)
 tollama serve
 
 # Terminal 2: Ollama-style lifecycle
@@ -32,7 +33,7 @@ tollama ps
 tollama rm mock
 
 # Check daemon version endpoint
-curl http://localhost:11434/api/version
+curl http://127.0.0.1:11435/api/version
 
 ruff check .
 pytest -q
@@ -40,10 +41,10 @@ pytest -q
 
 ## Daemon Base URL and Host Config
 
-- Default CLI base URL is `http://localhost:11434`.
-- Ollama-style API base URL is `http://localhost:11434/api`.
+- Default CLI base URL is `http://127.0.0.1:11435`.
+- Ollama-style API base URL is `http://127.0.0.1:11435/api`.
 - Configure bind host and port with `TOLLAMA_HOST` in `host:port` format.
-  - Example: `TOLLAMA_HOST=0.0.0.0:11434 tollamad`
+  - Example: `TOLLAMA_HOST=0.0.0.0:11435 tollamad`
 - Primary lifecycle endpoints are under `/api/*`.
   - `GET /api/tags`
   - `GET /api/ps`
@@ -54,6 +55,28 @@ pytest -q
 - Existing forecast and health endpoints remain under `/v1/*` for backward compatibility.
   - `GET /v1/health`
   - `POST /v1/forecast`
+
+## Chronos2 Forecasting
+
+```bash
+# install optional torch runner dependencies
+python -m pip install -e ".[dev,runner_torch]"
+
+# run daemon
+tollama serve
+
+# pull Chronos manifest
+tollama pull chronos2
+
+# run forecast through CLI
+tollama run chronos2 --input examples/chronos2_request.json --no-stream
+```
+
+```bash
+curl -s http://127.0.0.1:11435/api/forecast \
+  -H 'content-type: application/json' \
+  -d @examples/chronos2_request.json
+```
 
 ## Architecture
 
@@ -68,6 +91,7 @@ pytest -q
 - Request shape: `{"id":"...","method":"...","params":{...}}`
 - Response shape: `{"id":"...","result":{...}}` or `{"id":"...","error":{"code":...,"message":"..."}}`
 - Current mock runner methods: `hello`, `forecast`.
+- Current torch runner methods: `hello`, `load`, `unload`, `forecast`.
 
 ## Adding A New Runner Family
 

@@ -14,7 +14,7 @@ from tollama.daemon.supervisor import RunnerCallError, RunnerUnavailableError
 
 def _sample_forecast_payload() -> dict[str, Any]:
     return {
-        "model": "mock-naive",
+        "model": "mock",
         "horizon": 2,
         "quantiles": [0.1, 0.9],
         "series": [
@@ -33,6 +33,12 @@ def _sample_forecast_payload() -> dict[str, Any]:
         ],
         "options": {},
     }
+
+
+def _install_model(monkeypatch, tmp_path, name: str = "mock") -> None:
+    paths = TollamaPaths(base_dir=tmp_path / ".tollama")
+    monkeypatch.setenv("TOLLAMA_HOME", str(paths.base_dir))
+    install_from_registry(name, accept_license=True, paths=paths)
 
 
 def test_health_endpoint_returns_ok() -> None:
@@ -157,7 +163,8 @@ def test_ollama_pull_stream_returns_ndjson(monkeypatch, tmp_path) -> None:
     assert payloads[-1].get("model") == "mock"
 
 
-def test_api_ps_omits_model_after_forecast_keep_alive_zero() -> None:
+def test_api_ps_omits_model_after_forecast_keep_alive_zero(monkeypatch, tmp_path) -> None:
+    _install_model(monkeypatch, tmp_path, "mock")
     payload = _sample_forecast_payload()
     payload["keep_alive"] = 0
 
@@ -170,7 +177,8 @@ def test_api_ps_omits_model_after_forecast_keep_alive_zero() -> None:
     assert ps_response.json() == {"models": []}
 
 
-def test_api_ps_tracks_model_after_forecast_keep_alive_negative() -> None:
+def test_api_ps_tracks_model_after_forecast_keep_alive_negative(monkeypatch, tmp_path) -> None:
+    _install_model(monkeypatch, tmp_path, "mock")
     payload = _sample_forecast_payload()
     payload["keep_alive"] = -1
 
@@ -185,16 +193,17 @@ def test_api_ps_tracks_model_after_forecast_keep_alive_negative() -> None:
     assert len(models) == 1
 
     loaded = models[0]
-    assert loaded["name"] == "mock-naive"
-    assert loaded["model"] == "mock-naive"
+    assert loaded["name"] == "mock"
+    assert loaded["model"] == "mock"
     assert loaded["expires_at"] is None
     assert loaded["size"] == 0
     assert loaded["size_vram"] == 0
     assert loaded["context_length"] == 0
-    assert loaded["details"] == {"family": "mock-naive"}
+    assert loaded["details"] == {"family": "mock"}
 
 
-def test_api_forecast_stream_false_returns_forecast_response() -> None:
+def test_api_forecast_stream_false_returns_forecast_response(monkeypatch, tmp_path) -> None:
+    _install_model(monkeypatch, tmp_path, "mock")
     payload = _sample_forecast_payload()
     payload["stream"] = False
 
@@ -203,12 +212,13 @@ def test_api_forecast_stream_false_returns_forecast_response() -> None:
 
     assert response.status_code == 200
     body = response.json()
-    assert body["model"] == "mock-naive"
+    assert body["model"] == "mock"
     assert isinstance(body["forecasts"], list)
     assert len(body["forecasts"]) == 2
 
 
-def test_api_forecast_stream_true_returns_ndjson_with_done() -> None:
+def test_api_forecast_stream_true_returns_ndjson_with_done(monkeypatch, tmp_path) -> None:
+    _install_model(monkeypatch, tmp_path, "mock")
     with TestClient(create_app()) as client:
         response = client.post("/api/forecast", json=_sample_forecast_payload())
 
@@ -222,10 +232,11 @@ def test_api_forecast_stream_true_returns_ndjson_with_done() -> None:
     assert payloads[0] == {"status": "loading model"}
     assert payloads[1] == {"status": "running forecast"}
     assert payloads[-1].get("done") is True
-    assert payloads[-1]["response"]["model"] == "mock-naive"
+    assert payloads[-1]["response"]["model"] == "mock"
 
 
-def test_api_forecast_keep_alive_updates_loaded_model_tracker() -> None:
+def test_api_forecast_keep_alive_updates_loaded_model_tracker(monkeypatch, tmp_path) -> None:
+    _install_model(monkeypatch, tmp_path, "mock")
     payload = _sample_forecast_payload()
     payload["stream"] = False
     payload["keep_alive"] = -1
@@ -239,17 +250,18 @@ def test_api_forecast_keep_alive_updates_loaded_model_tracker() -> None:
     models = ps_response.json().get("models")
     assert isinstance(models, list)
     assert len(models) == 1
-    assert models[0]["model"] == "mock-naive"
+    assert models[0]["model"] == "mock"
     assert models[0]["expires_at"] is None
 
 
-def test_forecast_routes_end_to_end_to_mock_runner() -> None:
+def test_forecast_routes_end_to_end_to_mock_runner(monkeypatch, tmp_path) -> None:
+    _install_model(monkeypatch, tmp_path, "mock")
     with TestClient(create_app()) as client:
         response = client.post("/v1/forecast", json=_sample_forecast_payload())
 
     assert response.status_code == 200
     body = response.json()
-    assert body["model"] == "mock-naive"
+    assert body["model"] == "mock"
     assert len(body["forecasts"]) == 2
 
     first = body["forecasts"][0]
@@ -265,7 +277,8 @@ def test_forecast_routes_end_to_end_to_mock_runner() -> None:
     assert second["start_timestamp"] == "2025-01-02"
 
 
-def test_forecast_invalid_payload_returns_400() -> None:
+def test_forecast_invalid_payload_returns_400(monkeypatch, tmp_path) -> None:
+    _install_model(monkeypatch, tmp_path, "mock")
     payload = _sample_forecast_payload()
     payload["horizon"] = "2"
 
@@ -300,7 +313,7 @@ def test_models_endpoint_returns_available_and_installed(monkeypatch, tmp_path) 
 
     chronos = next(spec for spec in body["available"] if spec["name"] == "chronos2")
     assert chronos["installed"] is False
-    assert chronos["license"]["needs_acceptance"] is True
+    assert chronos["license"]["needs_acceptance"] is False
 
     assert body["installed"] == [
         {
@@ -352,7 +365,7 @@ def test_models_pull_error_mapping(monkeypatch, tmp_path) -> None:
 
         conflict = client.post(
             "/v1/models/pull",
-            json={"name": "chronos2", "accept_license": False},
+            json={"name": "timesfm2p5", "accept_license": False},
         )
         assert conflict.status_code == 409
 
@@ -363,24 +376,47 @@ def test_models_pull_error_mapping(monkeypatch, tmp_path) -> None:
         assert bad_payload.status_code == 400
 
 
-class _UnavailableSupervisor:
-    def call(self, method: str, params: dict[str, Any], timeout: float) -> dict[str, Any]:
-        raise RunnerUnavailableError(f"runner unavailable for {method}")
+class _UnavailableRunnerManager:
+    def call(
+        self,
+        family: str,
+        method: str,
+        params: dict[str, Any],
+        timeout: float,
+    ) -> dict[str, Any]:
+        raise RunnerUnavailableError(f"runner unavailable for {family}:{method}")
 
-    def stop(self) -> None:
+    def stop(self, family: str | None = None) -> None:
+        return None
+
+    def unload(self, family: str, *, model: str | None = None, timeout: float) -> None:
         return None
 
 
-class _BadGatewaySupervisor:
-    def call(self, method: str, params: dict[str, Any], timeout: float) -> dict[str, Any]:
-        raise RunnerCallError(code=-32602, message="invalid params", data={"method": method})
+class _BadGatewayRunnerManager:
+    def call(
+        self,
+        family: str,
+        method: str,
+        params: dict[str, Any],
+        timeout: float,
+    ) -> dict[str, Any]:
+        raise RunnerCallError(
+            code=-32602,
+            message="invalid params",
+            data={"family": family, "method": method},
+        )
 
-    def stop(self) -> None:
+    def stop(self, family: str | None = None) -> None:
+        return None
+
+    def unload(self, family: str, *, model: str | None = None, timeout: float) -> None:
         return None
 
 
-def test_forecast_returns_503_when_runner_unavailable() -> None:
-    app = create_app(supervisor=_UnavailableSupervisor())  # type: ignore[arg-type]
+def test_forecast_returns_503_when_runner_unavailable(monkeypatch, tmp_path) -> None:
+    _install_model(monkeypatch, tmp_path, "mock")
+    app = create_app(runner_manager=_UnavailableRunnerManager())  # type: ignore[arg-type]
     with TestClient(app) as client:
         response = client.post("/v1/forecast", json=_sample_forecast_payload())
 
@@ -388,8 +424,9 @@ def test_forecast_returns_503_when_runner_unavailable() -> None:
     assert "runner unavailable" in response.json()["detail"]
 
 
-def test_forecast_returns_502_when_runner_returns_error() -> None:
-    app = create_app(supervisor=_BadGatewaySupervisor())  # type: ignore[arg-type]
+def test_forecast_returns_502_when_runner_returns_error(monkeypatch, tmp_path) -> None:
+    _install_model(monkeypatch, tmp_path, "mock")
+    app = create_app(runner_manager=_BadGatewayRunnerManager())  # type: ignore[arg-type]
     with TestClient(app) as client:
         response = client.post("/v1/forecast", json=_sample_forecast_payload())
 
@@ -397,5 +434,5 @@ def test_forecast_returns_502_when_runner_returns_error() -> None:
     assert response.json()["detail"] == {
         "code": -32602,
         "message": "invalid params",
-        "data": {"method": "forecast"},
+        "data": {"family": "mock", "method": "forecast"},
     }

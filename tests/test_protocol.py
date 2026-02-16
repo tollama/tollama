@@ -52,6 +52,17 @@ def test_encode_decode_response_error_roundtrip() -> None:
     assert decoded == response
 
 
+def test_encode_decode_response_string_error_code_roundtrip() -> None:
+    response = ProtocolResponse(
+        id=generate_message_id(),
+        error=ProtocolErrorMessage(code="DEPENDENCY_MISSING", message="install extras"),
+    )
+
+    line = encode_line(response)
+    decoded = decode_response_line(line)
+    assert decoded == response
+
+
 def test_validate_message_detects_request_and_response() -> None:
     request_data = decode_line('{"id":"1","method":"capabilities","params":{}}')
     request = validate_message(request_data)

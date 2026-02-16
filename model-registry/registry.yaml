@@ -19,7 +19,7 @@ models:
       revision: main
     license:
       type: apache-2.0
-      needs_acceptance: true
+      needs_acceptance: false
 
   - name: timesfm2p5
     family: timesfm

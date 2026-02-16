@@ -56,9 +56,9 @@ def test_install_requires_license_acceptance_when_flagged(tmp_path) -> None:
     paths = TollamaPaths(base_dir=tmp_path / ".tollama")
 
     with pytest.raises(PermissionError):
-        install_from_registry("chronos2", accept_license=False, paths=paths)
+        install_from_registry("timesfm2p5", accept_license=False, paths=paths)
 
-    manifest = install_from_registry("chronos2", accept_license=True, paths=paths)
-    assert manifest["name"] == "chronos2"
+    manifest = install_from_registry("timesfm2p5", accept_license=True, paths=paths)
+    assert manifest["name"] == "timesfm2p5"
     assert manifest["license"]["needs_acceptance"] is True
     assert manifest["license"]["accepted"] is True

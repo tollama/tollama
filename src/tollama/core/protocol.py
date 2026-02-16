@@ -20,7 +20,7 @@ from pydantic import (
 
 NonEmptyStr = Annotated[StrictStr, Field(min_length=1)]
 
-SUPPORTED_METHODS = frozenset({"capabilities", "load", "forecast", "ping", "hello"})
+SUPPORTED_METHODS = frozenset({"capabilities", "load", "unload", "forecast", "ping", "hello"})
 
 
 class ProtocolDecodeError(ValueError):
@@ -44,7 +44,7 @@ class ProtocolRequest(ProtocolBaseModel):
 class ProtocolErrorMessage(ProtocolBaseModel):
     """Error payload for failed responses."""
 
-    code: StrictInt
+    code: StrictInt | StrictStr
     message: NonEmptyStr
     data: JsonValue | None = None
 
