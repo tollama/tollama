@@ -87,8 +87,78 @@ def test_models_endpoint_returns_available_and_installed(monkeypatch, tmp_path) 
 
     assert response.status_code == 200
     body = response.json()
-    assert any(spec["name"] == "mock" for spec in body["available"])
-    assert [item["name"] for item in body["installed"]] == ["mock"]
+    mock_available = next(spec for spec in body["available"] if spec["name"] == "mock")
+    assert mock_available["family"] == "mock"
+    assert mock_available["installed"] is True
+    assert mock_available["license"] == {
+        "type": "mit",
+        "needs_acceptance": False,
+        "accepted": True,
+    }
+
+    chronos = next(spec for spec in body["available"] if spec["name"] == "chronos2")
+    assert chronos["installed"] is False
+    assert chronos["license"]["needs_acceptance"] is True
+
+    assert body["installed"] == [
+        {
+            "name": "mock",
+            "family": "mock",
+            "installed": True,
+            "license": {
+                "type": "mit",
+                "needs_acceptance": False,
+                "accepted": True,
+            },
+        }
+    ]
+
+
+def test_models_pull_and_delete_flow(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("TOLLAMA_HOME", str(tmp_path / ".tollama"))
+
+    with TestClient(create_app()) as client:
+        pull_response = client.post(
+            "/v1/models/pull",
+            json={"name": "mock", "accept_license": False},
+        )
+        assert pull_response.status_code == 200
+        pulled = pull_response.json()
+        assert pulled["name"] == "mock"
+
+        listed = client.get("/v1/models")
+        assert listed.status_code == 200
+        assert [item["name"] for item in listed.json()["installed"]] == ["mock"]
+
+        delete_response = client.delete("/v1/models/mock")
+        assert delete_response.status_code == 200
+        assert delete_response.json() == {"removed": True, "name": "mock"}
+
+        delete_again = client.delete("/v1/models/mock")
+        assert delete_again.status_code == 404
+
+
+def test_models_pull_error_mapping(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("TOLLAMA_HOME", str(tmp_path / ".tollama"))
+
+    with TestClient(create_app()) as client:
+        missing = client.post(
+            "/v1/models/pull",
+            json={"name": "does-not-exist", "accept_license": True},
+        )
+        assert missing.status_code == 404
+
+        conflict = client.post(
+            "/v1/models/pull",
+            json={"name": "chronos2", "accept_license": False},
+        )
+        assert conflict.status_code == 409
+
+        bad_payload = client.post(
+            "/v1/models/pull",
+            json={"name": "mock", "accept_license": "false"},
+        )
+        assert bad_payload.status_code == 400
 
 
 class _UnavailableSupervisor:
