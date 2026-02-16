@@ -33,22 +33,6 @@ models:
       future_covariates_categorical: true
       static_covariates: false
 
-  - name: timesfm2p5
-    family: timesfm
-    source:
-      type: huggingface
-      repo_id: google/timesfm-2.5
-      revision: main
-    license:
-      type: apache-2.0
-      needs_acceptance: true
-    capabilities:
-      past_covariates_numeric: true
-      past_covariates_categorical: false
-      future_covariates_numeric: true
-      future_covariates_categorical: false
-      static_covariates: false
-
   - name: timesfm-2.5-200m
     family: timesfm
     source:
@@ -70,37 +54,19 @@ models:
       future_covariates_categorical: false
       static_covariates: false
 
-  - name: moirai1p1-base
+  - name: moirai-2.0-R-small
     family: uni2ts
     source:
       type: huggingface
-      repo_id: salesforce/moirai-1.1-base
+      repo_id: Salesforce/moirai-2.0-R-small
       revision: main
     license:
-      type: apache-2.0
-      needs_acceptance: true
-    capabilities:
-      past_covariates_numeric: true
-      past_covariates_categorical: false
-      future_covariates_numeric: true
-      future_covariates_categorical: false
-      static_covariates: false
-
-  - name: moirai-1.1-R-base
-    family: uni2ts
-    source:
-      type: huggingface
-      repo_id: Salesforce/moirai-1.1-R-base
-      revision: main
-    license:
-      id: cc-by-nc-4.0
+      type: cc-by-nc-4.0
       needs_acceptance: true
       notice: Non-commercial; research-only weight license. You must accept before pulling.
     metadata:
-      implementation: moirai_1p1
-      default_num_samples: 200
-      default_context_length: 200
-      default_patch_size: auto
+      implementation: moirai_2p0
+      default_context_length: 1680
     capabilities:
       past_covariates_numeric: true
       past_covariates_categorical: false

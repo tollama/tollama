@@ -1,5 +1,5 @@
 {
-  "model": "moirai-1.1-R-base",
+  "model": "moirai-2.0-R-small",
   "horizon": 24,
   "quantiles": [
     0.1,

@@ -220,10 +220,10 @@ python -m pip install -e ".[dev,runner_uni2ts]"
 tollama serve
 
 # Moirai model requires explicit license acceptance
-tollama pull moirai-1.1-R-base --accept-license
+tollama pull moirai-2.0-R-small --accept-license
 
 # run forecast
-tollama run moirai-1.1-R-base --input examples/moirai_request.json --no-stream
+tollama run moirai-2.0-R-small --input examples/moirai_request.json --no-stream
 ```
 
 ```bash

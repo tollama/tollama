@@ -13,9 +13,7 @@ This guide targets the current TSFM-capable registry entries in `model-registry/
 | `chronos2` | `torch` | `amazon/chronos-2` | `main` | `apache-2.0` | No | `runner_torch` |
 | `granite-ttm-r2` | `torch` | `ibm-granite/granite-timeseries-ttm-r2` | `90-30-ft-l1-r2.1` | `apache-2.0` | No | `runner_torch` |
 | `timesfm-2.5-200m` | `timesfm` | `google/timesfm-2.5-200m-pytorch` | `main` | `apache-2.0` | No | `runner_timesfm` |
-| `timesfm2p5` | `timesfm` | `google/timesfm-2.5` | `main` | `apache-2.0` | Yes | `runner_timesfm` |
-| `moirai1p1-base` | `uni2ts` | `salesforce/moirai-1.1-base` | `main` | `apache-2.0` | Yes | `runner_uni2ts` |
-| `moirai-1.1-R-base` | `uni2ts` | `Salesforce/moirai-1.1-R-base` | `main` | `cc-by-nc-4.0` | Yes | `runner_uni2ts` |
+| `moirai-2.0-R-small` | `uni2ts` | `Salesforce/moirai-2.0-R-small` | `main` | `cc-by-nc-4.0` | Yes | `runner_uni2ts` |
 
 ## Requirements
 
@@ -132,9 +130,7 @@ done
 Pull models that require explicit `--accept-license`:
 
 ```bash
-for model in timesfm2p5 moirai1p1-base moirai-1.1-R-base; do
-  tollama pull "$model" --accept-license --no-stream
-done
+tollama pull moirai-2.0-R-small --accept-license --no-stream
 ```
 
 Single command block version:
@@ -146,9 +142,7 @@ for model in chronos2 granite-ttm-r2 timesfm-2.5-200m; do
   tollama pull "$model" --no-stream
 done
 
-for model in timesfm2p5 moirai1p1-base moirai-1.1-R-base; do
-  tollama pull "$model" --accept-license --no-stream
-done
+tollama pull moirai-2.0-R-small --accept-license --no-stream
 ```
 
 ## Verify Installation
@@ -169,7 +163,7 @@ Verify all expected model directories exist:
 
 ```bash
 BASE="${TOLLAMA_HOME:-$HOME/.tollama}/models"
-for model in chronos2 granite-ttm-r2 timesfm-2.5-200m timesfm2p5 moirai1p1-base moirai-1.1-R-base; do
+for model in chronos2 granite-ttm-r2 timesfm-2.5-200m moirai-2.0-R-small; do
   test -f "$BASE/$model/manifest.json" && echo "ok: $model" || echo "missing: $model"
 done
 ```
@@ -182,14 +176,7 @@ Run one forecast per family:
 tollama run chronos2 --input examples/chronos2_request.json --no-stream
 tollama run granite-ttm-r2 --input examples/granite_ttm_request.json --no-stream
 tollama run timesfm-2.5-200m --input examples/timesfm_2p5_request.json --no-stream
-tollama run moirai-1.1-R-base --input examples/moirai_request.json --no-stream
-```
-
-Alias-model smoke checks:
-
-```bash
-tollama run timesfm2p5 --input examples/timesfm_2p5_request.json --no-stream
-tollama run moirai1p1-base --input examples/moirai_request.json --no-stream
+tollama run moirai-2.0-R-small --input examples/moirai_request.json --no-stream
 ```
 
 ## Useful Pull Controls

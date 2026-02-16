@@ -392,7 +392,7 @@ def test_run_help_mentions_input_and_stream_flags() -> None:
     [
         ("granite-ttm-r2", "granite_ttm", "granite_ttm_request.json"),
         ("timesfm-2.5-200m", "timesfm_2p5_torch", "timesfm_2p5_request.json"),
-        ("moirai-1.1-R-base", "moirai_1p1", "moirai_request.json"),
+        ("moirai-2.0-R-small", "moirai_2p0", "moirai_request.json"),
     ],
 )
 def test_resolve_default_request_path_uses_implementation_aliases(

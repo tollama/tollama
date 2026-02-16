@@ -25,4 +25,6 @@ jobs:
         run: ruff check .
 
       - name: Pytest
+        env:
+          TOLLAMA_VALIDATE_REGISTRY_REMOTE: "1"
         run: pytest -q

@@ -22,13 +22,6 @@ _TIMESFM_MODELS: dict[str, dict[str, Any]] = {
         "max_context": 1024,
         "max_horizon": 256,
     },
-    "timesfm2p5": {
-        "repo_id": "google/timesfm-2.5",
-        "revision": "main",
-        "implementation": "timesfm_2p5_torch",
-        "max_context": 1024,
-        "max_horizon": 256,
-    },
 }
 
 

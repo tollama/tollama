@@ -27,7 +27,7 @@ def test_moirai_forecast_integration(monkeypatch, tmp_path) -> None:
 
     start = datetime(2024, 1, 1, tzinfo=UTC)
     payload = {
-        "model": "moirai-1.1-R-base",
+        "model": "moirai-2.0-R-small",
         "horizon": 8,
         "quantiles": [0.1, 0.5, 0.9],
         "series": [
@@ -41,14 +41,14 @@ def test_moirai_forecast_integration(monkeypatch, tmp_path) -> None:
                 "target": [100.0 + float(index) for index in range(520)],
             }
         ],
-        "options": {"batch_size": 8, "num_samples": 32},
+        "options": {"batch_size": 8},
     }
 
     with TestClient(create_app()) as client:
         pull_response = client.post(
             "/api/pull",
             json={
-                "model": "moirai-1.1-R-base",
+                "model": "moirai-2.0-R-small",
                 "stream": False,
                 "accept_license": True,
             },
@@ -60,6 +60,6 @@ def test_moirai_forecast_integration(monkeypatch, tmp_path) -> None:
 
     assert forecast_response.status_code == 200
     body = forecast_response.json()
-    assert body["model"] == "moirai-1.1-R-base"
+    assert body["model"] == "moirai-2.0-R-small"
     assert len(body["forecasts"]) == 1
     assert len(body["forecasts"][0]["mean"]) == 8

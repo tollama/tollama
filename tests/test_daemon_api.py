@@ -541,7 +541,7 @@ def test_ollama_pull_moirai_requires_license_acceptance(monkeypatch, tmp_path) -
     monkeypatch.setenv("TOLLAMA_HOME", str(tmp_path / ".tollama"))
 
     with TestClient(create_app()) as client:
-        response = client.post("/api/pull", json={"model": "moirai-1.1-R-base", "stream": False})
+        response = client.post("/api/pull", json={"model": "moirai-2.0-R-small", "stream": False})
 
     assert response.status_code == 409
     assert "requires license acceptance" in response.json()["detail"]
@@ -557,7 +557,7 @@ def test_ollama_pull_moirai_with_accept_license_records_acceptance(monkeypatch, 
         response = client.post(
             "/api/pull",
             json={
-                "model": "moirai-1.1-R-base",
+                "model": "moirai-2.0-R-small",
                 "stream": False,
                 "accept_license": True,
             },
@@ -566,14 +566,14 @@ def test_ollama_pull_moirai_with_accept_license_records_acceptance(monkeypatch, 
     assert response.status_code == 200
     body = response.json()
     assert body["status"] == "success"
-    assert body["model"] == "moirai-1.1-R-base"
+    assert body["model"] == "moirai-2.0-R-small"
     assert captures["model_info"] == {
-        "repo_id": "Salesforce/moirai-1.1-R-base",
+        "repo_id": "Salesforce/moirai-2.0-R-small",
         "revision": "main",
         "token": None,
     }
 
-    manifest = json.loads(paths.manifest_path("moirai-1.1-R-base").read_text(encoding="utf-8"))
+    manifest = json.loads(paths.manifest_path("moirai-2.0-R-small").read_text(encoding="utf-8"))
     assert manifest["license"]["type"] == "cc-by-nc-4.0"
     assert manifest["license"]["needs_acceptance"] is True
     assert manifest["license"]["accepted"] is True
@@ -831,7 +831,7 @@ def test_ollama_pull_prevalidation_errors_are_raised_before_streaming(
         missing = client.post("/api/pull", json={"model": "does-not-exist"})
         assert missing.status_code == 404
 
-        conflict = client.post("/api/pull", json={"model": "timesfm2p5"})
+        conflict = client.post("/api/pull", json={"model": "moirai-2.0-R-small"})
         assert conflict.status_code == 409
 
 
@@ -1128,7 +1128,7 @@ def test_models_pull_error_mapping(monkeypatch, tmp_path) -> None:
 
         conflict = client.post(
             "/v1/models/pull",
-            json={"name": "timesfm2p5", "accept_license": False},
+            json={"name": "moirai-2.0-R-small", "accept_license": False},
         )
         assert conflict.status_code == 409
 

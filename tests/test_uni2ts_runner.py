@@ -58,7 +58,7 @@ def test_uni2ts_runner_forecast_returns_dependency_missing_error() -> None:
                 "id": "req-2",
                 "method": "forecast",
                 "params": {
-                    "model": "moirai-1.1-R-base",
+                    "model": "moirai-2.0-R-small",
                     "horizon": 2,
                     "series": [
                         {

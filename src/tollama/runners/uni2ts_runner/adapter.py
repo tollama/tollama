@@ -12,26 +12,14 @@ from tollama.core.schemas import ForecastRequest, ForecastResponse, SeriesForeca
 
 from .errors import AdapterInputError, DependencyMissingError, UnsupportedModelError
 
-_DEFAULT_CONTEXT_LENGTH = 200
-_DEFAULT_NUM_SAMPLES = 200
-_DEFAULT_PATCH_SIZE = "auto"
+_DEFAULT_CONTEXT_LENGTH = 1680
 _DEFAULT_BATCH_SIZE = 32
 _UNI2TS_MODELS: dict[str, dict[str, Any]] = {
-    "moirai-1.1-R-base": {
-        "repo_id": "Salesforce/moirai-1.1-R-base",
+    "moirai-2.0-R-small": {
+        "repo_id": "Salesforce/moirai-2.0-R-small",
         "revision": "main",
-        "implementation": "moirai_1p1",
-        "default_num_samples": 200,
-        "default_context_length": 200,
-        "default_patch_size": "auto",
-    },
-    "moirai1p1-base": {
-        "repo_id": "salesforce/moirai-1.1-base",
-        "revision": "main",
-        "implementation": "moirai_1p1",
-        "default_num_samples": 200,
-        "default_context_length": 200,
-        "default_patch_size": "auto",
+        "implementation": "moirai_2p0",
+        "default_context_length": 1680,
     },
 }
 
@@ -51,17 +39,13 @@ class _RuntimeConfig:
     repo_id: str
     revision: str
     implementation: str
-    default_num_samples: int
     default_context_length: int
-    default_patch_size: str
 
 
 @dataclass(frozen=True)
 class _PredictorConfig:
     prediction_length: int
     context_length: int
-    patch_size: str
-    num_samples: int
     batch_size: int
 
 
@@ -124,19 +108,15 @@ class MoiraiAdapter:
         dependencies = self._resolve_dependencies()
         module = self._get_or_load_module(runtime=runtime, model_local_dir=model_local_dir)
 
+        if "num_samples" in request.options:
+            raise AdapterInputError("moirai-2.0 does not support 'num_samples' execution option")
+        if "patch_size" in request.options:
+            raise AdapterInputError("moirai-2.0 does not support 'patch_size' execution option")
+
         context_length = resolve_context_length(
             option_value=request.options.get("context_length"),
             default_context_length=runtime.default_context_length,
             series_list=request.series,
-        )
-        patch_size = resolve_patch_size(
-            option_value=request.options.get("patch_size"),
-            default_patch_size=runtime.default_patch_size,
-        )
-        num_samples = resolve_positive_int(
-            option_value=request.options.get("num_samples"),
-            default_value=runtime.default_num_samples,
-            field_name="num_samples",
         )
         batch_size = resolve_positive_int(
             option_value=request.options.get("batch_size"),
@@ -146,8 +126,6 @@ class MoiraiAdapter:
         predictor_config = _PredictorConfig(
             prediction_length=request.horizon,
             context_length=context_length,
-            patch_size=patch_size,
-            num_samples=num_samples,
             batch_size=batch_size,
         )
 
@@ -175,8 +153,6 @@ class MoiraiAdapter:
             module=module,
             prediction_length=predictor_config.prediction_length,
             context_length=predictor_config.context_length,
-            patch_size=predictor_config.patch_size,
-            num_samples=predictor_config.num_samples,
             target_dim=1,
             feat_dynamic_real_dim=feat_dynamic_real_dim,
             past_feat_dynamic_real_dim=past_feat_dynamic_real_dim,
@@ -225,9 +201,7 @@ class MoiraiAdapter:
                 "implementation": runtime.implementation,
                 "series_count": len(payloads),
                 "horizon": request.horizon,
-                "num_samples": num_samples,
                 "context_length": context_length,
-                "patch_size": patch_size,
             },
         )
 
@@ -286,11 +260,14 @@ class MoiraiAdapter:
             PandasDataset = None
 
         try:
-            from uni2ts.model.moirai import MoiraiForecast, MoiraiModule
+            from uni2ts.model.moirai2 import Moirai2Forecast, Moirai2Module
         except ModuleNotFoundError as exc:
             missing_packages.append(exc.name or "uni2ts")
             MoiraiForecast = None
             MoiraiModule = None
+        else:
+            MoiraiForecast = Moirai2Forecast
+            MoiraiModule = Moirai2Module
 
         if missing_packages:
             joined = ", ".join(sorted(set(missing_packages)))
@@ -333,18 +310,6 @@ def resolve_context_length(
     if min_length < 2:
         raise AdapterInputError("each input series must include at least two target points")
     return max(2, min(candidate, min_length))
-
-
-def resolve_patch_size(*, option_value: Any, default_patch_size: str) -> str:
-    """Resolve patch size option with a default fallback."""
-    if option_value is None:
-        return default_patch_size or _DEFAULT_PATCH_SIZE
-    if not isinstance(option_value, str):
-        raise AdapterInputError("patch_size option must be a string")
-    normalized = option_value.strip()
-    if not normalized:
-        raise AdapterInputError("patch_size option cannot be empty")
-    return normalized
 
 
 def resolve_positive_int(*, option_value: Any, default_value: int, field_name: str) -> int:
@@ -602,36 +567,26 @@ def _resolve_runtime_config(
     implementation = _dict_str(model_metadata, "implementation") or _string_or_none(
         defaults.get("implementation"),
     )
-    default_num_samples = _dict_positive_int(model_metadata, "default_num_samples") or _int_or_none(
-        defaults.get("default_num_samples"),
-    )
-    default_context = _dict_positive_int(model_metadata, "default_context_length") or _int_or_none(
-        defaults.get("default_context_length"),
-    )
-    default_patch_size = _dict_str(model_metadata, "default_patch_size") or _string_or_none(
-        defaults.get("default_patch_size"),
-    )
+    default_context_length = _dict_positive_int(
+        model_metadata, "default_context_length"
+    ) or _int_or_none(defaults.get("default_context_length"))
+
+    if implementation is None:
+        implementation = "moirai_2p0"
+    if default_context_length is None:
+        default_context_length = _DEFAULT_CONTEXT_LENGTH
 
     if repo_id is None:
         raise UnsupportedModelError(f"unsupported uni2ts model {model_name!r}; missing repo_id")
     if revision is None:
         revision = "main"
-    if implementation is None:
-        implementation = "moirai_1p1"
-    if default_num_samples is None:
-        default_num_samples = _DEFAULT_NUM_SAMPLES
-    if default_context is None:
-        default_context = _DEFAULT_CONTEXT_LENGTH
-    if default_patch_size is None:
-        default_patch_size = _DEFAULT_PATCH_SIZE
+
     return _RuntimeConfig(
         model_name=model_name,
         repo_id=repo_id,
         revision=revision,
         implementation=implementation,
-        default_num_samples=default_num_samples,
-        default_context_length=default_context,
-        default_patch_size=default_patch_size,
+        default_context_length=default_context_length,
     )
 
 

@@ -47,7 +47,7 @@ def _timesfm_payload() -> dict[str, object]:
 
 def _uni2ts_payload() -> dict[str, object]:
     return {
-        "model": "moirai-1.1-R-base",
+        "model": "moirai-2.0-R-small",
         "horizon": 2,
         "quantiles": [0.1, 0.9],
         "series": [
@@ -101,7 +101,7 @@ def test_daemon_routes_timesfm_family_to_runner_command_override(monkeypatch, tm
 def test_daemon_routes_uni2ts_family_to_runner_command_override(monkeypatch, tmp_path) -> None:
     paths = TollamaPaths(base_dir=tmp_path / ".tollama")
     monkeypatch.setenv("TOLLAMA_HOME", str(paths.base_dir))
-    install_from_registry("moirai-1.1-R-base", accept_license=True, paths=paths)
+    install_from_registry("moirai-2.0-R-small", accept_license=True, paths=paths)
 
     manager = RunnerManager(
         runner_commands={"uni2ts": ("tollama-runner-mock",)},
@@ -111,7 +111,7 @@ def test_daemon_routes_uni2ts_family_to_runner_command_override(monkeypatch, tmp
 
     assert response.status_code == 200
     body = response.json()
-    assert body["model"] == "moirai-1.1-R-base"
+    assert body["model"] == "moirai-2.0-R-small"
     assert body["forecasts"][0]["id"] == "s1"
     assert body["forecasts"][0]["mean"] == [12.0, 12.0]
 
@@ -153,7 +153,7 @@ def test_missing_timesfm_runner_command_returns_install_hint(monkeypatch, tmp_pa
 def test_missing_uni2ts_runner_command_returns_install_hint(monkeypatch, tmp_path) -> None:
     paths = TollamaPaths(base_dir=tmp_path / ".tollama")
     monkeypatch.setenv("TOLLAMA_HOME", str(paths.base_dir))
-    install_from_registry("moirai-1.1-R-base", accept_license=True, paths=paths)
+    install_from_registry("moirai-2.0-R-small", accept_license=True, paths=paths)
 
     manager = RunnerManager(
         runner_commands={"uni2ts": ("tollama-runner-uni2ts-missing",)},

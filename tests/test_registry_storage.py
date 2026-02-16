@@ -21,10 +21,8 @@ def test_registry_loads_required_model_specs() -> None:
     assert {
         "mock",
         "chronos2",
-        "timesfm2p5",
         "timesfm-2.5-200m",
-        "moirai1p1-base",
-        "moirai-1.1-R-base",
+        "moirai-2.0-R-small",
         "granite-ttm-r2",
     } <= set(registry)
 
@@ -65,18 +63,16 @@ def test_registry_loads_required_model_specs() -> None:
         "use_quantiles_by_default": True,
     }
 
-    moirai = registry["moirai-1.1-R-base"]
+    moirai = registry["moirai-2.0-R-small"]
     assert moirai.family == "uni2ts"
-    assert moirai.source.repo_id == "Salesforce/moirai-1.1-R-base"
+    assert moirai.source.repo_id == "Salesforce/moirai-2.0-R-small"
     assert moirai.source.revision == "main"
     assert moirai.license.type == "cc-by-nc-4.0"
     assert moirai.license.needs_acceptance is True
     assert moirai.license.notice is not None
     assert moirai.metadata == {
-        "implementation": "moirai_1p1",
-        "default_num_samples": 200,
-        "default_context_length": 200,
-        "default_patch_size": "auto",
+        "implementation": "moirai_2p0",
+        "default_context_length": 1680,
     }
 
 
@@ -115,19 +111,10 @@ def test_install_requires_license_acceptance_when_flagged(tmp_path) -> None:
     paths = TollamaPaths(base_dir=tmp_path / ".tollama")
 
     with pytest.raises(PermissionError):
-        install_from_registry("timesfm2p5", accept_license=False, paths=paths)
+        install_from_registry("moirai-2.0-R-small", accept_license=False, paths=paths)
 
-    manifest = install_from_registry("timesfm2p5", accept_license=True, paths=paths)
-    assert manifest["name"] == "timesfm2p5"
-    assert manifest["license"]["needs_acceptance"] is True
-    assert manifest["license"]["accepted"] is True
-    assert isinstance(manifest["license"]["accepted_at"], str)
-
-    with pytest.raises(PermissionError):
-        install_from_registry("moirai-1.1-R-base", accept_license=False, paths=paths)
-
-    moirai_manifest = install_from_registry("moirai-1.1-R-base", accept_license=True, paths=paths)
-    assert moirai_manifest["name"] == "moirai-1.1-R-base"
+    moirai_manifest = install_from_registry("moirai-2.0-R-small", accept_license=True, paths=paths)
+    assert moirai_manifest["name"] == "moirai-2.0-R-small"
     assert moirai_manifest["license"]["needs_acceptance"] is True
     assert moirai_manifest["license"]["accepted"] is True
     assert isinstance(moirai_manifest["license"]["accepted_at"], str)
