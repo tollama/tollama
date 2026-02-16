@@ -129,6 +129,31 @@ tollama pull chronos2
 
 Tokens are intentionally not persisted in config. Use `TOLLAMA_HF_TOKEN` or `--token`.
 
+## Debugging: `tollama info`
+
+Use `tollama info` for one diagnostics view of daemon reachability, local config, effective pull
+defaults, and installed/loaded models.
+
+```bash
+tollama info
+tollama info --json
+```
+
+Example output excerpt:
+
+```text
+Tollama
+  Home: /Users/you/.tollama
+  Config: /Users/you/.tollama/config.json (exists)
+  Daemon: http://localhost:11435 (reachable) version=0.1.0
+
+Pull defaults (effective)
+  offline: false (source=default)
+  https_proxy: http://proxy:3128 (source=config)
+```
+
+`tollama info` still reports local config and locally installed models even when the daemon is down.
+
 ## Architecture
 
 - `tollama.daemon`: Public API layer (`/api/*`, `/v1/health`, `/v1/forecast`) and runner supervision.

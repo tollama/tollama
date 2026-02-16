@@ -276,6 +276,88 @@ def test_run_streaming_outputs_ndjson_lines(monkeypatch, tmp_path: Path) -> None
     assert json.loads(lines[1]) == {"done": True, "response": {"model": "mock"}}
 
 
+def test_run_accepts_stdin_payload_when_input_omitted(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    class _FakeClient:
+        def __init__(self, base_url: str, timeout: float) -> None:
+            captured["base_url"] = base_url
+            captured["timeout"] = timeout
+
+        def show_model(self, name: str) -> dict[str, object]:
+            return {"name": name}
+
+        def forecast(
+            self,
+            payload: dict[str, object],
+            *,
+            stream: bool,
+        ) -> dict[str, object] | list[dict[str, object]]:
+            captured["forecast"] = {"payload": payload, "stream": stream}
+            return {"model": payload["model"], "forecasts": []}
+
+    monkeypatch.setattr("tollama.cli.main.TollamaClient", _FakeClient)
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        ["run", "mock", "--no-stream"],
+        input=json.dumps(_sample_request_payload()),
+    )
+
+    assert result.exit_code == 0
+    assert captured["forecast"]["stream"] is False
+    assert captured["forecast"]["payload"]["model"] == "mock"
+    assert captured["forecast"]["payload"]["horizon"] == 2
+
+
+def test_run_uses_default_example_payload_when_input_omitted(monkeypatch, tmp_path: Path) -> None:
+    request_path = tmp_path / "chronos2_request.json"
+    request_path.write_text(json.dumps(_sample_request_payload()), encoding="utf-8")
+    captured: dict[str, object] = {}
+
+    class _FakeClient:
+        def __init__(self, base_url: str, timeout: float) -> None:
+            captured["base_url"] = base_url
+            captured["timeout"] = timeout
+
+        def show_model(self, name: str) -> dict[str, object]:
+            return {"name": name}
+
+        def forecast(
+            self,
+            payload: dict[str, object],
+            *,
+            stream: bool,
+        ) -> dict[str, object] | list[dict[str, object]]:
+            captured["forecast"] = {"payload": payload, "stream": stream}
+            return {"model": payload["model"], "forecasts": []}
+
+    monkeypatch.setattr("tollama.cli.main._load_request_payload_from_stdin", lambda: None)
+    monkeypatch.setattr(
+        "tollama.cli.main._resolve_default_request_path",
+        lambda model: request_path,
+    )
+    monkeypatch.setattr("tollama.cli.main.TollamaClient", _FakeClient)
+
+    runner = CliRunner()
+    result = runner.invoke(app, ["run", "chronos2", "--no-stream"])
+
+    assert result.exit_code == 0
+    assert captured["forecast"]["stream"] is False
+    assert captured["forecast"]["payload"]["model"] == "chronos2"
+
+
+def test_run_errors_when_payload_sources_are_missing(monkeypatch) -> None:
+    monkeypatch.setattr("tollama.cli.main._load_request_payload_from_stdin", lambda: None)
+    monkeypatch.setattr("tollama.cli.main._resolve_default_request_path", lambda model: None)
+
+    runner = CliRunner()
+    result = runner.invoke(app, ["run", "mock", "--no-stream"])
+
+    assert result.exit_code != 0
+    assert "missing forecast request payload" in result.stdout
+
+
 def test_run_rejects_non_json_input(tmp_path: Path) -> None:
     request_path = tmp_path / "broken.json"
     request_path.write_text("{not-json}", encoding="utf-8")
@@ -286,9 +368,10 @@ def test_run_rejects_non_json_input(tmp_path: Path) -> None:
     assert "input file is not valid JSON" in result.stdout
 
 
-def test_run_help_mentions_required_flags() -> None:
+def test_run_help_mentions_input_and_stream_flags() -> None:
     runner = CliRunner()
     result = runner.invoke(app, ["run", "--help"])
     assert result.exit_code == 0
     assert "--input" in result.stdout
     assert "--no-stream" in result.stdout
+    assert "stdin" in result.stdout
