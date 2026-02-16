@@ -29,6 +29,7 @@ tollama-runner-torch = "tollama.runners.torch_runner.main:main"
 tollama-runner-timesfm = "tollama.runners.timesfm_runner.main:main"
 tollama-runner-uni2ts = "tollama.runners.uni2ts_runner.main:main"
 tollama-runner-sundial = "tollama.runners.sundial_runner.main:main"
+tollama-runner-toto = "tollama.runners.toto_runner.main:main"
 
 [project.optional-dependencies]
 dev = [
@@ -60,6 +61,12 @@ runner_sundial = [
   "numpy>=1.26,<3.0",
   "pandas>=2.0,<3.0",
   "huggingface_hub>=0.20,<1.0",
+]
+runner_toto = [
+  "toto-ts>=0.1.4",
+  "torch>=2.5",
+  "numpy>=1.26,<3.0",
+  "pandas>=2.0,<3.0",
 ]
 
 [tool.setuptools]

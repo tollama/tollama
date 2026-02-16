@@ -24,6 +24,7 @@ def test_registry_loads_required_model_specs() -> None:
         "timesfm-2.5-200m",
         "moirai-2.0-R-small",
         "sundial-base-128m",
+        "toto-open-base-1.0",
         "granite-ttm-r2",
     } <= set(registry)
 
@@ -89,6 +90,24 @@ def test_registry_loads_required_model_specs() -> None:
         "max_context": 2880,
         "max_horizon": 720,
         "default_num_samples": 20,
+    }
+
+    toto = registry["toto-open-base-1.0"]
+    assert toto.family == "toto"
+    assert toto.source.repo_id == "Datadog/Toto-Open-Base-1.0"
+    assert toto.source.revision == "main"
+    assert toto.license.type == "apache-2.0"
+    assert toto.license.needs_acceptance is False
+    assert toto.capabilities is not None
+    assert toto.capabilities.past_covariates_numeric is True
+    assert toto.capabilities.future_covariates_numeric is False
+    assert toto.metadata == {
+        "implementation": "toto_open_base",
+        "max_context": 4096,
+        "max_horizon": 720,
+        "default_num_samples": 256,
+        "default_samples_per_batch": 256,
+        "default_use_kv_cache": True,
     }
 
 

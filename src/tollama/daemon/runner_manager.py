@@ -17,6 +17,7 @@ DEFAULT_RUNNER_COMMANDS: dict[str, tuple[str, ...]] = {
     "timesfm": ("tollama-runner-timesfm",),
     "uni2ts": ("tollama-runner-uni2ts",),
     "sundial": ("tollama-runner-sundial",),
+    "toto": ("tollama-runner-toto",),
 }
 
 FAMILY_EXTRAS: dict[str, str] = {
@@ -24,6 +25,7 @@ FAMILY_EXTRAS: dict[str, str] = {
     "timesfm": "runner_timesfm",
     "uni2ts": "runner_uni2ts",
     "sundial": "runner_sundial",
+    "toto": "runner_toto",
 }
 
 UNIMPLEMENTED_FAMILIES = frozenset()

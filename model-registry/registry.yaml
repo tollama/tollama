@@ -95,6 +95,29 @@ models:
       future_covariates_categorical: false
       static_covariates: false
 
+  - name: toto-open-base-1.0
+    family: toto
+    source:
+      type: huggingface
+      repo_id: Datadog/Toto-Open-Base-1.0
+      revision: main
+    license:
+      type: apache-2.0
+      needs_acceptance: false
+    metadata:
+      implementation: toto_open_base
+      max_context: 4096
+      max_horizon: 720
+      default_num_samples: 256
+      default_samples_per_batch: 256
+      default_use_kv_cache: true
+    capabilities:
+      past_covariates_numeric: true
+      past_covariates_categorical: false
+      future_covariates_numeric: false
+      future_covariates_categorical: false
+      static_covariates: false
+
   - name: granite-ttm-r2
     family: torch
     source:

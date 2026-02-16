@@ -75,6 +75,14 @@ TimesFM knobs live under `parameters.timesfm`:
 - In `best_effort`, unsupported covariates are ignored and surfaced as warnings.
 - In `strict`, covariate usage is rejected with HTTP 400.
 
+### Toto (toto runner)
+
+- Toto uses target + past numeric covariates as multivariate variates.
+- `past_covariates` numeric values are supported and aligned to target timestamps.
+- `future_covariates`, categorical covariates, and `static_covariates` are unsupported.
+- In `best_effort`, unsupported covariates are ignored and surfaced as warnings.
+- In `strict`, unsupported covariate usage is rejected with HTTP 400.
+
 ## Capability Visibility
 
 Covariate compatibility is exposed in:
@@ -91,6 +99,7 @@ Covariate compatibility is exposed in:
 | TimesFM 2.5 | Yes | No | Yes | No | Planned |
 | Uni2TS / Moirai | Yes | No | Yes | No | Planned |
 | Sundial | No | No | No | No | Planned |
+| Toto Open Base 1.0 | Yes | No | No | No | Planned |
 
 ## API Example (curl)
 
