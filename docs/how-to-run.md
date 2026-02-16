@@ -36,6 +36,7 @@ Recommended:
 - A dedicated virtual environment
 - A Hugging Face token (`TOLLAMA_HF_TOKEN`) for gated/private models
 - Preinstalled PyTorch wheel for your platform if you need GPU acceleration
+- Python `3.11` or `3.12` for Uni2TS/Moirai (`runner_uni2ts`) installs
 
 ## Dependency Matrix
 
@@ -223,6 +224,8 @@ Missing runner dependency errors:
   - `python -m pip install -e ".[runner_uni2ts]"`
   - `python -m pip install -e ".[runner_sundial]"`
   - `python -m pip install -e ".[runner_toto]"`
+- If `runner_uni2ts` install fails on Python 3.13 (build backend/dependency issues),
+  recreate the venv with Python 3.11 or 3.12 and reinstall.
 
 Offline/local-files-only pull failures:
 

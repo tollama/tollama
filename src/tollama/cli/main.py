@@ -45,6 +45,11 @@ _BOOL_CONFIG_KEYS = {
 }
 _INT_CONFIG_KEYS = {"pull.max_workers"}
 
+_UNI2TS_PYTHON_WARNING = (
+    "Uni2TS/Moirai dependencies may fail to install on Python 3.13+; "
+    "use Python 3.11 or 3.12 when running model family 'uni2ts'"
+)
+
 
 @app.command("serve")
 def serve(
@@ -351,6 +356,11 @@ def run(
     ),
     horizon: int | None = typer.Option(None, "--horizon", min=1, help="Override request horizon."),
     no_stream: bool = typer.Option(False, "--no-stream", help="Disable streaming forecast output."),
+    accept_license: bool = typer.Option(
+        False,
+        "--accept-license",
+        help="Accept model license terms when auto-pulling a missing model.",
+    ),
     base_url: str = typer.Option(
         DEFAULT_BASE_URL,
         help="Daemon base URL. Defaults to http://localhost:11435.",
@@ -358,6 +368,7 @@ def run(
     timeout: float = typer.Option(10.0, min=0.1, help="HTTP timeout in seconds."),
 ) -> None:
     """Run a forecast through POST /api/forecast, auto-pulling if needed."""
+    _emit_uni2ts_python_runtime_warning(model)
     payload = _load_request_payload(path=input_path, model=model)
     payload["model"] = model
     if horizon is not None:
@@ -373,7 +384,11 @@ def run(
             typer.echo(f"Error: {exc}", err=True)
             raise typer.Exit(code=1) from exc
         try:
-            pull_result = client.pull_model(name=model, stream=stream)
+            pull_result = client.pull_model(
+                name=model,
+                stream=stream,
+                accept_license=accept_license,
+            )
         except RuntimeError as pull_exc:
             typer.echo(f"Error: {pull_exc}", err=True)
             raise typer.Exit(code=1) from pull_exc
@@ -388,6 +403,23 @@ def run(
         typer.echo(f"Error: {exc}", err=True)
         raise typer.Exit(code=1) from exc
     _emit_result(forecast_result)
+
+
+def _emit_uni2ts_python_runtime_warning(model: str) -> None:
+    if not _is_python_313_or_newer():
+        return
+
+    try:
+        spec = get_model_spec(model)
+    except KeyError:
+        return
+    if spec.family != "uni2ts":
+        return
+    typer.echo(f"warning: {_UNI2TS_PYTHON_WARNING}", err=True)
+
+
+def _is_python_313_or_newer() -> bool:
+    return (sys.version_info.major, sys.version_info.minor) >= (3, 13)
 
 
 def _emit_result(result: dict[str, Any] | list[dict[str, Any]]) -> None:

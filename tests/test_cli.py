@@ -225,8 +225,13 @@ def test_run_auto_pulls_when_model_not_installed(monkeypatch, tmp_path: Path) ->
             name: str,
             *,
             stream: bool,
+            accept_license: bool = False,
         ) -> dict[str, object] | list[dict[str, object]]:
-            captured["pull"] = {"name": name, "stream": stream}
+            captured["pull"] = {
+                "name": name,
+                "stream": stream,
+                "accept_license": accept_license,
+            }
             return {"name": name, "family": "mock"}
 
         def forecast(
@@ -246,7 +251,7 @@ def test_run_auto_pulls_when_model_not_installed(monkeypatch, tmp_path: Path) ->
     )
 
     assert result.exit_code == 0
-    assert captured["pull"] == {"name": "mock", "stream": False}
+    assert captured["pull"] == {"name": "mock", "stream": False, "accept_license": False}
     assert captured["forecast"]["stream"] is False
     assert captured["forecast"]["payload"]["model"] == "mock"
     assert captured["forecast"]["payload"]["horizon"] == 7
@@ -284,6 +289,64 @@ def test_run_streaming_outputs_ndjson_lines(monkeypatch, tmp_path: Path) -> None
     assert len(lines) == 2
     assert json.loads(lines[0]) == {"status": "running forecast"}
     assert json.loads(lines[1]) == {"done": True, "response": {"model": "mock"}}
+
+
+def test_run_auto_pull_accept_license_flag(monkeypatch, tmp_path: Path) -> None:
+    request_path = tmp_path / "request.json"
+    request_path.write_text(json.dumps(_sample_request_payload()), encoding="utf-8")
+    captured: dict[str, object] = {}
+
+    class _FakeClient:
+        def __init__(self, base_url: str, timeout: float) -> None:
+            captured["base_url"] = base_url
+            captured["timeout"] = timeout
+
+        def show_model(self, name: str) -> dict[str, object]:
+            raise DaemonHTTPError(action="show model", status_code=404, detail="missing")
+
+        def pull_model(
+            self,
+            name: str,
+            *,
+            stream: bool,
+            accept_license: bool = False,
+        ) -> dict[str, object] | list[dict[str, object]]:
+            captured["pull"] = {
+                "name": name,
+                "stream": stream,
+                "accept_license": accept_license,
+            }
+            return {"name": name, "family": "uni2ts"}
+
+        def forecast(
+            self,
+            payload: dict[str, object],
+            *,
+            stream: bool,
+        ) -> dict[str, object] | list[dict[str, object]]:
+            captured["forecast"] = {"payload": payload, "stream": stream}
+            return {"model": payload["model"], "forecasts": []}
+
+    monkeypatch.setattr("tollama.cli.main.TollamaClient", _FakeClient)
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        [
+            "run",
+            "moirai-2.0-R-small",
+            "--input",
+            str(request_path),
+            "--accept-license",
+            "--no-stream",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert captured["pull"] == {
+        "name": "moirai-2.0-R-small",
+        "stream": False,
+        "accept_license": True,
+    }
 
 
 def test_run_accepts_stdin_payload_when_input_omitted(monkeypatch) -> None:
@@ -385,6 +448,46 @@ def test_run_help_mentions_input_and_stream_flags() -> None:
     assert "--input" in result.stdout
     assert "--no-stream" in result.stdout
     assert "stdin" in result.stdout
+
+
+def test_run_warns_for_uni2ts_models_on_python_313_plus(monkeypatch, tmp_path: Path) -> None:
+    request_path = tmp_path / "request.json"
+    request_path.write_text(json.dumps(_sample_request_payload()), encoding="utf-8")
+
+    class _FakeClient:
+        def __init__(self, base_url: str, timeout: float) -> None:
+            del base_url, timeout
+
+        def show_model(self, name: str) -> dict[str, object]:
+            return {"name": name}
+
+        def forecast(
+            self,
+            payload: dict[str, object],
+            *,
+            stream: bool,
+        ) -> dict[str, object] | list[dict[str, object]]:
+            del stream
+            return {"model": payload["model"], "forecasts": []}
+
+    monkeypatch.setattr("tollama.cli.main.TollamaClient", _FakeClient)
+    monkeypatch.setattr("tollama.cli.main._is_python_313_or_newer", lambda: True)
+    monkeypatch.setattr(
+        "tollama.cli.main.get_model_spec",
+        lambda _: SimpleNamespace(family="uni2ts"),
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        ["run", "moirai-2.0-R-small", "--input", str(request_path), "--no-stream"],
+    )
+
+    assert result.exit_code == 0
+    assert (
+        "warning: Uni2TS/Moirai dependencies may fail to install on Python 3.13+"
+        in result.stdout
+    )
 
 
 @pytest.mark.parametrize(

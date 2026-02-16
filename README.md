@@ -219,6 +219,7 @@ curl -s http://localhost:11435/api/forecast \
 # install optional Uni2TS runner dependencies
 python -m pip install -e ".[dev,runner_uni2ts]"
 # note: install a compatible torch build first for your platform when needed
+# note: Python 3.13+ may fail to build Uni2TS dependencies; prefer Python 3.11/3.12
 
 # run daemon (default http://127.0.0.1:11435)
 tollama serve
