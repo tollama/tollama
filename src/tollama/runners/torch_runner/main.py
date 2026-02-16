@@ -19,7 +19,8 @@ from tollama.core.protocol import (
 )
 from tollama.core.schemas import ForecastRequest
 
-from .chronos_adapter import ChronosAdapter, DependencyMissingError, UnsupportedModelError
+from .adapter_router import TorchAdapterRouter
+from .errors import AdapterInputError, DependencyMissingError, UnsupportedModelError
 
 RUNNER_NAME = "tollama-torch"
 RUNNER_VERSION = "0.1.0"
@@ -67,10 +68,42 @@ def _handle_hello(request: ProtocolRequest) -> ProtocolResponse:
     )
 
 
-def _handle_load(request: ProtocolRequest, adapter: ChronosAdapter) -> ProtocolResponse:
+def _optional_nonempty_str(params: Mapping[str, Any], key: str) -> str | None:
+    value = params.get(key)
+    if value is None:
+        return None
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"{key} must be a non-empty string when provided")
+    return value.strip()
+
+
+def _optional_string_key_mapping(params: Mapping[str, Any], key: str) -> dict[str, Any] | None:
+    value = params.get(key)
+    if value is None:
+        return None
+    if not isinstance(value, Mapping):
+        raise ValueError(f"{key} must be an object when provided")
+
+    normalized: dict[str, Any] = {}
+    for raw_key, raw_value in value.items():
+        if not isinstance(raw_key, str):
+            raise ValueError(f"{key} keys must be strings")
+        normalized[raw_key] = raw_value
+    return normalized
+
+
+def _handle_load(request: ProtocolRequest, adapter_router: TorchAdapterRouter) -> ProtocolResponse:
     try:
         model_name = _require_model_name(request.params)
-        adapter.load(model_name)
+        model_local_dir = _optional_nonempty_str(request.params, "model_local_dir")
+        model_source = _optional_string_key_mapping(request.params, "model_source")
+        model_metadata = _optional_string_key_mapping(request.params, "model_metadata")
+        adapter_router.load(
+            model_name,
+            model_local_dir=model_local_dir,
+            model_source=model_source,
+            model_metadata=model_metadata,
+        )
     except DependencyMissingError as exc:
         return _error_response(
             request.id,
@@ -83,12 +116,11 @@ def _handle_load(request: ProtocolRequest, adapter: ChronosAdapter) -> ProtocolR
             code="MODEL_UNSUPPORTED",
             message=str(exc),
         )
-    except ValueError as exc:
+    except (AdapterInputError, ValueError) as exc:
         return _error_response(
             request.id,
-            code=-32602,
-            message="invalid params",
-            data={"details": str(exc)},
+            code="BAD_REQUEST",
+            message=str(exc),
         )
 
     return ProtocolResponse(
@@ -97,7 +129,10 @@ def _handle_load(request: ProtocolRequest, adapter: ChronosAdapter) -> ProtocolR
     )
 
 
-def _handle_unload(request: ProtocolRequest, adapter: ChronosAdapter) -> ProtocolResponse:
+def _handle_unload(
+    request: ProtocolRequest,
+    adapter_router: TorchAdapterRouter,
+) -> ProtocolResponse:
     model_name = request.params.get("model")
     if model_name is not None and (not isinstance(model_name, str) or not model_name):
         return _error_response(
@@ -106,26 +141,29 @@ def _handle_unload(request: ProtocolRequest, adapter: ChronosAdapter) -> Protoco
             message="invalid params",
             data={"details": "model must be a non-empty string when provided"},
         )
-    adapter.unload(model_name if isinstance(model_name, str) else None)
+    adapter_router.unload(model_name if isinstance(model_name, str) else None)
     return ProtocolResponse(
         id=request.id,
         result={"unloaded": True, "model": model_name},
     )
 
 
-def _handle_forecast(request: ProtocolRequest, adapter: ChronosAdapter) -> ProtocolResponse:
+def _handle_forecast(
+    request: ProtocolRequest,
+    adapter_router: TorchAdapterRouter,
+) -> ProtocolResponse:
     canonical_params = {
         key: value for key, value in request.params.items() if key in _FORECAST_REQUEST_FIELDS
     }
-    model_local_dir = request.params.get("model_local_dir")
-    if model_local_dir is not None and (
-        not isinstance(model_local_dir, str) or not model_local_dir
-    ):
+    try:
+        model_local_dir = _optional_nonempty_str(request.params, "model_local_dir")
+        model_source = _optional_string_key_mapping(request.params, "model_source")
+        model_metadata = _optional_string_key_mapping(request.params, "model_metadata")
+    except ValueError as exc:
         return _error_response(
             request.id,
-            code=-32602,
-            message="invalid params",
-            data={"details": "model_local_dir must be a non-empty string when provided"},
+            code="BAD_REQUEST",
+            message=str(exc),
         )
 
     try:
@@ -139,9 +177,11 @@ def _handle_forecast(request: ProtocolRequest, adapter: ChronosAdapter) -> Proto
         )
 
     try:
-        response = adapter.forecast(
+        response = adapter_router.forecast(
             forecast_request,
-            model_local_dir=model_local_dir if isinstance(model_local_dir, str) else None,
+            model_local_dir=model_local_dir,
+            model_source=model_source,
+            model_metadata=model_metadata,
         )
     except DependencyMissingError as exc:
         return _error_response(
@@ -153,6 +193,12 @@ def _handle_forecast(request: ProtocolRequest, adapter: ChronosAdapter) -> Proto
         return _error_response(
             request.id,
             code="MODEL_UNSUPPORTED",
+            message=str(exc),
+        )
+    except AdapterInputError as exc:
+        return _error_response(
+            request.id,
+            code="BAD_REQUEST",
             message=str(exc),
         )
     except ValueError as exc:
@@ -168,7 +214,7 @@ def _handle_forecast(request: ProtocolRequest, adapter: ChronosAdapter) -> Proto
     )
 
 
-def handle_request_line(line: str | bytes, adapter: ChronosAdapter) -> ProtocolResponse:
+def handle_request_line(line: str | bytes, adapter_router: TorchAdapterRouter) -> ProtocolResponse:
     payload: Mapping[str, Any] | None = None
     request_id = UNKNOWN_REQUEST_ID
 
@@ -187,11 +233,11 @@ def handle_request_line(line: str | bytes, adapter: ChronosAdapter) -> ProtocolR
     if request.method == "hello":
         return _handle_hello(request)
     if request.method == "load":
-        return _handle_load(request, adapter)
+        return _handle_load(request, adapter_router)
     if request.method == "unload":
-        return _handle_unload(request, adapter)
+        return _handle_unload(request, adapter_router)
     if request.method == "forecast":
-        return _handle_forecast(request, adapter)
+        return _handle_forecast(request, adapter_router)
 
     return _error_response(
         request.id,
@@ -202,11 +248,11 @@ def handle_request_line(line: str | bytes, adapter: ChronosAdapter) -> ProtocolR
 
 
 def serve(stdin: TextIO = sys.stdin, stdout: TextIO = sys.stdout) -> int:
-    adapter = ChronosAdapter()
+    adapter_router = TorchAdapterRouter()
     for line in stdin:
         if not line.strip():
             continue
-        response = handle_request_line(line, adapter)
+        response = handle_request_line(line, adapter_router)
         stdout.write(encode_line(response))
         stdout.flush()
     return 0

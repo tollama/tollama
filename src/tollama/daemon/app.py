@@ -436,6 +436,8 @@ def _execute_forecast(
     model_manifest = _require_installed_manifest(payload.model)
     model_family = _manifest_family_or_500(model_manifest, payload.model)
     model_local_dir = _manifest_snapshot_path(model_manifest)
+    model_source = _manifest_source(model_manifest)
+    model_metadata = _manifest_metadata(model_manifest)
 
     try:
         keep_alive_policy = parse_keep_alive(payload.keep_alive, now=request_now)
@@ -450,6 +452,10 @@ def _execute_forecast(
     params["model_family"] = model_family
     if model_local_dir is not None:
         params["model_local_dir"] = model_local_dir
+    if model_source is not None:
+        params["model_source"] = model_source
+    if model_metadata is not None:
+        params["model_metadata"] = model_metadata
 
     try:
         raw_result = app.state.runner_manager.call(
@@ -462,6 +468,8 @@ def _execute_forecast(
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     except RunnerCallError as exc:
         status_code = 503 if exc.code == "DEPENDENCY_MISSING" else 502
+        if exc.code == "BAD_REQUEST":
+            status_code = 400
         raise HTTPException(status_code=status_code, detail=_runner_error_detail(exc)) from exc
     except RunnerProtocolError as exc:
         raise HTTPException(status_code=502, detail=_runner_error_detail(exc)) from exc
@@ -855,6 +863,8 @@ def _prepare_pull_manifest(
             "accepted": accepted,
         },
     }
+    if spec.metadata is not None:
+        manifest["metadata"] = spec.metadata
     return spec, manifest, paths
 
 
@@ -989,6 +999,20 @@ def _manifest_snapshot_path(manifest: dict[str, Any]) -> str | None:
     if not Path(normalized).exists():
         return None
     return normalized
+
+
+def _manifest_source(manifest: dict[str, Any]) -> dict[str, Any] | None:
+    source = manifest.get("source")
+    if not isinstance(source, dict):
+        return None
+    return source
+
+
+def _manifest_metadata(manifest: dict[str, Any]) -> dict[str, Any] | None:
+    metadata = manifest.get("metadata")
+    if not isinstance(metadata, dict):
+        return None
+    return metadata
 
 
 def _manifest_size_bytes(manifest: dict[str, Any]) -> int:

@@ -19,7 +19,7 @@ python -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip
 python -m pip install -e ".[dev]"
-python -m pip install -e ".[dev,runner_torch]"  # optional: Chronos torch runner
+python -m pip install -e ".[dev,runner_torch]"  # optional: torch runner (Chronos + Granite TTM)
 
 # Terminal 1: run daemon (default http://127.0.0.1:11435)
 tollama serve
@@ -108,6 +108,30 @@ tollama pull chronos2 --hf-home /mnt/fastcache/hf
 # token via environment
 export TOLLAMA_HF_TOKEN=hf_xxx
 tollama pull <private-model>
+```
+
+## Granite TTM Forecasting (torch runner)
+
+`runner_torch` now includes optional Chronos and Granite TTM dependencies.
+
+```bash
+# install optional torch runner dependencies
+python -m pip install -e ".[dev,runner_torch]"
+
+# run daemon (default http://127.0.0.1:11435)
+tollama serve
+
+# pull one Granite TTM revision pinned in the registry
+tollama pull granite-ttm-r2
+
+# run forecast
+tollama run granite-ttm-r2 --input examples/granite_ttm_request.json --no-stream
+```
+
+```bash
+curl -s http://localhost:11435/api/forecast \
+  -H 'content-type: application/json' \
+  -d @examples/granite_ttm_request.json
 ```
 
 ## Persistent Pull Defaults

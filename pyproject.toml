@@ -34,6 +34,7 @@ dev = [
 ]
 runner_torch = [
   "chronos-forecasting>=2.0",
+  "granite-tsfm>=0.3.0,<0.4",
   "pandas>=2.0,<3.0",
   "numpy>=1.26,<3.0",
 ]

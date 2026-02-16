@@ -45,8 +45,13 @@ models:
     family: torch
     source:
       type: huggingface
-      repo_id: ibm/granite-ttm-r2
-      revision: main
+      repo_id: ibm-granite/granite-timeseries-ttm-r2
+      revision: 90-30-ft-l1-r2.1
     license:
       type: apache-2.0
-      needs_acceptance: true
+      needs_acceptance: false
+    metadata:
+      implementation: granite_ttm
+      context_length: 90
+      prediction_length: 30
+      license: apache-2.0

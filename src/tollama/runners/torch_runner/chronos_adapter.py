@@ -9,20 +9,14 @@ from typing import Any
 
 from tollama.core.schemas import ForecastRequest, ForecastResponse, SeriesForecast, SeriesInput
 
+from .errors import DependencyMissingError, UnsupportedModelError
+
 CHRONOS_MODEL_REGISTRY = {
     "chronos2": {
         "repo_id": "amazon/chronos-2",
         "revision": "main",
     },
 }
-
-
-class DependencyMissingError(RuntimeError):
-    """Raised when optional torch runner dependencies are missing."""
-
-
-class UnsupportedModelError(ValueError):
-    """Raised when a request targets an unsupported torch runner model."""
 
 
 @dataclass(frozen=True)
@@ -38,8 +32,16 @@ class ChronosAdapter:
         self._dependencies: _ChronosDependencies | None = None
         self._pipelines: dict[str, Any] = {}
 
-    def load(self, model_name: str, *, model_local_dir: str | None = None) -> None:
+    def load(
+        self,
+        model_name: str,
+        *,
+        model_local_dir: str | None = None,
+        model_source: dict[str, Any] | None = None,
+        model_metadata: dict[str, Any] | None = None,
+    ) -> None:
         """Load one model pipeline into memory if needed."""
+        del model_source, model_metadata
         if model_name in self._pipelines:
             return
 
@@ -72,9 +74,16 @@ class ChronosAdapter:
         request: ForecastRequest,
         *,
         model_local_dir: str | None = None,
+        model_source: dict[str, Any] | None = None,
+        model_metadata: dict[str, Any] | None = None,
     ) -> ForecastResponse:
         """Generate a forecast from canonical request data."""
-        self.load(request.model, model_local_dir=model_local_dir)
+        self.load(
+            request.model,
+            model_local_dir=model_local_dir,
+            model_source=model_source,
+            model_metadata=model_metadata,
+        )
         dependencies = self._resolve_dependencies()
         pandas = dependencies.pandas
         pipeline = self._pipelines[request.model]

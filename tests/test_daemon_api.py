@@ -460,6 +460,43 @@ def test_ollama_pull_non_stream_returns_success_and_updates_manifest(monkeypatch
     assert manifest["size_bytes"] == 128
 
 
+def test_ollama_pull_granite_uses_registry_repo_and_revision(monkeypatch, tmp_path) -> None:
+    paths = TollamaPaths(base_dir=tmp_path / ".tollama")
+    monkeypatch.setenv("TOLLAMA_HOME", str(paths.base_dir))
+    captures: dict[str, Any] = {}
+    _patch_fake_hf_download(monkeypatch, captures=captures)
+
+    with TestClient(create_app()) as client:
+        response = client.post("/api/pull", json={"model": "granite-ttm-r2", "stream": False})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "success"
+    assert body["model"] == "granite-ttm-r2"
+    assert captures["model_info"] == {
+        "repo_id": "ibm-granite/granite-timeseries-ttm-r2",
+        "revision": "90-30-ft-l1-r2.1",
+        "token": None,
+    }
+
+    manifest = json.loads(paths.manifest_path("granite-ttm-r2").read_text(encoding="utf-8"))
+    assert manifest["source"] == {
+        "type": "huggingface",
+        "repo_id": "ibm-granite/granite-timeseries-ttm-r2",
+        "revision": "90-30-ft-l1-r2.1",
+    }
+    assert manifest["metadata"] == {
+        "implementation": "granite_ttm",
+        "context_length": 90,
+        "prediction_length": 30,
+        "license": "apache-2.0",
+    }
+    assert manifest["resolved"]["commit_sha"] == "fake-commit-sha"
+    assert isinstance(manifest["resolved"]["snapshot_path"], str)
+    assert isinstance(manifest["pulled_at"], str)
+    assert manifest["size_bytes"] == 128
+
+
 def test_ollama_pull_stream_reports_file_count_progress(monkeypatch, tmp_path) -> None:
     paths = TollamaPaths(base_dir=tmp_path / ".tollama")
     monkeypatch.setenv("TOLLAMA_HOME", str(paths.base_dir))
@@ -963,6 +1000,63 @@ class _BadGatewayRunnerManager:
         return None
 
 
+class _BadRequestRunnerManager:
+    def call(
+        self,
+        family: str,
+        method: str,
+        params: dict[str, Any],
+        timeout: float,
+    ) -> dict[str, Any]:
+        raise RunnerCallError(
+            code="BAD_REQUEST",
+            message="Requested horizon exceeds model prediction_length.",
+        )
+
+    def stop(self, family: str | None = None) -> None:
+        return None
+
+    def unload(self, family: str, *, model: str | None = None, timeout: float) -> None:
+        return None
+
+
+class _CapturingRunnerManager:
+    def __init__(self) -> None:
+        self.captured: dict[str, Any] = {}
+
+    def call(
+        self,
+        family: str,
+        method: str,
+        params: dict[str, Any],
+        timeout: float,
+    ) -> dict[str, Any]:
+        self.captured = {
+            "family": family,
+            "method": method,
+            "params": params,
+            "timeout": timeout,
+        }
+        series = params["series"][0]
+        return {
+            "model": params["model"],
+            "forecasts": [
+                {
+                    "id": series["id"],
+                    "freq": series["freq"],
+                    "start_timestamp": series["timestamps"][-1],
+                    "mean": [1.0] * int(params["horizon"]),
+                }
+            ],
+        }
+
+    def stop(self, family: str | None = None) -> None:
+        return None
+
+    def unload(self, family: str, *, model: str | None = None, timeout: float) -> None:
+        return None
+
+
 def test_forecast_returns_503_when_runner_unavailable(monkeypatch, tmp_path) -> None:
     _install_model(monkeypatch, tmp_path, "mock")
     app = create_app(runner_manager=_UnavailableRunnerManager())  # type: ignore[arg-type]
@@ -984,4 +1078,56 @@ def test_forecast_returns_502_when_runner_returns_error(monkeypatch, tmp_path) -
         "code": -32602,
         "message": "invalid params",
         "data": {"family": "mock", "method": "forecast"},
+    }
+
+
+def test_forecast_returns_400_when_runner_returns_bad_request(monkeypatch, tmp_path) -> None:
+    _install_model(monkeypatch, tmp_path, "mock")
+    app = create_app(runner_manager=_BadRequestRunnerManager())  # type: ignore[arg-type]
+    with TestClient(app) as client:
+        response = client.post("/v1/forecast", json=_sample_forecast_payload())
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == {
+        "code": "BAD_REQUEST",
+        "message": "Requested horizon exceeds model prediction_length.",
+    }
+
+
+def test_forecast_passes_manifest_source_and_metadata_to_runner(monkeypatch, tmp_path) -> None:
+    paths = TollamaPaths(base_dir=tmp_path / ".tollama")
+    monkeypatch.setenv("TOLLAMA_HOME", str(paths.base_dir))
+    install_from_registry("granite-ttm-r2", accept_license=False, paths=paths)
+
+    runner_manager = _CapturingRunnerManager()
+    app = create_app(runner_manager=runner_manager)  # type: ignore[arg-type]
+    payload = {
+        "model": "granite-ttm-r2",
+        "horizon": 2,
+        "quantiles": [],
+        "series": [
+            {
+                "id": "s1",
+                "freq": "D",
+                "timestamps": ["2025-01-01", "2025-01-02"],
+                "target": [1.0, 2.0],
+            }
+        ],
+        "options": {},
+    }
+    with TestClient(app) as client:
+        response = client.post("/v1/forecast", json=payload)
+
+    assert response.status_code == 200
+    captured_params = runner_manager.captured["params"]
+    assert captured_params["model_source"] == {
+        "type": "huggingface",
+        "repo_id": "ibm-granite/granite-timeseries-ttm-r2",
+        "revision": "90-30-ft-l1-r2.1",
+    }
+    assert captured_params["model_metadata"] == {
+        "implementation": "granite_ttm",
+        "context_length": 90,
+        "prediction_length": 30,
+        "license": "apache-2.0",
     }

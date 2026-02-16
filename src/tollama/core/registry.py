@@ -41,6 +41,7 @@ class ModelSpec(BaseModel):
     source: ModelSource
     license: ModelLicense
     defaults: dict[StrictStr, JsonValue] | None = None
+    metadata: dict[StrictStr, JsonValue] | None = None
 
 
 class RegistryFile(BaseModel):

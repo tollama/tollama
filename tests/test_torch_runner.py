@@ -4,23 +4,48 @@ from __future__ import annotations
 
 import json
 
-from tollama.runners.torch_runner.chronos_adapter import DependencyMissingError
+from tollama.runners.torch_runner.errors import DependencyMissingError
 from tollama.runners.torch_runner.main import handle_request_line
 
 
 class _NoopAdapter:
-    def load(self, model_name: str) -> None:
+    def load(
+        self,
+        model_name: str,
+        *,
+        model_local_dir: str | None = None,
+        model_source: dict[str, object] | None = None,
+        model_metadata: dict[str, object] | None = None,
+    ) -> None:
+        del model_name, model_local_dir, model_source, model_metadata
         return None
 
     def unload(self, model_name: str | None = None) -> None:
+        del model_name
         return None
 
-    def forecast(self, request, *, model_local_dir: str | None = None):  # pragma: no cover
+    def forecast(
+        self,
+        request,
+        *,
+        model_local_dir: str | None = None,
+        model_source: dict[str, object] | None = None,
+        model_metadata: dict[str, object] | None = None,
+    ):  # pragma: no cover
+        del request, model_local_dir, model_source, model_metadata
         raise AssertionError("unexpected call")
 
 
 class _MissingDependencyAdapter(_NoopAdapter):
-    def forecast(self, request, *, model_local_dir: str | None = None):
+    def forecast(
+        self,
+        request,
+        *,
+        model_local_dir: str | None = None,
+        model_source: dict[str, object] | None = None,
+        model_metadata: dict[str, object] | None = None,
+    ):
+        del request, model_local_dir, model_source, model_metadata
         raise DependencyMissingError("install with pip install -e \".[dev,runner_torch]\"")
 
 

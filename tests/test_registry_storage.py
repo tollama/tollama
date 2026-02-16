@@ -25,6 +25,17 @@ def test_registry_loads_required_model_specs() -> None:
     assert mock.source.repo_id == "tollama/mock-runner"
     assert mock.license.needs_acceptance is False
 
+    granite = registry["granite-ttm-r2"]
+    assert granite.family == "torch"
+    assert granite.source.repo_id == "ibm-granite/granite-timeseries-ttm-r2"
+    assert granite.source.revision == "90-30-ft-l1-r2.1"
+    assert granite.metadata == {
+        "implementation": "granite_ttm",
+        "context_length": 90,
+        "prediction_length": 30,
+        "license": "apache-2.0",
+    }
+
 
 def test_install_list_and_remove_model_manifest_in_temp_store(tmp_path) -> None:
     paths = TollamaPaths(base_dir=tmp_path / ".tollama")
