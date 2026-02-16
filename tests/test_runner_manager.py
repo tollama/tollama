@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import sys
+
 from fastapi.testclient import TestClient
 
 from tollama.core.storage import TollamaPaths, install_from_registry
@@ -92,7 +94,7 @@ def test_runner_manager_get_all_statuses_does_not_start_missing_supervisors(monk
     manager = RunnerManager(supervisors={"mock": fake})
     monkeypatch.setattr(
         "tollama.daemon.runner_manager.shutil.which",
-        lambda command: "/usr/bin/runner" if command == "tollama-runner-torch" else None,
+        lambda command: "/usr/bin/python3" if command == sys.executable else None,
     )
 
     statuses = manager.get_all_statuses()
@@ -101,6 +103,11 @@ def test_runner_manager_get_all_statuses_does_not_start_missing_supervisors(monk
     assert fake.calls == 1
     assert set(by_family) == {"mock", "torch", "timesfm", "uni2ts"}
     assert by_family["mock"]["running"] is True
+    assert by_family["torch"]["command"] == [
+        sys.executable,
+        "-m",
+        "tollama.runners.torch_runner.main",
+    ]
     assert by_family["torch"]["installed"] is True
     assert by_family["timesfm"]["running"] is False
     assert by_family["uni2ts"]["running"] is False

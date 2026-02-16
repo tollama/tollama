@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import shutil
+import sys
 import threading
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
@@ -11,8 +12,8 @@ from typing import Any
 from .supervisor import RunnerCallError, RunnerSupervisor, RunnerUnavailableError
 
 DEFAULT_RUNNER_COMMANDS: dict[str, tuple[str, ...]] = {
-    "mock": ("tollama-runner-mock",),
-    "torch": ("tollama-runner-torch",),
+    "mock": (sys.executable, "-m", "tollama.runners.mock.main"),
+    "torch": (sys.executable, "-m", "tollama.runners.torch_runner.main"),
     "timesfm": ("tollama-runner-timesfm",),
     "uni2ts": ("tollama-runner-uni2ts",),
 }
