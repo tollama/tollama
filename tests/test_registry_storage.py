@@ -23,6 +23,7 @@ def test_registry_loads_required_model_specs() -> None:
         "chronos2",
         "timesfm-2.5-200m",
         "moirai-2.0-R-small",
+        "sundial-base-128m",
         "granite-ttm-r2",
     } <= set(registry)
 
@@ -73,6 +74,21 @@ def test_registry_loads_required_model_specs() -> None:
     assert moirai.metadata == {
         "implementation": "moirai_2p0",
         "default_context_length": 1680,
+    }
+
+    sundial = registry["sundial-base-128m"]
+    assert sundial.family == "sundial"
+    assert sundial.source.repo_id == "thuml/sundial-base-128m"
+    assert sundial.source.revision == "main"
+    assert sundial.license.type == "apache-2.0"
+    assert sundial.license.needs_acceptance is False
+    assert sundial.capabilities is not None
+    assert sundial.capabilities.past_covariates_numeric is False
+    assert sundial.metadata == {
+        "implementation": "sundial_base",
+        "max_context": 2880,
+        "max_horizon": 720,
+        "default_num_samples": 20,
     }
 
 

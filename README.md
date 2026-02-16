@@ -8,7 +8,7 @@ This repository provides a structured forecasting stack:
 - PEP 621 packaging via `pyproject.toml`
 - `src/` project layout
 - FastAPI daemon (`tollamad`) exposing the public HTTP API
-- Runner processes (`mock`, `torch`, `timesfm`, `uni2ts`) connected over stdio JSON lines
+- Runner processes (`mock`, `torch`, `timesfm`, `uni2ts`, `sundial`) connected over stdio JSON lines
 - Typer CLI (`tollama`) for Ollama-style model lifecycle and forecasting
 - Unified covariates contract (`past_covariates` + `future_covariates`) with
   `best_effort`/`strict` handling and warnings
@@ -24,6 +24,7 @@ python -m pip install -e ".[dev]"
 python -m pip install -e ".[dev,runner_torch]"  # optional: torch runner (Chronos + Granite TTM)
 python -m pip install -e ".[dev,runner_timesfm]"  # optional: TimesFM runner
 python -m pip install -e ".[dev,runner_uni2ts]"  # optional: Uni2TS/Moirai runner
+python -m pip install -e ".[dev,runner_sundial]"  # optional: Sundial runner
 
 # Terminal 1: run daemon (default http://127.0.0.1:11435)
 tollama serve
@@ -130,6 +131,7 @@ Compatibility snapshot:
 | Granite TTM | Yes | No | Yes | No |
 | TimesFM 2.5 | Yes | No | Yes | No |
 | Uni2TS / Moirai | Yes | No | Yes | No |
+| Sundial | No | No | No | No |
 
 TimesFM XReg knobs are available at `parameters.timesfm`:
 `xreg_mode`, `ridge`, `force_on_cpu`.
@@ -232,6 +234,32 @@ curl -s http://localhost:11435/api/forecast \
   -d @examples/moirai_request.json
 ```
 
+## Sundial Forecasting (separate sundial runner family)
+
+Sundial (`thuml/sundial-base-128m`) is frequency-agnostic and target-only in this runner.
+Covariates are ignored in `best_effort` mode and rejected in `strict` mode by daemon compatibility checks.
+
+```bash
+# install optional Sundial runner dependencies
+python -m pip install -e ".[dev,runner_sundial]"
+# note: install a compatible torch build first for your platform when needed
+
+# run daemon (default http://127.0.0.1:11435)
+tollama serve
+
+# pull Sundial model snapshot from Hugging Face
+tollama pull sundial-base-128m
+
+# run forecast
+tollama run sundial-base-128m --input examples/sundial_request.json --no-stream
+```
+
+```bash
+curl -s http://localhost:11435/api/forecast \
+  -H 'content-type: application/json' \
+  -d @examples/sundial_request.json
+```
+
 ## Persistent Pull Defaults
 
 `tollama config` stores pull defaults in `~/.tollama/config.json` (or `$TOLLAMA_HOME/config.json`).
@@ -262,7 +290,7 @@ It includes:
 - effective pull defaults with value source (`env`/`config`/`default`)
 - installed + loaded models (including covariate capabilities when available)
 - registry-available models with covariate capability metadata
-- runner statuses for `mock`, `torch`, `timesfm`, and `uni2ts`
+- runner statuses for `mock`, `torch`, `timesfm`, `uni2ts`, and `sundial`
 
 `tollama info` renders the same payload and prints a short per-model covariates summary.
 

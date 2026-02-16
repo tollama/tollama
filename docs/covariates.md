@@ -68,6 +68,13 @@ TimesFM knobs live under `parameters.timesfm`:
 - Dataset includes horizon rows with `target=NaN` and known-future feature values.
 - Categorical covariates are unsupported.
 
+### Sundial (sundial runner)
+
+- Sundial is target-only in this runner implementation.
+- `past_covariates`, `future_covariates`, and `static_covariates` are unsupported.
+- In `best_effort`, unsupported covariates are ignored and surfaced as warnings.
+- In `strict`, covariate usage is rejected with HTTP 400.
+
 ## Capability Visibility
 
 Covariate compatibility is exposed in:
@@ -83,6 +90,7 @@ Covariate compatibility is exposed in:
 | Granite TTM | Yes | No | Yes | No | Planned |
 | TimesFM 2.5 | Yes | No | Yes | No | Planned |
 | Uni2TS / Moirai | Yes | No | Yes | No | Planned |
+| Sundial | No | No | No | No | Planned |
 
 ## API Example (curl)
 

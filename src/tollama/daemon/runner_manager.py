@@ -16,12 +16,14 @@ DEFAULT_RUNNER_COMMANDS: dict[str, tuple[str, ...]] = {
     "torch": (sys.executable, "-m", "tollama.runners.torch_runner.main"),
     "timesfm": ("tollama-runner-timesfm",),
     "uni2ts": ("tollama-runner-uni2ts",),
+    "sundial": ("tollama-runner-sundial",),
 }
 
 FAMILY_EXTRAS: dict[str, str] = {
     "torch": "runner_torch",
     "timesfm": "runner_timesfm",
     "uni2ts": "runner_uni2ts",
+    "sundial": "runner_sundial",
 }
 
 UNIMPLEMENTED_FAMILIES = frozenset()

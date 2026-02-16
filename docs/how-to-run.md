@@ -14,6 +14,9 @@ This guide targets the current TSFM-capable registry entries in `model-registry/
 | `granite-ttm-r2` | `torch` | `ibm-granite/granite-timeseries-ttm-r2` | `90-30-ft-l1-r2.1` | `apache-2.0` | No | `runner_torch` |
 | `timesfm-2.5-200m` | `timesfm` | `google/timesfm-2.5-200m-pytorch` | `main` | `apache-2.0` | No | `runner_timesfm` |
 | `moirai-2.0-R-small` | `uni2ts` | `Salesforce/moirai-2.0-R-small` | `main` | `cc-by-nc-4.0` | Yes | `runner_uni2ts` |
+| `sundial-base-128m` | `sundial` | `thuml/sundial-base-128m` | `main` | `apache-2.0` | No | `runner_sundial` |
+
+Sundial is target-only in the current runner; do not include covariates in Sundial requests.
 
 ## Requirements
 
@@ -46,6 +49,7 @@ Optional extras:
 | `runner_torch` | Chronos + Granite runner dependencies | `chronos-forecasting`, `granite-tsfm`, `pandas`, `numpy` |
 | `runner_timesfm` | TimesFM runner dependencies | `numpy`, `pandas`, `huggingface_hub`, `timesfm[torch]` from `git+https://github.com/google-research/timesfm.git` |
 | `runner_uni2ts` | Uni2TS/Moirai runner dependencies | `uni2ts`, `numpy`, `pandas`, `huggingface_hub`, `gluonts` |
+| `runner_sundial` | Sundial runner dependencies | `transformers`, `torch`, `numpy`, `pandas`, `huggingface_hub` |
 
 ## One-Time Environment Setup
 
@@ -60,13 +64,13 @@ python -m pip install --upgrade pip setuptools wheel
 Install everything needed for development plus all runner families:
 
 ```bash
-python -m pip install -e ".[dev,runner_torch,runner_timesfm,runner_uni2ts]"
+python -m pip install -e ".[dev,runner_torch,runner_timesfm,runner_uni2ts,runner_sundial]"
 ```
 
 If you only need runtime (no lint/test tooling):
 
 ```bash
-python -m pip install -e ".[runner_torch,runner_timesfm,runner_uni2ts]"
+python -m pip install -e ".[runner_torch,runner_timesfm,runner_uni2ts,runner_sundial]"
 ```
 
 ## Environment Variables and Paths
@@ -122,7 +126,7 @@ export TOLLAMA_HF_TOKEN=hf_xxx
 Pull models that do not require explicit acceptance:
 
 ```bash
-for model in chronos2 granite-ttm-r2 timesfm-2.5-200m; do
+for model in chronos2 granite-ttm-r2 timesfm-2.5-200m sundial-base-128m; do
   tollama pull "$model" --no-stream
 done
 ```
@@ -138,7 +142,7 @@ Single command block version:
 ```bash
 set -euo pipefail
 
-for model in chronos2 granite-ttm-r2 timesfm-2.5-200m; do
+for model in chronos2 granite-ttm-r2 timesfm-2.5-200m sundial-base-128m; do
   tollama pull "$model" --no-stream
 done
 
@@ -163,7 +167,7 @@ Verify all expected model directories exist:
 
 ```bash
 BASE="${TOLLAMA_HOME:-$HOME/.tollama}/models"
-for model in chronos2 granite-ttm-r2 timesfm-2.5-200m moirai-2.0-R-small; do
+for model in chronos2 granite-ttm-r2 timesfm-2.5-200m moirai-2.0-R-small sundial-base-128m; do
   test -f "$BASE/$model/manifest.json" && echo "ok: $model" || echo "missing: $model"
 done
 ```
@@ -177,6 +181,7 @@ tollama run chronos2 --input examples/chronos2_request.json --no-stream
 tollama run granite-ttm-r2 --input examples/granite_ttm_request.json --no-stream
 tollama run timesfm-2.5-200m --input examples/timesfm_2p5_request.json --no-stream
 tollama run moirai-2.0-R-small --input examples/moirai_request.json --no-stream
+tollama run sundial-base-128m --input examples/sundial_request.json --no-stream
 ```
 
 ## Useful Pull Controls
@@ -212,6 +217,7 @@ Missing runner dependency errors:
   - `python -m pip install -e ".[runner_torch]"`
   - `python -m pip install -e ".[runner_timesfm]"`
   - `python -m pip install -e ".[runner_uni2ts]"`
+  - `python -m pip install -e ".[runner_sundial]"`
 
 Offline/local-files-only pull failures:
 

@@ -74,6 +74,27 @@ models:
       future_covariates_categorical: false
       static_covariates: false
 
+  - name: sundial-base-128m
+    family: sundial
+    source:
+      type: huggingface
+      repo_id: thuml/sundial-base-128m
+      revision: main
+    license:
+      type: apache-2.0
+      needs_acceptance: false
+    metadata:
+      implementation: sundial_base
+      max_context: 2880
+      max_horizon: 720
+      default_num_samples: 20
+    capabilities:
+      past_covariates_numeric: false
+      past_covariates_categorical: false
+      future_covariates_numeric: false
+      future_covariates_categorical: false
+      static_covariates: false
+
   - name: granite-ttm-r2
     family: torch
     source:
