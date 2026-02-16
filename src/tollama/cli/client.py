@@ -2,14 +2,25 @@
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 import httpx
 
 DEFAULT_DAEMON_HOST = "127.0.0.1"
-DEFAULT_DAEMON_PORT = 11435
-DEFAULT_BASE_URL = f"http://{DEFAULT_DAEMON_HOST}:{DEFAULT_DAEMON_PORT}"
+DEFAULT_DAEMON_PORT = 11434
+DEFAULT_BASE_URL = "http://localhost:11434"
 DEFAULT_TIMEOUT_SECONDS = 10.0
+
+
+class DaemonHTTPError(RuntimeError):
+    """HTTP status error returned by the daemon."""
+
+    def __init__(self, *, action: str, status_code: int, detail: str) -> None:
+        super().__init__(f"{action} failed with HTTP {status_code}: {detail}")
+        self.action = action
+        self.status_code = status_code
+        self.detail = detail
 
 
 class TollamaClient:
@@ -23,50 +34,130 @@ class TollamaClient:
         self._base_url = base_url.rstrip("/")
         self._timeout = timeout
 
-    def forecast(self, payload: dict[str, Any]) -> dict[str, Any]:
-        """Submit a forecast request payload and return response JSON."""
-        with httpx.Client(base_url=self._base_url, timeout=self._timeout) as client:
-            response = client.post("/v1/forecast", json=payload)
-        return _handle_json_response(response, action="forecast request")
-
-    def list_models(self) -> dict[str, Any]:
-        """Fetch available and installed models from the daemon."""
-        with httpx.Client(base_url=self._base_url, timeout=self._timeout) as client:
-            response = client.get("/v1/models")
-        return _handle_json_response(response, action="list models")
-
-    def pull_model(self, name: str, accept_license: bool) -> dict[str, Any]:
-        """Install a model via the daemon model lifecycle API."""
-        with httpx.Client(base_url=self._base_url, timeout=self._timeout) as client:
-            response = client.post(
-                "/v1/models/pull",
-                json={"name": name, "accept_license": accept_license},
+    def forecast(
+        self,
+        payload: dict[str, Any],
+        *,
+        stream: bool = True,
+    ) -> dict[str, Any] | list[dict[str, Any]]:
+        """Submit an Ollama-compatible forecast request."""
+        request_payload = dict(payload)
+        request_payload["stream"] = stream
+        action = f"forecast with model {request_payload.get('model')!r}"
+        if stream:
+            return self._request_ndjson(
+                "POST",
+                "/api/forecast",
+                json_payload=request_payload,
+                action=action,
             )
-        return _handle_json_response(response, action=f"pull model {name!r}")
+        return self._request_json(
+            "POST",
+            "/api/forecast",
+            json_payload=request_payload,
+            action=action,
+        )
+
+    def list_tags(self) -> dict[str, Any]:
+        """Fetch installed model tags from the daemon."""
+        return self._request_json("GET", "/api/tags", action="list model tags")
+
+    def list_running(self) -> dict[str, Any]:
+        """Fetch loaded model process state from the daemon."""
+        return self._request_json("GET", "/api/ps", action="list loaded models")
+
+    def pull_model(
+        self,
+        name: str,
+        *,
+        stream: bool = True,
+    ) -> dict[str, Any] | list[dict[str, Any]]:
+        """Install a model through the Ollama-compatible pull endpoint."""
+        payload = {"model": name, "stream": stream}
+        action = f"pull model {name!r}"
+        if stream:
+            return self._request_ndjson("POST", "/api/pull", json_payload=payload, action=action)
+        return self._request_json("POST", "/api/pull", json_payload=payload, action=action)
+
+    def show_model(self, name: str) -> dict[str, Any]:
+        """Fetch model details through the Ollama-compatible show endpoint."""
+        payload = {"model": name}
+        return self._request_json(
+            "POST",
+            "/api/show",
+            json_payload=payload,
+            action=f"show model {name!r}",
+        )
 
     def remove_model(self, name: str) -> dict[str, Any]:
-        """Remove an installed model via the daemon model lifecycle API."""
-        with httpx.Client(base_url=self._base_url, timeout=self._timeout) as client:
-            response = client.delete(f"/v1/models/{name}")
-        return _handle_json_response(response, action=f"remove model {name!r}")
+        """Delete a model through the Ollama-compatible delete endpoint."""
+        payload = {"model": name}
+        return self._request_json(
+            "DELETE",
+            "/api/delete",
+            json_payload=payload,
+            action=f"remove model {name!r}",
+        )
 
+    def _request_json(
+        self,
+        method: str,
+        path: str,
+        *,
+        json_payload: dict[str, Any] | None = None,
+        action: str,
+    ) -> dict[str, Any]:
+        response = self._send_request(method, path, json_payload=json_payload, action=action)
+        try:
+            data = response.json()
+        except ValueError as exc:
+            raise RuntimeError("daemon returned non-JSON response") from exc
 
-def _handle_json_response(response: httpx.Response, *, action: str) -> dict[str, Any]:
-    try:
-        response.raise_for_status()
-    except httpx.HTTPStatusError as exc:
-        detail = exc.response.text
-        raise RuntimeError(
-            f"{action} failed with HTTP {exc.response.status_code}: {detail}",
-        ) from exc
-    except httpx.HTTPError as exc:
-        raise RuntimeError(f"{action} failed: {exc}") from exc
+        if not isinstance(data, dict):
+            raise RuntimeError("daemon returned unexpected JSON payload")
+        return data
 
-    try:
-        data = response.json()
-    except ValueError as exc:
-        raise RuntimeError("daemon returned non-JSON response") from exc
+    def _request_ndjson(
+        self,
+        method: str,
+        path: str,
+        *,
+        json_payload: dict[str, Any] | None = None,
+        action: str,
+    ) -> list[dict[str, Any]]:
+        response = self._send_request(method, path, json_payload=json_payload, action=action)
+        entries: list[dict[str, Any]] = []
+        for raw_line in response.text.splitlines():
+            line = raw_line.strip()
+            if not line:
+                continue
+            try:
+                payload = json.loads(line)
+            except json.JSONDecodeError as exc:
+                raise RuntimeError("daemon returned non-NDJSON response") from exc
+            if not isinstance(payload, dict):
+                raise RuntimeError("daemon returned unexpected NDJSON payload")
+            entries.append(payload)
+        return entries
 
-    if not isinstance(data, dict):
-        raise RuntimeError("daemon returned unexpected JSON payload")
-    return data
+    def _send_request(
+        self,
+        method: str,
+        path: str,
+        *,
+        json_payload: dict[str, Any] | None = None,
+        action: str,
+    ) -> httpx.Response:
+        try:
+            with httpx.Client(base_url=self._base_url, timeout=self._timeout) as client:
+                response = client.request(method, path, json=json_payload)
+        except httpx.HTTPError as exc:
+            raise RuntimeError(f"{action} failed: {exc}") from exc
+
+        if response.is_error:
+            raise DaemonHTTPError(
+                action=action,
+                status_code=response.status_code,
+                detail=response.text,
+            )
+        return response

@@ -7,7 +7,25 @@ from pathlib import Path
 
 from typer.testing import CliRunner
 
+from tollama.cli.client import DaemonHTTPError
 from tollama.cli.main import app
+
+
+def _sample_request_payload() -> dict[str, object]:
+    return {
+        "model": "original",
+        "horizon": 2,
+        "quantiles": [0.1, 0.9],
+        "series": [
+            {
+                "id": "s1",
+                "freq": "D",
+                "timestamps": ["2025-01-01", "2025-01-02"],
+                "target": [3.0, 4.0],
+            }
+        ],
+        "options": {},
+    }
 
 
 def test_serve_runs_uvicorn_with_expected_defaults(monkeypatch) -> None:
@@ -27,33 +45,12 @@ def test_serve_runs_uvicorn_with_expected_defaults(monkeypatch) -> None:
     assert captured == {
         "target": "tollama.daemon.app:app",
         "host": "127.0.0.1",
-        "port": 11435,
+        "port": 11434,
         "log_level": "info",
     }
 
 
-def test_forecast_reads_file_overrides_model_and_prints_json(monkeypatch, tmp_path: Path) -> None:
-    request_path = tmp_path / "request.json"
-    request_path.write_text(
-        json.dumps(
-            {
-                "model": "original",
-                "horizon": 2,
-                "quantiles": [],
-                "series": [
-                    {
-                        "id": "s1",
-                        "freq": "D",
-                        "timestamps": ["2025-01-01"],
-                        "target": [3.0],
-                    }
-                ],
-                "options": {},
-            }
-        ),
-        encoding="utf-8",
-    )
-
+def test_pull_supports_streaming_and_non_stream(monkeypatch) -> None:
     captured: dict[str, object] = {}
 
     class _FakeClient:
@@ -61,105 +58,164 @@ def test_forecast_reads_file_overrides_model_and_prints_json(monkeypatch, tmp_pa
             captured["base_url"] = base_url
             captured["timeout"] = timeout
 
-        def forecast(self, payload: dict[str, object]) -> dict[str, object]:
-            captured["payload"] = payload
-            return {"model": payload["model"], "ok": True}
-
-    monkeypatch.setattr("tollama.cli.main.TollamaClient", _FakeClient)
-
-    runner = CliRunner()
-    result = runner.invoke(
-        app,
-        [
-            "forecast",
-            "--model",
-            "mock",
-            "--input",
-            str(request_path),
-        ],
-    )
-
-    assert result.exit_code == 0
-    assert captured["payload"]["model"] == "mock"
-    output_json = json.loads(result.stdout)
-    assert output_json == {"model": "mock", "ok": True}
-
-
-def test_forecast_rejects_non_json_input(tmp_path: Path) -> None:
-    request_path = tmp_path / "broken.json"
-    request_path.write_text("{not-json}", encoding="utf-8")
-
-    runner = CliRunner()
-    result = runner.invoke(
-        app,
-        [
-            "forecast",
-            "--model",
-            "mock",
-            "--input",
-            str(request_path),
-        ],
-    )
-
-    assert result.exit_code != 0
-    assert "input file is not valid JSON" in result.stdout
-
-
-def test_pull_list_and_rm_model_via_client(monkeypatch) -> None:
-    captured: dict[str, object] = {}
-
-    class _FakeClient:
-        def __init__(self, base_url: str, timeout: float) -> None:
-            captured["base_url"] = base_url
-            captured["timeout"] = timeout
-
-        def pull_model(self, name: str, accept_license: bool) -> dict[str, object]:
-            captured["pulled"] = {"name": name, "accept_license": accept_license}
+        def pull_model(
+            self,
+            name: str,
+            *,
+            stream: bool,
+        ) -> dict[str, object] | list[dict[str, object]]:
+            captured["pull"] = {"name": name, "stream": stream}
+            if stream:
+                return [{"status": "pulling model manifest"}, {"done": True, "model": name}]
             return {"name": name, "family": "mock"}
 
-        def list_models(self) -> dict[str, object]:
-            return {
-                "installed": [{"name": "mock", "family": "mock", "installed": True}],
-                "available": [],
-            }
-
-        def remove_model(self, name: str) -> dict[str, object]:
-            captured["removed"] = name
-            return {"removed": True, "name": name}
-
     monkeypatch.setattr("tollama.cli.main.TollamaClient", _FakeClient)
-
     runner = CliRunner()
 
-    pulled = runner.invoke(app, ["pull", "mock"])
-    assert pulled.exit_code == 0
-    pulled_payload = json.loads(pulled.stdout)
-    assert pulled_payload["name"] == "mock"
-    assert captured["pulled"] == {"name": "mock", "accept_license": False}
+    streamed = runner.invoke(app, ["pull", "mock"])
+    assert streamed.exit_code == 0
+    lines = [line for line in streamed.stdout.splitlines() if line.strip()]
+    assert json.loads(lines[0]) == {"status": "pulling model manifest"}
+    assert json.loads(lines[-1]) == {"done": True, "model": "mock"}
+    assert captured["base_url"] == "http://localhost:11434"
+    assert captured["pull"] == {"name": "mock", "stream": True}
+
+    non_stream = runner.invoke(app, ["pull", "mock", "--no-stream"])
+    assert non_stream.exit_code == 0
+    assert json.loads(non_stream.stdout)["name"] == "mock"
+    assert captured["pull"] == {"name": "mock", "stream": False}
+
+
+def test_list_ps_show_and_rm_commands_call_api_client(monkeypatch) -> None:
+    class _FakeClient:
+        def __init__(self, base_url: str, timeout: float) -> None:
+            self._base_url = base_url
+            self._timeout = timeout
+
+        def list_tags(self) -> dict[str, object]:
+            return {"models": [{"name": "mock"}]}
+
+        def list_running(self) -> dict[str, object]:
+            return {"models": [{"name": "mock", "expires_at": None}]}
+
+        def show_model(self, name: str) -> dict[str, object]:
+            return {"name": name, "model": name}
+
+        def remove_model(self, name: str) -> dict[str, object]:
+            return {"deleted": True, "model": name}
+
+    monkeypatch.setattr("tollama.cli.main.TollamaClient", _FakeClient)
+    runner = CliRunner()
 
     listed = runner.invoke(app, ["list"])
     assert listed.exit_code == 0
-    listed_payload = json.loads(listed.stdout)
-    assert [item["name"] for item in listed_payload] == ["mock"]
+    assert json.loads(listed.stdout)["models"][0]["name"] == "mock"
+
+    running = runner.invoke(app, ["ps"])
+    assert running.exit_code == 0
+    assert json.loads(running.stdout)["models"][0]["name"] == "mock"
+
+    shown = runner.invoke(app, ["show", "mock"])
+    assert shown.exit_code == 0
+    assert json.loads(shown.stdout)["name"] == "mock"
 
     removed = runner.invoke(app, ["rm", "mock"])
     assert removed.exit_code == 0
-    removed_payload = json.loads(removed.stdout)
-    assert removed_payload == {"removed": True, "name": "mock"}
-    assert captured["removed"] == "mock"
+    assert json.loads(removed.stdout) == {"deleted": True, "model": "mock"}
 
 
-def test_pull_surfaces_daemon_error(monkeypatch) -> None:
+def test_run_auto_pulls_when_model_not_installed(monkeypatch, tmp_path: Path) -> None:
+    request_path = tmp_path / "request.json"
+    request_path.write_text(json.dumps(_sample_request_payload()), encoding="utf-8")
+    captured: dict[str, object] = {}
+
+    class _FakeClient:
+        def __init__(self, base_url: str, timeout: float) -> None:
+            captured["base_url"] = base_url
+            captured["timeout"] = timeout
+
+        def show_model(self, name: str) -> dict[str, object]:
+            raise DaemonHTTPError(action="show model", status_code=404, detail="missing")
+
+        def pull_model(
+            self,
+            name: str,
+            *,
+            stream: bool,
+        ) -> dict[str, object] | list[dict[str, object]]:
+            captured["pull"] = {"name": name, "stream": stream}
+            return {"name": name, "family": "mock"}
+
+        def forecast(
+            self,
+            payload: dict[str, object],
+            *,
+            stream: bool,
+        ) -> dict[str, object] | list[dict[str, object]]:
+            captured["forecast"] = {"payload": payload, "stream": stream}
+            return {"model": payload["model"], "forecasts": []}
+
+    monkeypatch.setattr("tollama.cli.main.TollamaClient", _FakeClient)
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        ["run", "mock", "--input", str(request_path), "--horizon", "7", "--no-stream"],
+    )
+
+    assert result.exit_code == 0
+    assert captured["pull"] == {"name": "mock", "stream": False}
+    assert captured["forecast"]["stream"] is False
+    assert captured["forecast"]["payload"]["model"] == "mock"
+    assert captured["forecast"]["payload"]["horizon"] == 7
+
+
+def test_run_streaming_outputs_ndjson_lines(monkeypatch, tmp_path: Path) -> None:
+    request_path = tmp_path / "request.json"
+    request_path.write_text(json.dumps(_sample_request_payload()), encoding="utf-8")
+
     class _FakeClient:
         def __init__(self, base_url: str, timeout: float) -> None:
             pass
 
-        def pull_model(self, name: str, accept_license: bool) -> dict[str, object]:
-            raise RuntimeError("pull model 'chronos2' failed with HTTP 409: license required")
+        def show_model(self, name: str) -> dict[str, object]:
+            return {"name": name}
+
+        def forecast(
+            self,
+            payload: dict[str, object],
+            *,
+            stream: bool,
+        ) -> dict[str, object] | list[dict[str, object]]:
+            assert stream is True
+            return [
+                {"status": "running forecast"},
+                {"done": True, "response": {"model": payload["model"]}},
+            ]
 
     monkeypatch.setattr("tollama.cli.main.TollamaClient", _FakeClient)
     runner = CliRunner()
+    result = runner.invoke(app, ["run", "mock", "--input", str(request_path)])
 
-    denied = runner.invoke(app, ["pull", "chronos2"])
-    assert denied.exit_code != 0
-    assert "HTTP 409" in denied.stdout
+    assert result.exit_code == 0
+    lines = [line for line in result.stdout.splitlines() if line.strip()]
+    assert len(lines) == 2
+    assert json.loads(lines[0]) == {"status": "running forecast"}
+    assert json.loads(lines[1]) == {"done": True, "response": {"model": "mock"}}
+
+
+def test_run_rejects_non_json_input(tmp_path: Path) -> None:
+    request_path = tmp_path / "broken.json"
+    request_path.write_text("{not-json}", encoding="utf-8")
+
+    runner = CliRunner()
+    result = runner.invoke(app, ["run", "mock", "--input", str(request_path)])
+    assert result.exit_code != 0
+    assert "input file is not valid JSON" in result.stdout
+
+
+def test_run_help_mentions_required_flags() -> None:
+    runner = CliRunner()
+    result = runner.invoke(app, ["run", "--help"])
+    assert result.exit_code == 0
+    assert "--input" in result.stdout
+    assert "--no-stream" in result.stdout

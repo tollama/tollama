@@ -9,9 +9,15 @@ from typing import Any
 import typer
 import uvicorn
 
-from .client import DEFAULT_BASE_URL, DEFAULT_DAEMON_HOST, DEFAULT_DAEMON_PORT, TollamaClient
+from .client import (
+    DEFAULT_BASE_URL,
+    DEFAULT_DAEMON_HOST,
+    DEFAULT_DAEMON_PORT,
+    DaemonHTTPError,
+    TollamaClient,
+)
 
-app = typer.Typer(help="Command-line interface for tollama.")
+app = typer.Typer(help="Ollama-style command-line interface for tollama.")
 
 
 @app.command("serve")
@@ -24,115 +30,151 @@ def serve(
     uvicorn.run("tollama.daemon.app:app", host=host, port=port, log_level=log_level)
 
 
-@app.command("forecast")
-def forecast(
-    model: str = typer.Option("mock", help="Model name to set on the outgoing request."),
-    input: Path = typer.Option(..., "--input", exists=True, file_okay=True, dir_okay=False),
-    base_url: str = typer.Option(
-        DEFAULT_BASE_URL,
-        help="Daemon base URL. Defaults to http://127.0.0.1:11435.",
-    ),
-    timeout: float = typer.Option(10.0, min=0.1, help="HTTP timeout in seconds."),
-) -> None:
-    """Send a forecast request from a JSON file to the running daemon."""
-    payload = _load_request_payload(input)
-    payload["model"] = model
-
-    client = TollamaClient(base_url=base_url, timeout=timeout)
-    try:
-        response = client.forecast(payload)
-    except RuntimeError as exc:
-        typer.echo(f"Error: {exc}", err=True)
-        raise typer.Exit(code=1) from exc
-
-    typer.echo(json.dumps(response, indent=2, sort_keys=True))
-
-
-@app.command("models")
-def models(
-    base_url: str = typer.Option(
-        DEFAULT_BASE_URL,
-        help="Daemon base URL. Defaults to http://127.0.0.1:11435.",
-    ),
-    timeout: float = typer.Option(10.0, min=0.1, help="HTTP timeout in seconds."),
-) -> None:
-    """List available and installed models reported by the daemon."""
-    client = TollamaClient(base_url=base_url, timeout=timeout)
-    try:
-        response = client.list_models()
-    except RuntimeError as exc:
-        typer.echo(f"Error: {exc}", err=True)
-        raise typer.Exit(code=1) from exc
-
-    typer.echo(json.dumps(response, indent=2, sort_keys=True))
-
-
 @app.command("pull")
 def pull(
-    name: str = typer.Argument(..., help="Model name from model-registry/registry.yaml."),
-    accept_license: bool = typer.Option(
-        False,
-        "--accept-license",
-        help="Accept the model license terms if required.",
-    ),
+    model: str = typer.Argument(..., help="Model name to pull."),
+    no_stream: bool = typer.Option(False, "--no-stream", help="Disable streaming pull output."),
     base_url: str = typer.Option(
         DEFAULT_BASE_URL,
-        help="Daemon base URL. Defaults to http://127.0.0.1:11435.",
+        help="Daemon base URL. Defaults to http://localhost:11434.",
     ),
     timeout: float = typer.Option(10.0, min=0.1, help="HTTP timeout in seconds."),
 ) -> None:
-    """Install a model via the running daemon."""
+    """Pull a model from the registry into local storage."""
     client = TollamaClient(base_url=base_url, timeout=timeout)
+    stream = not no_stream
     try:
-        manifest = client.pull_model(name=name, accept_license=accept_license)
+        result = client.pull_model(name=model, stream=stream)
     except RuntimeError as exc:
         typer.echo(f"Error: {exc}", err=True)
         raise typer.Exit(code=1) from exc
-
-    typer.echo(json.dumps(manifest, indent=2, sort_keys=True))
+    _emit_result(result)
 
 
 @app.command("list")
 def list_models(
     base_url: str = typer.Option(
         DEFAULT_BASE_URL,
-        help="Daemon base URL. Defaults to http://127.0.0.1:11435.",
+        help="Daemon base URL. Defaults to http://localhost:11434.",
     ),
     timeout: float = typer.Option(10.0, min=0.1, help="HTTP timeout in seconds."),
 ) -> None:
-    """List models installed in the daemon-managed store."""
+    """List installed models via GET /api/tags."""
     client = TollamaClient(base_url=base_url, timeout=timeout)
     try:
-        response = client.list_models()
+        response = client.list_tags()
     except RuntimeError as exc:
         typer.echo(f"Error: {exc}", err=True)
         raise typer.Exit(code=1) from exc
+    typer.echo(json.dumps(response, indent=2, sort_keys=True))
 
-    payload = response.get("installed")
-    if not isinstance(payload, list):
-        typer.echo("Error: daemon returned unexpected list payload", err=True)
-        raise typer.Exit(code=1)
 
-    typer.echo(json.dumps(payload, indent=2, sort_keys=True))
+@app.command("ps")
+def ps(
+    base_url: str = typer.Option(
+        DEFAULT_BASE_URL,
+        help="Daemon base URL. Defaults to http://localhost:11434.",
+    ),
+    timeout: float = typer.Option(10.0, min=0.1, help="HTTP timeout in seconds."),
+) -> None:
+    """Show loaded models via GET /api/ps."""
+    client = TollamaClient(base_url=base_url, timeout=timeout)
+    try:
+        response = client.list_running()
+    except RuntimeError as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+    typer.echo(json.dumps(response, indent=2, sort_keys=True))
+
+
+@app.command("show")
+def show(
+    model: str = typer.Argument(..., help="Model name to inspect."),
+    base_url: str = typer.Option(
+        DEFAULT_BASE_URL,
+        help="Daemon base URL. Defaults to http://localhost:11434.",
+    ),
+    timeout: float = typer.Option(10.0, min=0.1, help="HTTP timeout in seconds."),
+) -> None:
+    """Show model metadata via POST /api/show."""
+    client = TollamaClient(base_url=base_url, timeout=timeout)
+    try:
+        response = client.show_model(model)
+    except RuntimeError as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+    typer.echo(json.dumps(response, indent=2, sort_keys=True))
 
 
 @app.command("rm")
 def rm(
-    name: str = typer.Argument(..., help="Installed model name to remove."),
+    model: str = typer.Argument(..., help="Installed model name to remove."),
     base_url: str = typer.Option(
         DEFAULT_BASE_URL,
-        help="Daemon base URL. Defaults to http://127.0.0.1:11435.",
+        help="Daemon base URL. Defaults to http://localhost:11434.",
     ),
     timeout: float = typer.Option(10.0, min=0.1, help="HTTP timeout in seconds."),
 ) -> None:
-    """Remove one installed model via the running daemon."""
+    """Delete a model via DELETE /api/delete."""
     client = TollamaClient(base_url=base_url, timeout=timeout)
     try:
-        result = client.remove_model(name)
+        response = client.remove_model(model)
+    except RuntimeError as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+    typer.echo(json.dumps(response, indent=2, sort_keys=True))
+
+
+@app.command("run")
+def run(
+    model: str = typer.Argument(..., help="Model name to run."),
+    input: Path = typer.Option(..., "--input", exists=True, file_okay=True, dir_okay=False),
+    horizon: int | None = typer.Option(None, "--horizon", min=1, help="Override request horizon."),
+    no_stream: bool = typer.Option(False, "--no-stream", help="Disable streaming forecast output."),
+    base_url: str = typer.Option(
+        DEFAULT_BASE_URL,
+        help="Daemon base URL. Defaults to http://localhost:11434.",
+    ),
+    timeout: float = typer.Option(10.0, min=0.1, help="HTTP timeout in seconds."),
+) -> None:
+    """Run a forecast through POST /api/forecast, auto-pulling if needed."""
+    payload = _load_request_payload(input)
+    payload["model"] = model
+    if horizon is not None:
+        payload["horizon"] = horizon
+
+    stream = not no_stream
+    client = TollamaClient(base_url=base_url, timeout=timeout)
+
+    try:
+        client.show_model(model)
+    except DaemonHTTPError as exc:
+        if exc.status_code != 404:
+            typer.echo(f"Error: {exc}", err=True)
+            raise typer.Exit(code=1) from exc
+        try:
+            pull_result = client.pull_model(name=model, stream=stream)
+        except RuntimeError as pull_exc:
+            typer.echo(f"Error: {pull_exc}", err=True)
+            raise typer.Exit(code=1) from pull_exc
+        _emit_result(pull_result)
     except RuntimeError as exc:
         typer.echo(f"Error: {exc}", err=True)
         raise typer.Exit(code=1) from exc
 
+    try:
+        forecast_result = client.forecast(payload, stream=stream)
+    except RuntimeError as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+    _emit_result(forecast_result)
+
+
+def _emit_result(result: dict[str, Any] | list[dict[str, Any]]) -> None:
+    if isinstance(result, list):
+        for item in result:
+            typer.echo(json.dumps(item, sort_keys=True))
+        return
     typer.echo(json.dumps(result, indent=2, sort_keys=True))
 
 

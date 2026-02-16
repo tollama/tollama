@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 from fastapi.testclient import TestClient
@@ -47,6 +48,199 @@ def test_version_endpoint_returns_string_version() -> None:
     assert response.status_code == 200
     body = response.json()
     assert isinstance(body.get("version"), str)
+
+
+def test_ollama_tags_and_show_endpoints_from_installed_manifest(monkeypatch, tmp_path) -> None:
+    paths = TollamaPaths(base_dir=tmp_path / ".tollama")
+    monkeypatch.setenv("TOLLAMA_HOME", str(paths.base_dir))
+
+    manifest = {
+        "name": "mock",
+        "family": "mock",
+        "source": {
+            "repo_id": "tollama/mock-runner",
+            "revision": "main",
+            "entrypoint": "tollama-runner-mock",
+        },
+        "installed_at": "2026-02-16T00:00:00Z",
+        "license": {"type": "mit", "needs_acceptance": False, "accepted": True},
+        "size": 1234,
+        "digest": "sha256:abc123",
+    }
+    manifest_path = paths.manifest_path("mock")
+    manifest_path.parent.mkdir(parents=True, exist_ok=True)
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    with TestClient(create_app()) as client:
+        tags_response = client.get("/api/tags")
+        show_response = client.post("/api/show", json={"model": "mock"})
+
+    assert tags_response.status_code == 200
+    assert tags_response.json() == {
+        "models": [
+            {
+                "name": "mock",
+                "model": "mock",
+                "modified_at": "2026-02-16T00:00:00Z",
+                "size": 1234,
+                "digest": "sha256:abc123",
+                "details": {
+                    "format": "tollama",
+                    "family": "mock",
+                    "families": ["mock"],
+                    "parameter_size": "",
+                    "quantization_level": "",
+                },
+            }
+        ]
+    }
+
+    assert show_response.status_code == 200
+    assert show_response.json() == {
+        "name": "mock",
+        "model": "mock",
+        "family": "mock",
+        "source": {
+            "repo_id": "tollama/mock-runner",
+            "revision": "main",
+            "entrypoint": "tollama-runner-mock",
+        },
+        "license": {"type": "mit", "needs_acceptance": False, "accepted": True},
+        "modelfile": "",
+        "parameters": "",
+    }
+
+
+def test_ollama_show_returns_404_for_missing_model(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("TOLLAMA_HOME", str(tmp_path / ".tollama"))
+
+    with TestClient(create_app()) as client:
+        response = client.post("/api/show", json={"model": "not-installed"})
+
+    assert response.status_code == 404
+    assert "is not installed" in response.json()["detail"]
+
+
+def test_ollama_pull_non_stream_and_delete_flow(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("TOLLAMA_HOME", str(tmp_path / ".tollama"))
+
+    with TestClient(create_app()) as client:
+        pulled = client.post("/api/pull", json={"model": "mock", "stream": False})
+        assert pulled.status_code == 200
+        assert pulled.json()["name"] == "mock"
+
+        tags = client.get("/api/tags")
+        assert tags.status_code == 200
+        assert [item["name"] for item in tags.json()["models"]] == ["mock"]
+
+        deleted = client.request("DELETE", "/api/delete", json={"model": "mock"})
+        assert deleted.status_code == 200
+        assert deleted.json() == {"deleted": True, "model": "mock"}
+
+        deleted_again = client.request("DELETE", "/api/delete", json={"model": "mock"})
+        assert deleted_again.status_code == 404
+
+
+def test_ollama_pull_stream_returns_ndjson(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("TOLLAMA_HOME", str(tmp_path / ".tollama"))
+
+    with TestClient(create_app()) as client:
+        response = client.post("/api/pull", json={"model": "mock"})
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("application/x-ndjson")
+    lines = [line for line in response.text.splitlines() if line.strip()]
+    assert len(lines) >= 2
+    payloads = [json.loads(line) for line in lines]
+    assert payloads[0].get("status") == "pulling model manifest"
+    assert payloads[-1].get("done") is True
+    assert payloads[-1].get("model") == "mock"
+
+
+def test_api_ps_omits_model_after_forecast_keep_alive_zero() -> None:
+    payload = _sample_forecast_payload()
+    payload["keep_alive"] = 0
+
+    with TestClient(create_app()) as client:
+        forecast_response = client.post("/v1/forecast", json=payload)
+        ps_response = client.get("/api/ps")
+
+    assert forecast_response.status_code == 200
+    assert ps_response.status_code == 200
+    assert ps_response.json() == {"models": []}
+
+
+def test_api_ps_tracks_model_after_forecast_keep_alive_negative() -> None:
+    payload = _sample_forecast_payload()
+    payload["keep_alive"] = -1
+
+    with TestClient(create_app()) as client:
+        forecast_response = client.post("/v1/forecast", json=payload)
+        ps_response = client.get("/api/ps")
+
+    assert forecast_response.status_code == 200
+    assert ps_response.status_code == 200
+    models = ps_response.json().get("models")
+    assert isinstance(models, list)
+    assert len(models) == 1
+
+    loaded = models[0]
+    assert loaded["name"] == "mock-naive"
+    assert loaded["model"] == "mock-naive"
+    assert loaded["expires_at"] is None
+    assert loaded["size"] == 0
+    assert loaded["size_vram"] == 0
+    assert loaded["context_length"] == 0
+    assert loaded["details"] == {"family": "mock-naive"}
+
+
+def test_api_forecast_stream_false_returns_forecast_response() -> None:
+    payload = _sample_forecast_payload()
+    payload["stream"] = False
+
+    with TestClient(create_app()) as client:
+        response = client.post("/api/forecast", json=payload)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["model"] == "mock-naive"
+    assert isinstance(body["forecasts"], list)
+    assert len(body["forecasts"]) == 2
+
+
+def test_api_forecast_stream_true_returns_ndjson_with_done() -> None:
+    with TestClient(create_app()) as client:
+        response = client.post("/api/forecast", json=_sample_forecast_payload())
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("application/x-ndjson")
+
+    lines = [line for line in response.text.splitlines() if line.strip()]
+    assert len(lines) >= 2
+
+    payloads = [json.loads(line) for line in lines]
+    assert payloads[0] == {"status": "loading model"}
+    assert payloads[1] == {"status": "running forecast"}
+    assert payloads[-1].get("done") is True
+    assert payloads[-1]["response"]["model"] == "mock-naive"
+
+
+def test_api_forecast_keep_alive_updates_loaded_model_tracker() -> None:
+    payload = _sample_forecast_payload()
+    payload["stream"] = False
+    payload["keep_alive"] = -1
+
+    with TestClient(create_app()) as client:
+        forecast_response = client.post("/api/forecast", json=payload)
+        ps_response = client.get("/api/ps")
+
+    assert forecast_response.status_code == 200
+    assert ps_response.status_code == 200
+    models = ps_response.json().get("models")
+    assert isinstance(models, list)
+    assert len(models) == 1
+    assert models[0]["model"] == "mock-naive"
+    assert models[0]["expires_at"] is None
 
 
 def test_forecast_routes_end_to_end_to_mock_runner() -> None:
