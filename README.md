@@ -43,6 +43,8 @@ ruff check .
 pytest -q
 ```
 
+For a full setup/run walkthrough with dependency breakdown and commands to install every TSFM model in the registry, see `docs/how-to-run.md`.
+
 ## Daemon Base URL and Host Config
 
 - Default CLI base URL is `http://localhost:11435`.
