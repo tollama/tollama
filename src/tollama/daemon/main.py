@@ -10,7 +10,7 @@ import uvicorn
 def main() -> int:
     """Run the HTTP daemon with uvicorn."""
     host = os.environ.get("TOLLAMA_HOST", "127.0.0.1")
-    port_value = os.environ.get("TOLLAMA_PORT", "8000")
+    port_value = os.environ.get("TOLLAMA_PORT", "11435")
     log_level = os.environ.get("TOLLAMA_LOG_LEVEL", "info")
 
     try:

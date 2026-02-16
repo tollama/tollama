@@ -12,17 +12,19 @@ license = { file = "LICENSE" }
 authors = [{ name = "tollama contributors" }]
 dependencies = [
   "fastapi>=0.111.0,<1.0.0",
+  "httpx>=0.27.0",
   "pydantic>=2.0,<3.0",
+  "typer>=0.12.0,<1.0.0",
   "uvicorn>=0.30.0,<1.0.0",
 ]
 
 [project.scripts]
+tollama = "tollama.cli.main:main"
 tollamad = "tollama.daemon.main:main"
 tollama-runner-mock = "tollama.runners.mock.main:main"
 
 [project.optional-dependencies]
 dev = [
-  "httpx>=0.27.0",
   "pytest>=8.0",
   "ruff>=0.6.0",
 ]

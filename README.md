@@ -18,6 +18,13 @@ python -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip
 python -m pip install -e ".[dev]"
+
+# Terminal 1: run daemon (default http://127.0.0.1:11435)
+tollama serve
+
+# Terminal 2: request a forecast from example payload
+tollama forecast --model mock --input examples/request.json
+
 ruff check .
 pytest -q
 ```
