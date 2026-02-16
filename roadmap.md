@@ -164,6 +164,7 @@ tollama/
 ### Current implementation status
 - Optional torch dependency universe is available through `runner_torch` extras.
 - Family routing supports separate command targets per family.
+- Default `mock` and `torch` runner launches now use the daemon interpreter (`sys.executable -m ...`) instead of PATH-only console-script lookup, reducing environment mismatch failures (`src/tollama/daemon/runner_manager.py`).
 - `timesfm` and `uni2ts` families are already modeled in routing/registry metadata but not implemented as runnable workers.
 
 ### Planned work / TODO
@@ -293,6 +294,7 @@ tollama/
   - pull streaming NDJSON and non-stream flow
   - config/env pull default resolution
   - diagnostics redaction via `/api/info`
+  - runner-manager default command behavior for interpreter-module launches (`tests/test_runner_manager.py`)
 
 ### Planned work / TODO
 - Add test coverage for future TimesFM and Uni2TS forecast paths.
@@ -311,6 +313,7 @@ Phase A — Foundation:
 Phase B — First real runner: Torch family:
 - `[x]` `runner-torch` with Chronos adapter
 - `[x]` `tollama pull` downloads model + writes manifest metadata
+- `[x]` daemon default launch path for torch/mock runners is interpreter-module based (no PATH-only entrypoint dependency)
 - `[~]` model cache/LRU/device behavior (basic cache exists, no LRU or explicit device policy)
 
 Phase C — Add IBM Granite TSFM to torch runner:
