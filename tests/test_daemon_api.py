@@ -28,6 +28,7 @@ def _clear_pull_environment(monkeypatch) -> None:
         "HTTPS_PROXY",
         "NO_PROXY",
         "TOLLAMA_HF_TOKEN",
+        "TOLLAMA_FORECAST_TIMEOUT_SECONDS",
     ):
         monkeypatch.delenv(key, raising=False)
 
@@ -1308,3 +1309,30 @@ def test_forecast_passes_manifest_source_and_metadata_to_runner(monkeypatch, tmp
         "prediction_length": 30,
         "license": "apache-2.0",
     }
+
+
+def test_forecast_uses_default_runner_timeout(monkeypatch, tmp_path) -> None:
+    _install_model(monkeypatch, tmp_path, "mock")
+    runner_manager = _CapturingRunnerManager()
+    app = create_app(runner_manager=runner_manager)  # type: ignore[arg-type]
+
+    with TestClient(app) as client:
+        response = client.post("/v1/forecast", json=_sample_forecast_payload())
+
+    assert response.status_code == 200
+    assert (
+        runner_manager.captured["timeout"] == daemon_app_module.DEFAULT_FORECAST_TIMEOUT_SECONDS
+    )
+
+
+def test_forecast_uses_env_override_for_runner_timeout(monkeypatch, tmp_path) -> None:
+    _install_model(monkeypatch, tmp_path, "mock")
+    monkeypatch.setenv("TOLLAMA_FORECAST_TIMEOUT_SECONDS", "240")
+    runner_manager = _CapturingRunnerManager()
+    app = create_app(runner_manager=runner_manager)  # type: ignore[arg-type]
+
+    with TestClient(app) as client:
+        response = client.post("/v1/forecast", json=_sample_forecast_payload())
+
+    assert response.status_code == 200
+    assert runner_manager.captured["timeout"] == 240.0

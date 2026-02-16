@@ -7,6 +7,7 @@ import shutil
 import subprocess
 import sys
 import threading
+import time
 from collections.abc import Sequence
 from datetime import UTC, datetime
 from typing import Any
@@ -159,29 +160,36 @@ class RunnerSupervisor:
         except OSError as exc:
             raise RunnerUnavailableError(f"failed to write to runner: {exc}") from exc
 
-        line = self._readline_with_timeout(process, timeout)
-        try:
-            response = decode_response_line(line)
-        except ProtocolDecodeError as exc:
-            raise RunnerProtocolError(f"invalid response from runner: {exc}") from exc
+        deadline = time.monotonic() + timeout
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise RunnerUnavailableError(f"runner call timed out after {timeout:.2f}s")
 
-        if response.id != request.id:
-            raise RunnerProtocolError(
-                f"response id mismatch: expected {request.id!r}, got {response.id!r}",
-            )
+            line = self._readline_with_timeout(process, remaining)
+            try:
+                response = decode_response_line(line)
+            except ProtocolDecodeError:
+                # Some model libraries emit stdout logs that can appear interleaved with the
+                # protocol channel. Ignore non-protocol lines and keep waiting.
+                continue
 
-        if response.error is not None:
-            raise RunnerCallError(
-                code=response.error.code,
-                message=response.error.message,
-                data=response.error.data,
-            )
+            if response.id != request.id:
+                # Ignore unrelated responses (for example stale responses that arrived late).
+                continue
 
-        result = response.result
-        if result is None:
-            raise RunnerProtocolError("runner response is missing result")
+            if response.error is not None:
+                raise RunnerCallError(
+                    code=response.error.code,
+                    message=response.error.message,
+                    data=response.error.data,
+                )
 
-        return result
+            result = response.result
+            if result is None:
+                raise RunnerProtocolError("runner response is missing result")
+
+            return result
 
     def _readline_with_timeout(self, process: subprocess.Popen[str], timeout: float) -> str:
         stdout = process.stdout

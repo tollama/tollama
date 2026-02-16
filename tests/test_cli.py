@@ -251,6 +251,7 @@ def test_run_auto_pulls_when_model_not_installed(monkeypatch, tmp_path: Path) ->
     )
 
     assert result.exit_code == 0
+    assert captured["timeout"] == 120.0
     assert captured["pull"] == {"name": "mock", "stream": False, "accept_license": False}
     assert captured["forecast"]["stream"] is False
     assert captured["forecast"]["payload"]["model"] == "mock"

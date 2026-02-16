@@ -61,11 +61,13 @@ from .supervisor import (
     RunnerUnavailableError,
 )
 
-DEFAULT_FORECAST_TIMEOUT_SECONDS = 10.0
+DEFAULT_FORECAST_TIMEOUT_SECONDS = 120.0
+FORECAST_TIMEOUT_ENV_NAME = "TOLLAMA_FORECAST_TIMEOUT_SECONDS"
 DEFAULT_MODIFIED_AT = "1970-01-01T00:00:00Z"
 INFO_ENV_KEYS = (
     "TOLLAMA_HOME",
     "TOLLAMA_HOST",
+    FORECAST_TIMEOUT_ENV_NAME,
     "HF_HOME",
     "HF_HUB_OFFLINE",
     "HTTP_PROXY",
@@ -440,6 +442,7 @@ def _execute_forecast(
     extra_exclude: set[str] | None = None,
 ) -> ForecastResponse:
     _unload_expired_models(app)
+    forecast_timeout_seconds = _resolve_forecast_timeout_seconds()
     request_now = datetime.now(UTC)
     model_manifest = _require_installed_manifest(payload.model)
     model_family = _manifest_family_or_500(model_manifest, payload.model)
@@ -493,7 +496,7 @@ def _execute_forecast(
             family=model_family,
             method="forecast",
             params=params,
-            timeout=DEFAULT_FORECAST_TIMEOUT_SECONDS,
+            timeout=forecast_timeout_seconds,
         )
     except RunnerUnavailableError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
@@ -523,7 +526,7 @@ def _execute_forecast(
             app.state.runner_manager.unload(
                 family=model_family,
                 model=forecast_payload.model,
-                timeout=DEFAULT_FORECAST_TIMEOUT_SECONDS,
+                timeout=forecast_timeout_seconds,
             )
         except RunnerError:
             app.state.runner_manager.stop(family=model_family)
@@ -701,6 +704,20 @@ def _resolve_pull_bool(
         return bool(config_value), False
 
     return hard_default, False
+
+
+def _resolve_forecast_timeout_seconds() -> float:
+    configured = _env_or_none(FORECAST_TIMEOUT_ENV_NAME)
+    if configured is None:
+        return DEFAULT_FORECAST_TIMEOUT_SECONDS
+
+    try:
+        resolved = float(configured)
+    except ValueError:
+        return DEFAULT_FORECAST_TIMEOUT_SECONDS
+    if resolved <= 0:
+        return DEFAULT_FORECAST_TIMEOUT_SECONDS
+    return resolved
 
 
 def _resolve_pull_str(

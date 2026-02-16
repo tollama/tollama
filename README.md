@@ -54,6 +54,7 @@ For a full setup/run walkthrough with dependency breakdown and commands to insta
 - Default daemon port remains `11435`.
 - Configure bind host and port with `TOLLAMA_HOST` in `host:port` format.
   - Example: `TOLLAMA_HOST=0.0.0.0:11435 tollamad`
+- Override daemon runner forecast timeout with `TOLLAMA_FORECAST_TIMEOUT_SECONDS` (default `120`).
 - Local tollama state lives under `~/.tollama` by default.
   - Override with `TOLLAMA_HOME=/custom/path` (config, models, runtimes all use this base).
 - Primary lifecycle endpoints are under `/api/*`.
@@ -229,6 +230,8 @@ tollama pull moirai-2.0-R-small --accept-license
 
 # run forecast
 tollama run moirai-2.0-R-small --input examples/moirai_request.json --no-stream
+# if you hit timeout on first run, increase CLI timeout
+tollama run moirai-2.0-R-small --input examples/moirai_request.json --no-stream --timeout 120
 ```
 
 ```bash

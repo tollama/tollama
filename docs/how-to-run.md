@@ -83,6 +83,7 @@ Important variables:
 
 - `TOLLAMA_HOME`: overrides default state root (`~/.tollama`)
 - `TOLLAMA_HOST`: bind host and port in `host:port` format for daemon process
+- `TOLLAMA_FORECAST_TIMEOUT_SECONDS`: daemon runner-call timeout for forecast/unload (default `120`)
 - `TOLLAMA_HF_TOKEN`: Hugging Face token used by pull operations
 - `HTTP_PROXY`, `HTTPS_PROXY`, `NO_PROXY`: optional proxy settings for pulls
 
@@ -241,6 +242,14 @@ Daemon unreachable:
 - Ensure `tollama serve` is running.
 - Confirm host/port (`http://localhost:11435` by default).
 - Use `tollama info --remote` to force daemon diagnostics.
+
+Forecast timeout (`failed: timed out` / runner timeout):
+
+- Increase CLI timeout for slower first-run inference:
+  - `tollama run moirai-2.0-R-small --input examples/moirai_request.json --no-stream --timeout 120`
+- If needed, increase daemon runner timeout:
+  - `export TOLLAMA_FORECAST_TIMEOUT_SECONDS=240`
+  - restart `tollama serve`
 
 ## Development Checks
 

@@ -49,6 +49,7 @@ _UNI2TS_PYTHON_WARNING = (
     "Uni2TS/Moirai dependencies may fail to install on Python 3.13+; "
     "use Python 3.11 or 3.12 when running model family 'uni2ts'"
 )
+_RUN_TIMEOUT_SECONDS = 120.0
 
 
 @app.command("serve")
@@ -365,7 +366,11 @@ def run(
         DEFAULT_BASE_URL,
         help="Daemon base URL. Defaults to http://localhost:11435.",
     ),
-    timeout: float = typer.Option(10.0, min=0.1, help="HTTP timeout in seconds."),
+    timeout: float = typer.Option(
+        _RUN_TIMEOUT_SECONDS,
+        min=0.1,
+        help="HTTP timeout in seconds. Increase for first-run model load/inference.",
+    ),
 ) -> None:
     """Run a forecast through POST /api/forecast, auto-pulling if needed."""
     _emit_uni2ts_python_runtime_warning(model)

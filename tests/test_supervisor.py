@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 
+from tollama.core.protocol import ProtocolRequest, ProtocolResponse, encode_line
 from tollama.daemon.supervisor import RunnerSupervisor, RunnerUnavailableError
 
 
@@ -115,3 +116,40 @@ def test_runner_supervisor_records_last_error_and_restarts(monkeypatch) -> None:
         "at": status["last_error"]["at"],
     }
     assert isinstance(status["last_error"]["at"], str)
+
+
+def test_call_once_ignores_non_protocol_lines(monkeypatch) -> None:
+    supervisor = RunnerSupervisor(runner_command=("runner-cmd",))
+    process = _FakeProcess()
+    request = ProtocolRequest(id="req-1", method="forecast", params={"x": 1})
+
+    response = ProtocolResponse(id="req-1", result={"ok": True})
+    lines = iter(["this is a log line\n", encode_line(response)])
+
+    monkeypatch.setattr(
+        supervisor,
+        "_readline_with_timeout",
+        lambda _process, _timeout: next(lines),
+    )
+
+    result = supervisor._call_once_locked(process, request, timeout=1.0)
+    assert result == {"ok": True}
+
+
+def test_call_once_ignores_mismatched_response_id(monkeypatch) -> None:
+    supervisor = RunnerSupervisor(runner_command=("runner-cmd",))
+    process = _FakeProcess()
+    request = ProtocolRequest(id="req-2", method="forecast", params={"x": 1})
+
+    stale = ProtocolResponse(id="stale-id", result={"ok": False})
+    expected = ProtocolResponse(id="req-2", result={"ok": True})
+    lines = iter([encode_line(stale), encode_line(expected)])
+
+    monkeypatch.setattr(
+        supervisor,
+        "_readline_with_timeout",
+        lambda _process, _timeout: next(lines),
+    )
+
+    result = supervisor._call_once_locked(process, request, timeout=1.0)
+    assert result == {"ok": True}
