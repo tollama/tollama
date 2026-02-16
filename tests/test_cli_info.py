@@ -212,3 +212,43 @@ def test_info_command_local_flag_forces_local_mode(monkeypatch) -> None:
 
     assert result.exit_code == 0
     assert captured["mode"] == "local"
+
+
+def test_info_command_reports_covariate_capabilities(monkeypatch) -> None:
+    snapshot: dict[str, Any] = {
+        "client": {"base_url": "http://localhost:11435", "api_base_url": "", "source": "remote"},
+        "daemon": {"reachable": True, "version": "0.1.0"},
+        "paths": {
+            "tollama_home": "/tmp",
+            "config_path": "/tmp/config.json",
+            "config_exists": False,
+        },
+        "config": None,
+        "env": {},
+        "pull_defaults": {},
+        "models": {
+            "installed": [
+                {
+                    "name": "timesfm-2.5-200m",
+                    "family": "timesfm",
+                    "capabilities": {
+                        "past_covariates_numeric": True,
+                        "past_covariates_categorical": False,
+                        "future_covariates_numeric": True,
+                        "future_covariates_categorical": False,
+                        "static_covariates": False,
+                    },
+                }
+            ],
+            "loaded": [],
+            "available": [],
+        },
+        "runners": [],
+    }
+    monkeypatch.setattr("tollama.cli.main.collect_info", lambda **_: snapshot)
+
+    runner = CliRunner()
+    result = runner.invoke(app, ["info"])
+
+    assert result.exit_code == 0
+    assert "covariates: past-only numeric, known-future numeric, static planned" in result.stdout

@@ -17,6 +17,7 @@ from typing import Any
 
 import httpx
 from fastapi import FastAPI, HTTPException, Request
+from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import (
@@ -39,7 +40,7 @@ from tollama.core.hf_pull import (
 )
 from tollama.core.pull_defaults import resolve_effective_pull_defaults
 from tollama.core.redact import redact_config_dict, redact_env_dict, redact_proxy_url
-from tollama.core.registry import get_model_spec, list_registry_models
+from tollama.core.registry import ModelCapabilities, get_model_spec, list_registry_models
 from tollama.core.schemas import ForecastRequest, ForecastResponse
 from tollama.core.storage import (
     TollamaPaths,
@@ -50,6 +51,7 @@ from tollama.core.storage import (
     write_manifest,
 )
 
+from .covariates import apply_covariate_capabilities, normalize_covariates
 from .loaded_models import LoadedModelTracker, parse_keep_alive, to_utc_iso
 from .runner_manager import RunnerManager
 from .supervisor import (
@@ -220,7 +222,11 @@ def create_app(*, runner_manager: RunnerManager | None = None) -> FastAPI:
         _request: Request,
         exc: RequestValidationError,
     ) -> JSONResponse:
-        return JSONResponse(status_code=400, content={"detail": exc.errors()})
+        detail = jsonable_encoder(
+            exc.errors(),
+            custom_encoder={ValueError: str},
+        )
+        return JSONResponse(status_code=400, content={"detail": detail})
 
     @app.get("/api/version")
     def version() -> dict[str, str]:
@@ -254,6 +260,7 @@ def create_app(*, runner_manager: RunnerManager | None = None) -> FastAPI:
             "models": {
                 "installed": _collect_installed_model_entries(paths=paths),
                 "loaded": _collect_loaded_model_entries(app),
+                "available": _collect_available_model_entries(),
             },
             "runners": app.state.runner_manager.get_all_statuses(),
         }
@@ -439,17 +446,40 @@ def _execute_forecast(
     model_local_dir = _manifest_snapshot_path(model_manifest)
     model_source = _manifest_source(model_manifest)
     model_metadata = _manifest_metadata(model_manifest)
+    model_capabilities = _resolve_model_capabilities(payload.model, model_manifest)
 
     try:
-        keep_alive_policy = parse_keep_alive(payload.keep_alive, now=request_now)
+        normalized_series, normalize_warnings = normalize_covariates(
+            payload.series,
+            payload.horizon,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    try:
+        compatible_series, capability_warnings = apply_covariate_capabilities(
+            model_name=payload.model,
+            model_family=model_family,
+            inputs=normalized_series,
+            capabilities=model_capabilities,
+            covariates_mode=payload.parameters.covariates_mode,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    forecast_payload = payload.model_copy(update={"series": compatible_series})
+    request_warnings = [*normalize_warnings, *capability_warnings]
+
+    try:
+        keep_alive_policy = parse_keep_alive(forecast_payload.keep_alive, now=request_now)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     exclude_fields = {"keep_alive"}
     if extra_exclude is not None:
         exclude_fields.update(extra_exclude)
-    params = payload.model_dump(mode="json", exclude_none=True, exclude=exclude_fields)
-    params["model_name"] = payload.model
+    params = forecast_payload.model_dump(mode="json", exclude_none=True, exclude=exclude_fields)
+    params["model_name"] = forecast_payload.model
     params["model_family"] = model_family
     if model_local_dir is not None:
         params["model_local_dir"] = model_local_dir
@@ -483,12 +513,16 @@ def _execute_forecast(
             detail=f"runner returned invalid forecast response: {exc}",
         ) from exc
 
+    merged_warnings = _merge_warnings(response.warnings, request_warnings)
+    if merged_warnings:
+        response = response.model_copy(update={"warnings": merged_warnings})
+
     tracker: LoadedModelTracker = app.state.loaded_model_tracker
     if keep_alive_policy.unload_immediately:
         try:
             app.state.runner_manager.unload(
                 family=model_family,
-                model=payload.model,
+                model=forecast_payload.model,
                 timeout=DEFAULT_FORECAST_TIMEOUT_SECONDS,
             )
         except RunnerError:
@@ -497,8 +531,8 @@ def _execute_forecast(
         return response
 
     tracker.upsert(
-        name=payload.model,
-        model=payload.model,
+        name=forecast_payload.model,
+        model=forecast_payload.model,
         family=model_family,
         runner=model_family,
         expires_at=keep_alive_policy.expires_at,
@@ -874,6 +908,8 @@ def _prepare_pull_manifest(
         manifest["license"]["notice"] = spec.license.notice
     if spec.metadata is not None:
         manifest["metadata"] = spec.metadata
+    if spec.capabilities is not None:
+        manifest["capabilities"] = spec.capabilities.model_dump(mode="json")
     return spec, manifest, paths
 
 
@@ -1024,6 +1060,31 @@ def _manifest_metadata(manifest: dict[str, Any]) -> dict[str, Any] | None:
     return metadata
 
 
+def _manifest_capabilities(manifest: dict[str, Any]) -> ModelCapabilities | None:
+    raw = manifest.get("capabilities")
+    if not isinstance(raw, dict):
+        return None
+    try:
+        return ModelCapabilities.model_validate(raw)
+    except ValidationError:
+        return None
+
+
+def _resolve_model_capabilities(
+    model_name: str,
+    manifest: dict[str, Any],
+) -> ModelCapabilities | None:
+    from_manifest = _manifest_capabilities(manifest)
+    if from_manifest is not None:
+        return from_manifest
+
+    try:
+        spec = get_model_spec(model_name)
+    except KeyError:
+        return None
+    return spec.capabilities
+
+
 def _manifest_size_bytes(manifest: dict[str, Any]) -> int:
     size_bytes = manifest.get("size_bytes")
     if isinstance(size_bytes, int) and size_bytes >= 0:
@@ -1054,6 +1115,25 @@ def _public_license_view(license_payload: Any) -> dict[str, Any]:
     if "notice" in license_payload:
         normalized["notice"] = license_payload["notice"]
     return normalized
+
+
+def _merge_warnings(
+    runner_warnings: list[str] | None,
+    daemon_warnings: list[str],
+) -> list[str] | None:
+    merged: list[str] = []
+    seen: set[str] = set()
+    for warning in (runner_warnings or []):
+        if warning in seen:
+            continue
+        seen.add(warning)
+        merged.append(warning)
+    for warning in daemon_warnings:
+        if warning in seen:
+            continue
+        seen.add(warning)
+        merged.append(warning)
+    return merged or None
 
 
 def _optional_nonempty_str(value: Any) -> str | None:
@@ -1137,6 +1217,20 @@ def _collect_installed_model_entries(*, paths: TollamaPaths) -> list[dict[str, A
     return entries
 
 
+def _collect_available_model_entries() -> list[dict[str, Any]]:
+    entries: list[dict[str, Any]] = []
+    for spec in list_registry_models():
+        entry: dict[str, Any] = {
+            "name": spec.name,
+            "family": spec.family,
+            "source": spec.source.model_dump(mode="json"),
+        }
+        if spec.capabilities is not None:
+            entry["capabilities"] = spec.capabilities.model_dump(mode="json")
+        entries.append(entry)
+    return entries
+
+
 def _collect_loaded_model_entries(app: FastAPI) -> list[dict[str, Any]]:
     tracker: LoadedModelTracker = app.state.loaded_model_tracker
     models: list[dict[str, Any]] = []
@@ -1153,7 +1247,7 @@ def _collect_loaded_model_entries(app: FastAPI) -> list[dict[str, Any]]:
 
 
 def _model_from_manifest_for_info(manifest: dict[str, Any]) -> dict[str, Any]:
-    return {
+    payload = {
         "name": _optional_nonempty_str(manifest.get("name")),
         "family": _optional_nonempty_str(manifest.get("family")),
         "digest": _manifest_digest(manifest) or None,
@@ -1162,6 +1256,19 @@ def _model_from_manifest_for_info(manifest: dict[str, Any]) -> dict[str, Any]:
             manifest.get("pulled_at") or manifest.get("installed_at"),
         ),
     }
+    capabilities = _manifest_capabilities(manifest)
+    if capabilities is None:
+        model_name = _optional_nonempty_str(manifest.get("name"))
+        if model_name is not None:
+            try:
+                spec = get_model_spec(model_name)
+            except KeyError:
+                spec = None
+            if spec is not None:
+                capabilities = spec.capabilities
+    if capabilities is not None:
+        payload["capabilities"] = capabilities.model_dump(mode="json")
+    return payload
 
 
 def _optional_datetime(value: Any) -> datetime | None:

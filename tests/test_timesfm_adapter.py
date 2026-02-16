@@ -6,7 +6,10 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
+from tollama.core.schemas import ForecastRequest
 from tollama.runners.timesfm_runner.adapter import (
+    TimesFMAdapter,
+    _TimesFMDependencies,
     generate_future_timestamps,
     map_quantile_forecast,
     point_forecast_to_rows,
@@ -102,3 +105,108 @@ def test_point_forecast_to_rows_normalizes_two_dimensional_output() -> None:
         horizon=2,
     )
     assert rows == [[1.0, 2.0], [4.0, 5.0]]
+
+
+class _FakeNumpy:
+    @staticmethod
+    def asarray(values, dtype=float):  # noqa: ANN001
+        del dtype
+        return [float(value) for value in values]
+
+
+class _FakeForecastConfig:
+    def __init__(self, **kwargs):  # noqa: ANN003
+        self.kwargs = kwargs
+
+
+class _FakeTimesFMModel:
+    def __init__(self) -> None:
+        self.compile_kwargs: dict[str, object] | None = None
+        self.covariate_kwargs: dict[str, object] | None = None
+
+    @classmethod
+    def from_pretrained(cls, model_ref: str, **kwargs):  # noqa: ANN003
+        del model_ref, kwargs
+        return cls()
+
+    def compile(self, forecast_config: _FakeForecastConfig) -> None:
+        self.compile_kwargs = dict(forecast_config.kwargs)
+
+    def forecast(self, *, horizon: int, inputs):  # noqa: ANN001
+        del inputs
+        return [[float(index + 1) for index in range(horizon)]]
+
+    def forecast_with_covariates(self, **kwargs):  # noqa: ANN003
+        self.covariate_kwargs = dict(kwargs)
+        horizon = int(kwargs.get("horizon", 1))
+        return [[float(index + 1) for index in range(horizon)]]
+
+
+class _FakeTimesFMModule:
+    ForecastConfig = _FakeForecastConfig
+    TimesFM_2p5_200M_torch = _FakeTimesFMModel
+
+
+def _covariate_request() -> ForecastRequest:
+    return ForecastRequest.model_validate(
+        {
+            "model": "timesfm-2.5-200m",
+            "horizon": 2,
+            "quantiles": [],
+            "series": [
+                {
+                    "id": "s1",
+                    "freq": "D",
+                    "timestamps": ["2025-01-01", "2025-01-02", "2025-01-03"],
+                    "target": [10.0, 11.0, 12.0],
+                    "past_covariates": {
+                        "promo": [0.0, 1.0, 0.0],
+                        "event": ["off", "on", "off"],
+                    },
+                    "future_covariates": {
+                        "promo": [1.0, 1.0],
+                        "event": ["on", "off"],
+                    },
+                }
+            ],
+            "options": {},
+            "parameters": {
+                "timesfm": {
+                    "xreg_mode": "xreg + timesfm",
+                    "ridge": 0.25,
+                    "force_on_cpu": True,
+                }
+            },
+        },
+    )
+
+
+def test_timesfm_adapter_uses_forecast_with_covariates_and_return_backcast(monkeypatch) -> None:
+    adapter = TimesFMAdapter()
+    monkeypatch.setattr(
+        adapter,
+        "_resolve_dependencies",
+        lambda: _TimesFMDependencies(
+            numpy=_FakeNumpy(),
+            pandas=_FakePandas(),
+            timesfm=_FakeTimesFMModule(),
+        ),
+    )
+
+    response = adapter.forecast(_covariate_request())
+
+    assert response.model == "timesfm-2.5-200m"
+    assert len(response.forecasts) == 1
+    compiled_entry = next(iter(adapter._compiled_models.values()))  # noqa: SLF001
+    model = compiled_entry.model
+    assert isinstance(model, _FakeTimesFMModel)
+    assert model.compile_kwargs is not None
+    assert model.compile_kwargs.get("return_backcast") is True
+    assert model.covariate_kwargs is not None
+    dynamic = model.covariate_kwargs["dynamic_numerical_covariates"]
+    assert dynamic["promo"][0] == [0.0, 1.0, 0.0, 1.0, 1.0]
+    assert model.covariate_kwargs["xreg_mode"] == "xreg + timesfm"
+    assert model.covariate_kwargs["ridge"] == 0.25
+    assert model.covariate_kwargs["force_on_cpu"] is True
+    assert response.warnings is not None
+    assert "Ignoring categorical covariate" in response.warnings[0]

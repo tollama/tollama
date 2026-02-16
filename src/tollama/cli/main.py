@@ -392,9 +392,27 @@ def run(
 def _emit_result(result: dict[str, Any] | list[dict[str, Any]]) -> None:
     if isinstance(result, list):
         for item in result:
+            _emit_warnings(item)
             typer.echo(json.dumps(item, sort_keys=True))
         return
+    _emit_warnings(result)
     typer.echo(json.dumps(result, indent=2, sort_keys=True))
+
+
+def _emit_warnings(payload: dict[str, Any]) -> None:
+    warnings = payload.get("warnings")
+    if isinstance(warnings, list):
+        for warning in warnings:
+            if isinstance(warning, str) and warning:
+                typer.echo(f"warning: {warning}", err=True)
+
+    response = payload.get("response")
+    if isinstance(response, dict):
+        nested = response.get("warnings")
+        if isinstance(nested, list):
+            for warning in nested:
+                if isinstance(warning, str) and warning:
+                    typer.echo(f"warning: {warning}", err=True)
 
 
 def _render_info_report(snapshot: dict[str, Any], *, verbose: bool) -> str:
@@ -477,9 +495,29 @@ def _render_info_report(snapshot: dict[str, Any], *, verbose: bool) -> str:
         digest = _value_or_unknown(item.get("digest"))
         size = _format_info_value(item.get("size"))
         modified_at = _format_info_value(item.get("modified_at"))
+        covariates = _covariates_summary(item.get("capabilities"))
         lines.append(
             f"  - {name} (family={family}) digest={digest} size={size} modified_at={modified_at}",
         )
+        if covariates is not None:
+            lines.append(f"    covariates: {covariates}")
+        if verbose:
+            lines.append(f"    raw: {json.dumps(item, sort_keys=True)}")
+
+    available = models.get("available") if isinstance(models, dict) else None
+    available_entries = available if isinstance(available, list) else []
+    lines.append("")
+    lines.append(f"Models available: {len(available_entries)}")
+    for item in available_entries:
+        if not isinstance(item, dict):
+            continue
+        name = _value_or_unknown(item.get("name"))
+        family = _value_or_unknown(item.get("family"))
+        covariates = _covariates_summary(item.get("capabilities"))
+        if covariates is None:
+            lines.append(f"  - {name} (family={family})")
+        else:
+            lines.append(f"  - {name} (family={family}) covariates: {covariates}")
         if verbose:
             lines.append(f"    raw: {json.dumps(item, sort_keys=True)}")
 
@@ -608,6 +646,26 @@ def _value_or_unknown(value: Any) -> str:
     if normalized == "null":
         return "unknown"
     return normalized
+
+
+def _covariates_summary(capabilities: Any) -> str | None:
+    if not isinstance(capabilities, dict):
+        return None
+
+    parts: list[str] = []
+    if capabilities.get("past_covariates_numeric"):
+        parts.append("past-only numeric")
+    if capabilities.get("past_covariates_categorical"):
+        parts.append("past-only categorical")
+    if capabilities.get("future_covariates_numeric"):
+        parts.append("known-future numeric")
+    if capabilities.get("future_covariates_categorical"):
+        parts.append("known-future categorical")
+    if capabilities.get("static_covariates"):
+        parts.append("static")
+    else:
+        parts.append("static planned")
+    return ", ".join(parts)
 
 
 def _load_request_payload(path: Path | None, *, model: str) -> dict[str, Any]:

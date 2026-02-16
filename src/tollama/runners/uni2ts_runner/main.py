@@ -26,7 +26,9 @@ RUNNER_NAME = "tollama-uni2ts"
 RUNNER_VERSION = "0.1.0"
 UNKNOWN_REQUEST_ID = "unknown"
 CAPABILITIES = ("hello", "forecast", "unload")
-_FORECAST_REQUEST_FIELDS = frozenset({"model", "horizon", "quantiles", "series", "options"})
+_FORECAST_REQUEST_FIELDS = frozenset(
+    {"model", "horizon", "quantiles", "series", "options", "parameters"},
+)
 
 
 def _extract_request_id(payload: Mapping[str, Any] | None) -> str:

@@ -34,7 +34,6 @@ class _GraniteDependencies:
 @dataclass(frozen=True)
 class _LoadedGraniteModel:
     model: Any
-    preprocessor: Any
     repo_id: str
     revision: str
     context_length: int
@@ -73,20 +72,8 @@ class GraniteTTMAdapter:
         else:
             model = dependencies.model_cls.from_pretrained(repo_id, revision=revision)
 
-        preprocessor = dependencies.preprocessor_cls(
-            timestamp_column="timestamp",
-            id_columns=["id"],
-            target_columns=["target"],
-            observable_columns=[],
-            context_length=context_length,
-            prediction_length=prediction_length,
-            scaling=True,
-            encode_categorical=False,
-            scaler_type="standard",
-        )
         self._models[model_name] = _LoadedGraniteModel(
             model=model,
-            preprocessor=preprocessor,
             repo_id=repo_id,
             revision=revision,
             context_length=context_length,
@@ -140,17 +127,40 @@ class GraniteTTMAdapter:
             )
 
         timestamps = dependencies.pandas.to_datetime(series.timestamps, utc=True, errors="raise")
+        past_covariates = series.past_covariates or {}
+        future_covariates = series.future_covariates or {}
+        known_future_columns = sorted(set(past_covariates).intersection(future_covariates))
+        past_only_columns = sorted(set(past_covariates) - set(known_future_columns))
+        future_only = set(future_covariates) - set(past_covariates)
+        if future_only:
+            first = sorted(future_only)[0]
+            raise AdapterInputError(
+                f"future_covariates[{first!r}] must also be present in past_covariates "
+                f"for series {series.id!r}",
+            )
+
         context_rows = [
             {
                 "id": series.id,
                 "timestamp": timestamps[index],
                 "target": float(series.target[index]),
+                **{
+                    name: _to_numeric_covariate(past_covariates[name][index], covariate=name)
+                    for name in sorted(past_covariates)
+                },
             }
             for index in range(len(series.timestamps))
         ]
         context_df = dependencies.pandas.DataFrame(context_rows)
         context_tail = context_df.tail(loaded.context_length).copy()
-        processed = loaded.preprocessor.preprocess(context_tail)
+
+        preprocessor = _build_preprocessor(
+            dependencies=dependencies,
+            context_length=loaded.context_length,
+            prediction_length=loaded.prediction_length,
+            control_columns=known_future_columns,
+            conditional_columns=past_only_columns,
+        )
 
         pipeline = dependencies.forecasting_pipeline_cls(
             loaded.model,
@@ -158,10 +168,20 @@ class GraniteTTMAdapter:
                 torch_module=dependencies.torch,
                 requested_device=_requested_device(request.options),
             ),
-            feature_extractor=loaded.preprocessor,
+            feature_extractor=preprocessor,
             batch_size=1,
         )
-        pred_df = pipeline(processed)
+        future_time_series = _build_future_time_series(
+            series=series,
+            pandas=dependencies.pandas,
+            timestamps=timestamps,
+            horizon=request.horizon,
+            known_future_columns=known_future_columns,
+        )
+        if future_time_series is None:
+            pred_df = pipeline(context_tail)
+        else:
+            pred_df = pipeline(context_tail, future_time_series=future_time_series)
 
         prediction_column = _prediction_column_name(pred_df)
         raw_vector = pred_df.iloc[-1][prediction_column]
@@ -195,6 +215,8 @@ class GraniteTTMAdapter:
                 "implementation": "granite_ttm",
                 "series_count": 1,
                 "horizon": request.horizon,
+                "control_columns": known_future_columns,
+                "conditional_columns": past_only_columns,
             },
         )
 
@@ -326,6 +348,86 @@ def _to_float_list(value: Any) -> list[float]:
             raise AdapterInputError(f"non-numeric prediction value: {item!r}")
         return numbers
     raise AdapterInputError("Granite TTM prediction output is not list-like")
+
+
+def _build_preprocessor(
+    *,
+    dependencies: _GraniteDependencies,
+    context_length: int,
+    prediction_length: int,
+    control_columns: list[str],
+    conditional_columns: list[str],
+) -> Any:
+    kwargs: dict[str, Any] = {
+        "timestamp_column": "timestamp",
+        "id_columns": ["id"],
+        "target_columns": ["target"],
+        "observable_columns": [],
+        "control_columns": control_columns,
+        "conditional_columns": conditional_columns,
+        "context_length": context_length,
+        "prediction_length": prediction_length,
+        "scaling": True,
+        "encode_categorical": False,
+        "scaler_type": "standard",
+    }
+    try:
+        return dependencies.preprocessor_cls(**kwargs)
+    except TypeError:
+        # Backward-compatible fallback for older preprocessor signatures.
+        fallback_kwargs = dict(kwargs)
+        fallback_kwargs.pop("control_columns", None)
+        fallback_kwargs.pop("conditional_columns", None)
+        fallback_kwargs["observable_columns"] = sorted(
+            set(control_columns).union(conditional_columns),
+        )
+        return dependencies.preprocessor_cls(**fallback_kwargs)
+
+
+def _build_future_time_series(
+    *,
+    series: Any,
+    pandas: Any,
+    timestamps: Any,
+    horizon: int,
+    known_future_columns: list[str],
+) -> Any | None:
+    if not known_future_columns:
+        return None
+
+    future_covariates = series.future_covariates or {}
+    future_timestamps = pandas.date_range(
+        start=timestamps[-1],
+        periods=horizon + 1,
+        freq=series.freq,
+    )
+    rows: list[dict[str, Any]] = []
+    for step in range(horizon):
+        row: dict[str, Any] = {
+            "id": series.id,
+            "timestamp": future_timestamps[step + 1],
+        }
+        for name in known_future_columns:
+            values = future_covariates[name]
+            row[name] = _to_numeric_covariate(values[step], covariate=name)
+        rows.append(row)
+    return pandas.DataFrame(rows)
+
+
+def _to_numeric_covariate(value: Any, *, covariate: str) -> float:
+    if isinstance(value, bool):
+        return float(int(value))
+    if isinstance(value, (int, float)):
+        return float(value)
+    if hasattr(value, "item"):
+        scalar = value.item()
+        if isinstance(scalar, bool):
+            return float(int(scalar))
+        if isinstance(scalar, (int, float)):
+            return float(scalar)
+    raise AdapterInputError(
+        f"Granite TTM supports only numeric covariates; got {value!r} for {covariate!r}",
+    )
 
 
 def _to_iso_timestamp(value: Any) -> str:

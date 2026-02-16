@@ -13,6 +13,7 @@ from tollama import __version__ as CLI_VERSION
 from tollama.core.config import ConfigFileError, TollamaConfig, load_config
 from tollama.core.pull_defaults import resolve_effective_pull_defaults
 from tollama.core.redact import redact_config_dict, redact_env_dict, redact_proxy_url
+from tollama.core.registry import get_model_spec, list_registry_models
 from tollama.core.storage import TollamaPaths, list_installed
 
 InfoMode = Literal["auto", "local", "remote"]
@@ -128,6 +129,7 @@ def _collect_local_snapshot(
         "models": {
             "installed": _local_installed_models(paths),
             "loaded": [],
+            "available": _local_available_models(),
         },
         "runners": [],
         "client": {
@@ -206,13 +208,36 @@ def _local_installed_models(paths: TollamaPaths) -> list[dict[str, Any]]:
 
 
 def _model_from_manifest(manifest: dict[str, Any]) -> dict[str, Any]:
-    return {
+    payload = {
         "name": _str_or_none(manifest.get("name")),
         "family": _str_or_none(manifest.get("family")),
         "digest": _manifest_digest(manifest),
         "size": _manifest_size(manifest),
         "modified_at": _str_or_none(manifest.get("pulled_at") or manifest.get("installed_at")),
     }
+    capabilities = manifest.get("capabilities")
+    if isinstance(capabilities, dict):
+        payload["capabilities"] = capabilities
+    else:
+        model_name = _str_or_none(manifest.get("name"))
+        if model_name is not None:
+            try:
+                spec = get_model_spec(model_name)
+            except KeyError:
+                spec = None
+            if spec is not None and spec.capabilities is not None:
+                payload["capabilities"] = spec.capabilities.model_dump(mode="json")
+    return payload
+
+
+def _local_available_models() -> list[dict[str, Any]]:
+    entries: list[dict[str, Any]] = []
+    for spec in list_registry_models():
+        entry: dict[str, Any] = {"name": spec.name, "family": spec.family}
+        if spec.capabilities is not None:
+            entry["capabilities"] = spec.capabilities.model_dump(mode="json")
+        entries.append(entry)
+    return entries
 
 
 def _manifest_digest(manifest: dict[str, Any]) -> str | None:
@@ -256,4 +281,3 @@ def _str_or_none(value: Any) -> str | None:
         normalized = value.strip()
         return normalized if normalized else None
     return None
-

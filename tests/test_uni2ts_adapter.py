@@ -9,6 +9,7 @@ import pytest
 
 from tollama.core.schemas import SeriesInput
 from tollama.runners.uni2ts_runner.adapter import (
+    build_pandas_dataset,
     build_quantile_payload,
     generate_future_timestamps,
     normalize_forecast_vector,
@@ -22,13 +23,37 @@ class _FakePandas:
     def to_datetime(values, *, utc: bool, errors: str):  # noqa: ANN001
         assert utc is True
         assert errors == "raise"
-        return [datetime.fromisoformat(values[0]).replace(tzinfo=UTC)]
+        return [datetime.fromisoformat(value).replace(tzinfo=UTC) for value in values]
 
     @staticmethod
     def date_range(*, start: datetime, periods: int, freq: str):
         if freq != "D":
             raise ValueError("unsupported frequency")
         return [start + timedelta(days=index) for index in range(periods)]
+
+    @staticmethod
+    def DataFrame(payload, index=None):  # noqa: ANN001
+        return {"payload": payload, "index": index}
+
+
+class _FakeNumpy:
+    @staticmethod
+    def asarray(values, dtype=float):  # noqa: ANN001
+        del dtype
+        return _FakeArray([float(value) for value in values])
+
+
+class _FakeArray(list[float]):
+    def tolist(self) -> list[float]:
+        return list(self)
+
+
+class _CapturingPandasDataset:
+    def __init__(self, frames, **kwargs):  # noqa: ANN001, ANN003
+        self.frames = frames
+        self.kwargs = kwargs
+        self.num_feat_dynamic_real = len(kwargs.get("feat_dynamic_real") or [])
+        self.num_past_feat_dynamic_real = len(kwargs.get("past_feat_dynamic_real") or [])
 
 
 @dataclass(frozen=True)
@@ -107,3 +132,39 @@ def test_generate_future_timestamps_daily() -> None:
         "2025-02-02T00:00:00Z",
         "2025-02-03T00:00:00Z",
     ]
+
+
+def test_build_pandas_dataset_maps_dynamic_and_past_dynamic_covariates() -> None:
+    series = SeriesInput.model_validate(
+        {
+            "id": "s1",
+            "freq": "D",
+            "timestamps": ["2025-01-01", "2025-01-02", "2025-01-03"],
+            "target": [10.0, 11.0, 12.0],
+            "past_covariates": {
+                "promo": [0.0, 1.0, 0.0],
+                "temperature": [20.0, 21.0, 22.0],
+            },
+            "future_covariates": {
+                "promo": [1.0, 1.0],
+            },
+        },
+    )
+
+    result = build_pandas_dataset(
+        series_list=[series],
+        pandas_module=_FakePandas(),
+        numpy_module=_FakeNumpy(),
+        pandas_dataset_cls=_CapturingPandasDataset,
+        horizon=2,
+    )
+
+    assert result.feat_dynamic_real_dim == 1
+    assert result.past_feat_dynamic_real_dim == 1
+    dataset = result.dataset
+    assert dataset.kwargs["feat_dynamic_real"] == ["promo"]
+    assert dataset.kwargs["past_feat_dynamic_real"] == ["temperature"]
+    frame = dataset.frames["s1"]["payload"]
+    assert len(frame["target"]) == 5
+    assert frame["promo"] == [0.0, 1.0, 0.0, 1.0, 1.0]
+    assert frame["temperature"][:3] == [20.0, 21.0, 22.0]

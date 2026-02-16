@@ -85,11 +85,11 @@ class _FakeTorch:
 
 
 class _FakePreprocessor:
+    last_kwargs: dict[str, Any] | None = None
+
     def __init__(self, **kwargs: Any) -> None:
         self.kwargs = kwargs
-
-    def preprocess(self, payload: _FakeDataFrame) -> _FakeDataFrame:
-        return payload
+        _FakePreprocessor.last_kwargs = kwargs
 
 
 class _FakeModel:
@@ -102,13 +102,22 @@ class _FakeModel:
 
 
 class _FakePipeline:
+    last_payload: _FakeDataFrame | None = None
+    last_future_time_series: _FakeDataFrame | None = None
+
     def __init__(self, model: Any, *, device: str, feature_extractor: Any, batch_size: int) -> None:
         del model, feature_extractor
         assert device == "cpu"
         assert batch_size == 1
 
-    def __call__(self, payload: _FakeDataFrame) -> _FakeDataFrame:
-        del payload
+    def __call__(
+        self,
+        payload: _FakeDataFrame,
+        *,
+        future_time_series: _FakeDataFrame | None = None,
+    ) -> _FakeDataFrame:
+        _FakePipeline.last_payload = payload
+        _FakePipeline.last_future_time_series = future_time_series
         return _FakeDataFrame(
             [{"target_prediction": [float(index) for index in range(30)]}],
         )
@@ -134,6 +143,19 @@ def _build_request(*, horizon: int) -> ForecastRequest:
             "options": {"device": "cpu"},
         },
     )
+
+
+def _build_request_with_covariates(*, horizon: int) -> ForecastRequest:
+    request = _build_request(horizon=horizon).model_dump(mode="json", exclude_none=True)
+    series = request["series"][0]
+    target = series["target"]
+    history_length = len(target)
+    series["past_covariates"] = {
+        "promo": [0.0 if index % 2 == 0 else 1.0 for index in range(history_length)],
+        "temperature": [20.0 + float(index) for index in range(history_length)],
+    }
+    series["future_covariates"] = {"promo": [1.0 for _ in range(horizon)]}
+    return ForecastRequest.model_validate(request)
 
 
 def _fake_dependencies() -> _GraniteDependencies:
@@ -195,3 +217,33 @@ def test_granite_adapter_errors_when_horizon_exceeds_prediction_length(monkeypat
         )
 
     assert "Requested horizon exceeds model prediction_length" in str(exc_info.value)
+
+
+def test_granite_adapter_passes_future_time_series_and_covariate_columns(monkeypatch) -> None:
+    adapter = GraniteTTMAdapter()
+    monkeypatch.setattr(adapter, "_resolve_dependencies", _fake_dependencies)
+    _FakePreprocessor.last_kwargs = None
+    _FakePipeline.last_future_time_series = None
+
+    response = adapter.forecast(
+        _build_request_with_covariates(horizon=4),
+        model_local_dir=None,
+        model_source={
+            "type": "huggingface",
+            "repo_id": "ibm-granite/granite-timeseries-ttm-r2",
+            "revision": "90-30-ft-l1-r2.1",
+        },
+        model_metadata={
+            "implementation": "granite_ttm",
+            "context_length": 90,
+            "prediction_length": 30,
+        },
+    )
+
+    assert response.model == "granite-ttm-r2"
+    assert _FakePreprocessor.last_kwargs is not None
+    assert _FakePreprocessor.last_kwargs["control_columns"] == ["promo"]
+    assert _FakePreprocessor.last_kwargs["conditional_columns"] == ["temperature"]
+    assert _FakePipeline.last_future_time_series is not None
+    assert len(_FakePipeline.last_future_time_series._rows) == 4
+    assert set(_FakePipeline.last_future_time_series.columns) >= {"id", "timestamp", "promo"}

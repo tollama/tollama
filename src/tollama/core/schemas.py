@@ -3,13 +3,15 @@
 from __future__ import annotations
 
 import json
-from typing import Annotated
+from typing import Annotated, Literal
 
 from pydantic import (
+    AliasChoices,
     BaseModel,
     ConfigDict,
     Field,
     JsonValue,
+    StrictBool,
     StrictFloat,
     StrictInt,
     StrictStr,
@@ -23,6 +25,9 @@ PositiveInt = Annotated[StrictInt, Field(gt=0)]
 Quantile = Annotated[StrictFloat, Field(gt=0.0, lt=1.0)]
 NumericValue = StrictInt | StrictFloat
 SequenceValues = list[NumericValue]
+CovariateValue = NumericValue | StrictStr
+CovariateValues = list[CovariateValue]
+CovariateMode = Literal["best_effort", "strict"]
 
 
 class CanonicalModel(BaseModel):
@@ -43,8 +48,8 @@ class SeriesInput(CanonicalModel):
     freq: NonEmptyStr
     timestamps: list[NonEmptyStr] = Field(min_length=1)
     target: SequenceValues = Field(min_length=1)
-    past_covariates: dict[NonEmptyStr, SequenceValues] | None = None
-    future_covariates: dict[NonEmptyStr, SequenceValues] | None = None
+    past_covariates: dict[NonEmptyStr, CovariateValues] | None = None
+    future_covariates: dict[NonEmptyStr, CovariateValues] | None = None
     static_covariates: dict[NonEmptyStr, JsonValue] | None = None
 
     @model_validator(mode="after")
@@ -55,6 +60,7 @@ class SeriesInput(CanonicalModel):
 
         if self.past_covariates:
             for name, values in self.past_covariates.items():
+                _validate_covariate_values(name=name, values=values, location="past_covariates")
                 if len(values) != expected:
                     raise ValueError(
                         f"past_covariates[{name!r}] length must match timestamps length",
@@ -62,12 +68,24 @@ class SeriesInput(CanonicalModel):
 
         if self.future_covariates:
             for name, values in self.future_covariates.items():
-                if len(values) < expected:
-                    raise ValueError(
-                        f"future_covariates[{name!r}] length must be >= timestamps length",
-                    )
+                _validate_covariate_values(name=name, values=values, location="future_covariates")
 
         return self
+
+
+class TimesFMParameters(CanonicalModel):
+    """TimesFM-specific xreg knobs."""
+
+    xreg_mode: NonEmptyStr = "xreg + timesfm"
+    ridge: StrictInt | StrictFloat = 0.0
+    force_on_cpu: StrictBool = False
+
+
+class ForecastParameters(CanonicalModel):
+    """Shared forecast parameters independent of model family options."""
+
+    covariates_mode: CovariateMode = "best_effort"
+    timesfm: TimesFMParameters | None = None
 
 
 class ForecastRequest(CanonicalModel):
@@ -77,7 +95,14 @@ class ForecastRequest(CanonicalModel):
     horizon: PositiveInt
     quantiles: list[Quantile] = Field(default_factory=list)
     series: list[SeriesInput] = Field(min_length=1)
-    options: dict[NonEmptyStr, JsonValue] = Field(default_factory=dict)
+    options: dict[NonEmptyStr, JsonValue] = Field(
+        default_factory=dict,
+        validation_alias=AliasChoices("options"),
+    )
+    parameters: ForecastParameters = Field(
+        default_factory=ForecastParameters,
+        validation_alias=AliasChoices("parameters"),
+    )
 
     @field_validator("quantiles")
     @classmethod
@@ -87,6 +112,37 @@ class ForecastRequest(CanonicalModel):
         if len(value) != len(set(value)):
             raise ValueError("quantiles must be unique")
         return value
+
+    @model_validator(mode="after")
+    def validate_covariates(self) -> ForecastRequest:
+        for series in self.series:
+            past_covariates = series.past_covariates or {}
+            future_covariates = series.future_covariates or {}
+
+            for name, values in future_covariates.items():
+                if len(values) != self.horizon:
+                    raise ValueError(
+                        f"future_covariates[{name!r}] length must match horizon ({self.horizon})",
+                    )
+
+            future_only = set(future_covariates) - set(past_covariates)
+            if future_only:
+                first = sorted(future_only)[0]
+                raise ValueError(
+                    "future_covariates must also exist in past_covariates; "
+                    f"missing past values for covariate {first!r}",
+                )
+
+            for name in set(past_covariates).intersection(future_covariates):
+                past_kind = _covariate_kind(past_covariates[name])
+                future_kind = _covariate_kind(future_covariates[name])
+                if past_kind != future_kind:
+                    raise ValueError(
+                        "covariate type must be consistent between past and future values; "
+                        f"covariate {name!r} has past={past_kind} future={future_kind}",
+                    )
+
+        return self
 
 
 class SeriesForecast(CanonicalModel):
@@ -145,3 +201,38 @@ class ForecastResponse(CanonicalModel):
     model: NonEmptyStr
     forecasts: list[SeriesForecast] = Field(min_length=1)
     usage: dict[NonEmptyStr, JsonValue] | None = None
+    warnings: list[NonEmptyStr] | None = None
+
+
+def _validate_covariate_values(
+    *,
+    name: str,
+    values: CovariateValues,
+    location: str,
+) -> None:
+    try:
+        _covariate_kind(values)
+    except ValueError as exc:
+        raise ValueError(f"{location}[{name!r}] {exc}") from exc
+
+
+def _covariate_kind(values: CovariateValues) -> str:
+    if not values:
+        raise ValueError("must not be empty")
+
+    has_numeric = False
+    has_string = False
+    for value in values:
+        if isinstance(value, str):
+            has_string = True
+            continue
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            has_numeric = True
+            continue
+        raise ValueError(f"contains unsupported value type {type(value).__name__!r}")
+
+    if has_numeric and has_string:
+        raise ValueError("must contain either only numeric values or only string values")
+    if has_string:
+        return "categorical"
+    return "numeric"

@@ -10,6 +10,12 @@ models:
       needs_acceptance: false
     defaults:
       runner: mock
+    capabilities:
+      past_covariates_numeric: false
+      past_covariates_categorical: false
+      future_covariates_numeric: false
+      future_covariates_categorical: false
+      static_covariates: false
 
   - name: chronos2
     family: torch
@@ -20,6 +26,12 @@ models:
     license:
       type: apache-2.0
       needs_acceptance: false
+    capabilities:
+      past_covariates_numeric: true
+      past_covariates_categorical: true
+      future_covariates_numeric: true
+      future_covariates_categorical: true
+      static_covariates: false
 
   - name: timesfm2p5
     family: timesfm
@@ -30,6 +42,12 @@ models:
     license:
       type: apache-2.0
       needs_acceptance: true
+    capabilities:
+      past_covariates_numeric: true
+      past_covariates_categorical: false
+      future_covariates_numeric: true
+      future_covariates_categorical: false
+      static_covariates: false
 
   - name: timesfm-2.5-200m
     family: timesfm
@@ -45,6 +63,12 @@ models:
       max_context: 1024
       max_horizon: 256
       use_quantiles_by_default: true
+    capabilities:
+      past_covariates_numeric: true
+      past_covariates_categorical: false
+      future_covariates_numeric: true
+      future_covariates_categorical: false
+      static_covariates: false
 
   - name: moirai1p1-base
     family: uni2ts
@@ -55,6 +79,12 @@ models:
     license:
       type: apache-2.0
       needs_acceptance: true
+    capabilities:
+      past_covariates_numeric: true
+      past_covariates_categorical: false
+      future_covariates_numeric: true
+      future_covariates_categorical: false
+      static_covariates: false
 
   - name: moirai-1.1-R-base
     family: uni2ts
@@ -71,6 +101,12 @@ models:
       default_num_samples: 200
       default_context_length: 200
       default_patch_size: auto
+    capabilities:
+      past_covariates_numeric: true
+      past_covariates_categorical: false
+      future_covariates_numeric: true
+      future_covariates_categorical: false
+      static_covariates: false
 
   - name: granite-ttm-r2
     family: torch
@@ -86,3 +122,9 @@ models:
       context_length: 90
       prediction_length: 30
       license: apache-2.0
+    capabilities:
+      past_covariates_numeric: true
+      past_covariates_categorical: false
+      future_covariates_numeric: true
+      future_covariates_categorical: false
+      static_covariates: false

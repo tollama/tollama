@@ -1,15 +1,17 @@
 # tollama
 
-Lightweight Python project skeleton for the `tollama` codebase.
+Local-first forecasting daemon + CLI with pluggable model-family runners.
 
 ## Overview
 
-This repository provides a minimal but structured forecasting stack:
+This repository provides a structured forecasting stack:
 - PEP 621 packaging via `pyproject.toml`
 - `src/` project layout
 - FastAPI daemon (`tollamad`) exposing the public HTTP API
-- Runner processes (currently mock) connected over stdio JSON lines
+- Runner processes (`mock`, `torch`, `timesfm`, `uni2ts`) connected over stdio JSON lines
 - Typer CLI (`tollama`) for Ollama-style model lifecycle and forecasting
+- Unified covariates contract (`past_covariates` + `future_covariates`) with
+  `best_effort`/`strict` handling and warnings
 - Ruff + Pytest + CI checks
 
 ## Quickstart
@@ -83,6 +85,52 @@ curl -s http://localhost:11435/api/forecast \
   -H 'content-type: application/json' \
   -d @examples/chronos2_request.json
 ```
+
+### Covariates (Past + Known-Future)
+
+Unified covariates contract:
+
+- `past_covariates[name]` length must equal `len(target)`
+- `future_covariates[name]` length must equal `horizon`
+- every `future_covariates[name]` key must also exist in `past_covariates`
+- each covariate array must be all-numeric or all-string (no mixed arrays)
+- known-future covariates are keys present in both past and future maps
+- set `parameters.covariates_mode` to `best_effort` (default) or `strict`
+- in `best_effort`, unsupported covariates are ignored with response `warnings[]`
+- in `strict`, unsupported covariates return HTTP `400`
+
+```json
+{
+  "model": "timesfm-2.5-200m",
+  "horizon": 2,
+  "series": [
+    {
+      "id": "s1",
+      "freq": "D",
+      "timestamps": ["2025-01-01", "2025-01-02", "2025-01-03"],
+      "target": [10.0, 11.0, 12.0],
+      "past_covariates": {"promo": [0.0, 1.0, 0.0]},
+      "future_covariates": {"promo": [1.0, 1.0]}
+    }
+  ],
+  "parameters": {"covariates_mode": "best_effort"},
+  "options": {}
+}
+```
+
+See `docs/covariates.md` for the full compatibility matrix and model-family mappings.
+
+Compatibility snapshot:
+
+| Family | Past Numeric | Past Categorical | Known-Future Numeric | Known-Future Categorical |
+|---|---|---|---|---|
+| Chronos-2 | Yes | Yes | Yes | Yes |
+| Granite TTM | Yes | No | Yes | No |
+| TimesFM 2.5 | Yes | No | Yes | No |
+| Uni2TS / Moirai | Yes | No | Yes | No |
+
+TimesFM XReg knobs are available at `parameters.timesfm`:
+`xreg_mode`, `ridge`, `force_on_cpu`.
 
 `/api/pull` now performs a real Hugging Face snapshot pull for registry models with `source.type=huggingface`,
 streams NDJSON progress by default, and writes resolved pull metadata into the local manifest:
@@ -210,8 +258,11 @@ It includes:
 - local paths and config presence (`tollama_home`, `config_path`, `config_exists`)
 - redacted config and safe env subset
 - effective pull defaults with value source (`env`/`config`/`default`)
-- installed + loaded models
+- installed + loaded models (including covariate capabilities when available)
+- registry-available models with covariate capability metadata
 - runner statuses for `mock`, `torch`, `timesfm`, and `uni2ts`
+
+`tollama info` renders the same payload and prints a short per-model covariates summary.
 
 Example shape:
 
@@ -222,7 +273,11 @@ Example shape:
   "config": {"pull": {"https_proxy": "http://***:***@proxy:3128"}},
   "env": {"HTTP_PROXY": "http://***:***@proxy:3128", "TOLLAMA_HF_TOKEN_present": false},
   "pull_defaults": {"offline": {"value": false, "source": "default"}},
-  "models": {"installed": [], "loaded": []},
+  "models": {
+    "installed": [{"name": "chronos2", "capabilities": {"past_covariates_numeric": true}}],
+    "loaded": [],
+    "available": [{"name": "timesfm-2.5-200m", "capabilities": {"future_covariates_numeric": true}}]
+  },
   "runners": []
 }
 ```

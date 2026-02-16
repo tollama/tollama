@@ -27,12 +27,20 @@ from .protocol import (
 )
 from .registry import (
     DEFAULT_REGISTRY_PATH,
+    ModelCapabilities,
     ModelLicense,
     ModelSource,
     ModelSpec,
     list_registry_models,
 )
-from .schemas import ForecastRequest, ForecastResponse, SeriesForecast, SeriesInput
+from .schemas import (
+    ForecastParameters,
+    ForecastRequest,
+    ForecastResponse,
+    SeriesForecast,
+    SeriesInput,
+    TimesFMParameters,
+)
 from .storage import (
     TollamaPaths,
     install_from_registry,
@@ -47,8 +55,10 @@ __all__ = [
     "ConfigFileError",
     "DaemonDefaults",
     "DEFAULT_REGISTRY_PATH",
+    "ForecastParameters",
     "ForecastRequest",
     "ForecastResponse",
+    "ModelCapabilities",
     "ModelLicense",
     "ModelSource",
     "ModelSpec",
@@ -62,6 +72,7 @@ __all__ = [
     "SeriesInput",
     "TollamaConfig",
     "TollamaPaths",
+    "TimesFMParameters",
     "decode_line",
     "decode_request_line",
     "decode_response_line",

@@ -65,6 +65,14 @@ class _PredictorConfig:
     batch_size: int
 
 
+@dataclass(frozen=True)
+class _DatasetBuildResult:
+    dataset: Any
+    ordered_series: list[SeriesInput]
+    feat_dynamic_real_dim: int
+    past_feat_dynamic_real_dim: int
+
+
 class MoiraiAdapter:
     """Adapter that maps canonical request/response to Moirai probabilistic inference."""
 
@@ -143,12 +151,26 @@ class MoiraiAdapter:
             batch_size=batch_size,
         )
 
-        dataset, ordered_series = build_pandas_dataset(
+        dataset_result = build_pandas_dataset(
             series_list=request.series,
             pandas_module=dependencies.pandas,
             numpy_module=dependencies.numpy,
             pandas_dataset_cls=dependencies.pandas_dataset_cls,
+            horizon=request.horizon,
         )
+        dataset = dataset_result.dataset
+        ordered_series = dataset_result.ordered_series
+        feat_dynamic_real_dim = dataset_result.feat_dynamic_real_dim
+        past_feat_dynamic_real_dim = dataset_result.past_feat_dynamic_real_dim
+        if hasattr(dataset, "num_feat_dynamic_real"):
+            value = getattr(dataset, "num_feat_dynamic_real")
+            if isinstance(value, int):
+                feat_dynamic_real_dim = value
+        if hasattr(dataset, "num_past_feat_dynamic_real"):
+            value = getattr(dataset, "num_past_feat_dynamic_real")
+            if isinstance(value, int):
+                past_feat_dynamic_real_dim = value
+
         moirai_model = dependencies.moirai_forecast_cls(
             module=module,
             prediction_length=predictor_config.prediction_length,
@@ -156,8 +178,8 @@ class MoiraiAdapter:
             patch_size=predictor_config.patch_size,
             num_samples=predictor_config.num_samples,
             target_dim=1,
-            feat_dynamic_real_dim=0,
-            past_feat_dynamic_real_dim=0,
+            feat_dynamic_real_dim=feat_dynamic_real_dim,
+            past_feat_dynamic_real_dim=past_feat_dynamic_real_dim,
         )
         predictor = moirai_model.create_predictor(batch_size=predictor_config.batch_size)
         forecast_iter = predictor.predict(dataset)
@@ -344,9 +366,34 @@ def build_pandas_dataset(
     pandas_module: Any,
     numpy_module: Any,
     pandas_dataset_cls: Any,
-) -> tuple[Any, list[SeriesInput]]:
+    horizon: int = 1,
+) -> _DatasetBuildResult:
+    """Build a GluonTS PandasDataset with dynamic covariate feature fields."""
+    return build_pandas_dataset_with_horizon(
+        series_list=series_list,
+        pandas_module=pandas_module,
+        numpy_module=numpy_module,
+        pandas_dataset_cls=pandas_dataset_cls,
+        horizon=horizon,
+    )
+
+
+def build_pandas_dataset_with_horizon(
+    *,
+    series_list: Sequence[SeriesInput],
+    pandas_module: Any,
+    numpy_module: Any,
+    pandas_dataset_cls: Any,
+    horizon: int,
+) -> _DatasetBuildResult:
     """Build a GluonTS PandasDataset from canonical series payloads."""
-    columns: dict[str, Any] = {}
+    if horizon <= 0:
+        raise AdapterInputError("horizon must be greater than zero")
+
+    frames: dict[str, Any] = {}
+    known_future_columns: set[str] = set()
+    past_only_columns: set[str] = set()
+
     for index, series in enumerate(series_list):
         if len(series.timestamps) != len(series.target):
             raise AdapterInputError(
@@ -357,13 +404,101 @@ def build_pandas_dataset(
             raise AdapterInputError(
                 f"series {series.id!r} must include at least two timestamps",
             )
-        values = numpy_module.asarray(series.target, dtype=float)
-        column_name = _unique_column_name(series.id, index, columns)
-        columns[column_name] = pandas_module.Series(values, index=timestamps, name=column_name)
 
-    dataframe = pandas_module.DataFrame(columns).sort_index()
-    dataset = pandas_dataset_cls(dict(dataframe))
-    return dataset, list(series_list)
+        past_covariates = series.past_covariates or {}
+        future_covariates = series.future_covariates or {}
+        known_future = set(past_covariates).intersection(future_covariates)
+        future_only = set(future_covariates) - set(past_covariates)
+        if future_only:
+            first = sorted(future_only)[0]
+            raise AdapterInputError(
+                f"future_covariates[{first!r}] must also be present in past_covariates "
+                f"for series {series.id!r}",
+            )
+        past_only = set(past_covariates) - known_future
+
+        known_future_columns.update(known_future)
+        past_only_columns.update(past_only)
+
+        try:
+            future_index = pandas_module.date_range(
+                start=timestamps[-1],
+                periods=horizon + 1,
+                freq=series.freq,
+            )[1:]
+        except ValueError as exc:
+            raise AdapterInputError(
+                f"invalid frequency {series.freq!r} for series {series.id!r}",
+            ) from exc
+        full_index = list(timestamps) + list(future_index)
+        target_values = numpy_module.asarray(series.target, dtype=float).tolist() + [
+            float("nan")
+        ] * horizon
+        frame_payload: dict[str, list[float]] = {"target": target_values}
+
+        for name in sorted(past_covariates):
+            history_values = _to_numeric_covariate_sequence(
+                values=past_covariates[name],
+                series_id=series.id,
+                covariate=name,
+            )
+            if name in known_future:
+                future_values = _to_numeric_covariate_sequence(
+                    values=future_covariates[name],
+                    series_id=series.id,
+                    covariate=name,
+                )
+                frame_payload[name] = history_values + future_values
+            else:
+                frame_payload[name] = history_values + [float("nan")] * horizon
+
+        dataframe = pandas_module.DataFrame(frame_payload, index=full_index)
+        column_name = _unique_column_name(series.id, index, frames)
+        frames[column_name] = dataframe
+
+    feat_dynamic_real_columns = sorted(known_future_columns)
+    past_feat_dynamic_real_columns = sorted(past_only_columns)
+    dataset = pandas_dataset_cls(
+        frames,
+        target="target",
+        feat_dynamic_real=feat_dynamic_real_columns or None,
+        past_feat_dynamic_real=past_feat_dynamic_real_columns or None,
+    )
+    return _DatasetBuildResult(
+        dataset=dataset,
+        ordered_series=list(series_list),
+        feat_dynamic_real_dim=len(feat_dynamic_real_columns),
+        past_feat_dynamic_real_dim=len(past_feat_dynamic_real_columns),
+    )
+
+
+def _to_numeric_covariate_sequence(
+    *,
+    values: Sequence[Any],
+    series_id: str,
+    covariate: str,
+) -> list[float]:
+    converted: list[float] = []
+    for value in values:
+        if isinstance(value, bool):
+            converted.append(float(int(value)))
+            continue
+        if isinstance(value, (int, float)):
+            converted.append(float(value))
+            continue
+        if hasattr(value, "item"):
+            scalar = value.item()
+            if isinstance(scalar, bool):
+                converted.append(float(int(scalar)))
+                continue
+            if isinstance(scalar, (int, float)):
+                converted.append(float(scalar))
+                continue
+        raise AdapterInputError(
+            f"Moirai covariates must be numeric; series={series_id!r} "
+            f"covariate={covariate!r} value={value!r}",
+        )
+    return converted
 
 
 def build_quantile_payload(

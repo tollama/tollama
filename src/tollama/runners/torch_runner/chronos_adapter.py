@@ -173,6 +173,20 @@ def _build_chronos_frames(
     for series in request.series:
         timestamps = pandas.to_datetime(series.timestamps, utc=True, errors="raise")
         history_length = len(series.timestamps)
+        past_covariates = series.past_covariates or {}
+        future_covariates = series.future_covariates or {}
+        known_future = sorted(set(past_covariates).intersection(future_covariates))
+
+        future_only = set(future_covariates) - set(past_covariates)
+        if future_only:
+            first = sorted(future_only)[0]
+            raise ValueError(
+                f"future_covariates[{first!r}] is missing in past_covariates for series "
+                f"{series.id!r}",
+            )
+
+        if future_covariates:
+            _validate_future_covariates(series=series, horizon=request.horizon)
 
         for index in range(history_length):
             row: dict[str, Any] = {
@@ -180,16 +194,11 @@ def _build_chronos_frames(
                 "timestamp": timestamps[index],
                 "target": _to_python_number(series.target[index]),
             }
-            if series.past_covariates:
-                for name, values in series.past_covariates.items():
-                    row[name] = _to_python_number(values[index])
-            if series.future_covariates:
-                for name, values in series.future_covariates.items():
-                    row[name] = _to_python_number(values[index])
+            for name, values in past_covariates.items():
+                row[name] = _to_python_covariate_value(values[index])
             context_rows.append(row)
 
-        if series.future_covariates:
-            _validate_future_covariates(series=series, horizon=request.horizon)
+        if known_future:
             future_timestamps = _future_timestamps(
                 pandas=pandas,
                 last_timestamp=timestamps[-1],
@@ -201,9 +210,9 @@ def _build_chronos_frames(
                     "id": series.id,
                     "timestamp": future_timestamps[step],
                 }
-                for name, values in series.future_covariates.items():
-                    offset = history_length + step
-                    future_row[name] = _to_python_number(values[offset])
+                for name in known_future:
+                    values = future_covariates[name]
+                    future_row[name] = _to_python_covariate_value(values[step])
                 future_rows.append(future_row)
 
     context_df = pandas.DataFrame(context_rows)
@@ -216,12 +225,10 @@ def _validate_future_covariates(*, series: SeriesInput, horizon: int) -> None:
     if not future_covariates:
         return
 
-    min_length = len(series.timestamps) + horizon
     for name, values in future_covariates.items():
-        if len(values) < min_length:
+        if len(values) != horizon:
             raise ValueError(
-                f"future_covariates[{name!r}] must include at least "
-                f"timestamps + horizon values ({min_length})",
+                f"future_covariates[{name!r}] must include exactly horizon values ({horizon})",
             )
 
 
@@ -308,6 +315,20 @@ def _to_python_number(value: Any) -> int | float:
         if isinstance(scalar, (int, float)):
             return scalar
     raise ValueError(f"non-numeric value in forecast payload: {value!r}")
+
+
+def _to_python_covariate_value(value: Any) -> int | float | str:
+    if isinstance(value, bool):
+        return int(value)
+    if isinstance(value, (int, float, str)):
+        return value
+    if hasattr(value, "item"):
+        scalar = value.item()
+        if isinstance(scalar, bool):
+            return int(scalar)
+        if isinstance(scalar, (int, float, str)):
+            return scalar
+    raise ValueError(f"unsupported covariate value in forecast payload: {value!r}")
 
 
 def _existing_local_model_path(model_local_dir: str | None) -> str | None:

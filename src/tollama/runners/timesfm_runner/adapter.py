@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import inspect
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -59,12 +60,19 @@ class _CompileKey:
     use_quantile_head: bool
     torch_compile: bool
     infer_is_positive: bool
+    return_backcast: bool
 
 
 @dataclass(frozen=True)
 class _CompiledTimesFMModel:
     model: Any
     runtime: _RuntimeConfig
+
+
+@dataclass(frozen=True)
+class _TimesFMCovariatePayload:
+    dynamic_numerical_covariates: dict[str, list[list[float]]]
+    warnings: list[str]
 
 
 class TimesFMAdapter:
@@ -96,6 +104,7 @@ class TimesFMAdapter:
             request_horizon=request_horizon,
             requested_quantiles=[],
             options={},
+            return_backcast=False,
         )
 
     def unload(self, model_name: str | None = None) -> None:
@@ -130,6 +139,7 @@ class TimesFMAdapter:
             request_horizon=request.horizon,
             requested_quantiles=list(request.quantiles),
             options=request.options,
+            return_backcast=_request_has_covariates(request.series),
         )
         dependencies = self._resolve_dependencies()
         inputs = build_timesfm_inputs(
@@ -138,7 +148,32 @@ class TimesFMAdapter:
             numpy_module=dependencies.numpy,
         )
 
-        forecast_output = compiled.model.forecast(horizon=request.horizon, inputs=inputs)
+        covariate_payload = build_timesfm_covariates(
+            series_list=request.series,
+            max_context=compiled.runtime.max_context,
+            horizon=request.horizon,
+            covariates_mode=request.parameters.covariates_mode,
+        )
+        if covariate_payload.dynamic_numerical_covariates:
+            timesfm_parameters = request.parameters.timesfm
+            xreg_mode = (
+                timesfm_parameters.xreg_mode if timesfm_parameters is not None else "xreg + timesfm"
+            )
+            ridge_value = float(timesfm_parameters.ridge) if timesfm_parameters is not None else 0.0
+            force_on_cpu = (
+                bool(timesfm_parameters.force_on_cpu) if timesfm_parameters is not None else False
+            )
+            forecast_output = _forecast_with_covariates(
+                model=compiled.model,
+                horizon=request.horizon,
+                inputs=inputs,
+                dynamic_numerical_covariates=covariate_payload.dynamic_numerical_covariates,
+                xreg_mode=xreg_mode,
+                ridge=ridge_value,
+                force_on_cpu=force_on_cpu,
+            )
+        else:
+            forecast_output = compiled.model.forecast(horizon=request.horizon, inputs=inputs)
         point_forecast, quantile_forecast = _split_forecast_output(forecast_output)
         point_values = point_forecast_to_rows(
             point_forecast=point_forecast,
@@ -179,6 +214,7 @@ class TimesFMAdapter:
                 "series_count": len(request.series),
                 "horizon": request.horizon,
             },
+            warnings=covariate_payload.warnings or None,
         )
 
     def _get_or_compile_model(
@@ -190,6 +226,7 @@ class TimesFMAdapter:
         request_horizon: int,
         requested_quantiles: list[float],
         options: dict[str, Any],
+        return_backcast: bool,
     ) -> _CompiledTimesFMModel:
         dependencies = self._resolve_dependencies()
         model_ref = _existing_local_model_path(model_local_dir) or runtime.repo_id
@@ -212,6 +249,7 @@ class TimesFMAdapter:
             use_quantile_head=use_quantile_head,
             torch_compile=torch_compile,
             infer_is_positive=infer_is_positive,
+            return_backcast=return_backcast,
         )
         cached = self._compiled_models.get(key)
         if cached is not None:
@@ -224,15 +262,26 @@ class TimesFMAdapter:
             torch_compile=torch_compile,
             local_model_path=_existing_local_model_path(model_local_dir) is not None,
         )
-        forecast_config = dependencies.timesfm.ForecastConfig(
-            max_context=runtime.max_context,
-            max_horizon=max_horizon,
-            normalize_inputs=True,
-            use_continuous_quantile_head=use_quantile_head,
-            force_flip_invariance=True,
-            infer_is_positive=infer_is_positive,
-            fix_quantile_crossing=True,
-        )
+        forecast_config_kwargs: dict[str, Any] = {
+            "max_context": runtime.max_context,
+            "max_horizon": max_horizon,
+            "normalize_inputs": True,
+            "use_continuous_quantile_head": use_quantile_head,
+            "force_flip_invariance": True,
+            "infer_is_positive": infer_is_positive,
+            "fix_quantile_crossing": True,
+            "return_backcast": return_backcast,
+        }
+        try:
+            forecast_config = dependencies.timesfm.ForecastConfig(**forecast_config_kwargs)
+        except TypeError as exc:
+            if return_backcast:
+                raise AdapterInputError(
+                    "TimesFM ForecastConfig must support return_backcast=True when covariates "
+                    "are provided",
+                ) from exc
+            forecast_config_kwargs.pop("return_backcast", None)
+            forecast_config = dependencies.timesfm.ForecastConfig(**forecast_config_kwargs)
         model.compile(forecast_config)
         compiled = _CompiledTimesFMModel(model=model, runtime=runtime)
         self._compiled_models[key] = compiled
@@ -309,6 +358,175 @@ def build_timesfm_inputs(
         truncated = truncate_target_to_max_context(series.target, max_context)
         arrays.append(numpy_module.asarray(truncated, dtype=float))
     return arrays
+
+
+def build_timesfm_covariates(
+    *,
+    series_list: Sequence[SeriesInput],
+    max_context: int,
+    horizon: int,
+    covariates_mode: str,
+) -> _TimesFMCovariatePayload:
+    """Build TimesFM dynamic numerical covariates as past+future concatenated sequences."""
+    warnings: list[str] = []
+    warning_seen: set[str] = set()
+    strict_mode = covariates_mode == "strict"
+
+    all_covariate_names: set[str] = set()
+    for series in series_list:
+        all_covariate_names.update((series.past_covariates or {}).keys())
+
+    dynamic_numerical_covariates: dict[str, list[list[float]]] = {}
+    for name in sorted(all_covariate_names):
+        sequences: list[list[float]] = []
+        kind: str | None = None
+
+        for series in series_list:
+            history_length = len(series.target)
+            context_length = min(history_length, max_context)
+            context_start = history_length - context_length
+
+            past_covariates = series.past_covariates or {}
+            future_covariates = series.future_covariates or {}
+            if name not in past_covariates:
+                sequences.append([0.0] * (context_length + horizon))
+                _append_warning(
+                    warnings=warnings,
+                    seen=warning_seen,
+                    message=(
+                        f"TimesFM missing covariate {name!r} for series {series.id!r}; "
+                        "using zero-filled values for that series"
+                    ),
+                )
+                continue
+
+            past_values_raw = list(past_covariates[name])[context_start:]
+            current_kind = _covariate_kind(past_values_raw)
+            if kind is None:
+                kind = current_kind
+            elif kind != current_kind:
+                raise AdapterInputError(
+                    f"covariate {name!r} mixes numeric and categorical types across series",
+                )
+
+            if current_kind == "categorical":
+                if strict_mode:
+                    raise AdapterInputError(
+                        f"TimesFM runner does not support categorical covariates; "
+                        f"covariate {name!r}",
+                    )
+                _append_warning(
+                    warnings=warnings,
+                    seen=warning_seen,
+                    message=(
+                        f"Ignoring categorical covariate {name!r}; TimesFM numeric xreg is "
+                        "enabled in this runner version"
+                    ),
+                )
+                sequences = []
+                break
+
+            future_values_raw = future_covariates.get(name)
+            if future_values_raw is None:
+                last_value = float(past_values_raw[-1])
+                future_values = [last_value] * horizon
+            else:
+                future_values = _to_numeric_covariate_values(
+                    values=future_values_raw,
+                    covariate=name,
+                    series_id=series.id,
+                )
+
+            sequence = _to_numeric_covariate_values(
+                values=past_values_raw,
+                covariate=name,
+                series_id=series.id,
+            )
+            sequence.extend(future_values)
+            sequences.append(sequence)
+
+        if sequences:
+            dynamic_numerical_covariates[name] = sequences
+
+    return _TimesFMCovariatePayload(
+        dynamic_numerical_covariates=dynamic_numerical_covariates,
+        warnings=warnings,
+    )
+
+
+def _request_has_covariates(series_list: Sequence[SeriesInput]) -> bool:
+    for series in series_list:
+        if series.past_covariates:
+            return True
+        if series.future_covariates:
+            return True
+        if series.static_covariates:
+            return True
+    return False
+
+
+def _forecast_with_covariates(
+    *,
+    model: Any,
+    horizon: int,
+    inputs: Sequence[Any],
+    dynamic_numerical_covariates: dict[str, list[list[float]]],
+    xreg_mode: str,
+    ridge: float,
+    force_on_cpu: bool,
+) -> Any:
+    forecast_with_covariates = getattr(model, "forecast_with_covariates", None)
+    if not callable(forecast_with_covariates):
+        raise AdapterInputError(
+            "TimesFM model does not expose forecast_with_covariates for covariate requests",
+        )
+
+    kwargs: dict[str, Any] = {
+        "horizon": horizon,
+        "inputs": inputs,
+        "dynamic_numerical_covariates": dynamic_numerical_covariates,
+        "xreg_mode": xreg_mode,
+        "ridge": ridge,
+        "force_on_cpu": force_on_cpu,
+    }
+    try:
+        return forecast_with_covariates(**kwargs)
+    except TypeError:
+        # Fallback for slight signature differences across TimesFM patch versions.
+        try:
+            parameter_names = set(inspect.signature(forecast_with_covariates).parameters.keys())
+        except (TypeError, ValueError):
+            parameter_names = set()
+
+        fallback_kwargs: dict[str, Any] = {}
+        if "inputs" in parameter_names:
+            fallback_kwargs["inputs"] = inputs
+        elif "input_ts" in parameter_names:
+            fallback_kwargs["input_ts"] = inputs
+        else:
+            fallback_kwargs["inputs"] = inputs
+
+        if "dynamic_numerical_covariates" in parameter_names:
+            fallback_kwargs["dynamic_numerical_covariates"] = dynamic_numerical_covariates
+        elif "dynamic_numeric_covariates" in parameter_names:
+            fallback_kwargs["dynamic_numeric_covariates"] = dynamic_numerical_covariates
+        else:
+            fallback_kwargs["dynamic_numerical_covariates"] = dynamic_numerical_covariates
+
+        if "xreg_mode" in parameter_names:
+            fallback_kwargs["xreg_mode"] = xreg_mode
+        if "ridge" in parameter_names:
+            fallback_kwargs["ridge"] = ridge
+        if "force_on_cpu" in parameter_names:
+            fallback_kwargs["force_on_cpu"] = force_on_cpu
+
+        if "horizon" in parameter_names:
+            fallback_kwargs["horizon"] = horizon
+        elif "forecast_horizon" in parameter_names:
+            fallback_kwargs["forecast_horizon"] = horizon
+        else:
+            fallback_kwargs["horizon"] = horizon
+        return forecast_with_covariates(**fallback_kwargs)
 
 
 def point_forecast_to_rows(
@@ -637,3 +855,63 @@ def _int_or_none(value: Any) -> int | None:
 
 def _normalize_quantile(value: float) -> float:
     return round(float(value), 6)
+
+
+def _covariate_kind(values: Sequence[Any]) -> str:
+    if not values:
+        raise AdapterInputError("covariate values must not be empty")
+
+    has_numeric = False
+    has_string = False
+    for value in values:
+        if isinstance(value, str):
+            has_string = True
+            continue
+        if isinstance(value, bool):
+            has_numeric = True
+            continue
+        if isinstance(value, (int, float)):
+            has_numeric = True
+            continue
+        raise AdapterInputError(f"unsupported covariate value: {value!r}")
+    if has_numeric and has_string:
+        raise AdapterInputError("covariate values must not mix numeric and string types")
+    if has_string:
+        return "categorical"
+    return "numeric"
+
+
+def _append_warning(*, warnings: list[str], seen: set[str], message: str) -> None:
+    if message in seen:
+        return
+    seen.add(message)
+    warnings.append(message)
+
+
+def _to_numeric_covariate_values(
+    *,
+    values: Sequence[Any],
+    covariate: str,
+    series_id: str,
+) -> list[float]:
+    converted: list[float] = []
+    for value in values:
+        if isinstance(value, bool):
+            converted.append(float(int(value)))
+            continue
+        if isinstance(value, (int, float)):
+            converted.append(float(value))
+            continue
+        if hasattr(value, "item"):
+            scalar = value.item()
+            if isinstance(scalar, bool):
+                converted.append(float(int(scalar)))
+                continue
+            if isinstance(scalar, (int, float)):
+                converted.append(float(scalar))
+                continue
+        raise AdapterInputError(
+            f"TimesFM covariate {covariate!r} in series {series_id!r} contains non-numeric "
+            f"value {value!r}",
+        )
+    return converted

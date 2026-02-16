@@ -32,11 +32,16 @@ def test_registry_loads_required_model_specs() -> None:
     assert mock.family == "mock"
     assert mock.source.repo_id == "tollama/mock-runner"
     assert mock.license.needs_acceptance is False
+    assert mock.capabilities is not None
+    assert mock.capabilities.past_covariates_numeric is False
 
     granite = registry["granite-ttm-r2"]
     assert granite.family == "torch"
     assert granite.source.repo_id == "ibm-granite/granite-timeseries-ttm-r2"
     assert granite.source.revision == "90-30-ft-l1-r2.1"
+    assert granite.capabilities is not None
+    assert granite.capabilities.past_covariates_numeric is True
+    assert granite.capabilities.past_covariates_categorical is False
     assert granite.metadata == {
         "implementation": "granite_ttm",
         "context_length": 90,
@@ -50,6 +55,9 @@ def test_registry_loads_required_model_specs() -> None:
     assert timesfm.source.revision == "main"
     assert timesfm.license.type == "apache-2.0"
     assert timesfm.license.needs_acceptance is False
+    assert timesfm.capabilities is not None
+    assert timesfm.capabilities.future_covariates_numeric is True
+    assert timesfm.capabilities.future_covariates_categorical is False
     assert timesfm.metadata == {
         "implementation": "timesfm_2p5_torch",
         "max_context": 1024,
@@ -93,6 +101,7 @@ def test_install_list_and_remove_model_manifest_in_temp_store(tmp_path) -> None:
     assert manifest["size_bytes"] == 0
     assert manifest["pulled_at"] is None
     assert isinstance(manifest["installed_at"], str)
+    assert manifest["capabilities"]["past_covariates_numeric"] is False
 
     installed = list_installed(paths=paths)
     assert [entry["name"] for entry in installed] == ["mock"]

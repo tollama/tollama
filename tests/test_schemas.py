@@ -18,7 +18,7 @@ def _example_request_payload() -> dict[str, object]:
                 "timestamps": ["2025-01-01", "2025-01-02", "2025-01-03"],
                 "target": [10.0, 11.0, 12.0],
                 "past_covariates": {"promo": [0.0, 1.0, 0.0]},
-                "future_covariates": {"price": [1.1, 1.2, 1.3, 1.4]},
+                "future_covariates": {"promo": [1.1, 1.2, 1.3]},
                 "static_covariates": {"region": "us-east", "tier": 2},
             }
         ],
@@ -85,3 +85,19 @@ def test_series_forecast_accepts_valid_quantiles() -> None:
     )
     assert forecast.quantiles is not None
     assert set(forecast.quantiles) == {"0.1", "0.9"}
+
+
+def test_forecast_request_rejects_mixed_covariate_value_types() -> None:
+    payload = _example_request_payload()
+    series = payload["series"][0]
+    series["past_covariates"] = {"promo": [1.0, "bad", 3.0]}
+    with pytest.raises(ValidationError):
+        ForecastRequest.model_validate(payload)
+
+
+def test_forecast_request_rejects_future_only_covariates() -> None:
+    payload = _example_request_payload()
+    series = payload["series"][0]
+    series["future_covariates"] = {"future_only": [1.0, 2.0, 3.0]}
+    with pytest.raises(ValidationError):
+        ForecastRequest.model_validate(payload)

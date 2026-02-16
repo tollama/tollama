@@ -5,7 +5,15 @@ from __future__ import annotations
 from pathlib import Path
 
 import yaml
-from pydantic import AliasChoices, BaseModel, ConfigDict, Field, JsonValue, StrictBool, StrictStr
+from pydantic import (
+    AliasChoices,
+    BaseModel,
+    ConfigDict,
+    Field,
+    JsonValue,
+    StrictBool,
+    StrictStr,
+)
 
 NonEmptyStr = StrictStr
 
@@ -36,6 +44,18 @@ class ModelLicense(BaseModel):
     notice: StrictStr | None = None
 
 
+class ModelCapabilities(BaseModel):
+    """Model-family covariate compatibility metadata."""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    past_covariates_numeric: StrictBool = False
+    past_covariates_categorical: StrictBool = False
+    future_covariates_numeric: StrictBool = False
+    future_covariates_categorical: StrictBool = False
+    static_covariates: StrictBool = False
+
+
 class ModelSpec(BaseModel):
     """Canonical model definition loaded from the registry."""
 
@@ -47,6 +67,7 @@ class ModelSpec(BaseModel):
     license: ModelLicense
     defaults: dict[StrictStr, JsonValue] | None = None
     metadata: dict[StrictStr, JsonValue] | None = None
+    capabilities: ModelCapabilities | None = None
 
 
 class RegistryFile(BaseModel):

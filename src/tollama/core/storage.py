@@ -164,6 +164,8 @@ def _build_manifest(spec: ModelSpec, *, accepted: bool) -> dict[str, Any]:
         manifest["license"]["notice"] = spec.license.notice
     if spec.metadata is not None:
         manifest["metadata"] = spec.metadata
+    if spec.capabilities is not None:
+        manifest["capabilities"] = spec.capabilities.model_dump(mode="json")
     return manifest
 
 

@@ -269,6 +269,9 @@ def test_api_info_returns_redacted_diagnostics(monkeypatch, tmp_path) -> None:
     assert payload["env"]["TOLLAMA_HF_TOKEN_present"] is True
     assert "TOLLAMA_HF_TOKEN" not in payload["env"]
     assert payload["models"]["installed"][0]["name"] == "dummy"
+    available = payload["models"]["available"]
+    mock_available = next(item for item in available if item["name"] == "mock")
+    assert mock_available["capabilities"]["past_covariates_numeric"] is False
     assert payload["runners"] == runner_statuses
     assert isinstance(payload["daemon"]["uptime_seconds"], int)
 
@@ -956,6 +959,97 @@ def test_forecast_invalid_payload_returns_400(monkeypatch, tmp_path) -> None:
 
     assert response.status_code == 400
     assert "detail" in response.json()
+
+
+def test_forecast_rejects_mismatched_future_covariate_length(monkeypatch, tmp_path) -> None:
+    _install_model(monkeypatch, tmp_path, "mock")
+    payload = _sample_forecast_payload()
+    payload["series"][0]["past_covariates"] = {"promo": [1.0, 2.0]}
+    payload["series"][0]["future_covariates"] = {"promo": [3.0]}
+
+    with TestClient(create_app()) as client:
+        response = client.post("/v1/forecast", json=payload)
+
+    assert response.status_code == 400
+    detail = json.dumps(response.json())
+    assert "future_covariates" in detail
+    assert "horizon" in detail
+
+
+def test_forecast_rejects_mixed_covariate_types(monkeypatch, tmp_path) -> None:
+    _install_model(monkeypatch, tmp_path, "mock")
+    payload = _sample_forecast_payload()
+    payload["series"][0]["past_covariates"] = {"promo": [1.0, "mixed"]}
+
+    with TestClient(create_app()) as client:
+        response = client.post("/v1/forecast", json=payload)
+
+    assert response.status_code == 400
+    detail = json.dumps(response.json())
+    assert "covariate" in detail
+    assert "mix" in detail
+
+
+def test_forecast_best_effort_ignores_unsupported_covariates_with_warning(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    paths = TollamaPaths(base_dir=tmp_path / ".tollama")
+    monkeypatch.setenv("TOLLAMA_HOME", str(paths.base_dir))
+    install_from_registry("mock", accept_license=False, paths=paths)
+
+    runner_manager = _CapturingRunnerManager()
+    app = create_app(runner_manager=runner_manager)  # type: ignore[arg-type]
+    payload = _sample_forecast_payload()
+    payload["series"][0]["past_covariates"] = {"promo": [1.0, 2.0]}
+    payload["series"][0]["future_covariates"] = {"promo": [3.0, 4.0]}
+
+    with TestClient(app) as client:
+        response = client.post("/v1/forecast", json=payload)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["warnings"]
+    assert "does not support" in body["warnings"][0]
+    passed_series = runner_manager.captured["params"]["series"][0]
+    assert passed_series.get("past_covariates") is None
+    assert passed_series.get("future_covariates") is None
+
+
+def test_forecast_strict_rejects_unsupported_covariates_before_runner_call(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    paths = TollamaPaths(base_dir=tmp_path / ".tollama")
+    monkeypatch.setenv("TOLLAMA_HOME", str(paths.base_dir))
+    install_from_registry("timesfm-2.5-200m", accept_license=False, paths=paths)
+
+    runner_manager = _CapturingRunnerManager()
+    app = create_app(runner_manager=runner_manager)  # type: ignore[arg-type]
+    payload = {
+        "model": "timesfm-2.5-200m",
+        "horizon": 2,
+        "quantiles": [],
+        "series": [
+            {
+                "id": "s1",
+                "freq": "D",
+                "timestamps": ["2025-01-01", "2025-01-02"],
+                "target": [1.0, 2.0],
+                "past_covariates": {"event": ["off", "on"]},
+                "future_covariates": {"event": ["off", "on"]},
+            }
+        ],
+        "options": {},
+        "parameters": {"covariates_mode": "strict"},
+    }
+
+    with TestClient(app) as client:
+        response = client.post("/v1/forecast", json=payload)
+
+    assert response.status_code == 400
+    assert "does not support" in response.json()["detail"]
+    assert runner_manager.captured == {}
 
 
 def test_models_endpoint_returns_available_and_installed(monkeypatch, tmp_path) -> None:
