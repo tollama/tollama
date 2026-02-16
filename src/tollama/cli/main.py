@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from typing import Any
 
@@ -34,17 +35,45 @@ def serve(
 def pull(
     model: str = typer.Argument(..., help="Model name to pull."),
     no_stream: bool = typer.Option(False, "--no-stream", help="Disable streaming pull output."),
+    insecure: bool = typer.Option(False, "--insecure", help="Disable SSL verification."),
+    offline: bool = typer.Option(False, "--offline", help="Use offline pull mode."),
+    local_files_only: bool = typer.Option(
+        False,
+        "--local-files-only",
+        help="Use local cache only for pull, without forcing full offline mode.",
+    ),
+    http_proxy: str | None = typer.Option(None, "--http-proxy", help="HTTP proxy URL."),
+    https_proxy: str | None = typer.Option(None, "--https-proxy", help="HTTPS proxy URL."),
+    no_proxy: str | None = typer.Option(None, "--no-proxy", help="No proxy host patterns."),
+    hf_home: str | None = typer.Option(None, "--hf-home", help="HF_HOME override."),
+    token: str | None = typer.Option(
+        None,
+        "--token",
+        help="Hugging Face token override (prefer TOLLAMA_HF_TOKEN).",
+    ),
     base_url: str = typer.Option(
         DEFAULT_BASE_URL,
-        help="Daemon base URL. Defaults to http://127.0.0.1:11435.",
+        help="Daemon base URL. Defaults to http://localhost:11435.",
     ),
     timeout: float = typer.Option(10.0, min=0.1, help="HTTP timeout in seconds."),
 ) -> None:
     """Pull a model from the registry into local storage."""
     client = TollamaClient(base_url=base_url, timeout=timeout)
     stream = not no_stream
+    resolved_token = token or os.environ.get("TOLLAMA_HF_TOKEN")
     try:
-        result = client.pull_model(name=model, stream=stream)
+        result = client.pull_model(
+            name=model,
+            stream=stream,
+            insecure=insecure,
+            offline=offline,
+            local_files_only=True if local_files_only else None,
+            http_proxy=http_proxy,
+            https_proxy=https_proxy,
+            no_proxy=no_proxy,
+            hf_home=hf_home,
+            token=resolved_token,
+        )
     except RuntimeError as exc:
         typer.echo(f"Error: {exc}", err=True)
         raise typer.Exit(code=1) from exc
@@ -55,7 +84,7 @@ def pull(
 def list_models(
     base_url: str = typer.Option(
         DEFAULT_BASE_URL,
-        help="Daemon base URL. Defaults to http://127.0.0.1:11435.",
+        help="Daemon base URL. Defaults to http://localhost:11435.",
     ),
     timeout: float = typer.Option(10.0, min=0.1, help="HTTP timeout in seconds."),
 ) -> None:
@@ -73,7 +102,7 @@ def list_models(
 def ps(
     base_url: str = typer.Option(
         DEFAULT_BASE_URL,
-        help="Daemon base URL. Defaults to http://127.0.0.1:11435.",
+        help="Daemon base URL. Defaults to http://localhost:11435.",
     ),
     timeout: float = typer.Option(10.0, min=0.1, help="HTTP timeout in seconds."),
 ) -> None:
@@ -92,7 +121,7 @@ def show(
     model: str = typer.Argument(..., help="Model name to inspect."),
     base_url: str = typer.Option(
         DEFAULT_BASE_URL,
-        help="Daemon base URL. Defaults to http://127.0.0.1:11435.",
+        help="Daemon base URL. Defaults to http://localhost:11435.",
     ),
     timeout: float = typer.Option(10.0, min=0.1, help="HTTP timeout in seconds."),
 ) -> None:
@@ -111,7 +140,7 @@ def rm(
     model: str = typer.Argument(..., help="Installed model name to remove."),
     base_url: str = typer.Option(
         DEFAULT_BASE_URL,
-        help="Daemon base URL. Defaults to http://127.0.0.1:11435.",
+        help="Daemon base URL. Defaults to http://localhost:11435.",
     ),
     timeout: float = typer.Option(10.0, min=0.1, help="HTTP timeout in seconds."),
 ) -> None:
@@ -133,7 +162,7 @@ def run(
     no_stream: bool = typer.Option(False, "--no-stream", help="Disable streaming forecast output."),
     base_url: str = typer.Option(
         DEFAULT_BASE_URL,
-        help="Daemon base URL. Defaults to http://127.0.0.1:11435.",
+        help="Daemon base URL. Defaults to http://localhost:11435.",
     ),
     timeout: float = typer.Option(10.0, min=0.1, help="HTTP timeout in seconds."),
 ) -> None:

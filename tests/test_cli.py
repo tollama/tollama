@@ -52,6 +52,7 @@ def test_serve_runs_uvicorn_with_expected_defaults(monkeypatch) -> None:
 
 def test_pull_supports_streaming_and_non_stream(monkeypatch) -> None:
     captured: dict[str, object] = {}
+    monkeypatch.setenv("TOLLAMA_HF_TOKEN", "env-token")
 
     class _FakeClient:
         def __init__(self, base_url: str, timeout: float) -> None:
@@ -63,8 +64,27 @@ def test_pull_supports_streaming_and_non_stream(monkeypatch) -> None:
             name: str,
             *,
             stream: bool,
+            insecure: bool,
+            offline: bool,
+            local_files_only: bool | None,
+            http_proxy: str | None,
+            https_proxy: str | None,
+            no_proxy: str | None,
+            hf_home: str | None,
+            token: str | None,
         ) -> dict[str, object] | list[dict[str, object]]:
-            captured["pull"] = {"name": name, "stream": stream}
+            captured["pull"] = {
+                "name": name,
+                "stream": stream,
+                "insecure": insecure,
+                "offline": offline,
+                "local_files_only": local_files_only,
+                "http_proxy": http_proxy,
+                "https_proxy": https_proxy,
+                "no_proxy": no_proxy,
+                "hf_home": hf_home,
+                "token": token,
+            }
             if stream:
                 return [{"status": "pulling manifest"}, {"status": "success", "model": name}]
             return {"status": "success", "model": name}
@@ -77,13 +97,58 @@ def test_pull_supports_streaming_and_non_stream(monkeypatch) -> None:
     lines = [line for line in streamed.stdout.splitlines() if line.strip()]
     assert json.loads(lines[0]) == {"status": "pulling manifest"}
     assert json.loads(lines[-1]) == {"status": "success", "model": "mock"}
-    assert captured["base_url"] == "http://127.0.0.1:11435"
-    assert captured["pull"] == {"name": "mock", "stream": True}
+    assert captured["base_url"] == "http://localhost:11435"
+    assert captured["pull"] == {
+        "name": "mock",
+        "stream": True,
+        "insecure": False,
+        "offline": False,
+        "local_files_only": None,
+        "http_proxy": None,
+        "https_proxy": None,
+        "no_proxy": None,
+        "hf_home": None,
+        "token": "env-token",
+    }
 
     non_stream = runner.invoke(app, ["pull", "mock", "--no-stream"])
     assert non_stream.exit_code == 0
     assert json.loads(non_stream.stdout) == {"status": "success", "model": "mock"}
-    assert captured["pull"] == {"name": "mock", "stream": False}
+    assert captured["pull"]["stream"] is False
+
+    with_flags = runner.invoke(
+        app,
+        [
+            "pull",
+            "mock",
+            "--offline",
+            "--local-files-only",
+            "--insecure",
+            "--http-proxy",
+            "http://proxy:8080",
+            "--https-proxy",
+            "http://proxy:8443",
+            "--no-proxy",
+            "localhost,127.0.0.1",
+            "--hf-home",
+            "/tmp/hf",
+            "--token",
+            "flag-token",
+        ],
+    )
+    assert with_flags.exit_code == 0
+    assert captured["pull"] == {
+        "name": "mock",
+        "stream": True,
+        "insecure": True,
+        "offline": True,
+        "local_files_only": True,
+        "http_proxy": "http://proxy:8080",
+        "https_proxy": "http://proxy:8443",
+        "no_proxy": "localhost,127.0.0.1",
+        "hf_home": "/tmp/hf",
+        "token": "flag-token",
+    }
 
 
 def test_list_ps_show_and_rm_commands_call_api_client(monkeypatch) -> None:

@@ -6,6 +6,7 @@ import json
 import shutil
 from collections.abc import Callable, Iterator
 from contextlib import asynccontextmanager
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from importlib import metadata
 from pathlib import Path
@@ -13,6 +14,7 @@ from queue import Queue
 from threading import Thread
 from typing import Any
 
+import httpx
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -27,7 +29,12 @@ from pydantic import (
     ValidationError,
 )
 
-from tollama.core.hf_pull import pull_snapshot_to_local_dir
+from tollama.core.env_override import set_env_temporarily
+from tollama.core.hf_pull import (
+    OfflineModelUnavailableError,
+    PullError,
+    pull_snapshot_to_local_dir,
+)
 from tollama.core.registry import get_model_spec, list_registry_models
 from tollama.core.schemas import ForecastRequest, ForecastResponse
 from tollama.core.storage import (
@@ -50,6 +57,18 @@ from .supervisor import (
 
 DEFAULT_FORECAST_TIMEOUT_SECONDS = 10.0
 DEFAULT_MODIFIED_AT = "1970-01-01T00:00:00Z"
+
+
+@dataclass(frozen=True)
+class PullOptions:
+    insecure: bool
+    offline: bool
+    local_files_only: bool
+    http_proxy: str | None
+    https_proxy: str | None
+    no_proxy: str | None
+    hf_home: str | None
+    token: str | None
 
 
 class ModelPullRequest(BaseModel):
@@ -80,11 +99,19 @@ class ModelDeleteRequest(BaseModel):
 class ApiPullRequest(BaseModel):
     """Request body for the Ollama-compatible pull endpoint."""
 
-    model_config = ConfigDict(extra="forbid", strict=True)
+    model_config = ConfigDict(extra="allow", strict=True)
 
     model: StrictStr = Field(min_length=1)
     stream: StrictBool = True
     accept_license: StrictBool = False
+    insecure: StrictBool = False
+    offline: StrictBool = False
+    local_files_only: StrictBool | None = None
+    http_proxy: StrictStr | None = None
+    https_proxy: StrictStr | None = None
+    no_proxy: StrictStr | None = None
+    hf_home: StrictStr | None = None
+    token: StrictStr | None = None
 
 
 class ForecastRequestWithKeepAlive(ForecastRequest):
@@ -160,17 +187,28 @@ def create_app(*, runner_manager: RunnerManager | None = None) -> FastAPI:
 
     @app.post("/api/pull", response_model=None)
     def pull(payload: ApiPullRequest) -> Any:
+        pull_options = _to_pull_options(payload)
         if not payload.stream:
-            return _pull_model_snapshot(
-                name=payload.model,
-                accept_license=payload.accept_license,
-            )
+            try:
+                return _pull_model_snapshot(
+                    name=payload.model,
+                    accept_license=payload.accept_license,
+                    pull_options=pull_options,
+                )
+            except HTTPException:
+                raise
+            except Exception as exc:  # noqa: BLE001
+                raise HTTPException(
+                    status_code=502,
+                    detail=_friendly_pull_error_message(exc),
+                ) from exc
 
         _validate_pull_request(name=payload.model, accept_license=payload.accept_license)
         return StreamingResponse(
             _pull_stream_lines(
                 name=payload.model,
                 accept_license=payload.accept_license,
+                pull_options=pull_options,
             ),
             media_type="application/x-ndjson",
         )
@@ -363,7 +401,12 @@ def _to_ndjson_line(payload: dict[str, Any]) -> str:
     return json.dumps(payload, separators=(",", ":"), sort_keys=True) + "\n"
 
 
-def _pull_stream_lines(*, name: str, accept_license: bool) -> Iterator[str]:
+def _pull_stream_lines(
+    *,
+    name: str,
+    accept_license: bool,
+    pull_options: PullOptions,
+) -> Iterator[str]:
     event_queue: Queue[dict[str, Any] | object] = Queue()
     done = object()
 
@@ -372,13 +415,14 @@ def _pull_stream_lines(*, name: str, accept_license: bool) -> Iterator[str]:
             result = _pull_model_snapshot(
                 name=name,
                 accept_license=accept_license,
+                pull_options=pull_options,
                 progress_cb=event_queue.put,
             )
             event_queue.put(result)
         except HTTPException as exc:
             event_queue.put({"error": {"message": str(exc.detail)}})
         except Exception as exc:  # noqa: BLE001
-            event_queue.put({"error": {"message": str(exc)}})
+            event_queue.put({"error": {"message": _friendly_pull_error_message(exc)}})
         finally:
             event_queue.put(done)
 
@@ -394,6 +438,25 @@ def _pull_stream_lines(*, name: str, accept_license: bool) -> Iterator[str]:
         yield _to_ndjson_line(item)
 
 
+def _to_pull_options(payload: ApiPullRequest) -> PullOptions:
+    local_files_only = payload.local_files_only
+    if local_files_only is None:
+        local_files_only = bool(payload.offline)
+    if payload.offline:
+        local_files_only = True
+
+    return PullOptions(
+        insecure=bool(payload.insecure),
+        offline=bool(payload.offline),
+        local_files_only=bool(local_files_only),
+        http_proxy=_optional_nonempty_str(payload.http_proxy),
+        https_proxy=_optional_nonempty_str(payload.https_proxy),
+        no_proxy=_optional_nonempty_str(payload.no_proxy),
+        hf_home=_optional_nonempty_str(payload.hf_home),
+        token=_optional_nonempty_str(payload.token),
+    )
+
+
 def _validate_pull_request(*, name: str, accept_license: bool) -> None:
     _prepare_pull_manifest(name=name, accept_license=accept_license)
 
@@ -402,12 +465,24 @@ def _pull_model_snapshot(
     *,
     name: str,
     accept_license: bool,
+    pull_options: PullOptions,
     progress_cb: Callable[[dict[str, Any]], None] | None = None,
 ) -> dict[str, Any]:
     spec, manifest, paths = _prepare_pull_manifest(
         name=name,
         accept_license=accept_license,
     )
+    snapshot_existing = _manifest_snapshot_path(manifest)
+    if snapshot_existing is not None:
+        digest_existing = _manifest_digest(manifest) or "unknown"
+        size_existing = _manifest_size_bytes(manifest)
+        _emit_pull_event(progress_cb, {"status": "already present", "model": spec.name})
+        return {
+            "status": "success",
+            "model": spec.name,
+            "digest": digest_existing,
+            "size": size_existing,
+        }
 
     model_dir = paths.model_dir(spec.name)
     model_dir.mkdir(parents=True, exist_ok=True)
@@ -415,35 +490,56 @@ def _pull_model_snapshot(
     snapshot_dir = model_dir / "snapshot"
     _remove_path(snapshot_tmp)
 
-    try:
-        if spec.source.type == "huggingface":
-            commit_sha, _snapshot_path, size_bytes = pull_snapshot_to_local_dir(
-                repo_id=spec.source.repo_id,
-                revision=spec.source.revision,
-                local_dir=snapshot_tmp,
-                progress_cb=progress_cb,
-            )
-            _replace_directory(source=snapshot_tmp, destination=snapshot_dir)
-        else:
-            _emit_pull_event(progress_cb, {"status": "pulling manifest"})
-            commit_sha = "local"
-            _emit_pull_event(progress_cb, {"status": "resolving digest", "digest": commit_sha})
-            snapshot_dir.mkdir(parents=True, exist_ok=True)
-            size_bytes = 0
+    env_mapping: dict[str, str | None] = {}
+    if pull_options.hf_home is not None:
+        env_mapping["HF_HOME"] = pull_options.hf_home
+    if pull_options.http_proxy is not None:
+        env_mapping["HTTP_PROXY"] = pull_options.http_proxy
+    if pull_options.https_proxy is not None:
+        env_mapping["HTTPS_PROXY"] = pull_options.https_proxy
+    if pull_options.no_proxy is not None:
+        env_mapping["NO_PROXY"] = pull_options.no_proxy
+    if pull_options.offline:
+        env_mapping["HF_HUB_OFFLINE"] = "1"
 
-        manifest["resolved"] = {
-            "commit_sha": commit_sha,
-            "snapshot_path": str(snapshot_dir.resolve()),
-        }
-        manifest["size_bytes"] = size_bytes
-        manifest["pulled_at"] = _utc_now_iso()
-        write_manifest(spec.name, manifest, paths=paths)
-        return {
-            "status": "success",
-            "model": spec.name,
-            "digest": commit_sha,
-            "size": size_bytes,
-        }
+    try:
+        with set_env_temporarily(env_mapping):
+            if spec.source.type == "huggingface":
+                commit_hint = _manifest_digest(manifest) or None
+                size_hint = _manifest_size_bytes(manifest)
+                commit_sha, _snapshot_path, size_bytes = pull_snapshot_to_local_dir(
+                    repo_id=spec.source.repo_id,
+                    revision=spec.source.revision,
+                    local_dir=snapshot_tmp,
+                    token=pull_options.token,
+                    progress_cb=progress_cb,
+                    local_files_only=pull_options.local_files_only,
+                    offline=pull_options.offline,
+                    insecure=pull_options.insecure,
+                    known_commit_sha=commit_hint,
+                    known_total_bytes=size_hint,
+                )
+                _replace_directory(source=snapshot_tmp, destination=snapshot_dir)
+            else:
+                _emit_pull_event(progress_cb, {"status": "pulling manifest"})
+                commit_sha = "local"
+                _emit_pull_event(progress_cb, {"status": "resolving digest", "digest": commit_sha})
+                snapshot_dir.mkdir(parents=True, exist_ok=True)
+                size_bytes = 0
+
+            manifest["resolved"] = {
+                "commit_sha": commit_sha,
+                "snapshot_path": str(snapshot_dir.resolve()),
+            }
+            manifest["size_bytes"] = size_bytes
+            manifest["pulled_at"] = _utc_now_iso()
+            write_manifest(spec.name, manifest, paths=paths)
+            return {
+                "status": "success",
+                "model": spec.name,
+                "digest": commit_sha,
+                "size": size_bytes,
+            }
     except Exception:
         _remove_path(snapshot_tmp)
         raise
@@ -685,6 +781,60 @@ def _emit_pull_event(
     if progress_cb is None:
         return
     progress_cb(payload)
+
+
+def _friendly_pull_error_message(exc: Exception) -> str:
+    if isinstance(exc, OfflineModelUnavailableError):
+        return str(exc)
+    if isinstance(exc, PullError):
+        return str(exc)
+
+    base_message = _compact_exception_message(exc)
+    network_error = isinstance(
+        exc,
+        (
+            httpx.ConnectError,
+            httpx.ConnectTimeout,
+            httpx.ProxyError,
+            httpx.ReadTimeout,
+            httpx.TimeoutException,
+        ),
+    ) or _looks_like_network_failure(base_message)
+    if not network_error:
+        return base_message
+
+    return (
+        f"{base_message}. "
+        "If behind a proxy, set HTTP_PROXY/HTTPS_PROXY/NO_PROXY or use "
+        "--http-proxy/--https-proxy. "
+        "If your network does TLS interception, configure a trusted CA bundle "
+        "(preferred) or use --insecure for debugging."
+    )
+
+
+def _compact_exception_message(exc: Exception) -> str:
+    message = str(exc).strip()
+    if message:
+        return message
+    return exc.__class__.__name__
+
+
+def _looks_like_network_failure(message: str) -> bool:
+    lowered = message.lower()
+    indicators = (
+        "connecterror",
+        "connection refused",
+        "connection reset",
+        "connection timed out",
+        "name or service not known",
+        "proxy",
+        "ssl",
+        "tls",
+        "network is unreachable",
+        "temporary failure in name resolution",
+        "timed out",
+    )
+    return any(token in lowered for token in indicators)
 
 
 def _replace_directory(*, source: Path, destination: Path) -> None:

@@ -33,7 +33,7 @@ tollama ps
 tollama rm mock
 
 # Check daemon version endpoint
-curl http://127.0.0.1:11435/api/version
+curl http://localhost:11435/api/version
 
 ruff check .
 pytest -q
@@ -41,8 +41,8 @@ pytest -q
 
 ## Daemon Base URL and Host Config
 
-- Default CLI base URL is `http://127.0.0.1:11435`.
-- Ollama-style API base URL is `http://127.0.0.1:11435/api`.
+- Default CLI base URL is `http://localhost:11435`.
+- Ollama-style API base URL is `http://localhost:11435/api`.
 - Configure bind host and port with `TOLLAMA_HOST` in `host:port` format.
   - Example: `TOLLAMA_HOST=0.0.0.0:11435 tollamad`
 - Primary lifecycle endpoints are under `/api/*`.
@@ -65,7 +65,7 @@ python -m pip install -e ".[dev,runner_torch]"
 # run daemon
 tollama serve
 
-# pull Chronos manifest
+# pull Chronos snapshot + manifest metadata
 tollama pull chronos2
 
 # run forecast through CLI
@@ -73,7 +73,7 @@ tollama run chronos2 --input examples/chronos2_request.json --no-stream
 ```
 
 ```bash
-curl -s http://127.0.0.1:11435/api/forecast \
+curl -s http://localhost:11435/api/forecast \
   -H 'content-type: application/json' \
   -d @examples/chronos2_request.json
 ```
@@ -84,6 +84,27 @@ streams NDJSON progress by default, and writes resolved pull metadata into the l
 - `resolved.snapshot_path`
 - `size_bytes`
 - `pulled_at`
+
+### Pull examples
+
+```bash
+# basic pull
+tollama pull chronos2
+
+# proxy override
+tollama pull chronos2 --https-proxy http://proxy:3128
+
+# offline after first pull
+tollama pull chronos2
+tollama pull chronos2 --offline
+
+# override Hugging Face cache home
+tollama pull chronos2 --hf-home /mnt/fastcache/hf
+
+# token via environment
+export TOLLAMA_HF_TOKEN=hf_xxx
+tollama pull <private-model>
+```
 
 ## Architecture
 

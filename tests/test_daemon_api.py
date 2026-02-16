@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import importlib
 import json
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
@@ -11,6 +13,8 @@ from fastapi.testclient import TestClient
 from tollama.core.storage import TollamaPaths, install_from_registry
 from tollama.daemon.app import create_app
 from tollama.daemon.supervisor import RunnerCallError, RunnerUnavailableError
+
+daemon_app_module = importlib.import_module("tollama.daemon.app")
 
 
 def _sample_forecast_payload() -> dict[str, Any]:
@@ -42,13 +46,29 @@ def _install_model(monkeypatch, tmp_path, name: str = "mock") -> None:
     install_from_registry(name, accept_license=True, paths=paths)
 
 
-def _patch_fake_hf_download(monkeypatch) -> None:
+def _patch_fake_hf_download(
+    monkeypatch,
+    *,
+    captures: dict[str, Any] | None = None,
+    progressive_files: bool = False,
+) -> None:
+    class _FakeSibling:
+        def __init__(self, size: int) -> None:
+            self.size = size
+
     class _FakeModelInfo:
         sha = "fake-commit-sha"
+        siblings = [_FakeSibling(64), _FakeSibling(64)]
 
     def _fake_model_info(*, repo_id: str, revision: str, token: str | None) -> _FakeModelInfo:
         assert repo_id
         assert revision
+        if captures is not None:
+            captures["model_info"] = {
+                "repo_id": repo_id,
+                "revision": revision,
+                "token": token,
+            }
         return _FakeModelInfo()
 
     def _fake_snapshot_download(
@@ -59,11 +79,19 @@ def _patch_fake_hf_download(monkeypatch) -> None:
         token: str | None,
         max_workers: int,
         tqdm_class,
+        local_files_only: bool,
     ) -> str:
         assert repo_id
         assert revision
         assert max_workers == 8
-        _ = token
+        if captures is not None:
+            captures["snapshot_download"] = {
+                "repo_id": repo_id,
+                "revision": revision,
+                "local_dir": local_dir,
+                "token": token,
+                "local_files_only": local_files_only,
+            }
 
         pull_root = Path(local_dir)
         pull_root.mkdir(parents=True, exist_ok=True)
@@ -74,18 +102,35 @@ def _patch_fake_hf_download(monkeypatch) -> None:
             unit="B",
             desc="huggingface_hub.snapshot_download",
         )
-        progress.update(10)
-        progress.update(90)
+        if progressive_files:
+            (pull_root / "weights-1.bin").write_bytes(b"x" * 32)
+            progress.update(10)
+            (pull_root / "weights-2.bin").write_bytes(b"x" * 48)
+            progress.update(40)
+            (pull_root / "weights-3.bin").write_bytes(b"x" * 48)
+            progress.update(50)
+        else:
+            (pull_root / "weights-1.bin").write_bytes(b"x" * 128)
+            progress.update(10)
+            progress.update(90)
         progress.set_description("Download complete")
         progress.close()
 
-        (pull_root / "weights.bin").write_bytes(b"x" * 128)
         (pull_root / ".cache").mkdir(parents=True, exist_ok=True)
         (pull_root / ".cache" / "ignored.bin").write_bytes(b"x" * 1024)
         return str(pull_root)
 
     monkeypatch.setattr("tollama.core.hf_pull._hf_model_info", _fake_model_info)
     monkeypatch.setattr("tollama.core.hf_pull._hf_snapshot_download", _fake_snapshot_download)
+
+
+def _capturing_env_override(capture: dict[str, Any]):
+    @contextmanager
+    def _capture(mapping: dict[str, str | None]):
+        capture["env_mapping"] = dict(mapping)
+        yield
+
+    return _capture
 
 
 def test_health_endpoint_returns_ok() -> None:
@@ -232,7 +277,10 @@ def test_ollama_pull_stream_downloads_hf_snapshot_with_progress(monkeypatch, tmp
     payloads = [json.loads(line) for line in response.text.splitlines() if line.strip()]
 
     assert payloads[0]["status"] == "pulling manifest"
-    assert any(entry.get("status") == "downloading" for entry in payloads)
+    downloading_events = [entry for entry in payloads if entry.get("status") == "downloading"]
+    assert downloading_events
+    for event in downloading_events:
+        assert {"completed_bytes", "total_bytes", "files_completed", "files_total"} <= set(event)
     assert payloads[-1]["status"] == "success"
     assert payloads[-1]["digest"] == "fake-commit-sha"
     assert payloads[-1]["size"] == 128
@@ -281,6 +329,192 @@ def test_ollama_pull_non_stream_returns_success_and_updates_manifest(monkeypatch
     manifest = json.loads(paths.manifest_path("chronos2").read_text(encoding="utf-8"))
     assert manifest["resolved"]["commit_sha"] == "fake-commit-sha"
     assert manifest["size_bytes"] == 128
+
+
+def test_ollama_pull_stream_reports_file_count_progress(monkeypatch, tmp_path) -> None:
+    paths = TollamaPaths(base_dir=tmp_path / ".tollama")
+    monkeypatch.setenv("TOLLAMA_HOME", str(paths.base_dir))
+    monkeypatch.setattr("tollama.core.hf_pull._THROTTLE_BYTES", 1)
+    monkeypatch.setattr("tollama.core.hf_pull._FILE_SCAN_INTERVAL_SECONDS", 0.0)
+    _patch_fake_hf_download(monkeypatch, progressive_files=True)
+
+    with TestClient(create_app()) as client:
+        response = client.post("/api/pull", json={"model": "chronos2"})
+
+    assert response.status_code == 200
+    payloads = [json.loads(line) for line in response.text.splitlines() if line.strip()]
+    downloading_events = [entry for entry in payloads if entry.get("status") == "downloading"]
+    assert len(downloading_events) >= 2
+
+    files_completed = [int(entry["files_completed"]) for entry in downloading_events]
+    assert files_completed == sorted(files_completed)
+    assert files_completed[-1] >= 3
+    assert payloads[-1]["status"] == "success"
+
+
+def test_ollama_pull_options_apply_overrides_and_token(monkeypatch, tmp_path) -> None:
+    paths = TollamaPaths(base_dir=tmp_path / ".tollama")
+    monkeypatch.setenv("TOLLAMA_HOME", str(paths.base_dir))
+    captures: dict[str, Any] = {}
+    _patch_fake_hf_download(monkeypatch, captures=captures)
+    monkeypatch.setattr(daemon_app_module, "set_env_temporarily", _capturing_env_override(captures))
+
+    with TestClient(create_app()) as client:
+        response = client.post(
+            "/api/pull",
+                json={
+                    "model": "chronos2",
+                    "stream": False,
+                    "http_proxy": "http://proxy.internal:3128",
+                    "https_proxy": "http://proxy.internal:3129",
+                    "no_proxy": "localhost,127.0.0.1",
+                    "hf_home": "/tmp/hf-cache",
+                    "token": "secret-token",
+            },
+        )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "success"
+    assert captures["env_mapping"] == {
+        "HF_HOME": "/tmp/hf-cache",
+        "HTTP_PROXY": "http://proxy.internal:3128",
+        "HTTPS_PROXY": "http://proxy.internal:3129",
+        "NO_PROXY": "localhost,127.0.0.1",
+    }
+    assert captures["model_info"]["token"] == "secret-token"
+    assert captures["snapshot_download"]["token"] == "secret-token"
+    assert captures["snapshot_download"]["local_files_only"] is False
+
+
+def test_ollama_pull_local_files_only_without_offline_avoids_hf_hub_offline(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    paths = TollamaPaths(base_dir=tmp_path / ".tollama")
+    monkeypatch.setenv("TOLLAMA_HOME", str(paths.base_dir))
+    captures: dict[str, Any] = {}
+    _patch_fake_hf_download(monkeypatch, captures=captures)
+    monkeypatch.setattr(daemon_app_module, "set_env_temporarily", _capturing_env_override(captures))
+
+    with TestClient(create_app()) as client:
+        response = client.post(
+            "/api/pull",
+            json={
+                "model": "chronos2",
+                "stream": False,
+                "local_files_only": True,
+            },
+        )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "success"
+    assert captures["env_mapping"] == {}
+    assert captures["snapshot_download"]["local_files_only"] is True
+    assert "model_info" not in captures
+
+
+def test_ollama_pull_offline_sets_hf_offline_and_forces_local_only(monkeypatch, tmp_path) -> None:
+    paths = TollamaPaths(base_dir=tmp_path / ".tollama")
+    monkeypatch.setenv("TOLLAMA_HOME", str(paths.base_dir))
+    captures: dict[str, Any] = {}
+    _patch_fake_hf_download(monkeypatch, captures=captures)
+    monkeypatch.setattr(daemon_app_module, "set_env_temporarily", _capturing_env_override(captures))
+
+    with TestClient(create_app()) as client:
+        response = client.post(
+            "/api/pull",
+            json={
+                "model": "chronos2",
+                "stream": False,
+                "offline": True,
+            },
+        )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "success"
+    assert captures["env_mapping"] == {"HF_HUB_OFFLINE": "1"}
+    assert "model_info" not in captures
+    assert captures["snapshot_download"]["local_files_only"] is True
+
+
+def test_ollama_pull_offline_returns_already_present_when_snapshot_exists(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    paths = TollamaPaths(base_dir=tmp_path / ".tollama")
+    monkeypatch.setenv("TOLLAMA_HOME", str(paths.base_dir))
+    _patch_fake_hf_download(monkeypatch)
+
+    with TestClient(create_app()) as client:
+        first_pull = client.post("/api/pull", json={"model": "chronos2", "stream": False})
+    assert first_pull.status_code == 200
+
+    def _should_not_download(**kwargs: Any) -> str:
+        raise AssertionError(f"unexpected download attempt in offline mode: {kwargs}")
+
+    monkeypatch.setattr("tollama.core.hf_pull._hf_snapshot_download", _should_not_download)
+
+    with TestClient(create_app()) as client:
+        offline_pull = client.post("/api/pull", json={"model": "chronos2", "offline": True})
+
+    assert offline_pull.status_code == 200
+    payloads = [json.loads(line) for line in offline_pull.text.splitlines() if line.strip()]
+    assert any(entry.get("status") == "already present" for entry in payloads)
+    assert payloads[-1]["status"] == "success"
+    assert payloads[-1]["model"] == "chronos2"
+
+
+def test_ollama_pull_stream_emits_warning_when_insecure(monkeypatch, tmp_path) -> None:
+    paths = TollamaPaths(base_dir=tmp_path / ".tollama")
+    monkeypatch.setenv("TOLLAMA_HOME", str(paths.base_dir))
+    _patch_fake_hf_download(monkeypatch)
+    monkeypatch.setattr(
+        "tollama.core.hf_pull._hf_client_tools",
+        lambda: type(
+            "_Tools",
+            (),
+            {
+                "backend": "httpx",
+                "request_hook": None,
+                "default_factory": lambda: None,
+                "set_factory": staticmethod(lambda _factory: None),
+            },
+        )(),
+    )
+
+    with TestClient(create_app()) as client:
+        response = client.post("/api/pull", json={"model": "chronos2", "insecure": True})
+
+    assert response.status_code == 200
+    payloads = [json.loads(line) for line in response.text.splitlines() if line.strip()]
+    warnings = [entry for entry in payloads if entry.get("status") == "warning"]
+    assert warnings
+    assert "SSL verification disabled" in warnings[0]["message"]
+
+
+def test_ollama_pull_offline_missing_local_model_returns_friendly_error(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    class LocalEntryNotFoundError(RuntimeError):
+        pass
+
+    paths = TollamaPaths(base_dir=tmp_path / ".tollama")
+    monkeypatch.setenv("TOLLAMA_HOME", str(paths.base_dir))
+    monkeypatch.setattr(
+        "tollama.core.hf_pull._hf_snapshot_download",
+        lambda **kwargs: (_ for _ in ()).throw(
+            LocalEntryNotFoundError("not found in local cache"),
+        ),
+    )
+
+    with TestClient(create_app()) as client:
+        response = client.post("/api/pull", json={"model": "chronos2", "offline": True})
+
+    assert response.status_code == 200
+    payloads = [json.loads(line) for line in response.text.splitlines() if line.strip()]
+    assert "error" in payloads[-1]
+    assert "without --offline or --local-files-only" in payloads[-1]["error"]["message"]
 
 
 def test_ollama_pull_prevalidation_errors_are_raised_before_streaming(

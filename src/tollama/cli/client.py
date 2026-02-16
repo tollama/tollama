@@ -9,7 +9,7 @@ import httpx
 
 DEFAULT_DAEMON_HOST = "127.0.0.1"
 DEFAULT_DAEMON_PORT = 11435
-DEFAULT_BASE_URL = f"http://{DEFAULT_DAEMON_HOST}:{DEFAULT_DAEMON_PORT}"
+DEFAULT_BASE_URL = f"http://localhost:{DEFAULT_DAEMON_PORT}"
 DEFAULT_TIMEOUT_SECONDS = 10.0
 
 
@@ -71,9 +71,34 @@ class TollamaClient:
         name: str,
         *,
         stream: bool = True,
+        insecure: bool = False,
+        offline: bool = False,
+        local_files_only: bool | None = None,
+        http_proxy: str | None = None,
+        https_proxy: str | None = None,
+        no_proxy: str | None = None,
+        hf_home: str | None = None,
+        token: str | None = None,
     ) -> dict[str, Any] | list[dict[str, Any]]:
         """Install a model through the Ollama-compatible pull endpoint."""
-        payload = {"model": name, "stream": stream}
+        payload: dict[str, Any] = {
+            "model": name,
+            "stream": stream,
+            "insecure": insecure,
+            "offline": offline,
+        }
+        if local_files_only is not None:
+            payload["local_files_only"] = local_files_only
+        if http_proxy is not None:
+            payload["http_proxy"] = http_proxy
+        if https_proxy is not None:
+            payload["https_proxy"] = https_proxy
+        if no_proxy is not None:
+            payload["no_proxy"] = no_proxy
+        if hf_home is not None:
+            payload["hf_home"] = hf_home
+        if token is not None:
+            payload["token"] = token
         action = f"pull model {name!r}"
         if stream:
             return self._request_ndjson("POST", "/api/pull", json_payload=payload, action=action)
