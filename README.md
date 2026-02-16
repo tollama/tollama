@@ -26,6 +26,9 @@ tollama serve
 # Terminal 2: request a forecast from example payload
 tollama forecast --model mock --input examples/request.json
 
+# Check daemon version endpoint
+curl http://localhost:11435/api/version
+
 # Manage models through tollamad
 tollama list
 tollama pull mock
@@ -35,9 +38,19 @@ ruff check .
 pytest -q
 ```
 
+## Daemon Base URL and Host Config
+
+- Default daemon bind is `127.0.0.1:11435`.
+- Ollama-style base URL is `http://localhost:11435/api`.
+- Configure bind host and port with `TOLLAMA_HOST` in `host:port` format.
+  - Example: `TOLLAMA_HOST=0.0.0.0:11435 tollamad`
+- Existing forecast and health endpoints remain under `/v1/*` for now.
+  - `GET /v1/health`
+  - `POST /v1/forecast`
+
 ## Architecture
 
-- `tollama.daemon`: Public API layer (`/v1/health`, `/v1/forecast`) and runner supervision.
+- `tollama.daemon`: Public API layer (`/api/version`, `/v1/health`, `/v1/forecast`) and runner supervision.
 - `tollama.runners`: Runner implementations that speak newline-delimited JSON over stdio.
 - `tollama.core`: Canonical data schemas (`ForecastRequest`, `ForecastResponse`) and protocol helpers.
 - `tollama.cli`: User CLI commands for serving and sending forecast requests.

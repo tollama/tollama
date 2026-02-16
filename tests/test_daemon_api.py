@@ -41,6 +41,14 @@ def test_health_endpoint_returns_ok() -> None:
     assert response.json() == {"status": "ok"}
 
 
+def test_version_endpoint_returns_string_version() -> None:
+    with TestClient(create_app()) as client:
+        response = client.get("/api/version")
+    assert response.status_code == 200
+    body = response.json()
+    assert isinstance(body.get("version"), str)
+
+
 def test_forecast_routes_end_to_end_to_mock_runner() -> None:
     with TestClient(create_app()) as client:
         response = client.post("/v1/forecast", json=_sample_forecast_payload())

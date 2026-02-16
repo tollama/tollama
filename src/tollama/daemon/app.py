@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+from importlib import metadata
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Request
@@ -41,7 +42,8 @@ async def _lifespan(app: FastAPI):
 
 def create_app(supervisor: RunnerSupervisor | None = None) -> FastAPI:
     """Create a configured FastAPI daemon app."""
-    app = FastAPI(title="tollama daemon", version="0.1.0", lifespan=_lifespan)
+    package_version = _resolve_package_version()
+    app = FastAPI(title="tollama daemon", version=package_version, lifespan=_lifespan)
     app.state.supervisor = supervisor or RunnerSupervisor()
 
     @app.exception_handler(RequestValidationError)
@@ -50,6 +52,10 @@ def create_app(supervisor: RunnerSupervisor | None = None) -> FastAPI:
         exc: RequestValidationError,
     ) -> JSONResponse:
         return JSONResponse(status_code=400, content={"detail": exc.errors()})
+
+    @app.get("/api/version")
+    def version() -> dict[str, str]:
+        return {"version": package_version}
 
     @app.get("/v1/health")
     def health() -> dict[str, str]:
@@ -154,6 +160,13 @@ def _runner_error_detail(exc: RunnerCallError | RunnerProtocolError) -> dict[str
             detail["data"] = exc.data
         return detail
     return str(exc)
+
+
+def _resolve_package_version() -> str:
+    try:
+        return metadata.version("tollama")
+    except metadata.PackageNotFoundError:
+        return "0.0.0"
 
 
 app = create_app()
