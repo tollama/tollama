@@ -26,6 +26,11 @@ tollama serve
 # Terminal 2: request a forecast from example payload
 tollama forecast --model mock --input examples/request.json
 
+# Manage models through tollamad
+tollama list
+tollama pull mock
+tollama rm mock
+
 ruff check .
 pytest -q
 ```

@@ -35,6 +35,21 @@ class TollamaClient:
             response = client.get("/v1/models")
         return _handle_json_response(response, action="list models")
 
+    def pull_model(self, name: str, accept_license: bool) -> dict[str, Any]:
+        """Install a model via the daemon model lifecycle API."""
+        with httpx.Client(base_url=self._base_url, timeout=self._timeout) as client:
+            response = client.post(
+                "/v1/models/pull",
+                json={"name": name, "accept_license": accept_license},
+            )
+        return _handle_json_response(response, action=f"pull model {name!r}")
+
+    def remove_model(self, name: str) -> dict[str, Any]:
+        """Remove an installed model via the daemon model lifecycle API."""
+        with httpx.Client(base_url=self._base_url, timeout=self._timeout) as client:
+            response = client.delete(f"/v1/models/{name}")
+        return _handle_json_response(response, action=f"remove model {name!r}")
+
 
 def _handle_json_response(response: httpx.Response, *, action: str) -> dict[str, Any]:
     try:

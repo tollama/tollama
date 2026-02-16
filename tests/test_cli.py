@@ -105,14 +105,37 @@ def test_forecast_rejects_non_json_input(tmp_path: Path) -> None:
     assert "input file is not valid JSON" in result.stdout
 
 
-def test_pull_list_and_rm_model(monkeypatch, tmp_path: Path) -> None:
-    monkeypatch.setenv("TOLLAMA_HOME", str(tmp_path / ".tollama"))
+def test_pull_list_and_rm_model_via_client(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    class _FakeClient:
+        def __init__(self, base_url: str, timeout: float) -> None:
+            captured["base_url"] = base_url
+            captured["timeout"] = timeout
+
+        def pull_model(self, name: str, accept_license: bool) -> dict[str, object]:
+            captured["pulled"] = {"name": name, "accept_license": accept_license}
+            return {"name": name, "family": "mock"}
+
+        def list_models(self) -> dict[str, object]:
+            return {
+                "installed": [{"name": "mock", "family": "mock", "installed": True}],
+                "available": [],
+            }
+
+        def remove_model(self, name: str) -> dict[str, object]:
+            captured["removed"] = name
+            return {"removed": True, "name": name}
+
+    monkeypatch.setattr("tollama.cli.main.TollamaClient", _FakeClient)
+
     runner = CliRunner()
 
     pulled = runner.invoke(app, ["pull", "mock"])
     assert pulled.exit_code == 0
     pulled_payload = json.loads(pulled.stdout)
     assert pulled_payload["name"] == "mock"
+    assert captured["pulled"] == {"name": "mock", "accept_license": False}
 
     listed = runner.invoke(app, ["list"])
     assert listed.exit_code == 0
@@ -121,22 +144,22 @@ def test_pull_list_and_rm_model(monkeypatch, tmp_path: Path) -> None:
 
     removed = runner.invoke(app, ["rm", "mock"])
     assert removed.exit_code == 0
-    assert "removed mock" in removed.stdout
-
-    listed_again = runner.invoke(app, ["list"])
-    assert listed_again.exit_code == 0
-    assert json.loads(listed_again.stdout) == []
+    removed_payload = json.loads(removed.stdout)
+    assert removed_payload == {"removed": True, "name": "mock"}
+    assert captured["removed"] == "mock"
 
 
-def test_pull_requires_license_acceptance(monkeypatch, tmp_path: Path) -> None:
-    monkeypatch.setenv("TOLLAMA_HOME", str(tmp_path / ".tollama"))
+def test_pull_surfaces_daemon_error(monkeypatch) -> None:
+    class _FakeClient:
+        def __init__(self, base_url: str, timeout: float) -> None:
+            pass
+
+        def pull_model(self, name: str, accept_license: bool) -> dict[str, object]:
+            raise RuntimeError("pull model 'chronos2' failed with HTTP 409: license required")
+
+    monkeypatch.setattr("tollama.cli.main.TollamaClient", _FakeClient)
     runner = CliRunner()
 
     denied = runner.invoke(app, ["pull", "chronos2"])
     assert denied.exit_code != 0
-    assert "requires license acceptance" in denied.stdout
-
-    accepted = runner.invoke(app, ["pull", "chronos2", "--accept-license"])
-    assert accepted.exit_code == 0
-    payload = json.loads(accepted.stdout)
-    assert payload["name"] == "chronos2"
+    assert "HTTP 409" in denied.stdout
