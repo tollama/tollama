@@ -86,10 +86,15 @@ class _FakeTorch:
 
 class _FakePreprocessor:
     last_kwargs: dict[str, Any] | None = None
+    last_train_payload: _FakeDataFrame | None = None
 
     def __init__(self, **kwargs: Any) -> None:
         self.kwargs = kwargs
         _FakePreprocessor.last_kwargs = kwargs
+
+    def train(self, payload: _FakeDataFrame) -> _FakePreprocessor:
+        _FakePreprocessor.last_train_payload = payload
+        return self
 
 
 class _FakeModel:
@@ -104,10 +109,20 @@ class _FakeModel:
 class _FakePipeline:
     last_payload: _FakeDataFrame | None = None
     last_future_time_series: _FakeDataFrame | None = None
+    last_init_kwargs: dict[str, Any] | None = None
 
-    def __init__(self, model: Any, *, device: str, feature_extractor: Any, batch_size: int) -> None:
+    def __init__(
+        self,
+        model: Any,
+        *,
+        device: str,
+        feature_extractor: Any,
+        freq: str,
+        batch_size: int,
+    ) -> None:
         del model, feature_extractor
         assert device == "cpu"
+        _FakePipeline.last_init_kwargs = {"device": device, "freq": freq, "batch_size": batch_size}
         assert batch_size == 1
 
     def __call__(
@@ -223,7 +238,9 @@ def test_granite_adapter_passes_future_time_series_and_covariate_columns(monkeyp
     adapter = GraniteTTMAdapter()
     monkeypatch.setattr(adapter, "_resolve_dependencies", _fake_dependencies)
     _FakePreprocessor.last_kwargs = None
+    _FakePreprocessor.last_train_payload = None
     _FakePipeline.last_future_time_series = None
+    _FakePipeline.last_init_kwargs = None
 
     response = adapter.forecast(
         _build_request_with_covariates(horizon=4),
@@ -242,8 +259,12 @@ def test_granite_adapter_passes_future_time_series_and_covariate_columns(monkeyp
 
     assert response.model == "granite-ttm-r2"
     assert _FakePreprocessor.last_kwargs is not None
+    assert _FakePreprocessor.last_kwargs["freq"] == "D"
     assert _FakePreprocessor.last_kwargs["control_columns"] == ["promo"]
     assert _FakePreprocessor.last_kwargs["conditional_columns"] == ["temperature"]
+    assert _FakePreprocessor.last_train_payload is not None
+    assert len(_FakePreprocessor.last_train_payload._rows) == 90
+    assert _FakePipeline.last_init_kwargs == {"device": "cpu", "freq": "D", "batch_size": 1}
     assert _FakePipeline.last_future_time_series is not None
     assert len(_FakePipeline.last_future_time_series._rows) == 4
     assert set(_FakePipeline.last_future_time_series.columns) >= {"id", "timestamp", "promo"}

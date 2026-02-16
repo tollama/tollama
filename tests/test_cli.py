@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
+import pytest
 from typer.testing import CliRunner
 
 from tollama.cli.client import DaemonHTTPError
-from tollama.cli.main import app
+from tollama.cli.main import _resolve_default_request_path, app
 
 
 def _sample_request_payload() -> dict[str, object]:
@@ -383,3 +385,36 @@ def test_run_help_mentions_input_and_stream_flags() -> None:
     assert "--input" in result.stdout
     assert "--no-stream" in result.stdout
     assert "stdin" in result.stdout
+
+
+@pytest.mark.parametrize(
+    ("model", "implementation", "filename"),
+    [
+        ("granite-ttm-r2", "granite_ttm", "granite_ttm_request.json"),
+        ("timesfm-2.5-200m", "timesfm_2p5_torch", "timesfm_2p5_request.json"),
+        ("moirai-1.1-R-base", "moirai_1p1", "moirai_request.json"),
+    ],
+)
+def test_resolve_default_request_path_uses_implementation_aliases(
+    monkeypatch,
+    tmp_path: Path,
+    model: str,
+    implementation: str,
+    filename: str,
+) -> None:
+    examples_dir = tmp_path / "examples"
+    examples_dir.mkdir(parents=True, exist_ok=True)
+    expected = examples_dir / filename
+    expected.write_text("{}", encoding="utf-8")
+    (examples_dir / "request.json").write_text("{}", encoding="utf-8")
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr("tollama.cli.main._project_root_from_module", lambda: None)
+    monkeypatch.setattr(
+        "tollama.cli.main.get_model_spec",
+        lambda _: SimpleNamespace(metadata={"implementation": implementation}),
+    )
+
+    resolved = _resolve_default_request_path(model)
+
+    assert resolved == expected

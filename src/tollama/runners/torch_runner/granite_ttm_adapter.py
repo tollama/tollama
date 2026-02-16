@@ -160,6 +160,11 @@ class GraniteTTMAdapter:
             prediction_length=loaded.prediction_length,
             control_columns=known_future_columns,
             conditional_columns=past_only_columns,
+            freq=series.freq,
+        )
+        preprocessor = _train_preprocessor(
+            preprocessor=preprocessor,
+            context_frame=context_tail,
         )
 
         pipeline = dependencies.forecasting_pipeline_cls(
@@ -169,6 +174,7 @@ class GraniteTTMAdapter:
                 requested_device=_requested_device(request.options),
             ),
             feature_extractor=preprocessor,
+            freq=series.freq,
             batch_size=1,
         )
         future_time_series = _build_future_time_series(
@@ -357,6 +363,7 @@ def _build_preprocessor(
     prediction_length: int,
     control_columns: list[str],
     conditional_columns: list[str],
+    freq: str,
 ) -> Any:
     kwargs: dict[str, Any] = {
         "timestamp_column": "timestamp",
@@ -367,6 +374,7 @@ def _build_preprocessor(
         "conditional_columns": conditional_columns,
         "context_length": context_length,
         "prediction_length": prediction_length,
+        "freq": freq,
         "scaling": True,
         "encode_categorical": False,
         "scaler_type": "standard",
@@ -378,10 +386,23 @@ def _build_preprocessor(
         fallback_kwargs = dict(kwargs)
         fallback_kwargs.pop("control_columns", None)
         fallback_kwargs.pop("conditional_columns", None)
+        fallback_kwargs.pop("freq", None)
         fallback_kwargs["observable_columns"] = sorted(
             set(control_columns).union(conditional_columns),
         )
         return dependencies.preprocessor_cls(**fallback_kwargs)
+
+
+def _train_preprocessor(*, preprocessor: Any, context_frame: Any) -> Any:
+    train = getattr(preprocessor, "train", None)
+    if not callable(train):
+        return preprocessor
+
+    try:
+        trained = train(context_frame)
+    except Exception as exc:  # noqa: BLE001
+        raise AdapterInputError(f"failed to train Granite TTM preprocessor: {exc}") from exc
+    return preprocessor if trained is None else trained
 
 
 def _build_future_time_series(

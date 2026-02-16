@@ -12,6 +12,7 @@ import typer
 import uvicorn
 
 from tollama.core.config import ConfigFileError, load_config, update_config
+from tollama.core.registry import get_model_spec
 from tollama.core.storage import TollamaPaths
 
 from .client import (
@@ -697,7 +698,8 @@ def _load_request_payload_from_stdin() -> dict[str, Any] | None:
 
 
 def _resolve_default_request_path(model: str) -> Path | None:
-    candidate_names = (f"{model}_request.json", "request.json")
+    candidate_names = [f"{alias}_request.json" for alias in _request_payload_aliases(model)]
+    candidate_names.append("request.json")
 
     roots: list[Path] = [Path.cwd()]
     package_root = _project_root_from_module()
@@ -712,6 +714,57 @@ def _resolve_default_request_path(model: str) -> Path | None:
                 return candidate
 
     return None
+
+
+def _request_payload_aliases(model: str) -> tuple[str, ...]:
+    aliases: list[str] = []
+    _append_alias(aliases, model)
+    _append_alias(aliases, _normalize_request_alias(model))
+
+    implementation = _model_implementation(model)
+    if implementation is not None:
+        _append_alias(aliases, implementation)
+        _append_alias(aliases, _normalize_request_alias(implementation))
+
+        for suffix in ("_torch", "_runner", "_adapter"):
+            if implementation.endswith(suffix) and len(implementation) > len(suffix):
+                trimmed = implementation[: -len(suffix)]
+                _append_alias(aliases, trimmed)
+                _append_alias(aliases, _normalize_request_alias(trimmed))
+
+        _append_alias(aliases, implementation.split("_", maxsplit=1)[0])
+
+    return tuple(aliases)
+
+
+def _append_alias(aliases: list[str], alias: str | None) -> None:
+    if alias is None:
+        return
+    normalized = alias.strip()
+    if not normalized:
+        return
+    if normalized not in aliases:
+        aliases.append(normalized)
+
+
+def _normalize_request_alias(value: str) -> str:
+    return value.strip().lower().replace("-", "_").replace(".", "_")
+
+
+def _model_implementation(model: str) -> str | None:
+    try:
+        spec = get_model_spec(model)
+    except (KeyError, OSError, ValueError):
+        return None
+
+    metadata = spec.metadata
+    if not isinstance(metadata, dict):
+        return None
+
+    implementation = metadata.get("implementation")
+    if not isinstance(implementation, str):
+        return None
+    return implementation.strip() or None
 
 
 def _project_root_from_module() -> Path | None:
