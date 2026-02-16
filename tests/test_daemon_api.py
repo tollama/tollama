@@ -8,13 +8,28 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
+import pytest
 from fastapi.testclient import TestClient
 
+from tollama.core.config import TollamaConfig, save_config
 from tollama.core.storage import TollamaPaths, install_from_registry
 from tollama.daemon.app import create_app
 from tollama.daemon.supervisor import RunnerCallError, RunnerUnavailableError
 
 daemon_app_module = importlib.import_module("tollama.daemon.app")
+
+
+@pytest.fixture(autouse=True)
+def _clear_pull_environment(monkeypatch) -> None:
+    for key in (
+        "HF_HOME",
+        "HF_HUB_OFFLINE",
+        "HTTP_PROXY",
+        "HTTPS_PROXY",
+        "NO_PROXY",
+        "TOLLAMA_HF_TOKEN",
+    ):
+        monkeypatch.delenv(key, raising=False)
 
 
 def _sample_forecast_payload() -> dict[str, Any]:
@@ -383,6 +398,58 @@ def test_ollama_pull_options_apply_overrides_and_token(monkeypatch, tmp_path) ->
     }
     assert captures["model_info"]["token"] == "secret-token"
     assert captures["snapshot_download"]["token"] == "secret-token"
+    assert captures["snapshot_download"]["local_files_only"] is False
+
+
+def test_ollama_pull_uses_config_defaults_when_request_omits_options(monkeypatch, tmp_path) -> None:
+    paths = TollamaPaths(base_dir=tmp_path / ".tollama")
+    monkeypatch.setenv("TOLLAMA_HOME", str(paths.base_dir))
+    captures: dict[str, Any] = {}
+    _patch_fake_hf_download(monkeypatch, captures=captures)
+    monkeypatch.setattr(daemon_app_module, "set_env_temporarily", _capturing_env_override(captures))
+    save_config(
+        paths,
+        TollamaConfig.model_validate(
+            {
+                "pull": {
+                    "offline": True,
+                    "https_proxy": "http://proxy.internal:3129",
+                }
+            },
+        ),
+    )
+
+    with TestClient(create_app()) as client:
+        response = client.post(
+            "/api/pull",
+            json={"model": "chronos2", "stream": False},
+        )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "success"
+    assert captures["env_mapping"]["HF_HUB_OFFLINE"] == "1"
+    assert captures["env_mapping"]["HTTPS_PROXY"] == "http://proxy.internal:3129"
+    assert captures["snapshot_download"]["local_files_only"] is True
+    assert captures["snapshot_download"]["token"] is None
+
+
+def test_ollama_pull_explicit_request_overrides_config_defaults(monkeypatch, tmp_path) -> None:
+    paths = TollamaPaths(base_dir=tmp_path / ".tollama")
+    monkeypatch.setenv("TOLLAMA_HOME", str(paths.base_dir))
+    captures: dict[str, Any] = {}
+    _patch_fake_hf_download(monkeypatch, captures=captures)
+    monkeypatch.setattr(daemon_app_module, "set_env_temporarily", _capturing_env_override(captures))
+    save_config(paths, TollamaConfig.model_validate({"pull": {"offline": True}}))
+
+    with TestClient(create_app()) as client:
+        response = client.post(
+            "/api/pull",
+            json={"model": "chronos2", "stream": False, "offline": False},
+        )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "success"
+    assert captures["env_mapping"] == {"HF_HUB_OFFLINE": None}
     assert captures["snapshot_download"]["local_files_only"] is False
 
 

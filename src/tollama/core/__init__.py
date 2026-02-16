@@ -1,5 +1,15 @@
 """Core types and protocol helpers for tollama."""
 
+from .config import (
+    ConfigFileError,
+    DaemonDefaults,
+    PullDefaults,
+    TollamaConfig,
+    get_config_path,
+    load_config,
+    save_config,
+    update_config,
+)
 from .protocol import (
     SUPPORTED_METHODS,
     ProtocolDecodeError,
@@ -34,12 +44,15 @@ from .storage import (
 )
 
 __all__ = [
+    "ConfigFileError",
+    "DaemonDefaults",
     "DEFAULT_REGISTRY_PATH",
     "ForecastRequest",
     "ForecastResponse",
     "ModelLicense",
     "ModelSource",
     "ModelSpec",
+    "PullDefaults",
     "ProtocolDecodeError",
     "ProtocolErrorMessage",
     "ProtocolRequest",
@@ -47,18 +60,23 @@ __all__ = [
     "SUPPORTED_METHODS",
     "SeriesForecast",
     "SeriesInput",
+    "TollamaConfig",
     "TollamaPaths",
     "decode_line",
     "decode_request_line",
     "decode_response_line",
     "encode_line",
     "generate_message_id",
+    "get_config_path",
     "install_from_registry",
     "is_installed",
     "list_installed",
     "list_registry_models",
+    "load_config",
     "read_manifest",
     "remove_model",
+    "save_config",
+    "update_config",
     "validate_message",
     "validate_request",
     "validate_response",

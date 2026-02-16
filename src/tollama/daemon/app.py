@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 from collections.abc import Callable, Iterator
 from contextlib import asynccontextmanager
@@ -11,7 +12,7 @@ from datetime import UTC, datetime
 from importlib import metadata
 from pathlib import Path
 from queue import Queue
-from threading import Thread
+from threading import Lock, Thread
 from typing import Any
 
 import httpx
@@ -29,6 +30,7 @@ from pydantic import (
     ValidationError,
 )
 
+from tollama.core.config import ConfigFileError, TollamaConfig, load_config
 from tollama.core.env_override import set_env_temporarily
 from tollama.core.hf_pull import (
     OfflineModelUnavailableError,
@@ -63,11 +65,17 @@ DEFAULT_MODIFIED_AT = "1970-01-01T00:00:00Z"
 class PullOptions:
     insecure: bool
     offline: bool
+    offline_explicit: bool
     local_files_only: bool
     http_proxy: str | None
+    http_proxy_explicit: bool
     https_proxy: str | None
+    https_proxy_explicit: bool
     no_proxy: str | None
+    no_proxy_explicit: bool
     hf_home: str | None
+    hf_home_explicit: bool
+    max_workers: int
     token: str | None
 
 
@@ -104,14 +112,59 @@ class ApiPullRequest(BaseModel):
     model: StrictStr = Field(min_length=1)
     stream: StrictBool = True
     accept_license: StrictBool = False
-    insecure: StrictBool = False
-    offline: StrictBool = False
+    insecure: StrictBool | None = None
+    offline: StrictBool | None = None
     local_files_only: StrictBool | None = None
     http_proxy: StrictStr | None = None
     https_proxy: StrictStr | None = None
     no_proxy: StrictStr | None = None
     hf_home: StrictStr | None = None
+    max_workers: StrictInt | None = Field(default=None, gt=0)
     token: StrictStr | None = None
+
+
+class ConfigProvider:
+    """Read-through cache for tollama config with mtime invalidation."""
+
+    def __init__(self) -> None:
+        self._lock = Lock()
+        self._cached_config: TollamaConfig | None = None
+        self._cached_path: Path | None = None
+        self._cached_mtime_ns: int | None = None
+
+    def get(self) -> TollamaConfig:
+        with self._lock:
+            paths = TollamaPaths.default()
+            config_path = paths.config_path
+            cached_path = self._cached_path
+            cached_config = self._cached_config
+
+            if not config_path.exists():
+                if (
+                    cached_path == config_path
+                    and self._cached_mtime_ns is None
+                    and cached_config is not None
+                ):
+                    return cached_config
+                loaded = TollamaConfig()
+                self._cached_config = loaded
+                self._cached_path = config_path
+                self._cached_mtime_ns = None
+                return loaded
+
+            mtime_ns = config_path.stat().st_mtime_ns
+            if (
+                cached_path == config_path
+                and self._cached_mtime_ns == mtime_ns
+                and cached_config is not None
+            ):
+                return cached_config
+
+            loaded = load_config(paths)
+            self._cached_config = loaded
+            self._cached_path = config_path
+            self._cached_mtime_ns = mtime_ns
+            return loaded
 
 
 class ForecastRequestWithKeepAlive(ForecastRequest):
@@ -139,6 +192,7 @@ def create_app(*, runner_manager: RunnerManager | None = None) -> FastAPI:
     app = FastAPI(title="tollama daemon", version=package_version, lifespan=_lifespan)
     app.state.runner_manager = runner_manager or RunnerManager()
     app.state.loaded_model_tracker = LoadedModelTracker()
+    app.state.config_provider = ConfigProvider()
 
     @app.exception_handler(RequestValidationError)
     async def _request_validation_handler(
@@ -187,7 +241,12 @@ def create_app(*, runner_manager: RunnerManager | None = None) -> FastAPI:
 
     @app.post("/api/pull", response_model=None)
     def pull(payload: ApiPullRequest) -> Any:
-        pull_options = _to_pull_options(payload)
+        try:
+            config: TollamaConfig = app.state.config_provider.get()
+        except ConfigFileError as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+        pull_options = _to_pull_options(payload, config=config)
         if not payload.stream:
             try:
                 return _pull_model_snapshot(
@@ -438,23 +497,158 @@ def _pull_stream_lines(
         yield _to_ndjson_line(item)
 
 
-def _to_pull_options(payload: ApiPullRequest) -> PullOptions:
-    local_files_only = payload.local_files_only
-    if local_files_only is None:
-        local_files_only = bool(payload.offline)
-    if payload.offline:
+def _to_pull_options(payload: ApiPullRequest, *, config: TollamaConfig) -> PullOptions:
+    fields_set = payload.model_fields_set
+    pull_defaults = config.pull
+
+    insecure, _insecure_explicit = _resolve_pull_bool(
+        field_name="insecure",
+        payload_value=payload.insecure,
+        fields_set=fields_set,
+        env_name=None,
+        config_value=pull_defaults.insecure,
+        hard_default=False,
+    )
+    offline, offline_explicit = _resolve_pull_bool(
+        field_name="offline",
+        payload_value=payload.offline,
+        fields_set=fields_set,
+        env_name="HF_HUB_OFFLINE",
+        config_value=pull_defaults.offline,
+        hard_default=False,
+    )
+    local_files_only, _local_files_only_explicit = _resolve_pull_bool(
+        field_name="local_files_only",
+        payload_value=payload.local_files_only,
+        fields_set=fields_set,
+        env_name=None,
+        config_value=pull_defaults.local_files_only,
+        hard_default=False,
+    )
+    if offline:
         local_files_only = True
 
-    return PullOptions(
-        insecure=bool(payload.insecure),
-        offline=bool(payload.offline),
-        local_files_only=bool(local_files_only),
-        http_proxy=_optional_nonempty_str(payload.http_proxy),
-        https_proxy=_optional_nonempty_str(payload.https_proxy),
-        no_proxy=_optional_nonempty_str(payload.no_proxy),
-        hf_home=_optional_nonempty_str(payload.hf_home),
-        token=_optional_nonempty_str(payload.token),
+    http_proxy, http_proxy_explicit = _resolve_pull_str(
+        field_name="http_proxy",
+        payload_value=payload.http_proxy,
+        fields_set=fields_set,
+        env_name="HTTP_PROXY",
+        config_value=pull_defaults.http_proxy,
     )
+    https_proxy, https_proxy_explicit = _resolve_pull_str(
+        field_name="https_proxy",
+        payload_value=payload.https_proxy,
+        fields_set=fields_set,
+        env_name="HTTPS_PROXY",
+        config_value=pull_defaults.https_proxy,
+    )
+    no_proxy, no_proxy_explicit = _resolve_pull_str(
+        field_name="no_proxy",
+        payload_value=payload.no_proxy,
+        fields_set=fields_set,
+        env_name="NO_PROXY",
+        config_value=pull_defaults.no_proxy,
+    )
+    hf_home, hf_home_explicit = _resolve_pull_str(
+        field_name="hf_home",
+        payload_value=payload.hf_home,
+        fields_set=fields_set,
+        env_name="HF_HOME",
+        config_value=pull_defaults.hf_home,
+    )
+
+    max_workers = _resolve_pull_int(
+        field_name="max_workers",
+        payload_value=payload.max_workers,
+        fields_set=fields_set,
+        config_value=pull_defaults.max_workers,
+        hard_default=8,
+    )
+    token = _resolve_pull_token(payload=payload, fields_set=fields_set)
+
+    return PullOptions(
+        insecure=insecure,
+        offline=offline,
+        offline_explicit=offline_explicit,
+        local_files_only=local_files_only,
+        http_proxy=http_proxy,
+        http_proxy_explicit=http_proxy_explicit,
+        https_proxy=https_proxy,
+        https_proxy_explicit=https_proxy_explicit,
+        no_proxy=no_proxy,
+        no_proxy_explicit=no_proxy_explicit,
+        hf_home=hf_home,
+        hf_home_explicit=hf_home_explicit,
+        max_workers=max_workers,
+        token=token,
+    )
+
+
+def _resolve_pull_bool(
+    *,
+    field_name: str,
+    payload_value: bool | None,
+    fields_set: set[str],
+    env_name: str | None,
+    config_value: bool | None,
+    hard_default: bool,
+) -> tuple[bool, bool]:
+    if field_name in fields_set and payload_value is not None:
+        return bool(payload_value), True
+
+    if env_name is not None:
+        env_value = _optional_bool_str(os.environ.get(env_name))
+        if env_value is not None:
+            return env_value, False
+
+    if config_value is not None:
+        return bool(config_value), False
+
+    return hard_default, False
+
+
+def _resolve_pull_str(
+    *,
+    field_name: str,
+    payload_value: str | None,
+    fields_set: set[str],
+    env_name: str | None,
+    config_value: str | None,
+) -> tuple[str | None, bool]:
+    if field_name in fields_set:
+        return _optional_nonempty_str(payload_value), True
+
+    if env_name is not None:
+        env_value = _optional_nonempty_str(os.environ.get(env_name))
+        if env_value is not None:
+            return env_value, False
+
+    return _optional_nonempty_str(config_value), False
+
+
+def _resolve_pull_int(
+    *,
+    field_name: str,
+    payload_value: int | None,
+    fields_set: set[str],
+    config_value: int | None,
+    hard_default: int,
+) -> int:
+    if field_name in fields_set and payload_value is not None:
+        return payload_value
+
+    if config_value is not None:
+        return config_value
+
+    return hard_default
+
+
+def _resolve_pull_token(*, payload: ApiPullRequest, fields_set: set[str]) -> str | None:
+    if "token" in fields_set:
+        return _optional_nonempty_str(payload.token)
+    env_token = _optional_nonempty_str(os.environ.get("TOLLAMA_HF_TOKEN"))
+    request_token = _optional_nonempty_str(payload.token)
+    return request_token or env_token
 
 
 def _validate_pull_request(*, name: str, accept_license: bool) -> None:
@@ -491,16 +685,18 @@ def _pull_model_snapshot(
     _remove_path(snapshot_tmp)
 
     env_mapping: dict[str, str | None] = {}
-    if pull_options.hf_home is not None:
+    if pull_options.hf_home is not None or pull_options.hf_home_explicit:
         env_mapping["HF_HOME"] = pull_options.hf_home
-    if pull_options.http_proxy is not None:
+    if pull_options.http_proxy is not None or pull_options.http_proxy_explicit:
         env_mapping["HTTP_PROXY"] = pull_options.http_proxy
-    if pull_options.https_proxy is not None:
+    if pull_options.https_proxy is not None or pull_options.https_proxy_explicit:
         env_mapping["HTTPS_PROXY"] = pull_options.https_proxy
-    if pull_options.no_proxy is not None:
+    if pull_options.no_proxy is not None or pull_options.no_proxy_explicit:
         env_mapping["NO_PROXY"] = pull_options.no_proxy
     if pull_options.offline:
         env_mapping["HF_HUB_OFFLINE"] = "1"
+    elif pull_options.offline_explicit:
+        env_mapping["HF_HUB_OFFLINE"] = None
 
     try:
         with set_env_temporarily(env_mapping):
@@ -512,6 +708,7 @@ def _pull_model_snapshot(
                     revision=spec.source.revision,
                     local_dir=snapshot_tmp,
                     token=pull_options.token,
+                    max_workers=pull_options.max_workers,
                     progress_cb=progress_cb,
                     local_files_only=pull_options.local_files_only,
                     offline=pull_options.offline,
@@ -768,6 +965,20 @@ def _optional_nonempty_str(value: Any) -> str | None:
     if not normalized:
         return None
     return normalized
+
+
+def _optional_bool_str(value: Any) -> bool | None:
+    if isinstance(value, bool):
+        return value
+    if not isinstance(value, str):
+        return None
+
+    normalized = value.strip().lower()
+    if normalized in {"1", "true", "yes", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "off"}:
+        return False
+    return None
 
 
 def _utc_now_iso() -> str:

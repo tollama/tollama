@@ -71,33 +71,40 @@ class TollamaClient:
         name: str,
         *,
         stream: bool = True,
-        insecure: bool = False,
-        offline: bool = False,
+        insecure: bool | None = None,
+        offline: bool | None = None,
         local_files_only: bool | None = None,
         http_proxy: str | None = None,
         https_proxy: str | None = None,
         no_proxy: str | None = None,
         hf_home: str | None = None,
+        max_workers: int | None = None,
         token: str | None = None,
+        include_null_fields: set[str] | None = None,
     ) -> dict[str, Any] | list[dict[str, Any]]:
         """Install a model through the Ollama-compatible pull endpoint."""
+        null_fields = include_null_fields or set()
         payload: dict[str, Any] = {
             "model": name,
             "stream": stream,
-            "insecure": insecure,
-            "offline": offline,
         }
-        if local_files_only is not None:
+        if insecure is not None or "insecure" in null_fields:
+            payload["insecure"] = insecure
+        if offline is not None or "offline" in null_fields:
+            payload["offline"] = offline
+        if local_files_only is not None or "local_files_only" in null_fields:
             payload["local_files_only"] = local_files_only
-        if http_proxy is not None:
+        if http_proxy is not None or "http_proxy" in null_fields:
             payload["http_proxy"] = http_proxy
-        if https_proxy is not None:
+        if https_proxy is not None or "https_proxy" in null_fields:
             payload["https_proxy"] = https_proxy
-        if no_proxy is not None:
+        if no_proxy is not None or "no_proxy" in null_fields:
             payload["no_proxy"] = no_proxy
-        if hf_home is not None:
+        if hf_home is not None or "hf_home" in null_fields:
             payload["hf_home"] = hf_home
-        if token is not None:
+        if max_workers is not None or "max_workers" in null_fields:
+            payload["max_workers"] = max_workers
+        if token is not None or "token" in null_fields:
             payload["token"] = token
         action = f"pull model {name!r}"
         if stream:

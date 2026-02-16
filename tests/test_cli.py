@@ -64,14 +64,16 @@ def test_pull_supports_streaming_and_non_stream(monkeypatch) -> None:
             name: str,
             *,
             stream: bool,
-            insecure: bool,
-            offline: bool,
+            insecure: bool | None,
+            offline: bool | None,
             local_files_only: bool | None,
             http_proxy: str | None,
             https_proxy: str | None,
             no_proxy: str | None,
             hf_home: str | None,
-            token: str | None,
+            max_workers: int | None = None,
+            token: str | None = None,
+            include_null_fields: set[str] | None = None,
         ) -> dict[str, object] | list[dict[str, object]]:
             captured["pull"] = {
                 "name": name,
@@ -83,7 +85,9 @@ def test_pull_supports_streaming_and_non_stream(monkeypatch) -> None:
                 "https_proxy": https_proxy,
                 "no_proxy": no_proxy,
                 "hf_home": hf_home,
+                "max_workers": max_workers,
                 "token": token,
+                "include_null_fields": include_null_fields,
             }
             if stream:
                 return [{"status": "pulling manifest"}, {"status": "success", "model": name}]
@@ -101,14 +105,16 @@ def test_pull_supports_streaming_and_non_stream(monkeypatch) -> None:
     assert captured["pull"] == {
         "name": "mock",
         "stream": True,
-        "insecure": False,
-        "offline": False,
+        "insecure": None,
+        "offline": None,
         "local_files_only": None,
         "http_proxy": None,
         "https_proxy": None,
         "no_proxy": None,
         "hf_home": None,
+        "max_workers": None,
         "token": "env-token",
+        "include_null_fields": set(),
     }
 
     non_stream = runner.invoke(app, ["pull", "mock", "--no-stream"])
@@ -147,7 +153,9 @@ def test_pull_supports_streaming_and_non_stream(monkeypatch) -> None:
         "https_proxy": "http://proxy:8443",
         "no_proxy": "localhost,127.0.0.1",
         "hf_home": "/tmp/hf",
+        "max_workers": None,
         "token": "flag-token",
+        "include_null_fields": set(),
     }
 
 

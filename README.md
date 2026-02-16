@@ -43,8 +43,11 @@ pytest -q
 
 - Default CLI base URL is `http://localhost:11435`.
 - Ollama-style API base URL is `http://localhost:11435/api`.
+- Default daemon port remains `11435`.
 - Configure bind host and port with `TOLLAMA_HOST` in `host:port` format.
   - Example: `TOLLAMA_HOST=0.0.0.0:11435 tollamad`
+- Local tollama state lives under `~/.tollama` by default.
+  - Override with `TOLLAMA_HOME=/custom/path` (config, models, runtimes all use this base).
 - Primary lifecycle endpoints are under `/api/*`.
   - `GET /api/tags`
   - `GET /api/ps`
@@ -105,6 +108,26 @@ tollama pull chronos2 --hf-home /mnt/fastcache/hf
 export TOLLAMA_HF_TOKEN=hf_xxx
 tollama pull <private-model>
 ```
+
+## Persistent Pull Defaults
+
+`tollama config` stores pull defaults in `~/.tollama/config.json` (or `$TOLLAMA_HOME/config.json`).
+These defaults are applied by the daemon on `/api/pull`, so any API client benefits.
+
+```bash
+# inspect current defaults
+tollama config list
+
+# set persistent defaults
+tollama config set pull.https_proxy http://proxy:3128
+tollama config set pull.hf_home /mnt/fastcache/hf
+tollama config set pull.offline true
+
+# no pull flags needed; daemon applies config defaults
+tollama pull chronos2
+```
+
+Tokens are intentionally not persisted in config. Use `TOLLAMA_HF_TOKEN` or `--token`.
 
 ## Architecture
 

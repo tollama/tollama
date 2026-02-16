@@ -33,11 +33,19 @@ class TollamaPaths:
     def models_dir(self) -> Path:
         return self.base_dir / "models"
 
+    @property
+    def runtimes_dir(self) -> Path:
+        return self.base_dir / "runtimes"
+
     def model_dir(self, name: str) -> Path:
         return self.models_dir / name
 
     def manifest_path(self, name: str) -> Path:
         return self.model_dir(name) / "manifest.json"
+
+    @property
+    def config_path(self) -> Path:
+        return self.base_dir / "config.json"
 
 
 def is_installed(name: str, *, paths: TollamaPaths | None = None) -> bool:
