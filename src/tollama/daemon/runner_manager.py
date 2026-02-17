@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import shutil
 import sys
 import threading
@@ -9,23 +10,22 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
+from tollama.core.runtime_bootstrap import (
+    FAMILY_EXTRAS,
+    FAMILY_RUNNER_MODULES,
+    BootstrapError,
+    ensure_family_runtime,
+    runner_command_for_family,
+)
+from tollama.core.storage import TollamaPaths
+
 from .supervisor import RunnerCallError, RunnerSupervisor, RunnerUnavailableError
 
-DEFAULT_RUNNER_COMMANDS: dict[str, tuple[str, ...]] = {
-    "mock": (sys.executable, "-m", "tollama.runners.mock.main"),
-    "torch": (sys.executable, "-m", "tollama.runners.torch_runner.main"),
-    "timesfm": (sys.executable, "-m", "tollama.runners.timesfm_runner.main"),
-    "uni2ts": (sys.executable, "-m", "tollama.runners.uni2ts_runner.main"),
-    "sundial": (sys.executable, "-m", "tollama.runners.sundial_runner.main"),
-    "toto": (sys.executable, "-m", "tollama.runners.toto_runner.main"),
-}
+logger = logging.getLogger(__name__)
 
-FAMILY_EXTRAS: dict[str, str] = {
-    "torch": "runner_torch",
-    "timesfm": "runner_timesfm",
-    "uni2ts": "runner_uni2ts",
-    "sundial": "runner_sundial",
-    "toto": "runner_toto",
+DEFAULT_RUNNER_COMMANDS: dict[str, tuple[str, ...]] = {
+    family: (sys.executable, "-m", module)
+    for family, module in FAMILY_RUNNER_MODULES.items()
 }
 
 UNIMPLEMENTED_FAMILIES = frozenset()
@@ -45,10 +45,19 @@ class RunnerManager:
         *,
         runner_commands: Mapping[str, Sequence[str]] | None = None,
         supervisors: Mapping[str, RunnerSupervisor] | None = None,
+        auto_bootstrap: bool = False,
+        paths: TollamaPaths | None = None,
     ) -> None:
         self._runner_configs = _build_runner_configs(runner_commands)
         self._supervisors: dict[str, RunnerSupervisor] = dict(supervisors or {})
         self._lock = threading.Lock()
+        self._auto_bootstrap = auto_bootstrap
+        self._paths = paths or TollamaPaths.default()
+        # Track families whose commands were explicitly overridden by the caller
+        # so that auto-bootstrap never overrides them.
+        self._explicit_families: frozenset[str] = (
+            frozenset(runner_commands.keys()) if runner_commands else frozenset()
+        )
 
     def list_families(self) -> list[str]:
         """List all configured runner families without starting runners."""
@@ -141,7 +150,32 @@ class RunnerManager:
             if config is None:
                 raise RunnerUnavailableError(f"runner family {family!r} is not supported")
 
-            supervisor = RunnerSupervisor(runner_command=config.command)
+            command = config.command
+
+            # Auto-bootstrap: create an isolated venv for this family if the
+            # caller did not provide an explicit runner_commands override.
+            if (
+                self._auto_bootstrap
+                and family in FAMILY_EXTRAS
+                and family not in self._explicit_families
+            ):
+                try:
+                    venv_python = ensure_family_runtime(family, paths=self._paths)
+                    command = runner_command_for_family(family, venv_python)
+                    logger.info(
+                        "using bootstrapped runtime for %r: %s",
+                        family,
+                        command[0],
+                    )
+                except BootstrapError as exc:
+                    logger.warning(
+                        "auto-bootstrap failed for family %r, falling back to "
+                        "default command: %s",
+                        family,
+                        exc,
+                    )
+
+            supervisor = RunnerSupervisor(runner_command=command)
             self._supervisors[family] = supervisor
             return supervisor
 

@@ -99,6 +99,7 @@ class ForecastRequest(CanonicalModel):
         default_factory=dict,
         validation_alias=AliasChoices("options"),
     )
+    timeout: float | None = Field(default=None, gt=0.0)
     parameters: ForecastParameters = Field(
         default_factory=ForecastParameters,
         validation_alias=AliasChoices("parameters"),

@@ -81,7 +81,13 @@ If you only need runtime (no lint/test tooling):
 python -m pip install -e ".[runner_torch,runner_timesfm,runner_uni2ts,runner_sundial,runner_toto]"
 ```
 
-## Single-Environment Checklist (Recommended)
+## Single-Environment Checklist (Legacy)
+
+> [!NOTE]
+> **Prefer per-family isolated runtimes** (see section below) to avoid
+> dependency conflicts between runner families.  The single-environment approach
+> still works but is harder to maintain when different runners require
+> incompatible library versions.
 
 Use this checklist to avoid mixed Conda/system/venv runners:
 
@@ -107,6 +113,102 @@ which tollama-runner-uni2ts
 # optional: verify daemon reports runner commands using the same interpreter
 curl -s http://127.0.0.1:11435/api/info | rg '"command"|uni2ts|timesfm|sundial|toto'
 ```
+
+## Per-Family Runtime Isolation (Recommended)
+
+Each runner family can be installed into its own virtualenv under
+`~/.tollama/runtimes/<family>/venv/`.  This avoids dependency conflicts
+(e.g. different `torch`, `transformers`, `gluonts` versions) and lets each
+model run independently.
+
+### Automatic bootstrap (lazy)
+
+When `daemon.auto_bootstrap` is `true` (the default), the daemon will
+automatically create the per-family venv the first time a forecast request
+needs that runner.  No manual setup is needed — just start the daemon and
+send requests:
+
+```bash
+tollama serve
+tollama run chronos2 --input examples/request.json
+# → daemon creates ~/.tollama/runtimes/torch/venv/ on first use
+```
+
+### Manual install (eager)
+
+Use the `tollama runtime` CLI to pre-create venvs before they are needed:
+
+```bash
+# Install one family
+tollama runtime install torch
+
+# Install all families at once
+tollama runtime install --all
+
+# List status of all runtimes
+tollama runtime list
+
+# Update runtimes after upgrading tollama
+tollama runtime update --all
+
+# Remove a runtime
+tollama runtime remove torch
+tollama runtime remove --all
+```
+
+### Configuration
+
+Control bootstrap behavior via `~/.tollama/config.json`:
+
+```json
+{
+  "version": 1,
+  "daemon": {
+    "auto_bootstrap": true
+  }
+}
+```
+
+Set `auto_bootstrap` to `false` to disable automatic venv creation.
+
+You can also override runner commands for specific families:
+
+```json
+{
+  "version": 1,
+  "daemon": {
+    "auto_bootstrap": true,
+    "runner_commands": {
+      "torch": ["/custom/venv/bin/python", "-m", "tollama.runners.torch_runner.main"]
+    }
+  }
+}
+```
+
+Families with explicit `runner_commands` entries skip auto-bootstrap.
+
+### Runtime directory layout
+
+```text
+~/.tollama/runtimes/
+├── torch/
+│   ├── venv/bin/python
+│   └── installed.json
+├── timesfm/
+│   ├── venv/bin/python
+│   └── installed.json
+├── uni2ts/
+│   └── ...
+├── sundial/
+│   └── ...
+└── toto/
+    └── ...
+```
+
+Each `installed.json` records the tollama version, extra name, Python version,
+and install timestamp.  When tollama is upgraded, runtimes are automatically
+re-bootstrapped on next use (or can be updated manually with
+`tollama runtime update --all`).
 
 ## Environment Variables and Paths
 
@@ -295,9 +397,9 @@ Forecast timeout (`failed: timed out` / runner timeout):
 
 - Increase CLI timeout for slower first-run inference:
   - `tollama run moirai-2.0-R-small --input examples/moirai_2p0_request.json --no-stream --timeout 600`
-- If needed, increase daemon runner timeout:
+- The `--timeout` flag now propagates to the daemon, overriding the default.
+- You can also set a higher default for the daemon:
   - `export TOLLAMA_FORECAST_TIMEOUT_SECONDS=600`
-  - restart `tollama serve`
 
 ## Development Checks
 

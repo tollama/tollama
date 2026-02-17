@@ -213,7 +213,7 @@ def create_app(*, runner_manager: RunnerManager | None = None) -> FastAPI:
     """Create a configured FastAPI daemon app."""
     package_version = _resolve_package_version()
     app = FastAPI(title="tollama daemon", version=package_version, lifespan=_lifespan)
-    app.state.runner_manager = runner_manager or RunnerManager()
+    app.state.runner_manager = runner_manager or _build_default_runner_manager()
     app.state.loaded_model_tracker = LoadedModelTracker()
     app.state.config_provider = ConfigProvider()
     app.state.started_at = datetime.now(UTC)
@@ -442,7 +442,7 @@ def _execute_forecast(
     extra_exclude: set[str] | None = None,
 ) -> ForecastResponse:
     _unload_expired_models(app)
-    forecast_timeout_seconds = _resolve_forecast_timeout_seconds()
+    forecast_timeout_seconds = _resolve_forecast_timeout_seconds(payload.timeout)
     request_now = datetime.now(UTC)
     model_manifest = _require_installed_manifest(payload.model)
     model_family = _manifest_family_or_500(model_manifest, payload.model)
@@ -706,7 +706,10 @@ def _resolve_pull_bool(
     return hard_default, False
 
 
-def _resolve_forecast_timeout_seconds() -> float:
+def _resolve_forecast_timeout_seconds(explicit: float | None = None) -> float:
+    if explicit is not None and explicit > 0:
+        return explicit
+
     configured = _env_or_none(FORECAST_TIMEOUT_ENV_NAME)
     if configured is None:
         return DEFAULT_FORECAST_TIMEOUT_SECONDS
@@ -1421,6 +1424,23 @@ def _resolve_package_version() -> str:
         return metadata.version("tollama")
     except metadata.PackageNotFoundError:
         return "0.0.0"
+
+
+def _build_default_runner_manager() -> RunnerManager:
+    """Build a RunnerManager using settings from ``config.json``."""
+    try:
+        paths = TollamaPaths.default()
+        config = load_config(paths)
+    except Exception:
+        return RunnerManager()
+
+    daemon_cfg = config.daemon
+    runner_commands = daemon_cfg.runner_commands or None
+    return RunnerManager(
+        runner_commands=runner_commands,
+        auto_bootstrap=daemon_cfg.auto_bootstrap,
+        paths=paths,
+    )
 
 
 app = create_app()

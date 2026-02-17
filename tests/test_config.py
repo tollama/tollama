@@ -95,3 +95,43 @@ def test_load_config_invalid_json_reports_file_path(monkeypatch, tmp_path) -> No
         load_config(paths)
 
     assert str(config_path) in str(exc_info.value)
+
+
+def test_daemon_defaults_auto_bootstrap_defaults_to_true(monkeypatch, tmp_path) -> None:
+    paths = _paths_from_env(monkeypatch, tmp_path)
+    config = load_config(paths)
+    assert config.daemon.auto_bootstrap is True
+
+
+def test_daemon_defaults_runner_commands_defaults_to_none(monkeypatch, tmp_path) -> None:
+    paths = _paths_from_env(monkeypatch, tmp_path)
+    config = load_config(paths)
+    assert config.daemon.runner_commands is None
+
+
+def test_daemon_defaults_runner_commands_round_trip(monkeypatch, tmp_path) -> None:
+    paths = _paths_from_env(monkeypatch, tmp_path)
+    updated = update_config(
+        paths,
+        {
+            "daemon": {
+                "runner_commands": {
+                    "torch": ["/opt/venv/bin/python", "-m", "tollama.runners.torch_runner.main"],
+                },
+            },
+        },
+    )
+    assert updated.daemon.runner_commands is not None
+    assert "torch" in updated.daemon.runner_commands
+
+    reloaded = load_config(paths)
+    assert reloaded.daemon.runner_commands == updated.daemon.runner_commands
+
+
+def test_daemon_defaults_auto_bootstrap_can_be_disabled(monkeypatch, tmp_path) -> None:
+    paths = _paths_from_env(monkeypatch, tmp_path)
+    updated = update_config(paths, {"daemon": {"auto_bootstrap": False}})
+    assert updated.daemon.auto_bootstrap is False
+
+    reloaded = load_config(paths)
+    assert reloaded.daemon.auto_bootstrap is False

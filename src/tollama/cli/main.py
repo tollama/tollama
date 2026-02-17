@@ -13,6 +13,13 @@ import uvicorn
 
 from tollama.core.config import ConfigFileError, load_config, update_config
 from tollama.core.registry import get_model_spec
+from tollama.core.runtime_bootstrap import (
+    FAMILY_EXTRAS,
+    BootstrapError,
+    ensure_family_runtime,
+    list_runtime_statuses,
+    remove_family_runtime,
+)
 from tollama.core.storage import TollamaPaths
 
 from .client import (
@@ -26,7 +33,9 @@ from .info import collect_info
 
 app = typer.Typer(help="Ollama-style command-line interface for tollama.")
 config_app = typer.Typer(help="Manage local tollama defaults in ~/.tollama/config.json.")
+runtime_app = typer.Typer(help="Manage per-family isolated runner environments.")
 app.add_typer(config_app, name="config")
+app.add_typer(runtime_app, name="runtime")
 
 _CONFIG_KEY_PATHS: dict[str, tuple[str, str]] = {
     "pull.offline": ("pull", "offline"),
@@ -378,6 +387,8 @@ def run(
     payload["model"] = model
     if horizon is not None:
         payload["horizon"] = horizon
+    if timeout is not None:
+        payload["timeout"] = timeout
 
     stream = not no_stream
     client = TollamaClient(base_url=base_url, timeout=timeout)
@@ -830,6 +841,126 @@ def _parse_request_payload(raw: str, *, source: str) -> dict[str, Any]:
         raise typer.BadParameter(f"{source} JSON must be an object")
 
     return payload
+
+
+# ---------------------------------------------------------------------------
+# ``tollama runtime`` subcommands
+# ---------------------------------------------------------------------------
+
+_ALL_BOOTSTRAPPABLE = list(FAMILY_EXTRAS.keys())
+
+
+@runtime_app.command("list")
+def runtime_list(
+    json_output: bool = typer.Option(False, "--json", help="Print JSON output."),
+) -> None:
+    """Show status of per-family isolated runner environments."""
+    paths = TollamaPaths.default()
+    statuses = list_runtime_statuses(paths=paths)
+
+    if json_output:
+        typer.echo(json.dumps(statuses, indent=2))
+        return
+
+    for entry in statuses:
+        mark = "✓" if entry["installed"] else "✗"
+        version = entry.get("tollama_version") or "—"
+        py_ver = entry.get("python_version") or "—"
+        typer.echo(f"  {mark}  {entry['family']:<12}  tollama={version}  python={py_ver}")
+
+
+@runtime_app.command("install")
+def runtime_install(
+    family: str = typer.Argument(
+        None,
+        help="Runner family to install (torch, timesfm, uni2ts, sundial, toto).",
+    ),
+    all_families: bool = typer.Option(False, "--all", help="Install all runner families."),
+    reinstall: bool = typer.Option(
+        False, "--reinstall", help="Force reinstall even if up-to-date.",
+    ),
+) -> None:
+    """Create or update an isolated venv for a runner family."""
+    families = _resolve_runtime_families(family, all_families=all_families)
+    paths = TollamaPaths.default()
+
+    for fam in families:
+        typer.echo(f"Installing runtime for {fam!r} …")
+        try:
+            python_path = ensure_family_runtime(fam, paths=paths, reinstall=reinstall)
+            typer.echo(f"  ✓ {fam}: {python_path}")
+        except BootstrapError as exc:
+            typer.echo(f"  ✗ {fam}: {exc}", err=True)
+            raise typer.Exit(code=1) from exc
+
+
+@runtime_app.command("remove")
+def runtime_remove(
+    family: str = typer.Argument(
+        None,
+        help="Runner family to remove (torch, timesfm, uni2ts, sundial, toto).",
+    ),
+    all_families: bool = typer.Option(False, "--all", help="Remove all runner runtimes."),
+) -> None:
+    """Remove an isolated runner virtualenv."""
+    families = _resolve_runtime_families(family, all_families=all_families)
+    paths = TollamaPaths.default()
+
+    for fam in families:
+        removed = remove_family_runtime(fam, paths=paths)
+        if removed:
+            typer.echo(f"  ✓ removed {fam}")
+        else:
+            typer.echo(f"  — {fam} not installed")
+
+
+@runtime_app.command("update")
+def runtime_update(
+    family: str = typer.Argument(
+        None,
+        help="Runner family to update.",
+    ),
+    all_families: bool = typer.Option(False, "--all", help="Update all installed runtimes."),
+) -> None:
+    """Reinstall runner runtime(s) to pick up tollama version changes."""
+    paths = TollamaPaths.default()
+
+    if all_families:
+        statuses = list_runtime_statuses(paths=paths)
+        families = [s["family"] for s in statuses if s["installed"]]
+        if not families:
+            typer.echo("No runtimes installed.")
+            return
+    elif family:
+        families = [family]
+    else:
+        typer.echo("Error: provide a family name or --all", err=True)
+        raise typer.Exit(code=1)
+
+    for fam in families:
+        typer.echo(f"Updating runtime for {fam!r} …")
+        try:
+            python_path = ensure_family_runtime(fam, paths=paths, reinstall=True)
+            typer.echo(f"  ✓ {fam}: {python_path}")
+        except BootstrapError as exc:
+            typer.echo(f"  ✗ {fam}: {exc}", err=True)
+            raise typer.Exit(code=1) from exc
+
+
+def _resolve_runtime_families(family: str | None, *, all_families: bool) -> list[str]:
+    """Resolve family argument + --all flag to a list of family names."""
+    if all_families:
+        return list(_ALL_BOOTSTRAPPABLE)
+    if family is None:
+        typer.echo("Error: provide a family name or --all", err=True)
+        raise typer.Exit(code=1)
+    if family not in FAMILY_EXTRAS:
+        typer.echo(
+            f"Error: unknown family {family!r}; choose from {', '.join(FAMILY_EXTRAS)}",
+            err=True,
+        )
+        raise typer.Exit(code=1)
+    return [family]
 
 
 def main() -> None:

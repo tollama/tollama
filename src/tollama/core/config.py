@@ -32,6 +32,8 @@ class DaemonDefaults(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
 
     host: StrictStr | None = None
+    auto_bootstrap: StrictBool = True
+    runner_commands: dict[StrictStr, list[StrictStr]] | None = None
 
 
 class TollamaConfig(BaseModel):

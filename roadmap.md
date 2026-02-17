@@ -143,19 +143,32 @@ tollama/
   - `licenses/`
 - Define cleanup, retention, and lifecycle rules for each directory.
 
-## 7) Runner environments (dependency isolation) [~]
+## 7) Runner environments (dependency isolation) [x]
 ### Current implementation status
 - Family routing supports separate command targets per family.
 - Optional extras are available for each heavy family:
   - `runner_torch`
   - `runner_timesfm`
   - `runner_uni2ts`
+  - `runner_sundial`
+  - `runner_toto`
 - Default `mock` and `torch` launches use interpreter-module commands.
 - `timesfm` and `uni2ts` launch via console entrypoints intended for separate env/runtime installs.
+- **Per-family venv auto-bootstrap** implemented under `~/.tollama/runtimes/<family>/venv/`.
+  - `core/runtime_bootstrap.py` handles venv creation, pip install, staleness detection.
+  - `RunnerManager` integrates auto-bootstrap: when `daemon.auto_bootstrap` is enabled,
+    runner subprocesses use an isolated venv Python interpreter.
+  - Staleness detection compares `tollama_version` in `installed.json` state file.
+  - Manual override via `config.json` `daemon.runner_commands` takes precedence.
+- CLI `tollama runtime` subcommand group:
+  - `tollama runtime install <family>` / `--all` — eagerly create isolated venvs.
+  - `tollama runtime remove <family>` / `--all` — delete isolated venvs.
+  - `tollama runtime update <family>` / `--all` — reinstall to pick up version changes.
+  - `tollama runtime list` — show per-family runtime status.
 
 ### Planned work / TODO
-- Implement per-family runtime bootstrap under `~/.tollama/runtimes/`.
-- Add automated install/repair flows for each runner family.
+- Add progress reporting for long-running pip install during auto-bootstrap.
+- Add support for specifying a custom Python interpreter per family in config.
 - Make single-install UX product-grade while preserving dependency isolation.
 
 ## 8) Daemon supervisor lifecycle & VRAM reclaim [~]
@@ -334,7 +347,7 @@ Phase F - Product hardening:
 
 ## Prioritized TODO backlog
 1. Implement supervisor restart backoff policy and startup handshake/health checks.
-2. Add per-family runtime bootstrap/install automation under `~/.tollama/runtimes/`.
+2. ~~Add per-family runtime bootstrap/install automation under `~/.tollama/runtimes/`.~~ ✓ Implemented.
 3. Add metrics endpoint and structured runtime telemetry.
 4. Add cache/memory policy controls (LRU + limits + reclaim behavior).
 5. Add static covariates support and capability flags.
