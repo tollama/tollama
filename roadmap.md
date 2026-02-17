@@ -1,6 +1,6 @@
 # tollama roadmap (worker-per-model-family)
 
-Last updated: 2026-02-16
+Last updated: 2026-02-17
 
 Status legend:
 - `[x]` implemented
@@ -34,7 +34,7 @@ the optional future `packages/*` split as a migration phase.
 - Runners (`src/tollama/runners/`) communicate over stdio JSON lines.
 - Shared core (`src/tollama/core/`) provides schemas, protocol, registry/storage/config helpers.
 - CLI (`src/tollama/cli/`) provides user commands and daemon HTTP client integration.
-- Active runner implementations: `mock`, `torch`, `timesfm`, `uni2ts`.
+- Active runner implementations: `mock`, `torch`, `timesfm`, `uni2ts`, `sundial`, `toto`.
 
 ### Planned work / TODO
 - Keep daemon free of heavy ML runtime imports and dependencies.
