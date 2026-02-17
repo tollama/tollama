@@ -545,7 +545,7 @@ def generate_future_timestamps(
         raise AdapterInputError("horizon must be greater than zero")
 
     parsed = pandas_module.to_datetime([last_timestamp], utc=True, errors="raise")
-    if not parsed:
+    if len(parsed) == 0:
         raise AdapterInputError("series timestamp parsing returned no values")
     start = parsed[0]
     try:
@@ -626,6 +626,8 @@ def _coerce_timestamp_like(value: Any) -> str | None:
 
 def _to_iso_timestamp(value: Any) -> str:
     if isinstance(value, datetime):
+        if value.tzinfo is None:
+            value = value.replace(tzinfo=UTC)
         return value.astimezone(UTC).isoformat().replace("+00:00", "Z")
     return str(value)
 

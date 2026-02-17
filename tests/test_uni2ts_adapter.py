@@ -15,6 +15,7 @@ from tollama.runners.uni2ts_runner.adapter import (
     generate_future_timestamps,
     normalize_forecast_vector,
     resolve_context_length,
+    resolve_forecast_start_timestamp,
 )
 from tollama.runners.uni2ts_runner.errors import AdapterInputError
 
@@ -35,6 +36,36 @@ class _FakePandas:
     @staticmethod
     def DataFrame(payload, index=None):  # noqa: ANN001
         return {"payload": payload, "index": index}
+
+
+class _AmbiguousDatetimeIndex:
+    def __init__(self, values: list[datetime]) -> None:
+        self._values = values
+
+    def __len__(self) -> int:
+        return len(self._values)
+
+    def __getitem__(self, index: int) -> datetime:
+        return self._values[index]
+
+    def __bool__(self) -> bool:
+        raise ValueError("ambiguous truth value")
+
+
+class _FakePandasAmbiguousBool:
+    @staticmethod
+    def to_datetime(values, *, utc: bool, errors: str):  # noqa: ANN001
+        assert utc is True
+        assert errors == "raise"
+        return _AmbiguousDatetimeIndex(
+            [datetime.fromisoformat(value).replace(tzinfo=UTC) for value in values],
+        )
+
+    @staticmethod
+    def date_range(*, start: datetime, periods: int, freq: str):
+        if freq != "D":
+            raise ValueError("unsupported frequency")
+        return [start + timedelta(days=index) for index in range(periods)]
 
 
 class _FakeNumpy:
@@ -152,6 +183,30 @@ def test_generate_future_timestamps_daily() -> None:
         "2025-02-02T00:00:00Z",
         "2025-02-03T00:00:00Z",
     ]
+
+
+def test_generate_future_timestamps_handles_ambiguous_index_truthiness() -> None:
+    timestamps = generate_future_timestamps(
+        last_timestamp="2025-01-31",
+        freq="D",
+        horizon=2,
+        pandas_module=_FakePandasAmbiguousBool(),
+    )
+    assert timestamps == [
+        "2025-02-01T00:00:00Z",
+        "2025-02-02T00:00:00Z",
+    ]
+
+
+def test_resolve_forecast_start_timestamp_localizes_naive_datetime() -> None:
+    series = _series(3)
+    start_timestamp = resolve_forecast_start_timestamp(
+        forecast=type("_Forecast", (), {"start_date": datetime(2025, 2, 1)})(),
+        series=series,
+        pandas_module=_FakePandas(),
+        horizon=2,
+    )
+    assert start_timestamp == "2025-02-01T00:00:00Z"
 
 
 def test_build_pandas_dataset_maps_dynamic_and_past_dynamic_covariates() -> None:

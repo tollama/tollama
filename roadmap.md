@@ -283,6 +283,10 @@ tollama/
 - Baseline checks currently pass:
   - `ruff check .`
   - `pytest -q` (heavy integration tests stay opt-in)
+- Optional real-model integration matrix was re-validated on `2026-02-17`:
+  - pass: `chronos2`, `granite-ttm-r2`, `timesfm-2.5-200m`, `moirai-2.0-R-small`,
+    `sundial-base-128m`
+  - skipped: `toto-open-base-1.0` when `toto` dependency is not installed
 
 ### Planned work / TODO
 - Add restart backoff and idle-timeout policy behavior tests.
@@ -361,4 +365,5 @@ Phase F - Product hardening:
 - `[x]` Endpoint inventory in section 11 is aligned with current API routes.
 - `[x]` Phased checklist in section 15 reflects current delivery status.
 - `[x]` Baseline verification state (`ruff check .`, `pytest -q`) is reflected from latest passing run.
+- `[x]` Optional real-model integration matrix status is reflected with date and outcomes.
 - `[x]` Migration notes in section 2 remain aligned with active repository layout.

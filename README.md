@@ -45,6 +45,29 @@ ruff check .
 pytest -q
 ```
 
+## E2E Integration Snapshot (2026-02-17)
+
+Optional real-model integration tests were re-run with:
+
+```bash
+TOLLAMA_RUN_INTEGRATION_TESTS=1 TOLLAMA_TOTO_INTEGRATION_CPU=1 pytest -q -rs \
+  tests/test_chronos_integration.py \
+  tests/test_granite_integration.py \
+  tests/test_timesfm_integration.py \
+  tests/test_uni2ts_integration.py \
+  tests/test_sundial_integration.py \
+  tests/test_toto_integration.py
+```
+
+| Model | Test | Result |
+|---|---|---|
+| `chronos2` | `tests/test_chronos_integration.py` | pass |
+| `granite-ttm-r2` | `tests/test_granite_integration.py` | pass |
+| `timesfm-2.5-200m` | `tests/test_timesfm_integration.py` | pass |
+| `moirai-2.0-R-small` | `tests/test_uni2ts_integration.py` | pass |
+| `sundial-base-128m` | `tests/test_sundial_integration.py` | pass |
+| `toto-open-base-1.0` | `tests/test_toto_integration.py` | skipped (`toto` package missing) |
+
 For one environment that supports all current model families, use Python `3.11` and install
 all runner extras into the same `.venv`.
 

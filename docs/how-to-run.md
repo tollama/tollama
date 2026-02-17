@@ -401,6 +401,31 @@ Forecast timeout (`failed: timed out` / runner timeout):
 - You can also set a higher default for the daemon:
   - `export TOLLAMA_FORECAST_TIMEOUT_SECONDS=600`
 
+## Integration Matrix Snapshot (2026-02-17)
+
+Latest optional integration run (`TOLLAMA_RUN_INTEGRATION_TESTS=1`) result:
+
+| Model | Result | Notes |
+|---|---|---|
+| `chronos2` | pass | `tests/test_chronos_integration.py` |
+| `granite-ttm-r2` | pass | `tests/test_granite_integration.py` |
+| `timesfm-2.5-200m` | pass | `tests/test_timesfm_integration.py` |
+| `moirai-2.0-R-small` | pass | `tests/test_uni2ts_integration.py` |
+| `sundial-base-128m` | pass | `tests/test_sundial_integration.py` |
+| `toto-open-base-1.0` | skipped | `tests/test_toto_integration.py` (`No module named 'toto'`) |
+
+To reproduce:
+
+```bash
+TOLLAMA_RUN_INTEGRATION_TESTS=1 TOLLAMA_TOTO_INTEGRATION_CPU=1 pytest -q -rs \
+  tests/test_chronos_integration.py \
+  tests/test_granite_integration.py \
+  tests/test_timesfm_integration.py \
+  tests/test_uni2ts_integration.py \
+  tests/test_sundial_integration.py \
+  tests/test_toto_integration.py
+```
+
 ## Development Checks
 
 ```bash

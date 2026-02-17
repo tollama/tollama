@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import select
 import shutil
 import subprocess
@@ -51,13 +52,14 @@ class RunnerSupervisor:
     def __init__(self, runner_command: Sequence[str] | None = None) -> None:
         default_command = (sys.executable, "-m", "tollama.runners.mock.main")
         self._runner_command = list(runner_command or default_command)
-        self._process: subprocess.Popen[str] | None = None
+        self._process: subprocess.Popen[bytes] | None = None
         self._lock = threading.Lock()
         self._started_at: datetime | None = None
         self._last_used_at: datetime | None = None
         self._restarts = 0
         self._last_error_message: str | None = None
         self._last_error_at: datetime | None = None
+        self._stdout_buffer = bytearray()
 
     def start(self) -> None:
         """Start the runner process if it is not currently running."""
@@ -147,7 +149,7 @@ class RunnerSupervisor:
 
     def _call_once_locked(
         self,
-        process: subprocess.Popen[str],
+        process: subprocess.Popen[bytes],
         request: ProtocolRequest,
         timeout: float,
     ) -> dict[str, Any]:
@@ -160,7 +162,7 @@ class RunnerSupervisor:
             raise RunnerUnavailableError(self._dead_process_message(process))
 
         try:
-            stdin.write(encode_line(request))
+            stdin.write(encode_line(request).encode("utf-8"))
             stdin.flush()
         except OSError as exc:
             raise RunnerUnavailableError(f"failed to write to runner: {exc}") from exc
@@ -196,24 +198,43 @@ class RunnerSupervisor:
 
             return result
 
-    def _readline_with_timeout(self, process: subprocess.Popen[str], timeout: float) -> str:
+    def _readline_with_timeout(self, process: subprocess.Popen[bytes], timeout: float) -> str:
         stdout = process.stdout
         if stdout is None:
             raise RunnerUnavailableError("runner stdout is not available")
 
-        ready, _, _ = select.select([stdout], [], [], timeout)
-        if not ready:
-            if process.poll() is not None:
+        deadline = time.monotonic() + timeout
+        while True:
+            line = self._consume_buffered_line()
+            if line is not None:
+                return line
+
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                if process.poll() is not None:
+                    raise RunnerUnavailableError(self._dead_process_message(process))
+                raise RunnerUnavailableError(f"runner call timed out after {timeout:.2f}s")
+
+            ready, _, _ = select.select([stdout], [], [], remaining)
+            if not ready:
+                if process.poll() is not None:
+                    raise RunnerUnavailableError(self._dead_process_message(process))
+                raise RunnerUnavailableError(f"runner call timed out after {timeout:.2f}s")
+
+            chunk = os.read(stdout.fileno(), 4096)
+            if not chunk:
                 raise RunnerUnavailableError(self._dead_process_message(process))
-            raise RunnerUnavailableError(f"runner call timed out after {timeout:.2f}s")
+            self._stdout_buffer.extend(chunk)
 
-        line = stdout.readline()
-        if line:
-            return line
+    def _consume_buffered_line(self) -> str | None:
+        newline_index = self._stdout_buffer.find(b"\n")
+        if newline_index < 0:
+            return None
+        line = bytes(self._stdout_buffer[: newline_index + 1])
+        del self._stdout_buffer[: newline_index + 1]
+        return line.decode("utf-8", errors="replace")
 
-        raise RunnerUnavailableError(self._dead_process_message(process))
-
-    def _ensure_running_locked(self) -> subprocess.Popen[str]:
+    def _ensure_running_locked(self) -> subprocess.Popen[bytes]:
         process = self._process
         if process is not None and process.poll() is None:
             return process
@@ -240,10 +261,11 @@ class RunnerSupervisor:
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
-                text=True,
-                bufsize=1,
+                text=False,
+                bufsize=0,
             )
             self._started_at = datetime.now(UTC)
+            self._stdout_buffer.clear()
         except OSError as exc:
             self._process = None
             self._started_at = None
@@ -281,14 +303,19 @@ class RunnerSupervisor:
 
         self._process = None
         self._started_at = None
+        self._stdout_buffer.clear()
 
-    def _dead_process_message(self, process: subprocess.Popen[str]) -> str:
+    def _dead_process_message(self, process: subprocess.Popen[bytes]) -> str:
         returncode = process.poll()
         stderr = process.stderr
         stderr_tail = ""
         if stderr is not None:
             try:
-                stderr_tail = stderr.read().strip()
+                raw_stderr = stderr.read()
+                if isinstance(raw_stderr, bytes):
+                    stderr_tail = raw_stderr.decode("utf-8", errors="replace").strip()
+                else:
+                    stderr_tail = raw_stderr.strip()
             except OSError:
                 stderr_tail = ""
 

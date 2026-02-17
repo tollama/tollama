@@ -143,4 +143,8 @@
 - [x] (P1) covariates strict/best_effort 정책 모델별 표준화 (warning 템플릿 포함)
 - [ ] (P1) `tollama doctor` 설계
   - `pull/runner start/GPU/offline/forecast smoke test` 시나리오 확정
-
+- [x] (P1) 6개 모델 e2e 통합 테스트 매트릭스 재검증 + 문서 동기화
+  - 기준 일자: `2026-02-17`
+  - pass: `chronos2`, `granite-ttm-r2`, `timesfm-2.5-200m`,
+    `moirai-2.0-R-small`, `sundial-base-128m`
+  - skipped: `toto-open-base-1.0` (`toto` 패키지 미설치 환경)

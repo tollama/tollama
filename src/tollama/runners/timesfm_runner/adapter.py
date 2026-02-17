@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import inspect
+import math
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -14,6 +15,9 @@ from tollama.core.schemas import ForecastRequest, ForecastResponse, SeriesForeca
 from .errors import AdapterInputError, DependencyMissingError, UnsupportedModelError
 
 _DEFAULT_QUANTILES = (0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9)
+_NON_FINITE_FORECAST_WARNING = (
+    "TimesFM produced non-finite forecast values; replaced them with fallback values."
+)
 _TIMESFM_MODELS: dict[str, dict[str, Any]] = {
     "timesfm-2.5-200m": {
         "repo_id": "google/timesfm-2.5-200m-pytorch",
@@ -179,6 +183,11 @@ class TimesFMAdapter:
             n_series=len(request.series),
             horizon=request.horizon,
         )
+        point_values, quantile_payloads, replaced_non_finite = _sanitize_non_finite_forecasts(
+            series_list=request.series,
+            point_values=point_values,
+            quantile_payloads=quantile_payloads,
+        )
 
         forecasts: list[SeriesForecast] = []
         for index, series in enumerate(request.series):
@@ -198,6 +207,10 @@ class TimesFMAdapter:
                 ),
             )
 
+        warnings = list(covariate_payload.warnings)
+        if replaced_non_finite:
+            warnings.append(_NON_FINITE_FORECAST_WARNING)
+
         return ForecastResponse(
             model=request.model,
             forecasts=forecasts,
@@ -207,7 +220,7 @@ class TimesFMAdapter:
                 "series_count": len(request.series),
                 "horizon": request.horizon,
             },
-            warnings=covariate_payload.warnings or None,
+            warnings=warnings or None,
         )
 
     def _get_or_compile_model(
@@ -617,7 +630,7 @@ def generate_future_timestamps(
         raise AdapterInputError("horizon must be greater than zero")
 
     parsed = pandas_module.to_datetime([last_timestamp], utc=True, errors="raise")
-    if not parsed:
+    if len(parsed) == 0:
         raise AdapterInputError("series timestamp parsing returned no values")
     start = parsed[0]
     try:
@@ -801,8 +814,70 @@ def _to_float(value: Any) -> float:
 
 def _to_iso_timestamp(value: Any) -> str:
     if isinstance(value, datetime):
+        if value.tzinfo is None:
+            value = value.replace(tzinfo=UTC)
         return value.astimezone(UTC).isoformat().replace("+00:00", "Z")
     return str(value)
+
+
+def _sanitize_non_finite_forecasts(
+    *,
+    series_list: Sequence[SeriesInput],
+    point_values: list[list[float]],
+    quantile_payloads: list[dict[str, list[float]] | None],
+) -> tuple[list[list[float]], list[dict[str, list[float]] | None], bool]:
+    """Replace non-finite forecast values with stable fallbacks."""
+    sanitized_points: list[list[float]] = []
+    sanitized_quantiles: list[dict[str, list[float]] | None] = []
+    replaced_any = False
+
+    for series, point_row, quantile_row in zip(
+        series_list,
+        point_values,
+        quantile_payloads,
+        strict=True,
+    ):
+        fallback_value = _series_fallback_value(series.target)
+        clean_point: list[float] = []
+        for value in point_row:
+            normalized = float(value)
+            if not math.isfinite(normalized):
+                normalized = fallback_value
+                replaced_any = True
+            clean_point.append(normalized)
+        sanitized_points.append(clean_point)
+
+        if quantile_row is None:
+            sanitized_quantiles.append(None)
+            continue
+
+        clean_quantiles: dict[str, list[float]] = {}
+        for quantile_key, values in quantile_row.items():
+            clean_values: list[float] = []
+            for index, value in enumerate(values):
+                normalized = float(value)
+                if not math.isfinite(normalized):
+                    normalized = clean_point[index]
+                    replaced_any = True
+                clean_values.append(normalized)
+            clean_quantiles[quantile_key] = clean_values
+        sanitized_quantiles.append(clean_quantiles)
+
+    return sanitized_points, sanitized_quantiles, replaced_any
+
+
+def _series_fallback_value(target: Sequence[int | float]) -> float:
+    """Return the latest finite target value or zero when no finite value exists."""
+    for value in reversed(target):
+        if isinstance(value, bool):
+            candidate = float(int(value))
+        elif isinstance(value, (int, float)):
+            candidate = float(value)
+        else:
+            continue
+        if math.isfinite(candidate):
+            return candidate
+    return 0.0
 
 
 def _existing_local_model_path(model_local_dir: str | None) -> str | None:
