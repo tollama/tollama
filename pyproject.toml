@@ -39,6 +39,7 @@ dev = [
 runner_torch = [
   "chronos-forecasting>=2.0",
   "granite-tsfm>=0.3.0,<0.4",
+  "torch>=2.0",
   "pandas>=2.0,<3.0",
   "numpy>=1.26,<3.0",
 ]
@@ -46,7 +47,7 @@ runner_timesfm = [
   "numpy>=1.26,<3.0",
   "pandas>=2.0,<3.0",
   "huggingface_hub>=0.20,<1.0",
-  "timesfm[torch] @ git+https://github.com/google-research/timesfm.git",
+  "timesfm[torch] @ git+https://github.com/google-research/timesfm.git@v2.0.0",
 ]
 runner_uni2ts = [
   "uni2ts>=2.0.0",
@@ -56,7 +57,7 @@ runner_uni2ts = [
   "gluonts>=0.14.0,<0.16.0",
 ]
 runner_sundial = [
-  "transformers>=4.40,<5.0",
+  "transformers>=4.40.1,<5.0",
   "torch>=2.0",
   "numpy>=1.26,<3.0",
   "pandas>=2.0,<3.0",

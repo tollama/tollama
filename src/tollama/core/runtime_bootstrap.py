@@ -17,6 +17,7 @@ import logging
 import platform
 import shutil
 import subprocess
+import sys
 import venv
 from datetime import UTC, datetime
 from pathlib import Path
@@ -38,10 +39,13 @@ FAMILY_EXTRAS: dict[str, str] = {
     "toto": "runner_toto",
 }
 
-# Families that are known to require a specific Python version ceiling.
-# The value is a human-readable note appended to warnings.
-FAMILY_PYTHON_NOTES: dict[str, str] = {
-    "uni2ts": "Uni2TS/Moirai may require Python <=3.11",
+# Families that require specific Python versions.
+# uni2ts and timesfm have build-time or runtime failures on Python 3.12+.
+# The constraint is checked before creating the venv so users get a clear
+# error early rather than a cryptic pip failure.
+FAMILY_PYTHON_CONSTRAINTS: dict[str, str] = {
+    "uni2ts": "<3.12",
+    "timesfm": "<3.12",
 }
 
 # Module paths used to build runner commands.
@@ -91,12 +95,29 @@ def ensure_family_runtime(
         logger.debug("runtime for family %r is up-to-date at %s", family, venv_dir)
         return python_path
 
+    _check_python_version(family)
     logger.info("bootstrapping isolated runtime for family %r …", family)
     _create_venv(venv_dir)
     _install_extras(python_path, family)
     _write_runtime_state(family_dir, family)
     logger.info("runtime for family %r ready at %s", family, venv_dir)
     return python_path
+
+
+def _check_python_version(family: str) -> None:
+    """Verify that the current Python interpreter meets the family's constraints."""
+    constraint = FAMILY_PYTHON_CONSTRAINTS.get(family)
+    if not constraint:
+        return
+
+    # Simple check for "<3.12" style constraints.
+    py_ver = sys.version_info[:2]
+
+    if constraint == "<3.12" and py_ver >= (3, 12):
+        raise BootstrapError(
+            f"Family {family!r} requires Python {constraint}, but current python is "
+            f"{sys.version.split()[0]}.  Please run tollama with Python 3.11."
+        )
 
 
 def remove_family_runtime(
@@ -124,6 +145,8 @@ def get_runtime_status(
     family_dir = resolved_paths.runtimes_dir / family
     state_path = family_dir / _STATE_FILENAME
 
+    python_constraint = FAMILY_PYTHON_CONSTRAINTS.get(family)
+
     if not state_path.is_file():
         return {
             "family": family,
@@ -132,6 +155,7 @@ def get_runtime_status(
             "tollama_version": None,
             "extra": FAMILY_EXTRAS.get(family),
             "python_version": None,
+            "python_constraint": python_constraint,
             "installed_at": None,
         }
 
@@ -143,6 +167,7 @@ def get_runtime_status(
         "tollama_version": state.get("tollama_version"),
         "extra": state.get("extra"),
         "python_version": state.get("python_version"),
+        "python_constraint": python_constraint,
         "installed_at": state.get("installed_at"),
     }
 

@@ -143,6 +143,41 @@ def test_ensure_rejects_unknown_family(tmp_path: Path) -> None:
         ensure_family_runtime("unknown_family", paths=paths)
 
 
+def test_python_version_check_blocks_312_for_uni2ts(tmp_path: Path) -> None:
+    paths = _paths(tmp_path)
+    with patch("tollama.core.runtime_bootstrap.sys") as mock_sys:
+        mock_sys.version_info = (3, 12, 0, "final", 0)
+        mock_sys.version = "3.12.0 (main, Oct  1 2024)"
+        with pytest.raises(BootstrapError, match="requires Python <3.12"):
+            ensure_family_runtime("uni2ts", paths=paths)
+
+
+def test_python_version_check_blocks_312_for_timesfm(tmp_path: Path) -> None:
+    paths = _paths(tmp_path)
+    with patch("tollama.core.runtime_bootstrap.sys") as mock_sys:
+        mock_sys.version_info = (3, 12, 0, "final", 0)
+        mock_sys.version = "3.12.0 (main, Oct  1 2024)"
+        with pytest.raises(BootstrapError, match="requires Python <3.12"):
+            ensure_family_runtime("timesfm", paths=paths)
+
+
+@patch("tollama.core.runtime_bootstrap._install_extras")
+@patch("tollama.core.runtime_bootstrap._create_venv")
+def test_python_version_check_allows_311_for_uni2ts(
+    mock_create: MagicMock, mock_install: MagicMock, tmp_path: Path,
+) -> None:
+    paths = _paths(tmp_path)
+
+    mock_create.side_effect = lambda vd: _write_fake_python(paths, "uni2ts")
+
+    with patch("tollama.core.runtime_bootstrap.sys") as mock_sys:
+        mock_sys.version_info = (3, 11, 7, "final", 0)
+        mock_sys.version = "3.11.7 (main, Oct  1 2024)"
+        ensure_family_runtime("uni2ts", paths=paths)
+
+    mock_create.assert_called_once()
+
+
 # ---------------------------------------------------------------------------
 # remove_family_runtime
 # ---------------------------------------------------------------------------
@@ -181,6 +216,7 @@ def test_get_status_installed(tmp_path: Path) -> None:
     assert status["family"] == "sundial"
     assert status["extra"] == "runner_sundial"
     assert status["tollama_version"] is not None
+    assert status["python_constraint"] is None  # sundial has no constraint
 
 
 def test_get_status_not_installed(tmp_path: Path) -> None:
@@ -190,6 +226,23 @@ def test_get_status_not_installed(tmp_path: Path) -> None:
 
     assert status["installed"] is False
     assert status["family"] == "sundial"
+    assert status["python_constraint"] is None
+
+
+def test_get_status_shows_python_constraint_for_uni2ts(tmp_path: Path) -> None:
+    paths = _paths(tmp_path)
+
+    status = get_runtime_status("uni2ts", paths=paths)
+
+    assert status["python_constraint"] == "<3.12"
+
+
+def test_get_status_shows_python_constraint_for_timesfm(tmp_path: Path) -> None:
+    paths = _paths(tmp_path)
+
+    status = get_runtime_status("timesfm", paths=paths)
+
+    assert status["python_constraint"] == "<3.12"
 
 
 def test_list_statuses_covers_all_families(tmp_path: Path) -> None:

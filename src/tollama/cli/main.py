@@ -866,7 +866,12 @@ def runtime_list(
         mark = "✓" if entry["installed"] else "✗"
         version = entry.get("tollama_version") or "—"
         py_ver = entry.get("python_version") or "—"
-        typer.echo(f"  {mark}  {entry['family']:<12}  tollama={version}  python={py_ver}")
+        constraint = entry.get("python_constraint")
+        constraint_tag = f"  (requires python{constraint})" if constraint else ""
+        typer.echo(
+            f"  {mark}  {entry['family']:<12}  tollama={version}"
+            f"  python={py_ver}{constraint_tag}"
+        )
 
 
 @runtime_app.command("install")
