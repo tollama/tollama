@@ -47,7 +47,7 @@ runner_timesfm = [
   "numpy>=1.26,<3.0",
   "pandas>=2.0,<3.0",
   "huggingface_hub>=0.20,<1.0",
-  "timesfm[torch] @ git+https://github.com/google-research/timesfm.git@v2.0.0",
+  "timesfm[torch] @ git+https://github.com/google-research/timesfm.git@2dcc66fbfe2155adba1af66aa4d564a0ee52f61e",
 ]
 runner_uni2ts = [
   "uni2ts>=2.0.0",
