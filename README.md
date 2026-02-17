@@ -87,6 +87,22 @@ TOLLAMA_RUN_INTEGRATION_TESTS=1 TOLLAMA_TOTO_INTEGRATION_CPU=1 pytest -q -rs \
 | `sundial-base-128m` | `tests/test_sundial_integration.py` | pass |
 | `toto-open-base-1.0` | `tests/test_toto_integration.py` | skipped (`toto` package missing) |
 
+Per-family runtime isolation smoke was also re-verified on `2026-02-17`
+after updating the TimesFM dependency pin to
+`git+https://github.com/google-research/timesfm.git@2dcc66fbfe2155adba1af66aa4d564a0ee52f61e`.
+
+| Model | Runtime Isolation Smoke |
+|---|---|
+| `chronos2` | pass |
+| `granite-ttm-r2` | pass |
+| `timesfm-2.5-200m` | pass |
+| `moirai-2.0-R-small` | pass |
+| `sundial-base-128m` | pass |
+| `toto-open-base-1.0` | pass |
+
+All runner commands were confirmed from `/api/info` to use
+`~/.tollama/runtimes/<family>/venv/bin/python`.
+
 Optional: one shared environment for all families (single-venv mode).
 Use this only when you intentionally disable auto-bootstrap as shown above.
 

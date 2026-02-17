@@ -148,3 +148,6 @@
   - pass: `chronos2`, `granite-ttm-r2`, `timesfm-2.5-200m`,
     `moirai-2.0-R-small`, `sundial-base-128m`
   - skipped: `toto-open-base-1.0` (`toto` 패키지 미설치 환경)
+  - 추가 재검증(per-family runtime isolation smoke, TimesFM pin 수정 후):
+    `chronos2`, `granite-ttm-r2`, `timesfm-2.5-200m`, `moirai-2.0-R-small`,
+    `sundial-base-128m`, `toto-open-base-1.0` 모두 pass

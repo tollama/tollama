@@ -435,6 +435,21 @@ TOLLAMA_RUN_INTEGRATION_TESTS=1 TOLLAMA_TOTO_INTEGRATION_CPU=1 pytest -q -rs \
   tests/test_toto_integration.py
 ```
 
+Per-family runtime isolation smoke re-run (`tollama runtime install --all` +
+one forecast per family) on `2026-02-17` after the TimesFM pin update:
+
+| Model | Result | Notes |
+|---|---|---|
+| `chronos2` | pass | `tollama run chronos2 --input examples/chronos2_request.json --no-stream` |
+| `granite-ttm-r2` | pass | `tollama run granite-ttm-r2 --input examples/granite_ttm_request.json --no-stream` |
+| `timesfm-2.5-200m` | pass | `tollama run timesfm-2.5-200m --input examples/timesfm_2p5_request.json --no-stream` |
+| `moirai-2.0-R-small` | pass | `tollama run moirai-2.0-R-small --input examples/moirai_2p0_request.json --no-stream --timeout 600` |
+| `sundial-base-128m` | pass | `tollama run sundial-base-128m --input examples/sundial_request.json --no-stream` |
+| `toto-open-base-1.0` | pass | `tollama run toto-open-base-1.0 --input examples/toto_request.json --no-stream` |
+
+`/api/info` confirmed all families used isolated runtime commands under
+`~/.tollama/runtimes/<family>/venv/bin/python`.
+
 ## Development Checks
 
 ```bash

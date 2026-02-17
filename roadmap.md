@@ -295,6 +295,11 @@ tollama/
   - pass: `chronos2`, `granite-ttm-r2`, `timesfm-2.5-200m`, `moirai-2.0-R-small`,
     `sundial-base-128m`
   - skipped: `toto-open-base-1.0` when `toto` dependency is not installed
+- Per-family runtime isolation smoke (`tollama runtime install --all` + one
+  forecast per family) was re-validated on `2026-02-17` after updating the
+  TimesFM dependency pin to commit `2dcc66fbfe2155adba1af66aa4d564a0ee52f61e`:
+  - pass: `chronos2`, `granite-ttm-r2`, `timesfm-2.5-200m`,
+    `moirai-2.0-R-small`, `sundial-base-128m`, `toto-open-base-1.0`
 
 ### Planned work / TODO
 - Add restart backoff and idle-timeout policy behavior tests.
