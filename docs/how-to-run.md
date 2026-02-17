@@ -39,7 +39,7 @@ Recommended:
 - A dedicated virtual environment
 - A Hugging Face token (`TOLLAMA_HF_TOKEN`) for gated/private models
 - Preinstalled PyTorch wheel for your platform if you need GPU acceleration
-- Python `3.11` for one environment covering all model families
+- Python `3.11` for stable per-family runtime bootstrap
 - Python `3.12+` may fail to resolve/install `gluonts` required by `runner_uni2ts` + `runner_toto`
 
 ## Dependency Matrix
@@ -59,7 +59,7 @@ Optional extras:
 | `runner_sundial` | Sundial runner dependencies | `transformers`, `torch`, `numpy`, `pandas`, `huggingface_hub` |
 | `runner_toto` | Toto runner dependencies | `toto-ts`, `torch`, `numpy`, `pandas` |
 
-## One-Time Environment Setup
+## One-Time Environment Setup (Default: Per-Family Runtime Isolation)
 
 From repository root:
 
@@ -72,13 +72,16 @@ python -m pip install --upgrade pip setuptools wheel
 Install everything needed for development plus all runner families:
 
 ```bash
-python -m pip install -e ".[dev,runner_torch,runner_timesfm,runner_uni2ts,runner_sundial,runner_toto]"
+python -m pip install -e ".[dev]"
 ```
 
-If you only need runtime (no lint/test tooling):
+With the default `daemon.auto_bootstrap=true`, family runtimes are created lazily under
+`~/.tollama/runtimes/<family>/venv/` on first use.
+
+If you prefer single-environment mode (legacy), install all runner extras in the same `.venv`:
 
 ```bash
-python -m pip install -e ".[runner_torch,runner_timesfm,runner_uni2ts,runner_sundial,runner_toto]"
+python -m pip install -e ".[dev,runner_torch,runner_timesfm,runner_uni2ts,runner_sundial,runner_toto]"
 ```
 
 ## Single-Environment Checklist (Legacy)
@@ -118,8 +121,8 @@ curl -s http://127.0.0.1:11435/api/info | rg '"command"|uni2ts|timesfm|sundial|t
 
 Each runner family can be installed into its own virtualenv under
 `~/.tollama/runtimes/<family>/venv/`.  This avoids dependency conflicts
-(e.g. different `torch`, `transformers`, `gluonts` versions) and lets each
-model run independently.
+(e.g. different `torch`, `transformers`, `gluonts` versions) and isolates
+runner families from each other.
 
 ### Automatic bootstrap (lazy)
 
@@ -352,6 +355,9 @@ License acceptance error (`409`):
 
 Missing runner dependency errors:
 
+- If `daemon.auto_bootstrap=true` (default), try preinstalling runtimes first:
+  - `tollama runtime list`
+  - `tollama runtime install --all`
 - Install the matching extras:
   - `python -m pip install -e ".[runner_torch]"`
   - `python -m pip install -e ".[runner_timesfm]"`
@@ -385,7 +391,10 @@ Daemon unreachable:
 Runner unavailable after restart:
 
 - Most commonly caused by mixed environments (for example daemon in one Python, runner scripts in another).
-- Recreate one `.venv` with Python 3.11, reinstall all runner extras, and launch with `./.venv/bin/tollama`.
+- Default mode: check per-family runtime status and reinstall as needed:
+  - `tollama runtime list`
+  - `tollama runtime install --all`
+- Single-venv mode: recreate one `.venv` with Python 3.11, reinstall all runner extras, and launch with `./.venv/bin/tollama`.
 - Also restart the daemon after dependency upgrades so stale runner subprocesses are not reused.
 
 Sundial `shape '[-1, 2]' is invalid for input of size 1`:

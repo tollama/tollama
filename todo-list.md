@@ -46,8 +46,8 @@
 - [x] (P0) Worker-per-model-family(런너 분리) 기본 구조 유지/강화
   - 현재 family: `torch`, `timesfm`, `uni2ts`, `sundial`, `toto` (+ `mock`)
 - [~] (P1) 런너별 종속성 충돌 방지 정책(버전 pin, lockfile, 독립 venv) 확립
-  - 현재: optional extras 분리는 있음
-  - TODO: family별 독립 runtime venv/lockfile 자동화 미구현
+  - 현재: optional extras 분리 + family별 독립 runtime venv 자동화 구현(`~/.tollama/runtimes/<family>/venv/`, `tollama runtime install/list/update/remove`)
+  - TODO: 버전 pin/lockfile 정책과 설치 재현성 보강
 - [ ] (P2) "Python 의존 최소화" 장기 트랙 정의
   - ONNX/TensorRT/LibTorch(C++)/Rust/Go 코어화 가능성 검토
   - (선택) 특정 모델용 컴파일 엔진 기반 고성능 런타임

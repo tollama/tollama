@@ -21,11 +21,8 @@ python3.11 -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip
 python -m pip install -e ".[dev]"
-python -m pip install -e ".[dev,runner_torch]"  # optional: torch runner (Chronos + Granite TTM)
-python -m pip install -e ".[dev,runner_timesfm]"  # optional: TimesFM runner
-python -m pip install -e ".[dev,runner_uni2ts]"  # optional: Uni2TS/Moirai runner
-python -m pip install -e ".[dev,runner_sundial]"  # optional: Sundial runner
-python -m pip install -e ".[dev,runner_toto]"  # optional: Toto runner
+# optional single-environment mode (not default):
+# python -m pip install -e ".[dev,runner_torch,runner_timesfm,runner_uni2ts,runner_sundial,runner_toto]"
 
 # Terminal 1: run daemon (default http://127.0.0.1:11435)
 tollama serve
@@ -43,6 +40,28 @@ curl http://localhost:11435/api/version
 
 ruff check .
 pytest -q
+```
+
+## Runner Runtime Mode (Default)
+
+Default daemon behavior is **family-level isolated runtimes** (not one venv per model):
+
+- `daemon.auto_bootstrap` defaults to `true`
+- first run for each family bootstraps `~/.tollama/runtimes/<family>/venv/`
+- active families: `torch`, `timesfm`, `uni2ts`, `sundial`, `toto`
+
+This allows different dependency sets per family without conflicts.
+
+If you prefer one shared `.venv` for all families, disable auto-bootstrap in
+`~/.tollama/config.json` and preinstall runner extras into that environment:
+
+```json
+{
+  "version": 1,
+  "daemon": {
+    "auto_bootstrap": false
+  }
+}
 ```
 
 ## E2E Integration Snapshot (2026-02-17)
@@ -68,8 +87,8 @@ TOLLAMA_RUN_INTEGRATION_TESTS=1 TOLLAMA_TOTO_INTEGRATION_CPU=1 pytest -q -rs \
 | `sundial-base-128m` | `tests/test_sundial_integration.py` | pass |
 | `toto-open-base-1.0` | `tests/test_toto_integration.py` | skipped (`toto` package missing) |
 
-For one environment that supports all current model families, use Python `3.11` and install
-all runner extras into the same `.venv`.
+Optional: one shared environment for all families (single-venv mode).
+Use this only when you intentionally disable auto-bootstrap as shown above.
 
 ```bash
 python3.11 -m venv .venv
@@ -81,7 +100,6 @@ which python
 which tollama
 which tollama-runner-uni2ts
 # all paths should resolve under .../tollama/.venv/bin/
-# daemon now launches all runner families with the same Python interpreter (`sys.executable`)
 
 ./.venv/bin/tollama serve
 ```
@@ -98,6 +116,8 @@ For a full setup/run walkthrough with dependency breakdown and commands to insta
 - Override daemon runner forecast timeout with `TOLLAMA_FORECAST_TIMEOUT_SECONDS` (default `300`).
 - Local tollama state lives under `~/.tollama` by default.
   - Override with `TOLLAMA_HOME=/custom/path` (config, models, runtimes all use this base).
+- Runner runtime default is per-family isolated venv under
+  `~/.tollama/runtimes/<family>/venv/` (`daemon.auto_bootstrap=true`).
 - Primary lifecycle endpoints are under `/api/*`.
   - `GET /api/info`
   - `GET /api/tags`

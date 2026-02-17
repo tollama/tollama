@@ -105,6 +105,8 @@ tollama/
   - `torch`: `hello`, `load`, `unload`, `forecast`
   - `timesfm`: `hello`, `unload`, `forecast`
   - `uni2ts`: `hello`, `unload`, `forecast`
+  - `sundial`: `hello`, `unload`, `forecast`
+  - `toto`: `hello`, `unload`, `forecast`
 
 ### Planned work / TODO
 - Standardize mandatory startup handshake semantics and health checks across all families.
@@ -203,7 +205,7 @@ tollama/
 
 ## 10) Runner internals [~]
 ### Current implementation status
-- `mock`, `torch`, `timesfm`, and `uni2ts` runner loops are implemented with stdio RPC handling.
+- `mock`, `torch`, `timesfm`, `uni2ts`, `sundial`, and `toto` runner loops are implemented with stdio RPC handling.
 - Torch runner router supports:
   - `ChronosAdapter` using `predict_df` + history/future dataframes
   - `GraniteTTMAdapter` using `future_time_series`, `control_columns`, and `conditional_columns`
@@ -214,6 +216,12 @@ tollama/
 - Uni2TS runner supports:
   - numeric dynamic covariates via `feat_dynamic_real`
   - numeric past covariates via `past_feat_dynamic_real`
+- Sundial runner supports:
+  - sample-based generation with canonical `mean`/`quantiles` projection
+  - forecast/unload/hello RPC parity with other families
+- Toto runner supports:
+  - variate-building adapter path and canonical output shaping
+  - forecast/unload/hello RPC parity with other families
 
 ### Planned work / TODO
 - Add cache policy controls (LRU, max loaded models, memory thresholds).
