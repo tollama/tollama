@@ -264,6 +264,7 @@ tollama/
 - API/model install paths enforce acceptance and return `409` when required acceptance is missing.
 - Manifest records acceptance state.
 - CLI supports `--accept-license` on pull/install paths.
+- Public-release checklist now documents license/compliance gates, including upstream registry license validation and third-party inventory generation (`docs/public-release-checklist.md`).
 
 ### Planned work / TODO
 - Record dedicated license receipts under `~/.tollama/licenses/<model>.json`.

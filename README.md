@@ -122,6 +122,8 @@ which tollama-runner-uni2ts
 
 For a full setup/run walkthrough with dependency breakdown and commands to install every TSFM model in the registry, see `docs/how-to-run.md`.
 
+Before publishing a public release, follow `docs/public-release-checklist.md` for licensing/compliance and release-readiness gates.
+
 ## Daemon Base URL and Host Config
 
 - Default CLI base URL is `http://localhost:11435`.

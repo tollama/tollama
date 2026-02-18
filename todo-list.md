@@ -143,6 +143,10 @@
 - [x] (P1) covariates strict/best_effort 정책 모델별 표준화 (warning 템플릿 포함)
 - [ ] (P1) `tollama doctor` 설계
   - `pull/runner start/GPU/offline/forecast smoke test` 시나리오 확정
+- [~] (P0) 공개 릴리스 라이선스/컴플라이언스 체크리스트 운영
+  - 현재: `docs/public-release-checklist.md` 추가(업스트림 라이선스 검증/서드파티 라이선스 인벤토리/제한 라이선스 정책)
+  - TODO: 릴리스 태그마다 체크 결과(`docs/releases/`)를 남기고, `cc-by-nc-4.0` 모델 공개 정책을 최종 확정
+
 - [x] (P1) 6개 모델 e2e 통합 테스트 매트릭스 재검증 + 문서 동기화
   - 기준 일자: `2026-02-17`
   - pass: `chronos2`, `granite-ttm-r2`, `timesfm-2.5-200m`,
