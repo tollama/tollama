@@ -447,6 +447,7 @@ def test_run_help_mentions_input_and_stream_flags() -> None:
     result = runner.invoke(app, ["run", "--help"])
     assert result.exit_code == 0
     assert "--input" in result.stdout
+    assert "--stream" in result.stdout
     assert "--no-stream" in result.stdout
     assert "stdin" in result.stdout
 
