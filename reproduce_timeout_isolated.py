@@ -1,10 +1,10 @@
 
+import os
 import subprocess
 import sys
 import time
-import os
+
 import requests
-import signal
 
 DAEMON_PORT = 11436
 BASE_URL = f"http://localhost:{DAEMON_PORT}"
@@ -46,7 +46,10 @@ def run_reproduction():
             
         print("Daemon ready. Pulling model...")
         subprocess.run(
-            [sys.executable, "-m", "tollama.cli.main", "pull", "timesfm-2.5-200m", "--base-url", BASE_URL],
+            [
+                sys.executable, "-m", "tollama.cli.main", "pull",
+                "timesfm-2.5-200m", "--base-url", BASE_URL
+            ],
             check=True
         )
         
