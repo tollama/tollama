@@ -1,20 +1,22 @@
 
 import os
-import sys
 import time
-import json
-from datetime import datetime, timedelta, UTC
+from datetime import UTC, datetime, timedelta
+
 from fastapi.testclient import TestClient
+
 from tollama.daemon.app import create_app
+
 
 def main():
     print("Starting reproduction script...")
     start_time = time.time()
 
     # Set up environment
-    os.environ["TOLLAMA_FORECAST_TIMEOUT_SECONDS"] = "300" # Increase timeout for reproduction script to see how long it actually takes
+    # Increase timeout for reproduction script to observe the full runtime.
+    os.environ["TOLLAMA_FORECAST_TIMEOUT_SECONDS"] = "300"
 
-    print(f"Creating app...")
+    print("Creating app...")
     app = create_app()
     client = TestClient(app)
 
@@ -41,7 +43,7 @@ def main():
                 "freq": "H",
                 "timestamps": [
                     (start + timedelta(hours=i)).isoformat()
-                    for i in range(168) # 1 week of history
+                    for i in range(168)  # 1 week of history
                 ],
                 "target": [float(i) for i in range(168)],
             }
@@ -49,7 +51,7 @@ def main():
     }
 
     # Run forecast
-    print(f"Running forecast...")
+    print("Running forecast...")
     forecast_start = time.time()
     try:
         response = client.post("/v1/forecast", json=payload)
@@ -69,6 +71,7 @@ def main():
 
     total_time = time.time() - start_time
     print(f"Total execution time: {total_time:.2f}s")
+
 
 if __name__ == "__main__":
     main()

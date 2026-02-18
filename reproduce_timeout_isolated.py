@@ -1,10 +1,10 @@
 
+import os
 import subprocess
 import sys
 import time
-import os
+
 import requests
-import signal
 
 DAEMON_PORT = 11436
 BASE_URL = f"http://localhost:{DAEMON_PORT}"
@@ -20,12 +20,12 @@ def wait_for_daemon():
 
 def run_reproduction():
     print("Starting isolated reproduction script...")
-    
-    # Start Daemon with custom timeout
+
+    # Start daemon with custom timeout
     env = os.environ.copy()
     env["TOLLAMA_FORECAST_TIMEOUT_SECONDS"] = "600"
     env["TOLLAMA_HOST"] = f"127.0.0.1:{DAEMON_PORT}"
-    
+
     print(f"Launching daemon on port {DAEMON_PORT} with timeout 600s...")
     # Use sys.executable to ensure we use the same environment
     daemon_proc = subprocess.Popen(
@@ -33,9 +33,9 @@ def run_reproduction():
         env=env,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
-        text=True
+        text=True,
     )
-    
+
     try:
         if not wait_for_daemon():
             print("Failed to start daemon")
@@ -43,39 +43,54 @@ def run_reproduction():
             if daemon_proc.poll() is not None:
                 print(f"Daemon exited with code {daemon_proc.returncode}")
             return
-            
+
         print("Daemon ready. Pulling model...")
         subprocess.run(
-            [sys.executable, "-m", "tollama.cli.main", "pull", "timesfm-2.5-200m", "--base-url", BASE_URL],
-            check=True
+            [
+                sys.executable,
+                "-m",
+                "tollama.cli.main",
+                "pull",
+                "timesfm-2.5-200m",
+                "--base-url",
+                BASE_URL,
+            ],
+            check=True,
         )
-        
+
         print("Running forecast...")
         start_time = time.time()
         
         # Use a distinctive timeout for CLI to verify
         result = subprocess.run(
             [
-                sys.executable, "-m", "tollama.cli.main", "run", "timesfm-2.5-200m",
-                "--input", "examples/timesfm_2p5_request.json",
+                sys.executable,
+                "-m",
+                "tollama.cli.main",
+                "run",
+                "timesfm-2.5-200m",
+                "--input",
+                "examples/timesfm_2p5_request.json",
                 "--no-stream",
-                "--timeout", "600",
-                "--base-url", BASE_URL
+                "--timeout",
+                "600",
+                "--base-url",
+                BASE_URL,
             ],
             capture_output=True,
-            text=True
+            text=True,
         )
-        
+
         duration = time.time() - start_time
         print(f"Forecast finished in {duration:.2f}s")
-        
+
         if result.returncode != 0:
             print("Forecast FAILED!")
             print("STDOUT:", result.stdout)
             print("STDERR:", result.stderr)
         else:
             print("Forecast SUCCESS!")
-            
+
     finally:
         print("Stopping daemon...")
         if daemon_proc.poll() is None:
@@ -84,11 +99,12 @@ def run_reproduction():
                 daemon_proc.wait(timeout=5)
             except subprocess.TimeoutExpired:
                 daemon_proc.kill()
-            
+
         print("\n--- DAEMON STDOUT ---")
         print(daemon_proc.stdout.read())
         print("\n--- DAEMON STDERR ---")
         print(daemon_proc.stderr.read())
+
 
 if __name__ == "__main__":
     run_reproduction()
