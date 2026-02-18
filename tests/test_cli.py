@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -446,10 +447,13 @@ def test_run_help_mentions_input_and_stream_flags() -> None:
     runner = CliRunner()
     result = runner.invoke(app, ["run", "--help"])
     assert result.exit_code == 0
-    assert "--input" in result.stdout
-    assert "--stream" in result.stdout
-    assert "--no-stream" in result.stdout
-    assert "stdin" in result.stdout
+    # Rich may inject ANSI style escapes into option tokens when color is forced,
+    # so normalize help text before checking for stable flag names.
+    normalized_stdout = re.sub(r"\x1b\[[0-9;]*m", "", result.stdout)
+    assert "--input" in normalized_stdout
+    assert "--stream" in normalized_stdout
+    assert "--no-stream" in normalized_stdout
+    assert "stdin" in normalized_stdout
 
 
 def test_run_warns_for_uni2ts_models_on_python_312_plus(monkeypatch, tmp_path: Path) -> None:
