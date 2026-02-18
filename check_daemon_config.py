@@ -1,7 +1,7 @@
 
+
 import requests
-import json
-import os
+
 
 def check_daemon_info():
     try:
@@ -10,9 +10,11 @@ def check_daemon_info():
         data = response.json()
         
         env = data.get("env", {})
-        print(f"Daemon TOLLAMA_FORECAST_TIMEOUT_SECONDS: {env.get('TOLLAMA_FORECAST_TIMEOUT_SECONDS')}")
+        timeout = env.get('TOLLAMA_FORECAST_TIMEOUT_SECONDS')
+        print(f"Daemon TOLLAMA_FORECAST_TIMEOUT_SECONDS: {timeout}")
         
-        # Also check if we can infer the default from code (not directly possible via API unless exposed)
+        # Also check if we can infer the default from code
+        # (not directly possible via API unless exposed)
         # But we can check if the env var was picked up.
         
     except Exception as e:
