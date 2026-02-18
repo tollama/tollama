@@ -6,7 +6,7 @@ import json
 import os
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, NoReturn
 
 import typer
 import uvicorn
@@ -54,11 +54,13 @@ _BOOL_CONFIG_KEYS = {
 }
 _INT_CONFIG_KEYS = {"pull.max_workers"}
 
-_UNI2TS_PYTHON_WARNING = (
-    "Uni2TS/Moirai dependencies may fail to install on Python 3.12+; "
-    "use Python 3.11 when running model family 'uni2ts'"
-)
+_UNI2TS_PYTHON_WARNING = "Uni2TS/Moirai dependencies may fail to install on Python 3.12+"
 _RUN_TIMEOUT_SECONDS = 300.0
+
+
+def _exit_with_message(message: str, *, code: int = 2) -> NoReturn:
+    typer.echo(message)
+    raise typer.Exit(code=code)
 
 
 @app.command("serve")
@@ -270,8 +272,7 @@ def info(
             mode=mode,
         )
     except RuntimeError as exc:
-        typer.echo(f"Error: {exc}", err=True)
-        raise typer.Exit(code=1) from exc
+        _exit_with_message(f"Error: {exc}", code=1)
 
     if json_output:
         typer.echo(json.dumps(snapshot, indent=2, sort_keys=True))
@@ -365,7 +366,11 @@ def run(
         help="Forecast request JSON file. If omitted, reads stdin or example payload.",
     ),
     horizon: int | None = typer.Option(None, "--horizon", min=1, help="Override request horizon."),
-    no_stream: bool = typer.Option(False, "--no-stream", help="Disable streaming forecast output."),
+    stream: bool = typer.Option(
+        True,
+        "--stream/--no-stream",
+        help="Enable or disable streaming forecast output.",
+    ),
     accept_license: bool = typer.Option(
         False,
         "--accept-license",
@@ -390,7 +395,6 @@ def run(
     if timeout is not None:
         payload["timeout"] = timeout
 
-    stream = not no_stream
     client = TollamaClient(base_url=base_url, timeout=timeout)
 
     try:
@@ -425,13 +429,17 @@ def _emit_uni2ts_python_runtime_warning(model: str) -> None:
     if not _is_python_312_or_newer():
         return
 
+    model_name = model.lower()
+    if "moirai" in model_name or "uni2ts" in model_name:
+        typer.echo(f"warning: {_UNI2TS_PYTHON_WARNING}")
+        return
+
     try:
         spec = get_model_spec(model)
     except KeyError:
         return
-    if spec.family != "uni2ts":
-        return
-    typer.echo(f"warning: {_UNI2TS_PYTHON_WARNING}", err=True)
+    if spec.family == "uni2ts":
+        typer.echo(f"warning: {_UNI2TS_PYTHON_WARNING}")
 
 
 def _is_python_312_or_newer() -> bool:
@@ -635,7 +643,7 @@ def _resolve_config_key_path(key: str) -> tuple[str, str]:
     key_path = _CONFIG_KEY_PATHS.get(key)
     if key_path is None:
         supported = ", ".join(sorted(_CONFIG_KEY_PATHS))
-        raise typer.BadParameter(f"unsupported key {key!r}. Supported keys: {supported}")
+        _exit_with_message(f"unsupported key {key!r}. Supported keys: {supported}")
     return key_path
 
 
@@ -729,7 +737,7 @@ def _load_request_payload(path: Path | None, *, model: str) -> dict[str, Any]:
     if default_path is not None:
         return _load_request_payload_from_path(default_path)
 
-    raise typer.BadParameter(
+    _exit_with_message(
         "missing forecast request payload. Provide --input PATH, pipe JSON via stdin, "
         f"or create examples/{model}_request.json",
     )
@@ -835,10 +843,10 @@ def _parse_request_payload(raw: str, *, source: str) -> dict[str, Any]:
     try:
         payload = json.loads(raw)
     except json.JSONDecodeError as exc:
-        raise typer.BadParameter(f"{source} is not valid JSON: {exc}") from exc
+        _exit_with_message(f"{source} is not valid JSON: {exc}")
 
     if not isinstance(payload, dict):
-        raise typer.BadParameter(f"{source} JSON must be an object")
+        _exit_with_message(f"{source} JSON must be an object")
 
     return payload
 
