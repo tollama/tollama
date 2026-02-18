@@ -208,7 +208,11 @@ def config_set(
     value: str = typer.Argument(..., help="New value."),
 ) -> None:
     """Set one config value."""
-    key_path = _resolve_config_key_path(key)
+    try:
+        key_path = _resolve_config_key_path(key)
+    except typer.BadParameter as exc:
+        typer.echo(str(exc))
+        raise typer.Exit(code=1) from exc
     parsed_value = _parse_config_value(key, value)
     updates = {key_path[0]: {key_path[1]: parsed_value}}
     try:
@@ -270,7 +274,7 @@ def info(
             mode=mode,
         )
     except RuntimeError as exc:
-        typer.echo(f"Error: {exc}", err=True)
+        typer.echo(str(exc))
         raise typer.Exit(code=1) from exc
 
     if json_output:
@@ -383,7 +387,11 @@ def run(
 ) -> None:
     """Run a forecast through POST /api/forecast, auto-pulling if needed."""
     _emit_uni2ts_python_runtime_warning(model)
-    payload = _load_request_payload(path=input_path, model=model)
+    try:
+        payload = _load_request_payload(path=input_path, model=model)
+    except typer.BadParameter as exc:
+        typer.echo(str(exc))
+        raise typer.Exit(code=1) from exc
     payload["model"] = model
     if horizon is not None:
         payload["horizon"] = horizon
@@ -431,7 +439,7 @@ def _emit_uni2ts_python_runtime_warning(model: str) -> None:
         return
     if spec.family != "uni2ts":
         return
-    typer.echo(f"warning: {_UNI2TS_PYTHON_WARNING}", err=True)
+    typer.echo(f"warning: {_UNI2TS_PYTHON_WARNING}")
 
 
 def _is_python_312_or_newer() -> bool:
