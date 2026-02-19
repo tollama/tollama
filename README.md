@@ -106,7 +106,7 @@ We also verified the OpenClaw skill integration using `scripts/e2e_skills_test.s
 
 | Skill | Result | Notes |
 |---|---|---|
-| `tollama-forecast` | pass | Validated skill structure + execution with `mock` model |
+| `tollama-forecast` | pass | Validated skill structure + execution with `mock` model; verified Exit Code Contract v2 compliance |
 
 All runner commands were confirmed from `/api/info` to use
 `~/.tollama/runtimes/<family>/venv/bin/python`.
@@ -495,7 +495,7 @@ openclaw skills list --eligible | rg tollama-forecast
 
 ### Runtime defaults and policy
 
-- Base URL: `--base-url` > `TOLLAMA_BASE_URL` > `http://localhost:11435`
+- Base URL: `--base-url` > `TOLLAMA_BASE_URL` > `http://127.0.0.1:11435`
 - Timeout: `--timeout` > `TOLLAMA_FORECAST_TIMEOUT_SECONDS` > `300`
 - Forecast requests are non-stream by default.
 - `tollama-forecast.sh` does not auto-pull by default; model install happens
@@ -504,6 +504,20 @@ openclaw skills list --eligible | rg tollama-forecast
   is unavailable in PATH.
 - HTTP forecast endpoint order is `POST /api/forecast` first, then
   `POST /v1/forecast` only when `/api/forecast` returns `404`.
+- `tollama-models.sh available` is daemon-only (`tollama info --json --remote`
+  or `GET /api/info`) and does not use local fallback.
+- Skill metadata eligibility is `bins=["bash"]` and `anyBins=["tollama","curl"]`.
+
+### Breaking change: skill exit code contract v2
+
+OpenClaw `tollama-forecast` scripts now share this exit code contract:
+- `0`: success
+- `2`: invalid input/request
+- `3`: daemon unreachable/health failure
+- `4`: model not installed
+- `5`: license required/not accepted/permission
+- `6`: timeout
+- `10`: unexpected internal error
 
 ### Troubleshooting
 

@@ -1,15 +1,20 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-DEFAULT_BASE_URL="http://localhost:11435"
+DEFAULT_BASE_URL="http://127.0.0.1:11435"
 DEFAULT_TIMEOUT="300"
 
 EXIT_USAGE=2
-EXIT_DEP_MISSING=3
-EXIT_DAEMON_UNREACHABLE=5
+EXIT_DAEMON_UNREACHABLE=3
+EXIT_PERMISSION=5
+EXIT_TIMEOUT=6
+EXIT_INTERNAL=10
 
 BASE_URL_ARG=""
 TIMEOUT_ARG=""
+HTTP_STATUS=""
+HTTP_BODY=""
+HTTP_ERROR=""
 
 usage() {
   cat <<'USAGE' >&2
@@ -34,17 +39,71 @@ print_host_mismatch_hint() {
   echo "Hint: exec host and --base-url may be mismatched. 127.0.0.1 inside sandbox/container is not host localhost." >&2
 }
 
+is_timeout_error() {
+  local text="$1"
+  [[ "$text" == *"timed out"* ]] ||
+  [[ "$text" == *"timeout"* ]] ||
+  [[ "$text" == *"operation timeout"* ]]
+}
+
+is_connection_error() {
+  local text="$1"
+  [[ "$text" == *"Connection refused"* ]] ||
+  [[ "$text" == *"Failed to connect"* ]] ||
+  [[ "$text" == *"No route to host"* ]] ||
+  [[ "$text" == *"Could not resolve host"* ]] ||
+  [[ "$text" == *"Name or service not known"* ]] ||
+  [[ "$text" == *"Temporary failure in name resolution"* ]]
+}
+
+classify_curl_error() {
+  local curl_exit="$1"
+  local err_text="$2"
+
+  if [[ "$curl_exit" -eq 28 ]] || is_timeout_error "$err_text"; then
+    echo "$EXIT_TIMEOUT"
+    return
+  fi
+
+  if is_connection_error "$err_text"; then
+    echo "$EXIT_DAEMON_UNREACHABLE"
+    return
+  fi
+
+  echo "$EXIT_INTERNAL"
+}
+
+classify_http_status() {
+  local status="$1"
+
+  case "$status" in
+    401|403)
+      echo "$EXIT_PERMISSION"
+      ;;
+    408|504)
+      echo "$EXIT_TIMEOUT"
+      ;;
+    *)
+      echo "$EXIT_DAEMON_UNREACHABLE"
+      ;;
+  esac
+}
+
 http_get() {
   local path="$1"
   local body_file err_file
+  local curl_exit
 
   body_file="$(mktemp)"
   err_file="$(mktemp)"
 
-  if ! HTTP_STATUS="$(curl -sS --connect-timeout "$TIMEOUT" --max-time "$TIMEOUT" -o "$body_file" -w '%{http_code}' "${BASE_URL}${path}" 2>"$err_file")"; then
+  if HTTP_STATUS="$(curl -sS --connect-timeout "$TIMEOUT" --max-time "$TIMEOUT" -o "$body_file" -w '%{http_code}' "${BASE_URL}${path}" 2>"$err_file")"; then
+    :
+  else
+    curl_exit=$?
     HTTP_ERROR="$(cat "$err_file")"
     rm -f "$body_file" "$err_file"
-    return 1
+    return "$curl_exit"
   fi
 
   HTTP_BODY="$(cat "$body_file")"
@@ -94,37 +153,47 @@ fi
 
 if ! command -v curl >/dev/null 2>&1; then
   echo "Error: curl not found in PATH." >&2
-  exit "$EXIT_DEP_MISSING"
+  exit "$EXIT_INTERNAL"
 fi
 
-if ! http_get "/v1/health"; then
+if http_get "/v1/health"; then
+  :
+else
+  rc=$?
+  exit_code="$(classify_curl_error "$rc" "${HTTP_ERROR:-}")"
   echo "Error: GET ${BASE_URL}/v1/health failed: ${HTTP_ERROR:-unknown error}" >&2
   print_host_mismatch_hint
-  exit "$EXIT_DAEMON_UNREACHABLE"
+  exit "$exit_code"
 fi
 
 HEALTH_STATUS="$HTTP_STATUS"
 HEALTH_BODY="$HTTP_BODY"
 
 if [[ ! "$HEALTH_STATUS" =~ ^2 ]]; then
+  exit_code="$(classify_http_status "$HEALTH_STATUS")"
   echo "Error: GET ${BASE_URL}/v1/health returned HTTP $HEALTH_STATUS: $(normalize_detail "$HEALTH_BODY")" >&2
   print_host_mismatch_hint
-  exit "$EXIT_DAEMON_UNREACHABLE"
+  exit "$exit_code"
 fi
 
-if ! http_get "/api/version"; then
+if http_get "/api/version"; then
+  :
+else
+  rc=$?
+  exit_code="$(classify_curl_error "$rc" "${HTTP_ERROR:-}")"
   echo "Error: GET ${BASE_URL}/api/version failed: ${HTTP_ERROR:-unknown error}" >&2
   print_host_mismatch_hint
-  exit "$EXIT_DAEMON_UNREACHABLE"
+  exit "$exit_code"
 fi
 
 VERSION_STATUS="$HTTP_STATUS"
 VERSION_BODY="$HTTP_BODY"
 
 if [[ ! "$VERSION_STATUS" =~ ^2 ]]; then
+  exit_code="$(classify_http_status "$VERSION_STATUS")"
   echo "Error: GET ${BASE_URL}/api/version returned HTTP $VERSION_STATUS: $(normalize_detail "$VERSION_BODY")" >&2
   print_host_mismatch_hint
-  exit "$EXIT_DAEMON_UNREACHABLE"
+  exit "$exit_code"
 fi
 
 printf '{"base_url":"%s","timeout_seconds":%s,"health":{"status":%s},"version":{"status":%s}}\n' \

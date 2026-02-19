@@ -19,7 +19,7 @@ MODELS_SCRIPT = SKILL_DIR / "bin" / "tollama-models.sh"
 FORECAST_SCRIPT = SKILL_DIR / "bin" / "tollama-forecast.sh"
 
 BASH_BIN = shutil.which("bash")
-REQUIRED_RUNTIME_BINS = ("awk", "cat", "mktemp", "rm", "python3")
+REQUIRED_RUNTIME_BINS = ("awk", "cat", "grep", "mktemp", "rm", "tail", "tr", "python3")
 MISSING_RUNTIME_BINS = [name for name in REQUIRED_RUNTIME_BINS if shutil.which(name) is None]
 
 
@@ -212,8 +212,51 @@ def test_health_failure_returns_exit_five_and_hint(tmp_path: Path) -> None:
         env=_base_env(str(runtime_bin)),
     )
 
-    assert result.returncode == 5
+    assert result.returncode == 3
     assert "exec host and --base-url may be mismatched" in result.stderr
+
+
+@pytest.mark.skipif(
+    BASH_BIN is None or MISSING_RUNTIME_BINS,
+    reason="bash and runtime binaries required",
+)
+def test_health_timeout_returns_exit_six(tmp_path: Path) -> None:
+    curl_script = textwrap.dedent(
+        """\
+        #!/usr/bin/env bash
+        set -euo pipefail
+        url=""
+        while (($# > 0)); do
+          case "$1" in
+            -o|-H|--connect-timeout|--max-time|-w)
+              shift
+              ;;
+            -s|-S|-sS)
+              ;;
+            *)
+              url="$1"
+              ;;
+          esac
+          shift
+        done
+
+        if [[ "$url" == *"/v1/health" ]]; then
+          echo "Operation timed out after 2000 milliseconds" >&2
+          exit 28
+        fi
+        echo "200"
+        """
+    )
+    runtime_bin = _make_runtime_bin(tmp_path, curl_script=curl_script)
+
+    result = _run_script(
+        HEALTH_SCRIPT,
+        ["--base-url", "http://daemon.test:11435", "--timeout", "2"],
+        env=_base_env(str(runtime_bin)),
+    )
+
+    assert result.returncode == 6
+    assert "timed out" in result.stderr.lower()
 
 
 @pytest.mark.skipif(
@@ -230,7 +273,7 @@ def test_models_available_remote_mode_does_not_local_fallback_when_cli_fails(
         #!/usr/bin/env bash
         set -euo pipefail
         if [[ "$1" == "info" ]]; then
-          echo "daemon unreachable" >&2
+          echo "Failed to connect to daemon" >&2
           exit 1
         fi
         exit 1
@@ -256,9 +299,36 @@ def test_models_available_remote_mode_does_not_local_fallback_when_cli_fails(
         env=_base_env(str(runtime_bin)),
     )
 
-    assert result.returncode == 5
+    assert result.returncode == 3
     assert "tollama info --json --remote failed" in result.stderr
     assert not curl_log.exists()
+
+
+@pytest.mark.skipif(
+    BASH_BIN is None or MISSING_RUNTIME_BINS,
+    reason="bash and runtime binaries required",
+)
+def test_models_show_missing_model_returns_exit_four(tmp_path: Path) -> None:
+    tollama_script = textwrap.dedent(
+        """\
+        #!/usr/bin/env bash
+        set -euo pipefail
+        if [[ "$1" == "show" ]]; then
+          echo "Error: show model failed with HTTP 404: missing" >&2
+          exit 1
+        fi
+        exit 1
+        """,
+    )
+    runtime_bin = _make_runtime_bin(tmp_path, tollama_script=tollama_script)
+
+    result = _run_script(
+        MODELS_SCRIPT,
+        ["show", "missing-model", "--base-url", "http://daemon.test:11435", "--timeout", "2"],
+        env=_base_env(str(runtime_bin)),
+    )
+
+    assert result.returncode == 4
 
 
 @pytest.mark.skipif(
@@ -303,6 +373,41 @@ def test_forecast_model_missing_without_pull_returns_exit_four(tmp_path: Path) -
     log_lines = tollama_log.read_text(encoding="utf-8").splitlines()
     assert any(line.startswith("show ") for line in log_lines)
     assert not any(line.startswith("pull ") for line in log_lines)
+
+
+@pytest.mark.skipif(
+    BASH_BIN is None or MISSING_RUNTIME_BINS,
+    reason="bash and runtime binaries required",
+)
+def test_forecast_pull_license_rejection_returns_exit_five(tmp_path: Path) -> None:
+    input_path = tmp_path / "req.json"
+    _write_minimal_request(input_path)
+
+    tollama_script = textwrap.dedent(
+        """\
+        #!/usr/bin/env bash
+        set -euo pipefail
+        if [[ "$1" == "show" ]]; then
+          echo "Error: show model failed with HTTP 404: missing" >&2
+          exit 1
+        fi
+        if [[ "$1" == "pull" ]]; then
+          echo "Error: pull model failed with HTTP 409: license requires --accept-license" >&2
+          exit 1
+        fi
+        exit 1
+        """,
+    )
+    runtime_bin = _make_runtime_bin(tmp_path, tollama_script=tollama_script)
+
+    result = _run_script(
+        FORECAST_SCRIPT,
+        ["--model", "moirai-2.0-R-small", "--input", str(input_path), "--pull"],
+        env=_base_env(str(runtime_bin)),
+    )
+
+    assert result.returncode == 5
+    assert "license" in result.stderr.lower()
 
 
 @pytest.mark.skipif(
@@ -443,7 +548,7 @@ def test_forecast_cli_non_zero_does_not_fallback_to_http(tmp_path: Path) -> None
         env=_base_env(str(runtime_bin)),
     )
 
-    assert result.returncode == 6
+    assert result.returncode == 10
     assert "tollama run failed" in result.stderr
     assert not curl_log.exists()
 
@@ -526,8 +631,103 @@ def test_forecast_http_400_preserves_detail_and_returns_exit_six(tmp_path: Path)
         env=_base_env(str(runtime_bin)),
     )
 
-    assert result.returncode == 6
+    assert result.returncode == 2
     assert "future_covariates mismatch" in result.stderr
+
+
+@pytest.mark.skipif(
+    BASH_BIN is None or MISSING_RUNTIME_BINS,
+    reason="bash and runtime binaries required",
+)
+def test_forecast_http_permission_returns_exit_five(tmp_path: Path) -> None:
+    input_path = tmp_path / "req.json"
+    _write_minimal_request(input_path)
+
+    curl_script = _build_fake_curl_script(
+        """
+        if [[ "$url" == *"/api/show" ]]; then
+          status="200"
+          body='{"name":"mock"}'
+        elif [[ "$url" == *"/api/forecast" ]]; then
+          status="403"
+          body='{"detail":"forbidden"}'
+        fi
+        """,
+    )
+    runtime_bin = _make_runtime_bin(tmp_path, curl_script=curl_script)
+
+    result = _run_script(
+        FORECAST_SCRIPT,
+        ["--model", "mock", "--input", str(input_path), "--base-url", "http://daemon.test"],
+        env=_base_env(str(runtime_bin)),
+    )
+
+    assert result.returncode == 5
+    assert "forbidden" in result.stderr.lower()
+
+
+@pytest.mark.skipif(
+    BASH_BIN is None or MISSING_RUNTIME_BINS,
+    reason="bash and runtime binaries required",
+)
+def test_forecast_http_timeout_returns_exit_six(tmp_path: Path) -> None:
+    input_path = tmp_path / "req.json"
+    _write_minimal_request(input_path)
+
+    curl_script = textwrap.dedent(
+        """\
+        #!/usr/bin/env bash
+        set -euo pipefail
+        method="GET"
+        out_file=""
+        url=""
+        while (($# > 0)); do
+          case "$1" in
+            -X)
+              shift
+              method="$1"
+              ;;
+            -o)
+              shift
+              out_file="$1"
+              ;;
+            -H|--connect-timeout|--max-time|-w|--data)
+              shift
+              ;;
+            -s|-S|-sS)
+              ;;
+            *)
+              url="$1"
+              ;;
+          esac
+          shift
+        done
+
+        if [[ "$url" == *"/api/show" ]]; then
+          printf '%s' '{"name":"mock"}' > "$out_file"
+          printf '%s' "200"
+          exit 0
+        fi
+
+        if [[ "$url" == *"/api/forecast" ]]; then
+          echo "Operation timed out after 1000 milliseconds" >&2
+          exit 28
+        fi
+
+        printf '%s' '{"detail":"unexpected"}' > "$out_file"
+        printf '%s' "500"
+        """
+    )
+    runtime_bin = _make_runtime_bin(tmp_path, curl_script=curl_script)
+
+    result = _run_script(
+        FORECAST_SCRIPT,
+        ["--model", "mock", "--input", str(input_path), "--base-url", "http://daemon.test"],
+        env=_base_env(str(runtime_bin)),
+    )
+
+    assert result.returncode == 6
+    assert "timed out" in result.stderr.lower()
 
 
 @pytest.mark.skipif(
@@ -568,6 +768,6 @@ def test_forecast_http_5xx_preserves_status_and_detail(
         env=_base_env(str(runtime_bin)),
     )
 
-    assert result.returncode == 6
+    assert result.returncode == 10
     assert f"HTTP {status_code}" in result.stderr
     assert detail in result.stderr

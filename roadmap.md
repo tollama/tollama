@@ -366,7 +366,7 @@ Phase F - Product hardening:
 ## 17) OpenClaw skill integration [x]
 ### Current implementation status
 - OpenClaw skill package is added under `skills/tollama-forecast/` with:
-  - `SKILL.md` (strict eligibility: `bash`, `tollama`, `curl`)
+  - `SKILL.md` (`requires.bins=["bash"]`, `requires.anyBins=["tollama","curl"]`)
   - `bin/tollama-health.sh`
   - `bin/tollama-models.sh`
   - `bin/tollama-forecast.sh`
@@ -378,6 +378,15 @@ Phase F - Product hardening:
   - default timeout `300` with `TOLLAMA_FORECAST_TIMEOUT_SECONDS` override
   - no-auto-pull default (`--pull` required)
   - `/api/forecast` primary with `/v1/forecast` fallback only on `404`
+  - daemon-only `available` resolution via `/api/info` or `tollama info --json --remote`
+- Skill scripts share exit code contract v2:
+  - `0` success
+  - `2` invalid input/request
+  - `3` daemon unreachable/health failure
+  - `4` model not installed
+  - `5` license/permission
+  - `6` timeout
+  - `10` unexpected internal error
 
 ### Planned work / TODO
 - Add end-to-end OpenClaw agent runbook examples for `sandbox` and `gateway`.

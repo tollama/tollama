@@ -55,6 +55,28 @@ raw = sys.argv[1]
 obj = json.loads(raw)
 if not isinstance(obj, dict):
     raise SystemExit("metadata must be a JSON object")
+
+openclaw = obj.get("openclaw")
+if not isinstance(openclaw, dict):
+    raise SystemExit("metadata.openclaw must be an object")
+
+requires = openclaw.get("requires")
+if not isinstance(requires, dict):
+    raise SystemExit("metadata.openclaw.requires must be an object")
+
+bins = requires.get("bins")
+if not isinstance(bins, list) or "bash" not in bins:
+    raise SystemExit("metadata.openclaw.requires.bins must include 'bash'")
+
+any_bins = requires.get("anyBins")
+if not isinstance(any_bins, list):
+    raise SystemExit("metadata.openclaw.requires.anyBins must be a list")
+
+for required in ("tollama", "curl"):
+    if required not in any_bins:
+        raise SystemExit(
+            f"metadata.openclaw.requires.anyBins must include {required!r}",
+        )
 PY
   echo "Invalid SKILL.md: metadata must be a single-line JSON object" >&2
   exit 1

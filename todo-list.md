@@ -138,6 +138,8 @@
 - [x] (P1) OpenClaw `tollama-forecast` 스킬 v3 운영 보강
   - 현재: `skills/tollama-forecast/` 추가(`SKILL.md`, `bin/*.sh`, `examples/*.json`)
   - 현재: 경로/exec host/PATH/auto-pull/endpoint/timeout 이슈를 스킬 계층에서 고정
+  - 현재: metadata 완화(`bins=["bash"]`, `anyBins=["tollama","curl"]`) + daemon-only `available` 정책 확정
+  - 현재: 스크립트 exit code contract v2(`0/2/3/4/5/6/10`)로 통일
   - 현재: 정적 검증 스크립트 `scripts/validate_openclaw_skill_tollama_forecast.sh` 추가
   - 현재: 스크립트 동작 회귀 테스트 `tests/test_openclaw_skill_tollama_forecast_scripts.py` 추가
 - [ ] (P1) TSModelfile 스펙 초안 작성 + parser 구현 계획
