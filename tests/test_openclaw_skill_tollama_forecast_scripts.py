@@ -17,6 +17,9 @@ SKILL_DIR = REPO_ROOT / "skills" / "tollama-forecast"
 HEALTH_SCRIPT = SKILL_DIR / "bin" / "tollama-health.sh"
 MODELS_SCRIPT = SKILL_DIR / "bin" / "tollama-models.sh"
 FORECAST_SCRIPT = SKILL_DIR / "bin" / "tollama-forecast.sh"
+PULL_SCRIPT = SKILL_DIR / "bin" / "tollama-pull.sh"
+RM_SCRIPT = SKILL_DIR / "bin" / "tollama-rm.sh"
+INFO_SCRIPT = SKILL_DIR / "bin" / "tollama-info.sh"
 
 BASH_BIN = shutil.which("bash")
 REQUIRED_RUNTIME_BINS = ("awk", "cat", "grep", "mktemp", "rm", "tail", "tr", "python3")
@@ -204,9 +207,11 @@ def test_health_success_returns_zero_and_json(tmp_path: Path) -> None:
 
     assert result.returncode == 0
     payload = json.loads(result.stdout)
+    assert payload["healthy"] is True
     assert payload["base_url"] == "http://daemon.test:11435"
     assert payload["health"]["status"] == 200
     assert payload["version"]["status"] == 200
+    assert payload["version_name"] == "0.1.0"
 
 
 @pytest.mark.skipif(
@@ -241,8 +246,10 @@ def test_health_runtimes_flag_includes_runtime_summary(tmp_path: Path) -> None:
 
     assert result.returncode == 0
     payload = json.loads(result.stdout)
+    assert payload["healthy"] is True
     assert payload["health"]["status"] == 200
     assert payload["version"]["status"] == 200
+    assert payload["version_name"] == "0.1.0"
     assert payload["runtimes"] == [
         {"family": "torch", "installed": True, "running": False},
         {"family": "mock", "installed": True, "running": True},
@@ -1099,3 +1106,210 @@ def test_forecast_http_5xx_preserves_status_and_detail(
     assert result.returncode == 10
     assert f"HTTP {status_code}" in result.stderr
     assert detail in result.stderr
+
+
+@pytest.mark.skipif(
+    BASH_BIN is None or MISSING_RUNTIME_BINS,
+    reason="bash and runtime binaries required",
+)
+def test_forecast_json_stderr_mode_emits_structured_error(tmp_path: Path) -> None:
+    input_path = tmp_path / "req.json"
+    _write_minimal_request(input_path)
+
+    tollama_script = textwrap.dedent(
+        """\
+        #!/usr/bin/env bash
+        set -euo pipefail
+        if [[ "$1" == "show" ]]; then
+          echo "Error: show model failed with HTTP 404: missing" >&2
+          exit 1
+        fi
+        exit 1
+        """,
+    )
+    runtime_bin = _make_runtime_bin(tmp_path, tollama_script=tollama_script)
+    env = _base_env(str(runtime_bin))
+    env["TOLLAMA_JSON_STDERR"] = "1"
+
+    result = _run_script(
+        FORECAST_SCRIPT,
+        ["--model", "mock", "--input", str(input_path)],
+        env=env,
+    )
+
+    assert result.returncode == 4
+    payload = json.loads(result.stderr.strip().splitlines()[-1])
+    assert payload["error"]["code"] == "MODEL_MISSING"
+    assert payload["error"]["exit_code"] == 4
+    assert "Re-run with --pull" in payload["error"]["hint"]
+
+
+@pytest.mark.skipif(
+    BASH_BIN is None or MISSING_RUNTIME_BINS,
+    reason="bash and runtime binaries required",
+)
+def test_forecast_json_stderr_mode_includes_license_subcode(tmp_path: Path) -> None:
+    input_path = tmp_path / "req.json"
+    _write_minimal_request(input_path)
+
+    tollama_script = textwrap.dedent(
+        """\
+        #!/usr/bin/env bash
+        set -euo pipefail
+        if [[ "$1" == "show" ]]; then
+          echo "Error: show model failed with HTTP 404: missing" >&2
+          exit 1
+        fi
+        if [[ "$1" == "pull" ]]; then
+          echo "Error: pull model failed with HTTP 409: license requires --accept-license" >&2
+          exit 1
+        fi
+        exit 1
+        """,
+    )
+    runtime_bin = _make_runtime_bin(tmp_path, tollama_script=tollama_script)
+    env = _base_env(str(runtime_bin))
+    env["TOLLAMA_JSON_STDERR"] = "1"
+
+    result = _run_script(
+        FORECAST_SCRIPT,
+        ["--model", "moirai-2.0-R-small", "--input", str(input_path), "--pull"],
+        env=env,
+    )
+
+    assert result.returncode == 5
+    payload = json.loads(result.stderr.strip().splitlines()[-1])
+    assert payload["error"]["code"] == "PERMISSION_DENIED"
+    assert payload["error"]["subcode"] == "LICENSE_REQUIRED"
+    assert payload["error"]["exit_code"] == 5
+
+
+@pytest.mark.skipif(
+    BASH_BIN is None or MISSING_RUNTIME_BINS,
+    reason="bash and runtime binaries required",
+)
+def test_tollama_pull_wrapper_invokes_models_pull(tmp_path: Path) -> None:
+    tollama_log = tmp_path / "tollama.log"
+    tollama_script = textwrap.dedent(
+        f"""\
+        #!/usr/bin/env bash
+        set -euo pipefail
+        echo "$*" >> "{tollama_log}"
+        if [[ "$1" == "pull" ]]; then
+          echo '{{"status":"success","model":"mock"}}'
+          exit 0
+        fi
+        exit 1
+        """,
+    )
+    runtime_bin = _make_runtime_bin(tmp_path, tollama_script=tollama_script)
+
+    result = _run_script(
+        PULL_SCRIPT,
+        [
+            "--model",
+            "mock",
+            "--base-url",
+            "http://daemon.test:11435",
+            "--timeout",
+            "5",
+            "--accept-license",
+        ],
+        env=_base_env(str(runtime_bin)),
+    )
+
+    assert result.returncode == 0
+    payload = json.loads(result.stdout)
+    assert payload["status"] == "success"
+    log_line = tollama_log.read_text(encoding="utf-8").strip()
+    assert log_line.startswith("pull mock ")
+    assert "--accept-license" in log_line
+    assert "--no-stream" in log_line
+
+
+@pytest.mark.skipif(
+    BASH_BIN is None or MISSING_RUNTIME_BINS,
+    reason="bash and runtime binaries required",
+)
+def test_tollama_rm_wrapper_invokes_models_rm(tmp_path: Path) -> None:
+    tollama_log = tmp_path / "tollama.log"
+    tollama_script = textwrap.dedent(
+        f"""\
+        #!/usr/bin/env bash
+        set -euo pipefail
+        echo "$*" >> "{tollama_log}"
+        if [[ "$1" == "rm" ]]; then
+          echo '{{"status":"success"}}'
+          exit 0
+        fi
+        exit 1
+        """,
+    )
+    runtime_bin = _make_runtime_bin(tmp_path, tollama_script=tollama_script)
+
+    result = _run_script(
+        RM_SCRIPT,
+        ["--model", "mock", "--base-url", "http://daemon.test:11435"],
+        env=_base_env(str(runtime_bin)),
+    )
+
+    assert result.returncode == 0
+    payload = json.loads(result.stdout)
+    assert payload["status"] == "success"
+    log_line = tollama_log.read_text(encoding="utf-8").strip()
+    assert log_line.startswith("rm mock ")
+
+
+@pytest.mark.skipif(
+    BASH_BIN is None or MISSING_RUNTIME_BINS,
+    reason="bash and runtime binaries required",
+)
+def test_tollama_info_wrapper_invokes_models_info_with_section(tmp_path: Path) -> None:
+    tollama_log = tmp_path / "tollama.log"
+    tollama_script = textwrap.dedent(
+        f"""\
+        #!/usr/bin/env bash
+        set -euo pipefail
+        echo "$*" >> "{tollama_log}"
+        if [[ "$1" == "info" ]]; then
+          cat <<'JSON'
+{{"daemon":{{"version":"0.1.0"}},"runners":[{{"family":"mock","installed":true,"running":true}}]}}
+JSON
+          exit 0
+        fi
+        exit 1
+        """,
+    )
+    runtime_bin = _make_runtime_bin(tmp_path, tollama_script=tollama_script)
+
+    result = _run_script(
+        INFO_SCRIPT,
+        ["--base-url", "http://daemon.test:11435", "--timeout", "3", "--section", "runners"],
+        env=_base_env(str(runtime_bin)),
+    )
+
+    assert result.returncode == 0
+    payload = json.loads(result.stdout)
+    assert isinstance(payload, list)
+    assert payload[0]["family"] == "mock"
+    log_line = tollama_log.read_text(encoding="utf-8").strip()
+    assert log_line.startswith("info ")
+    assert "--json" in log_line
+    assert "--remote" in log_line
+
+
+@pytest.mark.skipif(
+    BASH_BIN is None or MISSING_RUNTIME_BINS,
+    reason="bash and runtime binaries required",
+)
+@pytest.mark.parametrize("script", [PULL_SCRIPT, RM_SCRIPT])
+def test_lifecycle_wrapper_requires_model_arg(tmp_path: Path, script: Path) -> None:
+    runtime_bin = _make_runtime_bin(tmp_path)
+
+    result = _run_script(
+        script,
+        [],
+        env=_base_env(str(runtime_bin)),
+    )
+
+    assert result.returncode == 2

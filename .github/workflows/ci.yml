@@ -24,6 +24,9 @@ jobs:
       - name: Ruff
         run: ruff check .
 
+      - name: Validate OpenClaw tollama-forecast skill
+        run: bash scripts/validate_openclaw_skill_tollama_forecast.sh
+
       - name: Pytest
         env:
           TOLLAMA_VALIDATE_REGISTRY_REMOTE: "1"

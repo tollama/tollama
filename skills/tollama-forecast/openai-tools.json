@@ -1,0 +1,136 @@
+{
+  "tools": [
+    {
+      "type": "function",
+      "function": {
+        "name": "tollama_forecast",
+        "description": "Run a non-streaming Tollama forecast request via the tollama-forecast skill script.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "model": {
+              "type": "string",
+              "description": "Model name to run (example: mock, timesfm-2.5-200m)."
+            },
+            "input_path": {
+              "type": "string",
+              "description": "Path to forecast request JSON file. If omitted, stdin can be used."
+            },
+            "base_url": {
+              "type": "string",
+              "description": "Daemon base URL (default: http://127.0.0.1:11435)."
+            },
+            "timeout": {
+              "type": "number",
+              "description": "Request timeout in seconds (default: 300)."
+            },
+            "pull": {
+              "type": "boolean",
+              "description": "Allow pull when model is not installed."
+            },
+            "accept_license": {
+              "type": "boolean",
+              "description": "Accept model license during pull."
+            },
+            "metrics": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Optional metric names override (for example: [\"mape\", \"mase\"])."
+            },
+            "mase_seasonality": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "Optional MASE seasonality override."
+            }
+          },
+          "required": [
+            "model"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "tollama_health",
+        "description": "Run Tollama daemon health checks via the tollama-health script.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "base_url": {
+              "type": "string",
+              "description": "Daemon base URL."
+            },
+            "timeout": {
+              "type": "number",
+              "description": "Timeout in seconds."
+            },
+            "runtimes": {
+              "type": "boolean",
+              "description": "Include runtime installation/running summary from /api/info."
+            }
+          },
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "tollama_models",
+        "description": "Inspect or manage Tollama models via the tollama-models skill script.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "action": {
+              "type": "string",
+              "enum": [
+                "installed",
+                "loaded",
+                "show",
+                "available",
+                "pull",
+                "rm",
+                "info"
+              ]
+            },
+            "model": {
+              "type": "string",
+              "description": "Required for show/pull/rm actions."
+            },
+            "base_url": {
+              "type": "string",
+              "description": "Daemon base URL."
+            },
+            "timeout": {
+              "type": "number",
+              "description": "Timeout in seconds."
+            },
+            "accept_license": {
+              "type": "boolean",
+              "description": "Used with pull action only."
+            },
+            "section": {
+              "type": "string",
+              "enum": [
+                "daemon",
+                "models",
+                "runners",
+                "env",
+                "all"
+              ],
+              "description": "Used with info action only."
+            }
+          },
+          "required": [
+            "action"
+          ],
+          "additionalProperties": false
+        }
+      }
+    }
+  ]
+}

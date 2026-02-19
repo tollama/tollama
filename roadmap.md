@@ -377,9 +377,14 @@ Phase F - Product hardening:
 ### Current implementation status
 - OpenClaw skill package is added under `skills/tollama-forecast/` with:
   - `SKILL.md` (`requires.bins=["bash"]`, `requires.anyBins=["tollama","curl"]`)
+  - `bin/_tollama_lib.sh` (shared helpers + structured stderr emitter)
   - `bin/tollama-health.sh`
   - `bin/tollama-models.sh`
   - `bin/tollama-forecast.sh`
+  - `bin/tollama-pull.sh`
+  - `bin/tollama-rm.sh`
+  - `bin/tollama-info.sh`
+  - `openai-tools.json` (OpenAI function definitions)
   - `examples/*.json`
 - Integration is additive and keeps daemon/CLI HTTP contracts unchanged.
 - Runtime guardrails for common failures are included:
@@ -398,10 +403,11 @@ Phase F - Product hardening:
   - `5` license/permission
   - `6` timeout
   - `10` unexpected internal error
+- Optional structured stderr mode is available with `TOLLAMA_JSON_STDERR=1`.
+- CI now runs `scripts/validate_openclaw_skill_tollama_forecast.sh`.
 
 ### Planned work / TODO
 - Add end-to-end OpenClaw agent runbook examples for `sandbox` and `gateway`.
-- Add CI check to run `scripts/validate_openclaw_skill_tollama_forecast.sh`.
 
 ## Prioritized TODO backlog
 1. Implement supervisor restart backoff policy and startup handshake/health checks.

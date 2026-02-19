@@ -11,6 +11,10 @@ EXIT_PERMISSION=5
 EXIT_TIMEOUT=6
 EXIT_INTERNAL=10
 
+SKILL_BIN_DIR="$(cd "${BASH_SOURCE[0]%/*}" && pwd)"
+# shellcheck source=skills/tollama-forecast/bin/_tollama_lib.sh
+source "$SKILL_BIN_DIR/_tollama_lib.sh"
+
 MODEL=""
 INPUT_PATH=""
 BASE_URL_ARG=""
@@ -45,12 +49,6 @@ cleanup() {
 
 trap cleanup EXIT
 
-is_positive_number() {
-  local value="$1"
-  [[ "$value" =~ ^[0-9]+([.][0-9]+)?$ ]] || return 1
-  awk -v v="$value" 'BEGIN { exit !(v > 0) }'
-}
-
 is_positive_integer() {
   local value="$1"
   [[ "$value" =~ ^[1-9][0-9]*$ ]]
@@ -82,182 +80,9 @@ validate_metrics_csv() {
   return 0
 }
 
-print_host_mismatch_hint() {
-  echo "Hint: exec host and --base-url may be mismatched. 127.0.0.1 inside sandbox/container is not host localhost." >&2
-}
-
-normalize_detail() {
-  local raw="$1"
-  local flattened
-  flattened="${raw//$'\n'/ }"
-  printf '%s' "${flattened:0:700}"
-}
-
-is_timeout_error() {
-  local text="$1"
-  [[ "$text" == *"timed out"* ]] ||
-  [[ "$text" == *"timeout"* ]] ||
-  [[ "$text" == *"operation timeout"* ]]
-}
-
-is_daemon_error() {
-  local text="$1"
-  [[ "$text" == *"Connection refused"* ]] ||
-  [[ "$text" == *"Failed to connect"* ]] ||
-  [[ "$text" == *"No route to host"* ]] ||
-  [[ "$text" == *"Could not resolve host"* ]] ||
-  [[ "$text" == *"Name or service not known"* ]] ||
-  [[ "$text" == *"Temporary failure in name resolution"* ]]
-}
-
-is_permission_error() {
-  local text="$1"
-  local lower
-  lower="$(printf '%s' "$text" | tr '[:upper:]' '[:lower:]')"
-  [[ "$lower" == *"permission"* ]] ||
-  [[ "$lower" == *"forbidden"* ]] ||
-  [[ "$lower" == *"unauthorized"* ]] ||
-  [[ "$lower" == *"access denied"* ]]
-}
-
-is_license_error() {
-  local text="$1"
-  local lower
-  lower="$(printf '%s' "$text" | tr '[:upper:]' '[:lower:]')"
-  [[ "$lower" == *"license"* ]] || [[ "$lower" == *"accept-license"* ]]
-}
-
-extract_http_status_from_text() {
-  local text="$1"
-  local status
-  status="$(printf '%s' "$text" | grep -Eo 'HTTP [0-9]{3}' | awk '{print $2}' | tail -n1 || true)"
-  if [[ "$status" =~ ^[0-9]{3}$ ]]; then
-    printf '%s' "$status"
-    return 0
-  fi
-  return 1
-}
-
-classify_curl_error() {
-  local curl_exit="$1"
-  local err_text="$2"
-
-  if [[ "$curl_exit" -eq 28 ]] || is_timeout_error "$err_text"; then
-    echo "$EXIT_TIMEOUT"
-    return
-  fi
-
-  if is_daemon_error "$err_text"; then
-    echo "$EXIT_DAEMON_UNREACHABLE"
-    return
-  fi
-
-  echo "$EXIT_INTERNAL"
-}
-
-classify_http_status() {
-  local context="$1"
-  local status="$2"
-
-  case "$status" in
-    400)
-      echo "$EXIT_USAGE"
-      return
-      ;;
-    401|403)
-      echo "$EXIT_PERMISSION"
-      return
-      ;;
-    404)
-      if [[ "$context" == "show" ]]; then
-        echo "$EXIT_MODEL_MISSING"
-      else
-        echo "$EXIT_INTERNAL"
-      fi
-      return
-      ;;
-    408|504)
-      echo "$EXIT_TIMEOUT"
-      return
-      ;;
-    409)
-      echo "$EXIT_PERMISSION"
-      return
-      ;;
-    *)
-      echo "$EXIT_INTERNAL"
-      return
-      ;;
-  esac
-}
-
-classify_text_error() {
-  local context="$1"
-  local err_text="$2"
-
-  if is_timeout_error "$err_text"; then
-    echo "$EXIT_TIMEOUT"
-    return
-  fi
-
-  if is_daemon_error "$err_text"; then
-    echo "$EXIT_DAEMON_UNREACHABLE"
-    return
-  fi
-
-  if is_permission_error "$err_text" || is_license_error "$err_text"; then
-    echo "$EXIT_PERMISSION"
-    return
-  fi
-
-  status="$(extract_http_status_from_text "$err_text" || true)"
-  if [[ -n "$status" ]]; then
-    classify_http_status "$context" "$status"
-    return
-  fi
-
-  echo "$EXIT_INTERNAL"
-}
-
-http_request() {
-  local method="$1"
-  local path="$2"
-  local payload="${3:-}"
-  local body_file err_file
-  local curl_exit
-
-  body_file="$(mktemp)"
-  err_file="$(mktemp)"
-
-  if [[ -n "$payload" ]]; then
-    if HTTP_STATUS="$(curl -sS --connect-timeout "$TIMEOUT" --max-time "$TIMEOUT" -X "$method" -H 'content-type: application/json' --data "$payload" -o "$body_file" -w '%{http_code}' "${BASE_URL}${path}" 2>"$err_file")"; then
-      :
-    else
-      curl_exit=$?
-      HTTP_ERROR="$(cat "$err_file")"
-      rm -f "$body_file" "$err_file"
-      return "$curl_exit"
-    fi
-  else
-    if HTTP_STATUS="$(curl -sS --connect-timeout "$TIMEOUT" --max-time "$TIMEOUT" -X "$method" -o "$body_file" -w '%{http_code}' "${BASE_URL}${path}" 2>"$err_file")"; then
-      :
-    else
-      curl_exit=$?
-      HTTP_ERROR="$(cat "$err_file")"
-      rm -f "$body_file" "$err_file"
-      return "$curl_exit"
-    fi
-  fi
-
-  HTTP_BODY="$(cat "$body_file")"
-  HTTP_ERROR=""
-  rm -f "$body_file" "$err_file"
-  return 0
-}
-
 require_python3() {
   if ! command -v python3 >/dev/null 2>&1; then
-    echo "Error: python3 is required for JSON request normalization." >&2
+    emit_error "$EXIT_INTERNAL" "python3 is required for JSON request normalization."
     exit "$EXIT_INTERNAL"
   fi
 }
@@ -317,7 +142,7 @@ if parameters:
 with open(out_path, "w", encoding="utf-8") as f:
     json.dump(payload, f, sort_keys=True)
 PY
-    echo "Error: invalid request JSON. Provide a valid object payload." >&2
+    emit_error "$EXIT_USAGE" "invalid request JSON. Provide a valid object payload."
     exit "$EXIT_USAGE"
   fi
 }
@@ -336,16 +161,17 @@ run_tollama_command() {
     return 0
   fi
 
-  local err_text
-  local exit_code
+  local err_text exit_code hint
   err_text="$(cat "$err_file")"
   rm -f "$out_file" "$err_file"
 
-  echo "$err_text" >&2
   exit_code="$(classify_text_error "$context" "$err_text")"
+  hint=""
   if [[ "$exit_code" == "$EXIT_DAEMON_UNREACHABLE" ]]; then
-    print_host_mismatch_hint
+    hint="$_TOLLAMA_HOST_MISMATCH_HINT"
   fi
+
+  emit_error "$exit_code" "$err_text" "$hint"
   return "$exit_code"
 }
 
@@ -426,17 +252,17 @@ BASE_URL="${BASE_URL_ARG:-${TOLLAMA_BASE_URL:-$DEFAULT_BASE_URL}}"
 TIMEOUT="${TIMEOUT_ARG:-${TOLLAMA_FORECAST_TIMEOUT_SECONDS:-$DEFAULT_TIMEOUT}}"
 
 if ! is_positive_number "$TIMEOUT"; then
-  echo "Error: timeout must be a positive number, got '$TIMEOUT'." >&2
+  emit_error "$EXIT_USAGE" "timeout must be a positive number, got '$TIMEOUT'."
   exit "$EXIT_USAGE"
 fi
 
 if [[ -n "$METRICS_ARG" ]] && ! validate_metrics_csv "$METRICS_ARG"; then
-  echo "Error: --metrics must be comma-separated non-empty names (example: mape,mase)." >&2
+  emit_error "$EXIT_USAGE" "--metrics must be comma-separated non-empty names (example: mape,mase)."
   exit "$EXIT_USAGE"
 fi
 
 if [[ -n "$MASE_SEASONALITY_ARG" ]] && ! is_positive_integer "$MASE_SEASONALITY_ARG"; then
-  echo "Error: --mase-seasonality must be a positive integer." >&2
+  emit_error "$EXIT_USAGE" "--mase-seasonality must be a positive integer."
   exit "$EXIT_USAGE"
 fi
 
@@ -445,13 +271,13 @@ PAYLOAD_JSON_FILE="$(mktemp)"
 
 if [[ -n "$INPUT_PATH" ]]; then
   if [[ ! -f "$INPUT_PATH" ]]; then
-    echo "Error: input file not found: $INPUT_PATH" >&2
+    emit_error "$EXIT_USAGE" "input file not found: $INPUT_PATH"
     exit "$EXIT_USAGE"
   fi
   cat "$INPUT_PATH" >"$PAYLOAD_RAW_FILE"
 else
   if [[ -t 0 ]]; then
-    echo "Error: missing request JSON. Provide --input FILE or pipe JSON via stdin." >&2
+    emit_error "$EXIT_USAGE" "missing request JSON. Provide --input FILE or pipe JSON via stdin."
     exit "$EXIT_USAGE"
   fi
   cat >"$PAYLOAD_RAW_FILE"
@@ -467,7 +293,7 @@ if command -v tollama >/dev/null 2>&1; then
     rc=$?
     if [[ "$rc" -eq "$EXIT_MODEL_MISSING" ]]; then
       if [[ "$ALLOW_PULL" -eq 0 ]]; then
-        echo "Error: model '$MODEL' is not installed. Re-run with --pull to allow installation." >&2
+        emit_error "$EXIT_MODEL_MISSING" "model '$MODEL' is not installed" "Re-run with --pull to allow installation"
         exit "$EXIT_MODEL_MISSING"
       fi
 
@@ -490,8 +316,8 @@ if command -v tollama >/dev/null 2>&1; then
     :
   else
     rc=$?
-    if [[ "$rc" -eq "$EXIT_INTERNAL" ]]; then
-      echo "Error: tollama run failed." >&2
+    if [[ "$rc" -eq "$EXIT_INTERNAL" ]] && [[ "${TOLLAMA_JSON_STDERR:-0}" != "1" ]]; then
+      emit_error "$EXIT_INTERNAL" "tollama run failed."
     fi
     exit "$rc"
   fi
@@ -499,7 +325,7 @@ if command -v tollama >/dev/null 2>&1; then
 fi
 
 if ! command -v curl >/dev/null 2>&1; then
-  echo "Error: tollama is unavailable and curl is missing; cannot perform HTTP fallback." >&2
+  emit_error "$EXIT_INTERNAL" "tollama is unavailable and curl is missing; cannot perform HTTP fallback."
   exit "$EXIT_INTERNAL"
 fi
 
@@ -508,16 +334,17 @@ if http_request POST "/api/show" "{\"model\":\"$MODEL\"}"; then
 else
   rc=$?
   exit_code="$(classify_curl_error "$rc" "${HTTP_ERROR:-}")"
-  echo "Error: POST ${BASE_URL}/api/show failed: ${HTTP_ERROR:-unknown error}" >&2
+  hint=""
   if [[ "$exit_code" == "$EXIT_DAEMON_UNREACHABLE" ]]; then
-    print_host_mismatch_hint
+    hint="$_TOLLAMA_HOST_MISMATCH_HINT"
   fi
+  emit_error "$exit_code" "POST ${BASE_URL}/api/show failed: ${HTTP_ERROR:-unknown error}" "$hint"
   exit "$exit_code"
 fi
 
 if [[ "$HTTP_STATUS" == "404" ]]; then
   if [[ "$ALLOW_PULL" -eq 0 ]]; then
-    echo "Error: model '$MODEL' is not installed. Re-run with --pull to allow installation." >&2
+    emit_error "$EXIT_MODEL_MISSING" "model '$MODEL' is not installed" "Re-run with --pull to allow installation"
     exit "$EXIT_MODEL_MISSING"
   fi
 
@@ -532,24 +359,26 @@ if [[ "$HTTP_STATUS" == "404" ]]; then
   else
     rc=$?
     exit_code="$(classify_curl_error "$rc" "${HTTP_ERROR:-}")"
-    echo "Error: POST ${BASE_URL}/api/pull failed: ${HTTP_ERROR:-unknown error}" >&2
+    hint=""
     if [[ "$exit_code" == "$EXIT_DAEMON_UNREACHABLE" ]]; then
-      print_host_mismatch_hint
+      hint="$_TOLLAMA_HOST_MISMATCH_HINT"
     fi
+    emit_error "$exit_code" "POST ${BASE_URL}/api/pull failed: ${HTTP_ERROR:-unknown error}" "$hint"
     exit "$exit_code"
   fi
 
   if [[ ! "$HTTP_STATUS" =~ ^2 ]]; then
     exit_code="$(classify_http_status pull "$HTTP_STATUS")"
-    echo "Error: POST ${BASE_URL}/api/pull returned HTTP $HTTP_STATUS: $(normalize_detail "$HTTP_BODY")" >&2
+    emit_error "$exit_code" "POST ${BASE_URL}/api/pull returned HTTP $HTTP_STATUS: $(normalize_detail "$HTTP_BODY")"
     exit "$exit_code"
   fi
 elif [[ ! "$HTTP_STATUS" =~ ^2 ]]; then
   exit_code="$(classify_http_status show "$HTTP_STATUS")"
-  echo "Error: POST ${BASE_URL}/api/show returned HTTP $HTTP_STATUS: $(normalize_detail "$HTTP_BODY")" >&2
+  hint=""
   if [[ "$exit_code" == "$EXIT_DAEMON_UNREACHABLE" ]]; then
-    print_host_mismatch_hint
+    hint="$_TOLLAMA_HOST_MISMATCH_HINT"
   fi
+  emit_error "$exit_code" "POST ${BASE_URL}/api/show returned HTTP $HTTP_STATUS: $(normalize_detail "$HTTP_BODY")" "$hint"
   exit "$exit_code"
 fi
 
@@ -558,10 +387,11 @@ if http_request POST "/api/forecast" "$REQUEST_PAYLOAD"; then
 else
   rc=$?
   exit_code="$(classify_curl_error "$rc" "${HTTP_ERROR:-}")"
-  echo "Error: POST ${BASE_URL}/api/forecast failed: ${HTTP_ERROR:-unknown error}" >&2
+  hint=""
   if [[ "$exit_code" == "$EXIT_DAEMON_UNREACHABLE" ]]; then
-    print_host_mismatch_hint
+    hint="$_TOLLAMA_HOST_MISMATCH_HINT"
   fi
+  emit_error "$exit_code" "POST ${BASE_URL}/api/forecast failed: ${HTTP_ERROR:-unknown error}" "$hint"
   exit "$exit_code"
 fi
 
@@ -576,10 +406,11 @@ if [[ "$HTTP_STATUS" == "404" ]]; then
   else
     rc=$?
     exit_code="$(classify_curl_error "$rc" "${HTTP_ERROR:-}")"
-    echo "Error: POST ${BASE_URL}/v1/forecast failed: ${HTTP_ERROR:-unknown error}" >&2
+    hint=""
     if [[ "$exit_code" == "$EXIT_DAEMON_UNREACHABLE" ]]; then
-      print_host_mismatch_hint
+      hint="$_TOLLAMA_HOST_MISMATCH_HINT"
     fi
+    emit_error "$exit_code" "POST ${BASE_URL}/v1/forecast failed: ${HTTP_ERROR:-unknown error}" "$hint"
     exit "$exit_code"
   fi
 
@@ -590,5 +421,5 @@ if [[ "$HTTP_STATUS" == "404" ]]; then
 fi
 
 exit_code="$(classify_http_status forecast "$HTTP_STATUS")"
-echo "Error: forecast request failed with HTTP $HTTP_STATUS: $(normalize_detail "$HTTP_BODY")" >&2
+emit_error "$exit_code" "forecast request failed with HTTP $HTTP_STATUS: $(normalize_detail "$HTTP_BODY")"
 exit "$exit_code"

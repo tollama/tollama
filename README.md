@@ -537,6 +537,11 @@ OpenClaw integration is provided by the skill package under
 - `bin/tollama-health.sh`
 - `bin/tollama-models.sh`
 - `bin/tollama-forecast.sh`
+- `bin/tollama-pull.sh`
+- `bin/tollama-rm.sh`
+- `bin/tollama-info.sh`
+- `bin/_tollama_lib.sh`
+- `openai-tools.json`
 - `examples/*.json`
 
 This integration is OpenClaw-first and does not require any daemon/core/plugin
@@ -575,6 +580,9 @@ openclaw skills list --eligible | rg tollama-forecast
   `POST /v1/forecast` only when `/api/forecast` returns `404`.
 - `tollama-models.sh available` is daemon-only (`tollama info --json --remote`
   or `GET /api/info`) and does not use local fallback.
+- `tollama-health.sh` output includes `healthy`, `version_name`, and optional
+  `runtimes` (`--runtimes`).
+- Structured error output is available via `TOLLAMA_JSON_STDERR=1`.
 - Skill metadata eligibility is `bins=["bash"]` and `anyBins=["tollama","curl"]`.
 
 ### Breaking change: skill exit code contract v2
@@ -622,6 +630,8 @@ OpenClaw `tollama-forecast` scripts now share this exit code contract:
 ```bash
 bash skills/tollama-forecast/bin/tollama-health.sh --base-url "$TOLLAMA_BASE_URL"
 bash skills/tollama-forecast/bin/tollama-models.sh installed --base-url "$TOLLAMA_BASE_URL"
+bash skills/tollama-forecast/bin/tollama-pull.sh --model mock --base-url "$TOLLAMA_BASE_URL"
+bash skills/tollama-forecast/bin/tollama-info.sh --section runners --base-url "$TOLLAMA_BASE_URL"
 cat skills/tollama-forecast/examples/simple_forecast.json | \
   bash skills/tollama-forecast/bin/tollama-forecast.sh --model mock --base-url "$TOLLAMA_BASE_URL"
 # metrics-aware request example (input payload includes actuals + parameters.metrics)

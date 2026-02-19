@@ -7,9 +7,14 @@ SKILL_FILE="$SKILL_DIR/SKILL.md"
 
 required_files=(
   "$SKILL_FILE"
+  "$SKILL_DIR/bin/_tollama_lib.sh"
   "$SKILL_DIR/bin/tollama-health.sh"
   "$SKILL_DIR/bin/tollama-models.sh"
   "$SKILL_DIR/bin/tollama-forecast.sh"
+  "$SKILL_DIR/bin/tollama-pull.sh"
+  "$SKILL_DIR/bin/tollama-rm.sh"
+  "$SKILL_DIR/bin/tollama-info.sh"
+  "$SKILL_DIR/openai-tools.json"
   "$SKILL_DIR/examples/simple_forecast.json"
   "$SKILL_DIR/examples/multi_series.json"
   "$SKILL_DIR/examples/covariates_forecast.json"
@@ -94,5 +99,35 @@ done
 for json_file in "$SKILL_DIR"/examples/*.json; do
   python3 -m json.tool "$json_file" >/dev/null
 done
+
+python3 -m json.tool "$SKILL_DIR/openai-tools.json" >/dev/null
+python3 - <<'PY' "$SKILL_DIR/openai-tools.json"
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as fh:
+    payload = json.load(fh)
+
+tools = payload.get("tools")
+if not isinstance(tools, list) or not tools:
+    raise SystemExit("openai-tools.json must include a non-empty tools array")
+
+names = set()
+for item in tools:
+    if not isinstance(item, dict) or item.get("type") != "function":
+        raise SystemExit("all entries in openai-tools.json must be function tools")
+    function = item.get("function")
+    if not isinstance(function, dict):
+        raise SystemExit("tool.function must be an object")
+    name = function.get("name")
+    if not isinstance(name, str) or not name:
+        raise SystemExit("tool.function.name must be a non-empty string")
+    names.add(name)
+
+required = {"tollama_forecast", "tollama_health", "tollama_models"}
+missing = required.difference(names)
+if missing:
+    raise SystemExit(f"openai-tools.json missing required tool names: {sorted(missing)!r}")
+PY
 
 echo "OpenClaw tollama-forecast skill validation: OK"

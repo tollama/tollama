@@ -16,6 +16,7 @@ The skill ships **bash helper scripts** (under `bin/`) that:
 
 - verify daemon health/version
 - inspect installed/loaded models
+- pull/remove/show/info model lifecycle state
 - run forecasts in **non-streaming mode** and print a single **JSON** response to stdout
 
 ---
@@ -95,6 +96,7 @@ What it checks (implementation may use HTTP):
 
 - `GET /v1/health`
 - `GET /api/version`
+- optional `GET /api/info` with `--runtimes`
 
 ### 2) Model inspection
 
@@ -103,6 +105,9 @@ bash ./bin/tollama-models.sh installed --base-url "$TOLLAMA_BASE_URL"
 bash ./bin/tollama-models.sh loaded --base-url "$TOLLAMA_BASE_URL"
 bash ./bin/tollama-models.sh show moirai-2.0-R-small --base-url "$TOLLAMA_BASE_URL"
 bash ./bin/tollama-models.sh available --base-url "$TOLLAMA_BASE_URL"
+bash ./bin/tollama-models.sh pull timesfm-2.5-200m --base-url "$TOLLAMA_BASE_URL"
+bash ./bin/tollama-models.sh rm timesfm-2.5-200m --base-url "$TOLLAMA_BASE_URL"
+bash ./bin/tollama-models.sh info --section runners --base-url "$TOLLAMA_BASE_URL"
 ```
 
 Meaning of subcommands:
@@ -111,6 +116,15 @@ Meaning of subcommands:
 - `loaded`: models currently loaded (e.g., `tollama ps` / `/api/ps`)
 - `show <model>`: model details
 - `available`: daemon “available models” metadata (from `tollama info --json --remote` or `/api/info`)
+- `pull <model>`: model installation (with optional `--accept-license`)
+- `rm <model>`: remove an installed model
+- `info`: daemon info payload (`--section daemon|models|runners|env|all`)
+
+Thin wrappers are also provided for agent tool mapping:
+
+- `bin/tollama-pull.sh`
+- `bin/tollama-rm.sh`
+- `bin/tollama-info.sh`
 
 > Notes:
 >
@@ -164,6 +178,24 @@ Included examples:
 - `examples/covariates_forecast.json`: past/future covariates example (if supported by your model)
 - `examples/metrics_forecast.json`: forecast + accuracy metrics (`mape`, `mase`) example
 
+### Request/response schema quick reference
+
+| Path | Type | Required | Notes |
+|---|---|---|---|
+| `model` | `string` | yes | also overridden by `--model` |
+| `horizon` | `int` | yes | forecast length |
+| `series[]` | `array<object>` | yes | one or more series |
+| `series[].id` | `string` | yes | unique series id |
+| `series[].timestamps` | `array<string>` | yes | ISO timestamps |
+| `series[].target` | `array<number>` | yes | history values |
+| `series[].freq` | `string` | optional | defaults may be inferred by daemon |
+| `series[].actuals` | `array<number>` | conditional | required when requesting metrics |
+| `parameters.metrics.names` | `array<string>` | optional | current values: `mape`, `mase` |
+| `parameters.metrics.mase_seasonality` | `int>=1` | optional | default `1` |
+| `response.forecasts[]` | `array<object>` | yes | forecast output values |
+| `response.metrics.aggregate` | `object` | optional | macro average per metric |
+| `response.metrics.series[]` | `array<object>` | optional | per-series metric values |
+
 ### Forecast accuracy metrics (MAPE + MASE)
 
 The skill supports Tollama's metrics-aware request/response fields.
@@ -182,6 +214,11 @@ Validation behavior:
 - Detailed schema validation is handled by the daemon.
 - Invalid metrics payloads are expected to surface as HTTP `400` errors from Tollama.
 
+### Model capability source of truth
+
+Capability matrices are owned by `model-registry/registry.yaml` and daemon `/api/info`.
+The skill does not duplicate those rules; it forwards requests and surfaces daemon errors.
+
 **Important**
 
 - Do not enable streaming unless you explicitly want NDJSON and your host can parse it.
@@ -195,6 +232,23 @@ Validation behavior:
 - response may include optional `metrics` payload when requested
 - **stderr:** diagnostics and failure hints
 - **no streaming NDJSON** in the default path
+
+### Structured stderr mode
+
+Set `TOLLAMA_JSON_STDERR=1` to emit machine-readable errors on stderr:
+
+```json
+{"error":{"code":"MODEL_MISSING","exit_code":4,"message":"model 'x' is not installed","hint":"Re-run with --pull to allow installation"}}
+```
+
+Codes map to exit codes:
+
+- `INVALID_REQUEST` -> `2`
+- `DAEMON_UNREACHABLE` -> `3`
+- `MODEL_MISSING` -> `4`
+- `PERMISSION_DENIED` (or subcode `LICENSE_REQUIRED`) -> `5`
+- `TIMEOUT` -> `6`
+- `INTERNAL_ERROR` -> `10`
 
 ---
 
@@ -282,6 +336,21 @@ Use OpenClaw’s `tools.exec.pathPrepend` (or install `tollama` into a standard 
 - Ensure your Codex environment mounts the repository/workspace that contains this skill folder.
 - Use the agent’s shell/terminal execution capability to run the commands exactly as shown.
 - Prefer non-streaming output to keep parsing deterministic.
+- OpenAI function tool definitions are available at `openai-tools.json`.
+
+---
+
+## Claude Code / MCP Notes
+
+- MCP servers are not bundled in this skill folder.
+- Use these scripts as tool backends from your MCP bridge layer to keep behavior deterministic.
+
+---
+
+## LangChain / LlamaIndex Notes
+
+- Wrap scripts as shell tools and parse JSON stdout.
+- For error branching, use exit codes and optional `TOLLAMA_JSON_STDERR=1` mode.
 
 ---
 

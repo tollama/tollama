@@ -141,10 +141,15 @@
   - 현재: 통합 runner + docs/examples/tests까지 1차 완료
 - [x] (P1) OpenClaw `tollama-forecast` 스킬 v3 운영 보강
   - 현재: `skills/tollama-forecast/` 추가(`SKILL.md`, `bin/*.sh`, `examples/*.json`)
+  - 현재: 공통 helper `bin/_tollama_lib.sh`로 에러 분류/HTTP 유틸 통합
+  - 현재: `TOLLAMA_JSON_STDERR=1` 구조화 stderr 지원(`code/subcode/exit_code/message/hint`)
+  - 현재: lifecycle wrapper 스크립트 추가(`tollama-pull.sh`, `tollama-rm.sh`, `tollama-info.sh`)
+  - 현재: OpenAI function 정의 파일 `openai-tools.json` 추가
   - 현재: 경로/exec host/PATH/auto-pull/endpoint/timeout 이슈를 스킬 계층에서 고정
   - 현재: metadata 완화(`bins=["bash"]`, `anyBins=["tollama","curl"]`) + daemon-only `available` 정책 확정
   - 현재: 스크립트 exit code contract v2(`0/2/3/4/5/6/10`)로 통일
   - 현재: 정적 검증 스크립트 `scripts/validate_openclaw_skill_tollama_forecast.sh` 추가
+  - 현재: CI(`.github/workflows/ci.yml`)에서 skill validator 실행
   - 현재: 스크립트 동작 회귀 테스트 `tests/test_openclaw_skill_tollama_forecast_scripts.py` 추가
 - [ ] (P1) TSModelfile 스펙 초안 작성 + parser 구현 계획
   - 파일 포맷/키 목록/우선순위 규칙 정의
