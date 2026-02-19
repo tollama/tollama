@@ -151,6 +151,12 @@
   - 현재: 정적 검증 스크립트 `scripts/validate_openclaw_skill_tollama_forecast.sh` 추가
   - 현재: CI(`.github/workflows/ci.yml`)에서 skill validator 실행
   - 현재: 스크립트 동작 회귀 테스트 `tests/test_openclaw_skill_tollama_forecast_scripts.py` 추가
+- [~] (P1) MCP 서버(Claude Code 네이티브 연동) 1차 도입
+  - 현재: 공통 HTTP client `src/tollama/client/` 신설(CLI/MCP 공용)
+  - 현재: `src/tollama/mcp/` 서버/툴 핸들러/엔트리포인트 추가
+  - 현재: `tollama-mcp` 스크립트 및 optional extra `.[mcp]` 추가
+  - 현재: `scripts/install_mcp.sh`, `CLAUDE.md` 추가
+  - TODO: 실 SDK 환경 E2E smoke + 운영 가이드 보강
 - [ ] (P1) TSModelfile 스펙 초안 작성 + parser 구현 계획
   - 파일 포맷/키 목록/우선순위 규칙 정의
 - [~] (P1) Unified Data Adapter 설계 문서

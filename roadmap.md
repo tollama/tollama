@@ -409,6 +409,24 @@ Phase F - Product hardening:
 ### Planned work / TODO
 - Add end-to-end OpenClaw agent runbook examples for `sandbox` and `gateway`.
 
+## 18) MCP integration for Claude Code [~]
+### Current implementation status
+- Shared HTTP client package added under `src/tollama/client/` and reused by CLI/MCP.
+- MCP server scaffold added under `src/tollama/mcp/`:
+  - `server.py`, `tools.py`, `schemas.py`, `__main__.py`
+  - tool set: `tollama_health`, `tollama_models`, `tollama_forecast`, `tollama_pull`, `tollama_show`
+- Optional dependency bundle added in `pyproject.toml`:
+  - `.[mcp]` with `mcp>=1.0`
+  - script entrypoint `tollama-mcp`
+- Claude Desktop helper script added:
+  - `scripts/install_mcp.sh`
+- Agent context doc added:
+  - `CLAUDE.md`
+
+### Planned work / TODO
+- Add full MCP end-to-end smoke test against a live Claude Desktop/SDK runtime.
+- Add tool-level auth/session policy guidance once deployment target is finalized.
+
 ## Prioritized TODO backlog
 1. Implement supervisor restart backoff policy and startup handshake/health checks.
 2. ~~Add per-family runtime bootstrap/install automation under `~/.tollama/runtimes/`.~~ ✓ Implemented.

@@ -648,6 +648,51 @@ bash skills/tollama-forecast/bin/tollama-forecast.sh \
   --base-url "$TOLLAMA_BASE_URL"
 ```
 
+## MCP Integration (Claude Code)
+
+Tollama now includes an MCP server package for native Claude Code integration.
+
+Install optional MCP dependencies:
+
+```bash
+python -m pip install -e ".[mcp]"
+```
+
+Run MCP server:
+
+```bash
+tollama-mcp
+```
+
+Claude Desktop registration example:
+
+```json
+{
+  "mcpServers": {
+    "tollama": {
+      "command": "tollama-mcp",
+      "env": {
+        "TOLLAMA_BASE_URL": "http://127.0.0.1:11435"
+      }
+    }
+  }
+}
+```
+
+Automated installer (macOS/Linux):
+
+```bash
+bash scripts/install_mcp.sh --base-url "http://127.0.0.1:11435"
+```
+
+Exposed MCP tools:
+
+- `tollama_health`
+- `tollama_models`
+- `tollama_forecast`
+- `tollama_pull`
+- `tollama_show`
+
 ## Architecture
 
 - `tollama.daemon`: Public API layer (`/api/*`, `/v1/health`, `/v1/forecast`) and runner supervision.

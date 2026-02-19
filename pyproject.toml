@@ -31,11 +31,16 @@ tollama-runner-timesfm = "tollama.runners.timesfm_runner.main:main"
 tollama-runner-uni2ts = "tollama.runners.uni2ts_runner.main:main"
 tollama-runner-sundial = "tollama.runners.sundial_runner.main:main"
 tollama-runner-toto = "tollama.runners.toto_runner.main:main"
+tollama-mcp = "tollama.mcp.__main__:main"
 
 [project.optional-dependencies]
 dev = [
   "pytest>=8.0",
   "ruff>=0.6.0",
+]
+mcp = [
+  "mcp>=1.0",
+  "httpx>=0.27.0,<1.0.0",
 ]
 runner_torch = [
   "chronos-forecasting>=2.0",
