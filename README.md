@@ -106,13 +106,34 @@ after updating the TimesFM dependency pin to
 | `sundial-base-128m` | pass |
 | `toto-open-base-1.0` | pass |
 
-### OpenClaw Skills E2E (2026-02-19)
+### OpenClaw Skills E2E (2026-02-20)
 
 We also verified the OpenClaw skill integration using `scripts/e2e_skills_test.sh`:
 
 | Skill | Result | Notes |
 |---|---|---|
 | `tollama-forecast` | pass | Validated skill structure + execution with `mock` model; verified Exit Code Contract v2 compliance |
+
+### MCP SDK E2E (2026-02-20)
+
+We verified MCP integration over stdio with a live daemon using `tollama-mcp`:
+
+| MCP Tool | Result | Notes |
+|---|---|---|
+| `tollama_health` | pass | `isError=false` |
+| `tollama_models` | pass | `isError=false` |
+| `tollama_show` | pass | `isError=false` |
+| `tollama_forecast` | pass | `isError=false` |
+
+### Latest E2E Re-run (2026-02-20)
+
+We re-ran end-to-end regression checks:
+
+| Scope | Command | Result |
+|---|---|---|
+| Per-family forecasting | `bash scripts/e2e_all_families.sh` | pass |
+| OpenClaw skill | `bash scripts/e2e_skills_test.sh` | pass |
+| MCP stdio smoke | `tollama-mcp` + SDK tool calls | pass |
 
 All runner commands were confirmed from `/api/info` to use
 `~/.tollama/runtimes/<family>/venv/bin/python`.
@@ -547,6 +568,36 @@ OpenClaw integration is provided by the skill package under
 This integration is OpenClaw-first and does not require any daemon/core/plugin
 changes.
 
+### Skill implementation layout
+
+- `skills/tollama-forecast/bin/_tollama_lib.sh`:
+  shared HTTP helpers (`http_request`), error classifiers, and `emit_error`
+  (plain stderr / JSON stderr dual-mode).
+- `skills/tollama-forecast/bin/tollama-forecast.sh`:
+  forecast entrypoint (payload normalization + metrics flag injection +
+  model check/pull + forecast execution).
+- `skills/tollama-forecast/bin/tollama-models.sh`:
+  model lifecycle multiplexer (`installed|loaded|show|available|pull|rm|info`).
+- `skills/tollama-forecast/bin/tollama-health.sh`:
+  daemon health/version probe with optional runtime summary (`--runtimes`).
+- `skills/tollama-forecast/bin/tollama-pull.sh` / `tollama-rm.sh` /
+  `tollama-info.sh`:
+  thin wrappers delegating to `tollama-models.sh`.
+
+### Script contracts (current)
+
+| Script | Primary behavior | CLI path | HTTP path / endpoints |
+|---|---|---|---|
+| `tollama-forecast.sh` | non-stream forecast JSON output | `tollama show` + optional `tollama pull --no-stream` + `tollama run --no-stream` | `POST /api/show`, optional `POST /api/pull`, `POST /api/forecast`, fallback `POST /v1/forecast` on `/api/forecast` `404` |
+| `tollama-models.sh installed` | installed models list | `tollama list --json` | `GET /api/tags` |
+| `tollama-models.sh loaded` | loaded models list | `tollama ps --json` | `GET /api/ps` |
+| `tollama-models.sh show` | model detail | `tollama show` | `POST /api/show` |
+| `tollama-models.sh pull` | pull/install model | `tollama pull --no-stream` | `POST /api/pull` |
+| `tollama-models.sh rm` | remove model | `tollama rm` | `DELETE /api/delete` |
+| `tollama-models.sh available` | available model list | `tollama info --json --remote` + local extract | `GET /api/info` + local extract |
+| `tollama-models.sh info` | daemon info section output | `tollama info --json --remote` + section extract | `GET /api/info` + section extract |
+| `tollama-health.sh` | daemon health payload | n/a (curl path only) | `GET /v1/health`, `GET /api/version`, optional `GET /api/info` (`--runtimes`) |
+
 ### Install (Managed skills, recommended)
 
 ```bash
@@ -584,6 +635,10 @@ openclaw skills list --eligible | rg tollama-forecast
   `runtimes` (`--runtimes`).
 - Structured error output is available via `TOLLAMA_JSON_STDERR=1`.
 - Skill metadata eligibility is `bins=["bash"]` and `anyBins=["tollama","curl"]`.
+- Skill-side validation remains minimal by design:
+  - validates option shape (`--timeout` positive number, `--metrics` non-empty CSV,
+    `--mase-seasonality` positive integer)
+  - full schema/covariate/metrics validation is delegated to daemon (HTTP `400` path)
 
 ### Breaking change: skill exit code contract v2
 
@@ -595,6 +650,12 @@ OpenClaw `tollama-forecast` scripts now share this exit code contract:
 - `5`: license required/not accepted/permission
 - `6`: timeout
 - `10`: unexpected internal error
+
+When `TOLLAMA_JSON_STDERR=1`, stderr is emitted as structured JSON:
+
+```json
+{"error":{"code":"MODEL_MISSING","subcode":"LICENSE_REQUIRED","exit_code":5,"message":"...","hint":"..."}}
+```
 
 ### Troubleshooting
 
@@ -685,13 +746,62 @@ Automated installer (macOS/Linux):
 bash scripts/install_mcp.sh --base-url "http://127.0.0.1:11435"
 ```
 
-Exposed MCP tools:
+### Implementation layout
 
-- `tollama_health`
-- `tollama_models`
-- `tollama_forecast`
-- `tollama_pull`
-- `tollama_show`
+- `src/tollama/client/http.py`:
+  shared HTTP client used by CLI and MCP (`TollamaClient`).
+- `src/tollama/client/exceptions.py`:
+  typed error hierarchy with category + exit code metadata.
+- `src/tollama/mcp/schemas.py`:
+  strict tool input schemas (`extra="forbid"`, strict types).
+- `src/tollama/mcp/tools.py`:
+  tool handlers, input validation, client calls, response normalization.
+- `src/tollama/mcp/server.py`:
+  FastMCP registration + MCP error envelope mapping.
+- `src/tollama/mcp/__main__.py`:
+  `tollama-mcp` entrypoint.
+
+### Tool contracts (current)
+
+| Tool | Backend endpoint(s) | Key args | Return shape |
+|---|---|---|---|
+| `tollama_health` | `GET /v1/health`, `GET /api/version` | `base_url?`, `timeout?` | `{healthy, health, version}` |
+| `tollama_models` | `GET /api/tags` or `/api/ps` or `/api/info` | `mode=installed\|loaded\|available`, `base_url?`, `timeout?` | `{mode, items}` |
+| `tollama_forecast` | `POST /api/forecast` (non-stream) | `request`, `base_url?`, `timeout?` | canonical `ForecastResponse` JSON |
+| `tollama_pull` | `POST /api/pull` (non-stream) | `model`, `accept_license?`, `base_url?`, `timeout?` | daemon pull result JSON |
+| `tollama_show` | `POST /api/show` | `model`, `base_url?`, `timeout?` | daemon show payload JSON |
+
+Notes:
+- `tollama_forecast` validates `request` with `ForecastRequest` before HTTP call.
+- MCP tool input schemas require `timeout > 0` when provided.
+- MCP integration is intentionally non-streaming for deterministic tool responses.
+
+### Error mapping contract
+
+MCP tools map client/daemon failures to a stable category + exit-code-aligned payload:
+
+| Category | Exit code |
+|---|---|
+| `INVALID_REQUEST` | `2` |
+| `DAEMON_UNREACHABLE` | `3` |
+| `MODEL_MISSING` | `4` |
+| `LICENSE_REQUIRED` / `PERMISSION_DENIED` | `5` |
+| `TIMEOUT` | `6` |
+| `INTERNAL_ERROR` | `10` |
+
+MCP server emits tool failures as:
+
+```json
+{"error":{"category":"...","exit_code":3,"message":"..."}}
+```
+
+### Defaults and overrides
+
+- Default MCP client base URL: `http://localhost:11435`.
+- Default MCP client timeout: `10` seconds.
+- Every MCP tool accepts optional `base_url` and `timeout` overrides.
+- `scripts/install_mcp.sh` upserts Claude Desktop `mcpServers.<name>` and sets
+  `env.TOLLAMA_BASE_URL`.
 
 Quick checks:
 

@@ -36,3 +36,30 @@ MCP entrypoint:
 
 Claude Desktop helper:
 - `scripts/install_mcp.sh`
+
+## MCP Implementation Details
+
+Tool modules:
+- `src/tollama/mcp/schemas.py`: strict tool input schemas
+- `src/tollama/mcp/tools.py`: tool handlers + daemon client calls
+- `src/tollama/mcp/server.py`: FastMCP registration + error envelope mapping
+
+Exposed tools:
+- `tollama_health`
+- `tollama_models`
+- `tollama_forecast` (non-streaming)
+- `tollama_pull`
+- `tollama_show`
+
+Error categories (exit-code aligned):
+- `INVALID_REQUEST` (`2`)
+- `DAEMON_UNREACHABLE` (`3`)
+- `MODEL_MISSING` (`4`)
+- `LICENSE_REQUIRED` / `PERMISSION_DENIED` (`5`)
+- `TIMEOUT` (`6`)
+- `INTERNAL_ERROR` (`10`)
+
+Defaults:
+- base URL: `http://localhost:11435`
+- timeout: `10` seconds
+- per-tool override args: `base_url`, `timeout`

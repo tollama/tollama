@@ -151,12 +151,15 @@
   - 현재: 정적 검증 스크립트 `scripts/validate_openclaw_skill_tollama_forecast.sh` 추가
   - 현재: CI(`.github/workflows/ci.yml`)에서 skill validator 실행
   - 현재: 스크립트 동작 회귀 테스트 `tests/test_openclaw_skill_tollama_forecast_scripts.py` 추가
+  - 현재: `README.md`/`roadmap.md`/`SKILL.md`에 스킬 구현 상세(스크립트별 계약/HTTP 경로/에러 출력 포맷) 반영
 - [~] (P1) MCP 서버(Claude Code 네이티브 연동) 1차 도입
   - 현재: 공통 HTTP client `src/tollama/client/` 신설(CLI/MCP 공용)
   - 현재: `src/tollama/mcp/` 서버/툴 핸들러/엔트리포인트 추가
   - 현재: `tollama-mcp` 스크립트 및 optional extra `.[mcp]` 추가
   - 현재: `scripts/install_mcp.sh`, `CLAUDE.md` 추가
-  - TODO: 실 SDK 환경 E2E smoke + 운영 가이드 보강
+  - 현재: 실 SDK 환경 E2E smoke 완료(`tollama-mcp` stdio + live daemon tool call)
+  - 현재: `README.md`/`roadmap.md`/`CLAUDE.md`에 MCP 구현 상세(툴 계약/에러 매핑/기본값) 반영
+  - TODO: Claude Desktop 운영 가이드(권한/세션/배포 정책) 보강
 - [ ] (P1) TSModelfile 스펙 초안 작성 + parser 구현 계획
   - 파일 포맷/키 목록/우선순위 규칙 정의
 - [~] (P1) Unified Data Adapter 설계 문서
@@ -177,3 +180,8 @@
   - 추가 재검증(per-family runtime isolation smoke, TimesFM pin 수정 후):
     `chronos2`, `granite-ttm-r2`, `timesfm-2.5-200m`, `moirai-2.0-R-small`,
     `sundial-base-128m`, `toto-open-base-1.0` 모두 pass
+- [x] (P1) 최종 E2E 회귀(per-family/skill/MCP) 확인
+  - 기준 일자: `2026-02-20`
+  - pass: `bash scripts/e2e_all_families.sh`
+  - pass: `bash scripts/e2e_skills_test.sh`
+  - pass: MCP stdio SDK smoke(`tollama_health`, `tollama_models`, `tollama_show`, `tollama_forecast`)

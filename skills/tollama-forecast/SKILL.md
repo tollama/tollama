@@ -86,6 +86,14 @@ All scripts:
 - print **machine-readable outputs** to stdout (JSON where possible)
 - return meaningful exit codes (see below)
 
+Implementation map:
+
+- `bin/_tollama_lib.sh`: shared classifier/HTTP layer (`classify_*`, `http_request`, `emit_error`)
+- `bin/tollama-forecast.sh`: request normalization, optional metrics flag injection, forecast orchestration
+- `bin/tollama-models.sh`: lifecycle multiplexer used by `installed|loaded|show|available|pull|rm|info`
+- `bin/tollama-health.sh`: health/version probe (+ optional runtime summary via `--runtimes`)
+- `bin/tollama-pull.sh`, `bin/tollama-rm.sh`, `bin/tollama-info.sh`: thin delegating wrappers
+
 ### 1) Health check
 
 ```bash
@@ -345,6 +353,11 @@ Use OpenClaw’s `tools.exec.pathPrepend` (or install `tollama` into a standard 
 - MCP servers are not bundled in this skill folder.
 - Repository-level MCP server is available via `tollama-mcp` (`pip install ".[mcp]"`).
 - Claude Desktop helper script is available at `scripts/install_mcp.sh`.
+- MCP tools exposed by `tollama-mcp`:
+  `tollama_health`, `tollama_models`, `tollama_forecast`, `tollama_pull`, `tollama_show`.
+- MCP error categories align with the skill exit-code contract intent:
+  `INVALID_REQUEST`, `DAEMON_UNREACHABLE`, `MODEL_MISSING`,
+  `LICENSE_REQUIRED`/`PERMISSION_DENIED`, `TIMEOUT`, `INTERNAL_ERROR`.
 - Use these scripts as tool backends from your MCP bridge layer when shell-first behavior is preferred.
 
 ---

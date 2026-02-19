@@ -308,6 +308,11 @@ tollama/
   TimesFM dependency pin to commit `2dcc66fbfe2155adba1af66aa4d564a0ee52f61e`:
   - pass: `chronos2`, `granite-ttm-r2`, `timesfm-2.5-200m`,
     `moirai-2.0-R-small`, `sundial-base-128m`, `toto-open-base-1.0`
+- End-to-end regression was re-validated on `2026-02-20`:
+  - pass: per-family forecasting suite (`bash scripts/e2e_all_families.sh`)
+  - pass: OpenClaw skill suite (`bash scripts/e2e_skills_test.sh`)
+  - pass: MCP SDK stdio smoke (`tollama-mcp` tool calls:
+    `tollama_health`, `tollama_models`, `tollama_show`, `tollama_forecast`)
 
 ### Planned work / TODO
 - Add restart backoff and idle-timeout policy behavior tests.
@@ -395,6 +400,13 @@ Phase F - Product hardening:
   - `/api/forecast` primary with `/v1/forecast` fallback only on `404`
   - daemon-only `available` resolution via `/api/info` or `tollama info --json --remote`
   - `tollama-health.sh --runtimes` enriches health output with runtime install/running state
+- Skill implementation contracts are documented and aligned with code:
+  - `_tollama_lib.sh` centralizes error classification + HTTP helper + JSON stderr emitter
+  - `tollama-forecast.sh` handles metrics flags (`--metrics`, `--mase-seasonality`) and
+    performs CLI-first forecast with HTTP fallback when CLI is unavailable
+  - `tollama-models.sh` is lifecycle multiplexer; thin wrappers
+    (`tollama-pull.sh`, `tollama-rm.sh`, `tollama-info.sh`) delegate to it
+  - `tollama-health.sh` is curl-based health/version probe with optional runtimes
 - Skill scripts share exit code contract v2:
   - `0` success
   - `2` invalid input/request
@@ -405,6 +417,7 @@ Phase F - Product hardening:
   - `10` unexpected internal error
 - Optional structured stderr mode is available with `TOLLAMA_JSON_STDERR=1`.
 - CI now runs `scripts/validate_openclaw_skill_tollama_forecast.sh`.
+- Skill E2E re-validation passed on `2026-02-20` via `scripts/e2e_skills_test.sh`.
 
 ### Planned work / TODO
 - Add end-to-end OpenClaw agent runbook examples for `sandbox` and `gateway`.
@@ -412,24 +425,36 @@ Phase F - Product hardening:
 ## 18) MCP integration for Claude Code [~]
 ### Current implementation status
 - Shared HTTP client package added under `src/tollama/client/` and reused by CLI/MCP.
+- HTTP client contracts (`src/tollama/client/http.py`):
+  - default base URL `http://localhost:11435`, default timeout `10s`
+  - endpoint coverage: health/version, tags/ps/info, show/pull/delete, forecast, validate
+  - HTTP/status/request failures mapped into typed exceptions with category metadata
+    (`INVALID_REQUEST`, `DAEMON_UNREACHABLE`, `MODEL_MISSING`, `LICENSE_REQUIRED`,
+    `PERMISSION_DENIED`, `TIMEOUT`, `INTERNAL_ERROR`)
 - MCP server scaffold added under `src/tollama/mcp/`:
   - `server.py`, `tools.py`, `schemas.py`, `__main__.py`
   - tool set: `tollama_health`, `tollama_models`, `tollama_forecast`, `tollama_pull`, `tollama_show`
+- MCP tool behavior/contracts:
+  - strict input schemas (`extra="forbid"`, strict scalar typing, positive timeout)
+  - `tollama_models(mode=installed|loaded|available)` mapped to `/api/tags|/api/ps|/api/info`
+  - `tollama_forecast` is non-streaming and validates request via `ForecastRequest`
+  - tool failures are emitted as JSON payload with `{error:{category,exit_code,message}}`
 - Optional dependency bundle added in `pyproject.toml`:
   - `.[mcp]` with `mcp>=1.0`
   - script entrypoint `tollama-mcp`
 - Claude Desktop helper script added:
-  - `scripts/install_mcp.sh`
+  - `scripts/install_mcp.sh` (upsert `mcpServers.<name>` + `env.TOLLAMA_BASE_URL`)
 - Agent context doc added:
   - `CLAUDE.md`
 - Focused validation added:
   - `tests/test_client_http.py`
   - `tests/test_mcp_tools.py`
   - `tests/test_mcp_entrypoint.py`
+- MCP end-to-end SDK smoke passed on `2026-02-20` with stdio transport and live daemon.
 
 ### Planned work / TODO
-- Add full MCP end-to-end smoke test against a live Claude Desktop/SDK runtime.
 - Add tool-level auth/session policy guidance once deployment target is finalized.
+- Add explicit client-facing MCP tool schema docs with sample request/response payloads.
 
 ## Prioritized TODO backlog
 1. Implement supervisor restart backoff policy and startup handshake/health checks.
