@@ -1,6 +1,6 @@
 # tollama roadmap (worker-per-model-family)
 
-Last updated: 2026-02-17
+Last updated: 2026-02-19
 
 Status legend:
 - `[x]` implemented
@@ -93,7 +93,7 @@ tollama/
   - `covariates_mode = "best_effort" | "strict"` (default `best_effort`)
   - `timesfm` knobs: `xreg_mode`, `ridge`, `force_on_cpu`
   - optional `metrics`:
-    - `names` supports `mape`, `mase`
+    - `names` supports `mape`, `mase`, `mae`, `rmse`, `smape`
     - `mase_seasonality` default `1`
     - requires `series.actuals` with length `horizon`
 
@@ -282,7 +282,8 @@ tollama/
 - Sensitive values are redacted in diagnostics payloads.
 - Runner status reports include install/running state, restart count, and last error.
 - Forecast/pull paths map several failure classes to `400/404/409/502/503`.
-- Forecast endpoints support optional accuracy metrics (`mape`, `mase`) in response payloads.
+- Forecast endpoints support optional accuracy metrics
+  (`mape`, `mase`, `mae`, `rmse`, `smape`) in response payloads.
 
 ### Planned work / TODO
 - Add runtime `/metrics` endpoint with Prometheus-friendly counters/histograms.
@@ -313,6 +314,14 @@ tollama/
   - pass: OpenClaw skill suite (`bash scripts/e2e_skills_test.sh`)
   - pass: MCP SDK stdio smoke (`tollama-mcp` tool calls:
     `tollama_health`, `tollama_models`, `tollama_show`, `tollama_forecast`)
+- Phase 4 feature set was re-validated on `2026-02-19`:
+  - pass: OpenClaw skill regression (`bash scripts/e2e_skills_test.sh`)
+  - pass: metrics expansion live daemon checks (`/api/forecast` non-stream):
+    `mape`, `mase`, `mae`, `rmse`, `smape` aggregate + SMAPE undefined warning path
+  - pass: LangChain wrapper live invocation (`get_tollama_tools`):
+    `tollama_health`, `tollama_models`, `tollama_forecast`, invalid-request mapping
+  - pass: LangChain wrapper test file in LangChain-enabled venv
+    (`PYTHONPATH=src python -m pytest -q tests/test_langchain_skill.py`)
 
 ### Planned work / TODO
 - Add restart backoff and idle-timeout policy behavior tests.
@@ -420,7 +429,9 @@ Phase F - Product hardening:
 - Skill E2E re-validation passed on `2026-02-20` via `scripts/e2e_skills_test.sh`.
 
 ### Planned work / TODO
-- Add end-to-end OpenClaw agent runbook examples for `sandbox` and `gateway`.
+- Completed: end-to-end OpenClaw agent runbooks are documented:
+  - `docs/openclaw-sandbox-runbook.md`
+  - `docs/openclaw-gateway-runbook.md`
 
 ## 18) MCP integration for Claude Code [~]
 ### Current implementation status
@@ -446,10 +457,15 @@ Phase F - Product hardening:
   - `scripts/install_mcp.sh` (upsert `mcpServers.<name>` + `env.TOLLAMA_BASE_URL`)
 - Agent context doc added:
   - `CLAUDE.md`
+- Optional LangChain SDK wrapper added under `src/tollama/skill/langchain.py`:
+  - `TollamaForecastTool`, `TollamaHealthTool`, `TollamaModelsTool`
+  - `get_tollama_tools(base_url="http://127.0.0.1:11435", timeout=10.0)`
+  - optional extra `.[langchain]` with `langchain-core`
 - Focused validation added:
   - `tests/test_client_http.py`
   - `tests/test_mcp_tools.py`
   - `tests/test_mcp_entrypoint.py`
+  - `tests/test_langchain_skill.py`
 - MCP end-to-end SDK smoke passed on `2026-02-20` with stdio transport and live daemon.
 
 ### Planned work / TODO

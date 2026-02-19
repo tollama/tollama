@@ -117,7 +117,7 @@ def test_forecast_request_rejects_future_only_covariates() -> None:
 
 def test_forecast_request_metrics_requires_actuals_and_horizon_alignment() -> None:
     payload = _example_request_payload()
-    payload["parameters"] = {"metrics": {"names": ["mape", "mase"]}}
+    payload["parameters"] = {"metrics": {"names": ["mae", "rmse", "smape", "mape", "mase"]}}
 
     with pytest.raises(ValidationError):
         ForecastRequest.model_validate(payload)
@@ -130,7 +130,7 @@ def test_forecast_request_metrics_requires_actuals_and_horizon_alignment() -> No
     series["actuals"] = [12.0, 13.0, 14.0]
     request = ForecastRequest.model_validate(payload)
     assert request.parameters.metrics is not None
-    assert request.parameters.metrics.names == ["mape", "mase"]
+    assert request.parameters.metrics.names == ["mae", "rmse", "smape", "mape", "mase"]
     assert request.parameters.metrics.mase_seasonality == 1
 
 
@@ -138,6 +138,14 @@ def test_forecast_request_rejects_duplicate_metric_names() -> None:
     payload = _example_request_payload()
     payload["series"][0]["actuals"] = [12.0, 13.0, 14.0]
     payload["parameters"] = {"metrics": {"names": ["mape", "mape"]}}
+    with pytest.raises(ValidationError):
+        ForecastRequest.model_validate(payload)
+
+
+def test_forecast_request_rejects_unknown_metric_names() -> None:
+    payload = _example_request_payload()
+    payload["series"][0]["actuals"] = [12.0, 13.0, 14.0]
+    payload["parameters"] = {"metrics": {"names": ["mae", "unknown"]}}
     with pytest.raises(ValidationError):
         ForecastRequest.model_validate(payload)
 
@@ -154,11 +162,17 @@ def test_forecast_response_accepts_metrics_payload() -> None:
             }
         ],
         "metrics": {
-            "aggregate": {"mape": 12.5, "mase": 0.8},
+            "aggregate": {"mape": 12.5, "mase": 0.8, "mae": 0.2, "rmse": 0.3, "smape": 14.0},
             "series": [
                 {
                     "id": "series-1",
-                    "values": {"mape": 12.5, "mase": 0.8},
+                    "values": {
+                        "mape": 12.5,
+                        "mase": 0.8,
+                        "mae": 0.2,
+                        "rmse": 0.3,
+                        "smape": 14.0,
+                    },
                 }
             ],
         },
@@ -166,3 +180,4 @@ def test_forecast_response_accepts_metrics_payload() -> None:
     response = ForecastResponse.model_validate(payload)
     assert response.metrics is not None
     assert response.metrics.aggregate["mape"] == 12.5
+    assert response.metrics.aggregate["smape"] == 14.0

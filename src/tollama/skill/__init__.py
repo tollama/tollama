@@ -1,0 +1,30 @@
+"""Skill integrations for external agent frameworks."""
+
+from __future__ import annotations
+
+__all__ = [
+    "TollamaForecastTool",
+    "TollamaHealthTool",
+    "TollamaModelsTool",
+    "get_tollama_tools",
+]
+
+
+def __getattr__(name: str):
+    if name not in __all__:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+    from .langchain import (
+        TollamaForecastTool,
+        TollamaHealthTool,
+        TollamaModelsTool,
+        get_tollama_tools,
+    )
+
+    exports = {
+        "TollamaForecastTool": TollamaForecastTool,
+        "TollamaHealthTool": TollamaHealthTool,
+        "TollamaModelsTool": TollamaModelsTool,
+        "get_tollama_tools": get_tollama_tools,
+    }
+    return exports[name]

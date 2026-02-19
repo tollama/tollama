@@ -12,7 +12,8 @@ This repository provides a structured forecasting stack:
 - Typer CLI (`tollama`) for Ollama-style model lifecycle and forecasting
 - Unified covariates contract (`past_covariates` + `future_covariates`) with
   `best_effort`/`strict` handling and warnings
-- Optional forecast accuracy metrics (`MAPE`, `MASE`) via `series[].actuals`
+- Optional forecast accuracy metrics (`MAPE`, `MASE`, `MAE`, `RMSE`, `SMAPE`) via
+  `series[].actuals`
   and `parameters.metrics`
 - Ruff + Pytest + CI checks
 
@@ -138,6 +139,17 @@ We re-ran end-to-end regression checks:
 All runner commands were confirmed from `/api/info` to use
 `~/.tollama/runtimes/<family>/venv/bin/python`.
 
+### Phase 4 Feature E2E Re-run (2026-02-19)
+
+We re-validated newly implemented Phase 4 features with live daemon checks:
+
+| Scope | Command | Result | Notes |
+|---|---|---|---|
+| OpenClaw skill regression | `bash scripts/e2e_skills_test.sh` | pass | Skill validator + `tollama-forecast` mock execution pass |
+| Metrics expansion live check | `curl /api/forecast` (non-stream) with `mape,mase,mae,rmse,smape` | pass | aggregate includes all 5 metrics; SMAPE undefined case returns warning and `metrics=null` |
+| LangChain wrapper live check | `PYTHONPATH=src` + `get_tollama_tools(...)` invocation | pass | `tollama_health`, `tollama_models`, `tollama_forecast`, invalid-request mapping verified |
+| LangChain wrapper test file | `PYTHONPATH=src python -m pytest -q tests/test_langchain_skill.py` | pass | `6 passed` in LangChain-enabled venv |
+
 Optional: one shared environment for all families (single-venv mode).
 Use this only when you intentionally disable auto-bootstrap as shown above.
 
@@ -239,17 +251,19 @@ Unified covariates contract:
 }
 ```
 
-### Forecast Accuracy Metrics (MAPE + MASE)
+### Forecast Accuracy Metrics (MAPE, MASE, MAE, RMSE, SMAPE)
 
 `/api/forecast` and `/v1/forecast` can optionally calculate forecast accuracy
 metrics against provided actuals:
 
 - set `series[].actuals` (length must equal `horizon`)
-- set `parameters.metrics.names` to any of `["mape", "mase"]`
+- set `parameters.metrics.names` to any of
+  `["mape", "mase", "mae", "rmse", "smape"]`
 - optional `parameters.metrics.mase_seasonality` (default `1`)
 - undefined cases are best-effort with response `warnings[]`:
   - MAPE skips when all actual values are `0`
   - MASE skips when `len(target) <= mase_seasonality` or naive denominator is `0`
+  - SMAPE skips when all `|actual|+|prediction|` denominators are `0`
 
 ```json
 {
@@ -267,7 +281,7 @@ metrics against provided actuals:
   ],
   "parameters": {
     "metrics": {
-      "names": ["mape", "mase"],
+      "names": ["mape", "mase", "mae", "rmse", "smape"],
       "mase_seasonality": 1
     }
   },
@@ -289,9 +303,24 @@ Example response:
     }
   ],
   "metrics": {
-    "aggregate": {"mape": 37.5, "mase": 0.5},
+    "aggregate": {
+      "mape": 37.5,
+      "mase": 0.5,
+      "mae": 1.0,
+      "rmse": 1.0,
+      "smape": 34.2857142857
+    },
     "series": [
-      {"id": "s1", "values": {"mape": 37.5, "mase": 0.5}}
+      {
+        "id": "s1",
+        "values": {
+          "mape": 37.5,
+          "mase": 0.5,
+          "mae": 1.0,
+          "rmse": 1.0,
+          "smape": 34.2857142857
+        }
+      }
     ]
   }
 }
@@ -549,6 +578,51 @@ Pull defaults (effective)
 `tollama info` prefers `GET /api/info` when the daemon is reachable, and automatically falls back
 to local collection when the daemon is down (unless `--remote` is set).
 
+## LangChain Integration (Python SDK)
+
+Install optional LangChain dependencies:
+
+```bash
+python -m pip install -e ".[langchain]"
+```
+
+Create preconfigured tools:
+
+```python
+from tollama.skill import get_tollama_tools
+
+tools = get_tollama_tools(base_url="http://127.0.0.1:11435", timeout=10.0)
+```
+
+Provided `BaseTool` wrappers:
+
+- `TollamaForecastTool`
+- `TollamaHealthTool`
+- `TollamaModelsTool`
+- `get_tollama_tools(base_url="http://127.0.0.1:11435", timeout=10.0)`
+
+Tool input contracts:
+
+- `tollama_health`: no runtime args (`{}`)
+- `tollama_models`: `{"mode": "installed"|"loaded"|"available"}`
+- `tollama_forecast`: `{"request": <ForecastRequest-compatible dict>}`
+
+Tool output/error behavior:
+
+- all wrappers return structured `dict` payloads (not JSON strings)
+- client/runtime failures return
+  `{"error":{"category","exit_code","message"}}`
+- invalid local input validation maps to
+  `{"error":{"category":"INVALID_REQUEST","exit_code":2,...}}`
+- if `langchain_core` is missing, import raises:
+  `pip install "tollama[langchain]"`
+
+Validation test:
+
+```bash
+PYTHONPATH=src python -m pytest -q tests/test_langchain_skill.py
+```
+
 ## OpenClaw Integration (Skill: `tollama-forecast`)
 
 OpenClaw integration is provided by the skill package under
@@ -567,6 +641,11 @@ OpenClaw integration is provided by the skill package under
 
 This integration is OpenClaw-first and does not require any daemon/core/plugin
 changes.
+
+Runbooks for end-to-end operator workflows:
+
+- `docs/openclaw-sandbox-runbook.md`
+- `docs/openclaw-gateway-runbook.md`
 
 ### Skill implementation layout
 
@@ -704,7 +783,7 @@ bash skills/tollama-forecast/bin/tollama-forecast.sh \
 bash skills/tollama-forecast/bin/tollama-forecast.sh \
   --model mock \
   --input skills/tollama-forecast/examples/simple_forecast.json \
-  --metrics mape,mase \
+  --metrics mape,mase,mae,rmse,smape \
   --mase-seasonality 1 \
   --base-url "$TOLLAMA_BASE_URL"
 ```

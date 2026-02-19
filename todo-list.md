@@ -1,6 +1,6 @@
 # tollama Todo List (Ollama for TSFM)
 
-기준 시점: 2026-02-17 (repo 현재 구현 반영)
+기준 시점: 2026-02-19 (repo 현재 구현 반영)
 
 우선순위:
 - `P0` = 필수(MVP)
@@ -78,11 +78,13 @@
 ### 5) 표준 예측 인터페이스: API Protocol
 
 - [~] (P0) 표준 출력 규격 확정
-  - 현재 Output: `mean`, `quantiles`, `warnings`, `usage`, optional `metrics`(`mape`/`mase`) 구현
+  - 현재 Output: `mean`, `quantiles`, `warnings`, `usage`, optional
+    `metrics`(`mape`/`mase`/`mae`/`rmse`/`smape`) 구현
   - TODO Meta 확장: `execution_time`, `model_version/digest`, `device` 표준 필드화, `median` 명시 규격 보강
 - [~] (P1) 신뢰도/품질 메타 지표 설계
-  - 현재: 요청 `series.actuals` + `parameters.metrics` 기반 `mape`/`mase` 계산 및 응답 `metrics` 제공
-  - TODO: `mae/rmse/smape/wape/rmsse`, quantile 기반 pinball loss, interval coverage 확장
+  - 현재: 요청 `series.actuals` + `parameters.metrics` 기반
+    `mape`/`mase`/`mae`/`rmse`/`smape` 계산 및 응답 `metrics` 제공
+  - TODO: `wape/rmsse`, quantile 기반 pinball loss, interval coverage 확장
 - [ ] (P1) 포맷 지원 확대: JSON + Parquet (대용량/배치)
 
 ---
@@ -152,6 +154,14 @@
   - 현재: CI(`.github/workflows/ci.yml`)에서 skill validator 실행
   - 현재: 스크립트 동작 회귀 테스트 `tests/test_openclaw_skill_tollama_forecast_scripts.py` 추가
   - 현재: `README.md`/`roadmap.md`/`SKILL.md`에 스킬 구현 상세(스크립트별 계약/HTTP 경로/에러 출력 포맷) 반영
+  - 현재: OpenClaw 운영 런북 추가(`docs/openclaw-sandbox-runbook.md`,
+    `docs/openclaw-gateway-runbook.md`)
+- [x] (P1) Python SDK / LangChain Tool 래퍼 추가
+  - 현재: `src/tollama/skill/langchain.py`에
+    `TollamaForecastTool`/`TollamaHealthTool`/`TollamaModelsTool` 구현
+  - 현재: 팩토리 `get_tollama_tools(base_url="http://127.0.0.1:11435", timeout=10.0)` 제공
+  - 현재: optional extra `.[langchain]`(`langchain-core`) 추가
+  - 현재: `tests/test_langchain_skill.py` 검증 추가
 - [~] (P1) MCP 서버(Claude Code 네이티브 연동) 1차 도입
   - 현재: 공통 HTTP client `src/tollama/client/` 신설(CLI/MCP 공용)
   - 현재: `src/tollama/mcp/` 서버/툴 핸들러/엔트리포인트 추가
@@ -185,3 +195,11 @@
   - pass: `bash scripts/e2e_all_families.sh`
   - pass: `bash scripts/e2e_skills_test.sh`
   - pass: MCP stdio SDK smoke(`tollama_health`, `tollama_models`, `tollama_show`, `tollama_forecast`)
+- [x] (P1) Phase 4 신규 기능 E2E 재검증
+  - 기준 일자: `2026-02-19`
+  - pass: OpenClaw skill 회귀(`bash scripts/e2e_skills_test.sh`)
+  - pass: metrics 확장 live 검증(`/api/forecast` non-stream):
+    aggregate `mape`/`mase`/`mae`/`rmse`/`smape` + SMAPE undefined warning 경로
+  - pass: LangChain wrapper live 검증(`get_tollama_tools` 기반
+    `tollama_health`/`tollama_models`/`tollama_forecast` + invalid-request 매핑)
+  - pass: LangChain wrapper 테스트(`PYTHONPATH=src python -m pytest -q tests/test_langchain_skill.py`, `6 passed`)

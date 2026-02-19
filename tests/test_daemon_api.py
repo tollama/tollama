@@ -60,7 +60,7 @@ def _sample_forecast_payload_with_metrics() -> dict[str, Any]:
     payload = _sample_forecast_payload()
     payload["series"][0]["actuals"] = [2.0, 4.0]
     payload["series"][1]["actuals"] = [4.0, 2.0]
-    payload["parameters"] = {"metrics": {"names": ["mape", "mase"]}}
+    payload["parameters"] = {"metrics": {"names": ["mape", "mase", "mae", "rmse", "smape"]}}
     return payload
 
 
@@ -969,7 +969,15 @@ def test_forecast_returns_metrics_when_requested(monkeypatch, tmp_path) -> None:
     body = response.json()
     metrics = body.get("metrics")
     assert isinstance(metrics, dict)
-    assert metrics["aggregate"] == pytest.approx({"mape": 43.75, "mase": 0.5})
+    assert metrics["aggregate"] == pytest.approx(
+        {
+            "mape": 43.75,
+            "mase": 0.5,
+            "mae": 1.0,
+            "rmse": 1.2071067811865475,
+            "smape": 33.80952380952381,
+        }
+    )
     assert metrics["series"][0]["id"] == "s1"
     assert metrics["series"][1]["id"] == "s2"
 

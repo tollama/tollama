@@ -150,7 +150,8 @@ bash ./bin/tollama-forecast.sh --model <MODEL> [--input <file>] [--base-url <url
 - `--model <MODEL>` (required): the model to use (e.g., `mock`, `timesfm-2.5-200m`, `moirai-2.0-R-small`)
 - `--input <file>` (optional): request JSON file
   - If omitted, the script reads request JSON from **stdin**.
-- `--metrics <csv>` (optional): convenience override for `parameters.metrics.names` (example: `mape,mase`)
+- `--metrics <csv>` (optional): convenience override for `parameters.metrics.names`
+  (example: `mape,mase,mae,rmse,smape`)
 - `--mase-seasonality <int>` (optional): convenience override for `parameters.metrics.mase_seasonality`
   - if provided without metric names, the script auto-sets `parameters.metrics.names=["mase"]`
 
@@ -184,7 +185,7 @@ Included examples:
 - `examples/simple_forecast.json`: minimal single-series forecast (good sanity check)
 - `examples/multi_series.json`: multiple series in one request
 - `examples/covariates_forecast.json`: past/future covariates example (if supported by your model)
-- `examples/metrics_forecast.json`: forecast + accuracy metrics (`mape`, `mase`) example
+- `examples/metrics_forecast.json`: forecast + accuracy metrics example
 
 ### Request/response schema quick reference
 
@@ -198,19 +199,19 @@ Included examples:
 | `series[].target` | `array<number>` | yes | history values |
 | `series[].freq` | `string` | optional | defaults may be inferred by daemon |
 | `series[].actuals` | `array<number>` | conditional | required when requesting metrics |
-| `parameters.metrics.names` | `array<string>` | optional | current values: `mape`, `mase` |
+| `parameters.metrics.names` | `array<string>` | optional | current values: `mape`, `mase`, `mae`, `rmse`, `smape` |
 | `parameters.metrics.mase_seasonality` | `int>=1` | optional | default `1` |
 | `response.forecasts[]` | `array<object>` | yes | forecast output values |
 | `response.metrics.aggregate` | `object` | optional | macro average per metric |
 | `response.metrics.series[]` | `array<object>` | optional | per-series metric values |
 
-### Forecast accuracy metrics (MAPE + MASE)
+### Forecast accuracy metrics (MAPE, MASE, MAE, RMSE, SMAPE)
 
 The skill supports Tollama's metrics-aware request/response fields.
 
 Request fields:
 - `series[].actuals` (required when `parameters.metrics` is provided)
-- `parameters.metrics.names` (currently `mape`, `mase`)
+- `parameters.metrics.names` (currently `mape`, `mase`, `mae`, `rmse`, `smape`)
 - `parameters.metrics.mase_seasonality` (default `1`)
 
 Response fields (optional):
@@ -364,8 +365,20 @@ Use OpenClaw’s `tools.exec.pathPrepend` (or install `tollama` into a standard 
 
 ## LangChain / LlamaIndex Notes
 
-- Wrap scripts as shell tools and parse JSON stdout.
-- For error branching, use exit codes and optional `TOLLAMA_JSON_STDERR=1` mode.
+- First-party LangChain wrappers are available in Python SDK:
+  `tollama.skill.langchain` (`TollamaForecastTool`, `TollamaHealthTool`,
+  `TollamaModelsTool`, `get_tollama_tools`).
+- Install optional dependency:
+  `python -m pip install -e ".[langchain]"`.
+- Wrapper input contracts:
+  - `tollama_health`: no runtime args.
+  - `tollama_models`: `mode` in `installed|loaded|available`.
+  - `tollama_forecast`: `request` object validated with `ForecastRequest`.
+- Wrappers return structured `dict` payloads and map failures to:
+  `{"error":{"category","exit_code","message"}}`.
+- If you are in shell-first environments (OpenClaw/MCP bridge without Python SDK),
+  keep using `bin/*.sh`; for error branching, use exit codes and optional
+  `TOLLAMA_JSON_STDERR=1` mode.
 
 ---
 

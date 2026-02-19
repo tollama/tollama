@@ -196,7 +196,71 @@ def _compute_mase(
     return value, None
 
 
+def _compute_mae(
+    context: _SeriesMetricContext,
+    _: MetricsParameters,
+) -> tuple[float | None, str | None]:
+    absolute_errors = [
+        abs(actual - prediction)
+        for actual, prediction in zip(context.actuals, context.predictions, strict=True)
+    ]
+    value = sum(absolute_errors) / len(absolute_errors)
+    if not math.isfinite(value):
+        return (
+            None,
+            f"metrics.mae skipped for series {context.request_series.id!r}: non-finite value",
+        )
+    return value, None
+
+
+def _compute_rmse(
+    context: _SeriesMetricContext,
+    _: MetricsParameters,
+) -> tuple[float | None, str | None]:
+    squared_errors = [
+        (actual - prediction) ** 2
+        for actual, prediction in zip(context.actuals, context.predictions, strict=True)
+    ]
+    value = math.sqrt(sum(squared_errors) / len(squared_errors))
+    if not math.isfinite(value):
+        return (
+            None,
+            f"metrics.rmse skipped for series {context.request_series.id!r}: non-finite value",
+        )
+    return value, None
+
+
+def _compute_smape(
+    context: _SeriesMetricContext,
+    _: MetricsParameters,
+) -> tuple[float | None, str | None]:
+    values: list[float] = []
+    for actual, prediction in zip(context.actuals, context.predictions, strict=True):
+        denominator = abs(actual) + abs(prediction)
+        if denominator <= 0.0:
+            continue
+        values.append(200.0 * abs(actual - prediction) / denominator)
+
+    if not values:
+        return (
+            None,
+            f"metrics.smape skipped for series {context.request_series.id!r}: "
+            "all |actual|+|prediction| denominators are zero",
+        )
+
+    value = sum(values) / len(values)
+    if not math.isfinite(value):
+        return (
+            None,
+            f"metrics.smape skipped for series {context.request_series.id!r}: non-finite value",
+        )
+    return value, None
+
+
 _METRIC_REGISTRY: dict[MetricName, _MetricCalculator] = {
     "mape": _compute_mape,
     "mase": _compute_mase,
+    "mae": _compute_mae,
+    "rmse": _compute_rmse,
+    "smape": _compute_smape,
 }

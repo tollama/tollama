@@ -28,7 +28,7 @@ SequenceValues = list[NumericValue]
 CovariateValue = NumericValue | StrictStr
 CovariateValues = list[CovariateValue]
 CovariateMode = Literal["best_effort", "strict"]
-MetricName = Literal["mape", "mase"]
+MetricName = Literal["mape", "mase", "mae", "rmse", "smape"]
 
 
 class CanonicalModel(BaseModel):

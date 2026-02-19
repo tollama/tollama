@@ -42,6 +42,9 @@ mcp = [
   "mcp>=1.0",
   "httpx>=0.27.0,<1.0.0",
 ]
+langchain = [
+  "langchain-core>=0.2,<1.0",
+]
 runner_torch = [
   "chronos-forecasting>=2.0",
   "granite-tsfm>=0.3.0,<0.4",

@@ -53,6 +53,8 @@ Optional extras:
 | Extra | Purpose | Packages |
 |---|---|---|
 | `dev` | Local quality gates | `pytest`, `ruff` |
+| `mcp` | MCP server integration | `mcp`, `httpx` |
+| `langchain` | Python SDK LangChain tool wrappers | `langchain-core` |
 | `runner_torch` | Chronos + Granite runner dependencies | `chronos-forecasting`, `granite-tsfm`, `pandas`, `numpy` |
 | `runner_timesfm` | TimesFM runner dependencies | `numpy`, `pandas`, `huggingface_hub`, `timesfm[torch]` from `git+https://github.com/google-research/timesfm.git@2dcc66fbfe2155adba1af66aa4d564a0ee52f61e` |
 | `runner_uni2ts` | Uni2TS/Moirai runner dependencies | `uni2ts`, `numpy`, `pandas`, `huggingface_hub`, `gluonts` |
@@ -449,6 +451,66 @@ one forecast per family) on `2026-02-17` after the TimesFM pin update:
 
 `/api/info` confirmed all families used isolated runtime commands under
 `~/.tollama/runtimes/<family>/venv/bin/python`.
+
+## LangChain Support
+
+Install optional LangChain support:
+
+```bash
+python -m pip install -e ".[langchain]"
+```
+
+Available wrappers (in `src/tollama/skill/langchain.py`):
+
+- `TollamaForecastTool`
+- `TollamaHealthTool`
+- `TollamaModelsTool`
+- `get_tollama_tools(base_url="http://127.0.0.1:11435", timeout=10.0)`
+
+Quick smoke:
+
+```python
+from tollama.skill import get_tollama_tools
+
+tools = {tool.name: tool for tool in get_tollama_tools()}
+print(tools["tollama_health"].invoke({}))
+print(tools["tollama_models"].invoke({"mode": "installed"}))
+print(
+    tools["tollama_forecast"].invoke(
+        {
+            "request": {
+                "model": "mock",
+                "horizon": 2,
+                "series": [
+                    {
+                        "id": "s1",
+                        "freq": "D",
+                        "timestamps": ["2025-01-01", "2025-01-02"],
+                        "target": [1.0, 2.0],
+                    }
+                ],
+                "options": {},
+            }
+        }
+    )
+)
+```
+
+Tool contract summary:
+
+- `tollama_health`: no args, returns daemon `health` + `version`
+- `tollama_models`: args `{"mode":"installed|loaded|available"}`
+- `tollama_forecast`: args `{"request": <ForecastRequest dict>}`
+- all wrappers return structured `dict` payloads; errors use
+  `{"error":{"category","exit_code","message"}}`
+- missing optional dependency hint:
+  `pip install "tollama[langchain]"`
+
+LangChain wrapper validation command:
+
+```bash
+PYTHONPATH=src python -m pytest -q tests/test_langchain_skill.py
+```
 
 ## Development Checks
 
