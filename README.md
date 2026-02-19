@@ -100,6 +100,14 @@ after updating the TimesFM dependency pin to
 | `sundial-base-128m` | pass |
 | `toto-open-base-1.0` | pass |
 
+### OpenClaw Skills E2E (2026-02-19)
+
+We also verified the OpenClaw skill integration using `scripts/e2e_skills_test.sh`:
+
+| Skill | Result | Notes |
+|---|---|---|
+| `tollama-forecast` | pass | Validated skill structure + execution with `mock` model |
+
 All runner commands were confirmed from `/api/info` to use
 `~/.tollama/runtimes/<family>/venv/bin/python`.
 
@@ -453,6 +461,87 @@ Pull defaults (effective)
 
 `tollama info` prefers `GET /api/info` when the daemon is reachable, and automatically falls back
 to local collection when the daemon is down (unless `--remote` is set).
+
+## OpenClaw Integration (Skill: `tollama-forecast`)
+
+OpenClaw integration is provided by the skill package under
+`skills/tollama-forecast/`:
+
+- `SKILL.md`
+- `bin/tollama-health.sh`
+- `bin/tollama-models.sh`
+- `bin/tollama-forecast.sh`
+- `examples/*.json`
+
+This integration is OpenClaw-first and does not require any daemon/core/plugin
+changes.
+
+### Install (Managed skills, recommended)
+
+```bash
+mkdir -p ~/.openclaw/skills
+ln -s "$(pwd)/skills/tollama-forecast" ~/.openclaw/skills/tollama-forecast
+openclaw skills list --eligible | rg tollama-forecast
+```
+
+### Environment checks
+
+```bash
+tollama serve
+tollama info --json
+curl -s http://localhost:11435/api/version
+openclaw skills list --eligible | rg tollama-forecast
+```
+
+### Runtime defaults and policy
+
+- Base URL: `--base-url` > `TOLLAMA_BASE_URL` > `http://localhost:11435`
+- Timeout: `--timeout` > `TOLLAMA_FORECAST_TIMEOUT_SECONDS` > `300`
+- Forecast requests are non-stream by default.
+- `tollama-forecast.sh` does not auto-pull by default; model install happens
+  only when `--pull` is provided.
+- CLI -> HTTP fallback in `tollama-forecast.sh` is enabled only when `tollama`
+  is unavailable in PATH.
+- HTTP forecast endpoint order is `POST /api/forecast` first, then
+  `POST /v1/forecast` only when `/api/forecast` returns `404`.
+
+### Troubleshooting
+
+1. `tollama: command not found`
+   - Ensure `tollama` is on system PATH, or prepend venv bin path in OpenClaw:
+
+```json5
+{
+  "tools": {
+    "exec": {
+      "pathPrepend": [
+        "/ABSOLUTE/PATH/TO/tollama/.venv/bin"
+      ]
+    }
+  }
+}
+```
+
+2. Daemon connect failure in OpenClaw but not in local terminal
+   - This is usually an exec host mismatch (`sandbox` vs `gateway`) with
+     `127.0.0.1`.
+   - Set `--base-url` to a daemon address reachable from the current exec host.
+
+3. First-run timeout
+   - Increase `--timeout`, or set `TOLLAMA_FORECAST_TIMEOUT_SECONDS`.
+
+4. License-gated models
+   - Pull with license acceptance:
+     `tollama pull moirai-2.0-R-small --accept-license`
+
+### Skill smoke checks
+
+```bash
+bash skills/tollama-forecast/bin/tollama-health.sh --base-url "$TOLLAMA_BASE_URL"
+bash skills/tollama-forecast/bin/tollama-models.sh installed --base-url "$TOLLAMA_BASE_URL"
+cat skills/tollama-forecast/examples/simple_forecast.json | \
+  bash skills/tollama-forecast/bin/tollama-forecast.sh --model mock --base-url "$TOLLAMA_BASE_URL"
+```
 
 ## Architecture
 

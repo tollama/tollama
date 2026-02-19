@@ -363,6 +363,26 @@ Phase F - Product hardening:
   - `usage.device`
 - Set product defaults for runner idle timeout and hot-model cache limits.
 
+## 17) OpenClaw skill integration [x]
+### Current implementation status
+- OpenClaw skill package is added under `skills/tollama-forecast/` with:
+  - `SKILL.md` (strict eligibility: `bash`, `tollama`, `curl`)
+  - `bin/tollama-health.sh`
+  - `bin/tollama-models.sh`
+  - `bin/tollama-forecast.sh`
+  - `examples/*.json`
+- Integration is additive and keeps daemon/CLI HTTP contracts unchanged.
+- Runtime guardrails for common failures are included:
+  - base URL precedence and host mismatch hints
+  - PATH/command availability handling
+  - default timeout `300` with `TOLLAMA_FORECAST_TIMEOUT_SECONDS` override
+  - no-auto-pull default (`--pull` required)
+  - `/api/forecast` primary with `/v1/forecast` fallback only on `404`
+
+### Planned work / TODO
+- Add end-to-end OpenClaw agent runbook examples for `sandbox` and `gateway`.
+- Add CI check to run `scripts/validate_openclaw_skill_tollama_forecast.sh`.
+
 ## Prioritized TODO backlog
 1. Implement supervisor restart backoff policy and startup handshake/health checks.
 2. ~~Add per-family runtime bootstrap/install automation under `~/.tollama/runtimes/`.~~ ✓ Implemented.

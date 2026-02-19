@@ -1,0 +1,23 @@
+{
+  "model": "timesfm-2.5-200m",
+  "horizon": 2,
+  "quantiles": [0.1, 0.5, 0.9],
+  "series": [
+    {
+      "id": "store-1",
+      "freq": "D",
+      "timestamps": ["2025-01-01", "2025-01-02", "2025-01-03"],
+      "target": [10.0, 11.0, 12.0],
+      "past_covariates": {
+        "promo": [0.0, 1.0, 0.0]
+      },
+      "future_covariates": {
+        "promo": [1.0, 1.0]
+      }
+    }
+  ],
+  "parameters": {
+    "covariates_mode": "best_effort"
+  },
+  "options": {}
+}
