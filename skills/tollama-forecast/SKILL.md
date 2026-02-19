@@ -120,7 +120,7 @@ Meaning of subcommands:
 ### 3) Forecast execution
 
 ```bash
-bash ./bin/tollama-forecast.sh --model <MODEL> [--input <file>] [--base-url <url>] [--timeout <sec>] [--pull] [--accept-license]
+bash ./bin/tollama-forecast.sh --model <MODEL> [--input <file>] [--base-url <url>] [--timeout <sec>] [--metrics <csv>] [--mase-seasonality <int>] [--pull] [--accept-license]
 ```
 
 **Inputs**
@@ -128,12 +128,16 @@ bash ./bin/tollama-forecast.sh --model <MODEL> [--input <file>] [--base-url <url
 - `--model <MODEL>` (required): the model to use (e.g., `mock`, `timesfm-2.5-200m`, `moirai-2.0-R-small`)
 - `--input <file>` (optional): request JSON file
   - If omitted, the script reads request JSON from **stdin**.
+- `--metrics <csv>` (optional): convenience override for `parameters.metrics.names` (example: `mape,mase`)
+- `--mase-seasonality <int>` (optional): convenience override for `parameters.metrics.mase_seasonality`
+  - if provided without metric names, the script auto-sets `parameters.metrics.names=["mase"]`
 
 **Behavior**
 
 - Prefers CLI (`tollama run`) when available; can fall back to HTTP (`curl`) when CLI is unavailable.
 - Forces **non-streaming** output to avoid NDJSON parsing issues.
 - Timeout is configurable; first run can take longer due to model downloads/runner bootstrap.
+- `--metrics` and `--mase-seasonality` override conflicting values in input JSON.
 
 **Model pull policy (safe default)**
 
@@ -158,6 +162,25 @@ Included examples:
 - `examples/simple_forecast.json`: minimal single-series forecast (good sanity check)
 - `examples/multi_series.json`: multiple series in one request
 - `examples/covariates_forecast.json`: past/future covariates example (if supported by your model)
+- `examples/metrics_forecast.json`: forecast + accuracy metrics (`mape`, `mase`) example
+
+### Forecast accuracy metrics (MAPE + MASE)
+
+The skill supports Tollama's metrics-aware request/response fields.
+
+Request fields:
+- `series[].actuals` (required when `parameters.metrics` is provided)
+- `parameters.metrics.names` (currently `mape`, `mase`)
+- `parameters.metrics.mase_seasonality` (default `1`)
+
+Response fields (optional):
+- `metrics.aggregate`
+- `metrics.series[]`
+
+Validation behavior:
+- The skill performs minimal option-shape validation for `--metrics` and `--mase-seasonality`.
+- Detailed schema validation is handled by the daemon.
+- Invalid metrics payloads are expected to surface as HTTP `400` errors from Tollama.
 
 **Important**
 
@@ -169,6 +192,7 @@ Included examples:
 ## Output format
 
 - **stdout:** one JSON object (the forecast response)
+- response may include optional `metrics` payload when requested
 - **stderr:** diagnostics and failure hints
 - **no streaming NDJSON** in the default path
 

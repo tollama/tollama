@@ -560,6 +560,9 @@ openclaw skills list --eligible | rg tollama-forecast
 - Forecast requests are non-stream by default.
 - `tollama-forecast.sh` does not auto-pull by default; model install happens
   only when `--pull` is provided.
+- `tollama-forecast.sh` supports metrics-aware requests via input JSON
+  (`series[].actuals`, `parameters.metrics`) and convenience flags:
+  `--metrics <csv>`, `--mase-seasonality <int>`.
 - CLI -> HTTP fallback in `tollama-forecast.sh` is enabled only when `tollama`
   is unavailable in PATH.
 - HTTP forecast endpoint order is `POST /api/forecast` first, then
@@ -615,6 +618,18 @@ bash skills/tollama-forecast/bin/tollama-health.sh --base-url "$TOLLAMA_BASE_URL
 bash skills/tollama-forecast/bin/tollama-models.sh installed --base-url "$TOLLAMA_BASE_URL"
 cat skills/tollama-forecast/examples/simple_forecast.json | \
   bash skills/tollama-forecast/bin/tollama-forecast.sh --model mock --base-url "$TOLLAMA_BASE_URL"
+# metrics-aware request example (input payload includes actuals + parameters.metrics)
+bash skills/tollama-forecast/bin/tollama-forecast.sh \
+  --model mock \
+  --input skills/tollama-forecast/examples/metrics_forecast.json \
+  --base-url "$TOLLAMA_BASE_URL"
+# optional convenience override flags
+bash skills/tollama-forecast/bin/tollama-forecast.sh \
+  --model mock \
+  --input skills/tollama-forecast/examples/simple_forecast.json \
+  --metrics mape,mase \
+  --mase-seasonality 1 \
+  --base-url "$TOLLAMA_BASE_URL"
 ```
 
 ## Architecture

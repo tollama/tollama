@@ -97,8 +97,29 @@ def _minimal_request_payload() -> dict[str, Any]:
     }
 
 
+def _metrics_request_payload() -> dict[str, Any]:
+    return {
+        "horizon": 2,
+        "series": [
+            {
+                "id": "s1",
+                "freq": "D",
+                "timestamps": ["2025-01-01", "2025-01-02"],
+                "target": [1.0, 3.0],
+                "actuals": [2.0, 4.0],
+            }
+        ],
+        "parameters": {"metrics": {"names": ["mape", "mase"], "mase_seasonality": 1}},
+        "options": {},
+    }
+
+
 def _write_minimal_request(path: Path) -> None:
     path.write_text(json.dumps(_minimal_request_payload()), encoding="utf-8")
+
+
+def _write_metrics_request(path: Path) -> None:
+    path.write_text(json.dumps(_metrics_request_payload()), encoding="utf-8")
 
 
 def _build_fake_curl_script(route_logic: str, *, log_path: Path | None = None) -> str:
@@ -551,6 +572,273 @@ def test_forecast_cli_non_zero_does_not_fallback_to_http(tmp_path: Path) -> None
     assert result.returncode == 10
     assert "tollama run failed" in result.stderr
     assert not curl_log.exists()
+
+
+@pytest.mark.skipif(
+    BASH_BIN is None or MISSING_RUNTIME_BINS,
+    reason="bash and runtime binaries required",
+)
+def test_forecast_cli_metrics_passthrough_preserves_payload(tmp_path: Path) -> None:
+    input_path = tmp_path / "req.json"
+    captured_payload = tmp_path / "captured_payload.json"
+    _write_metrics_request(input_path)
+
+    tollama_script = textwrap.dedent(
+        f"""\
+        #!/usr/bin/env bash
+        set -euo pipefail
+        if [[ "$1" == "show" ]]; then
+          echo '{{"model":"mock"}}'
+          exit 0
+        fi
+        if [[ "$1" == "run" ]]; then
+          input_file=""
+          while (($# > 0)); do
+            if [[ "$1" == "--input" ]]; then
+              shift
+              input_file="$1"
+            fi
+            shift
+          done
+          cat "$input_file" > "{captured_payload}"
+          echo '{{"model":"mock","forecasts":[]}}'
+          exit 0
+        fi
+        exit 1
+        """,
+    )
+    runtime_bin = _make_runtime_bin(tmp_path, tollama_script=tollama_script)
+
+    result = _run_script(
+        FORECAST_SCRIPT,
+        ["--model", "mock", "--input", str(input_path)],
+        env=_base_env(str(runtime_bin)),
+    )
+
+    assert result.returncode == 0
+    captured = json.loads(captured_payload.read_text(encoding="utf-8"))
+    assert captured["series"][0]["actuals"] == [2.0, 4.0]
+    assert captured["parameters"]["metrics"] == {
+        "names": ["mape", "mase"],
+        "mase_seasonality": 1,
+    }
+
+
+@pytest.mark.skipif(
+    BASH_BIN is None or MISSING_RUNTIME_BINS,
+    reason="bash and runtime binaries required",
+)
+def test_forecast_http_metrics_passthrough_preserves_payload(tmp_path: Path) -> None:
+    curl_log = tmp_path / "curl.log"
+    input_path = tmp_path / "req.json"
+    _write_metrics_request(input_path)
+
+    curl_script = _build_fake_curl_script(
+        """
+        if [[ "$url" == *"/api/show" ]]; then
+          status="200"
+          body='{"name":"mock"}'
+        elif [[ "$url" == *"/api/forecast" ]]; then
+          status="200"
+          body='{"model":"mock","forecasts":[]}'
+        fi
+        """,
+        log_path=curl_log,
+    )
+    runtime_bin = _make_runtime_bin(tmp_path, curl_script=curl_script)
+
+    result = _run_script(
+        FORECAST_SCRIPT,
+        ["--model", "mock", "--input", str(input_path), "--base-url", "http://daemon.test"],
+        env=_base_env(str(runtime_bin)),
+    )
+
+    assert result.returncode == 0
+    lines = curl_log.read_text(encoding="utf-8").splitlines()
+    requests = [line.split("\t", 2) for line in lines]
+    _method, url, data = requests[1]
+    assert url == "http://daemon.test/api/forecast"
+    sent = json.loads(data)
+    assert sent["series"][0]["actuals"] == [2.0, 4.0]
+    assert sent["parameters"]["metrics"] == {
+        "names": ["mape", "mase"],
+        "mase_seasonality": 1,
+    }
+
+
+@pytest.mark.skipif(
+    BASH_BIN is None or MISSING_RUNTIME_BINS,
+    reason="bash and runtime binaries required",
+)
+def test_forecast_http_metrics_flag_injects_names(tmp_path: Path) -> None:
+    curl_log = tmp_path / "curl.log"
+    input_path = tmp_path / "req.json"
+    _write_minimal_request(input_path)
+
+    curl_script = _build_fake_curl_script(
+        """
+        if [[ "$url" == *"/api/show" ]]; then
+          status="200"
+          body='{"name":"mock"}'
+        elif [[ "$url" == *"/api/forecast" ]]; then
+          status="200"
+          body='{"model":"mock","forecasts":[]}'
+        fi
+        """,
+        log_path=curl_log,
+    )
+    runtime_bin = _make_runtime_bin(tmp_path, curl_script=curl_script)
+
+    result = _run_script(
+        FORECAST_SCRIPT,
+        [
+            "--model",
+            "mock",
+            "--input",
+            str(input_path),
+            "--base-url",
+            "http://daemon.test",
+            "--metrics",
+            "mape,mase",
+        ],
+        env=_base_env(str(runtime_bin)),
+    )
+
+    assert result.returncode == 0
+    lines = curl_log.read_text(encoding="utf-8").splitlines()
+    requests = [line.split("\t", 2) for line in lines]
+    _method, _url, data = requests[1]
+    sent = json.loads(data)
+    assert sent["parameters"]["metrics"]["names"] == ["mape", "mase"]
+
+
+@pytest.mark.skipif(
+    BASH_BIN is None or MISSING_RUNTIME_BINS,
+    reason="bash and runtime binaries required",
+)
+def test_forecast_http_mase_seasonality_flag_sets_default_mase_name(tmp_path: Path) -> None:
+    curl_log = tmp_path / "curl.log"
+    input_path = tmp_path / "req.json"
+    _write_minimal_request(input_path)
+
+    curl_script = _build_fake_curl_script(
+        """
+        if [[ "$url" == *"/api/show" ]]; then
+          status="200"
+          body='{"name":"mock"}'
+        elif [[ "$url" == *"/api/forecast" ]]; then
+          status="200"
+          body='{"model":"mock","forecasts":[]}'
+        fi
+        """,
+        log_path=curl_log,
+    )
+    runtime_bin = _make_runtime_bin(tmp_path, curl_script=curl_script)
+
+    result = _run_script(
+        FORECAST_SCRIPT,
+        [
+            "--model",
+            "mock",
+            "--input",
+            str(input_path),
+            "--base-url",
+            "http://daemon.test",
+            "--mase-seasonality",
+            "7",
+        ],
+        env=_base_env(str(runtime_bin)),
+    )
+
+    assert result.returncode == 0
+    lines = curl_log.read_text(encoding="utf-8").splitlines()
+    requests = [line.split("\t", 2) for line in lines]
+    _method, _url, data = requests[1]
+    sent = json.loads(data)
+    assert sent["parameters"]["metrics"]["mase_seasonality"] == 7
+    assert sent["parameters"]["metrics"]["names"] == ["mase"]
+
+
+@pytest.mark.skipif(
+    BASH_BIN is None or MISSING_RUNTIME_BINS,
+    reason="bash and runtime binaries required",
+)
+def test_forecast_http_metrics_flags_override_input_payload_values(tmp_path: Path) -> None:
+    curl_log = tmp_path / "curl.log"
+    input_path = tmp_path / "req.json"
+    payload = _metrics_request_payload()
+    payload["parameters"]["metrics"] = {"names": ["mape"], "mase_seasonality": 2}
+    input_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    curl_script = _build_fake_curl_script(
+        """
+        if [[ "$url" == *"/api/show" ]]; then
+          status="200"
+          body='{"name":"mock"}'
+        elif [[ "$url" == *"/api/forecast" ]]; then
+          status="200"
+          body='{"model":"mock","forecasts":[]}'
+        fi
+        """,
+        log_path=curl_log,
+    )
+    runtime_bin = _make_runtime_bin(tmp_path, curl_script=curl_script)
+
+    result = _run_script(
+        FORECAST_SCRIPT,
+        [
+            "--model",
+            "mock",
+            "--input",
+            str(input_path),
+            "--base-url",
+            "http://daemon.test",
+            "--metrics",
+            "mase",
+            "--mase-seasonality",
+            "9",
+        ],
+        env=_base_env(str(runtime_bin)),
+    )
+
+    assert result.returncode == 0
+    lines = curl_log.read_text(encoding="utf-8").splitlines()
+    requests = [line.split("\t", 2) for line in lines]
+    _method, _url, data = requests[1]
+    sent = json.loads(data)
+    assert sent["parameters"]["metrics"]["names"] == ["mase"]
+    assert sent["parameters"]["metrics"]["mase_seasonality"] == 9
+
+
+@pytest.mark.skipif(
+    BASH_BIN is None or MISSING_RUNTIME_BINS,
+    reason="bash and runtime binaries required",
+)
+@pytest.mark.parametrize(
+    ("args", "error_fragment"),
+    [
+        (["--metrics", "mape,,mase"], "--metrics"),
+        (["--mase-seasonality", "0"], "--mase-seasonality"),
+        (["--mase-seasonality", "abc"], "--mase-seasonality"),
+    ],
+)
+def test_forecast_invalid_metrics_flags_return_exit_two(
+    tmp_path: Path,
+    args: list[str],
+    error_fragment: str,
+) -> None:
+    input_path = tmp_path / "req.json"
+    _write_minimal_request(input_path)
+    runtime_bin = _make_runtime_bin(tmp_path)
+
+    result = _run_script(
+        FORECAST_SCRIPT,
+        ["--model", "mock", "--input", str(input_path), *args],
+        env=_base_env(str(runtime_bin)),
+    )
+
+    assert result.returncode == 2
+    assert error_fragment in result.stderr
 
 
 @pytest.mark.skipif(

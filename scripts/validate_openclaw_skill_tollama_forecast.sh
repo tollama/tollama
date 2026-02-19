@@ -13,6 +13,7 @@ required_files=(
   "$SKILL_DIR/examples/simple_forecast.json"
   "$SKILL_DIR/examples/multi_series.json"
   "$SKILL_DIR/examples/covariates_forecast.json"
+  "$SKILL_DIR/examples/metrics_forecast.json"
 )
 
 for file in "${required_files[@]}"; do

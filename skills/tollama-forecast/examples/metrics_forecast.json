@@ -1,0 +1,21 @@
+{
+  "model": "mock",
+  "horizon": 2,
+  "quantiles": [0.1, 0.9],
+  "series": [
+    {
+      "id": "s1",
+      "freq": "D",
+      "timestamps": ["2025-01-01", "2025-01-02"],
+      "target": [1.0, 3.0],
+      "actuals": [2.0, 4.0]
+    }
+  ],
+  "parameters": {
+    "metrics": {
+      "names": ["mape", "mase"],
+      "mase_seasonality": 1
+    }
+  },
+  "options": {}
+}
