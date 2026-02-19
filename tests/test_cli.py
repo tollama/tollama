@@ -32,6 +32,32 @@ def _sample_request_payload() -> dict[str, object]:
     }
 
 
+def _new_runner() -> CliRunner:
+    try:
+        return CliRunner(mix_stderr=False)
+    except TypeError:
+        # Click<8 does not support `mix_stderr`.
+        return CliRunner()
+
+
+def _result_stdout(result: object) -> str:
+    stdout = getattr(result, "stdout", None)
+    if isinstance(stdout, str):
+        return stdout
+    output = getattr(result, "output", None)
+    if isinstance(output, str):
+        return output
+    return ""
+
+
+def _result_stderr(result: object) -> str:
+    stderr = getattr(result, "stderr", None)
+    if isinstance(stderr, str):
+        return stderr
+    # Click<8 may mix stderr into output.
+    return _result_stdout(result)
+
+
 def test_serve_runs_uvicorn_with_expected_defaults(monkeypatch) -> None:
     captured: dict[str, object] = {}
 
@@ -43,7 +69,7 @@ def test_serve_runs_uvicorn_with_expected_defaults(monkeypatch) -> None:
 
     monkeypatch.setattr("tollama.cli.main.uvicorn.run", _fake_run)
 
-    runner = CliRunner(mix_stderr=False)
+    runner = _new_runner()
     result = runner.invoke(app, ["serve"])
     assert result.exit_code == 0
     assert captured == {
@@ -100,13 +126,13 @@ def test_pull_supports_streaming_and_non_stream(monkeypatch) -> None:
             return {"status": "success", "model": name}
 
     monkeypatch.setattr("tollama.cli.main.TollamaClient", _FakeClient)
-    runner = CliRunner(mix_stderr=False)
+    runner = _new_runner()
 
     streamed = runner.invoke(app, ["pull", "mock"])
     assert streamed.exit_code == 0
-    lines = [line for line in streamed.stdout.splitlines() if line.strip()]
+    lines = [line for line in _result_stdout(streamed).splitlines() if line.strip()]
     assert lines == ['{"model": "mock", "status": "success"}']
-    assert "pulling manifest" in streamed.stderr
+    assert "pulling manifest" in _result_stderr(streamed)
     assert captured["base_url"] == "http://localhost:11435"
     assert captured["pull"] == {
         "name": "mock",
@@ -126,7 +152,7 @@ def test_pull_supports_streaming_and_non_stream(monkeypatch) -> None:
 
     non_stream = runner.invoke(app, ["pull", "mock", "--no-stream"])
     assert non_stream.exit_code == 0
-    assert json.loads(non_stream.stdout) == {"status": "success", "model": "mock"}
+    assert json.loads(_result_stdout(non_stream)) == {"status": "success", "model": "mock"}
     assert captured["pull"]["stream"] is False
 
     with_accept = runner.invoke(app, ["pull", "mock", "--accept-license"])
@@ -190,33 +216,33 @@ def test_list_ps_show_and_rm_commands_call_api_client(monkeypatch) -> None:
             return {"deleted": True, "model": name}
 
     monkeypatch.setattr("tollama.cli.main.TollamaClient", _FakeClient)
-    runner = CliRunner(mix_stderr=False)
+    runner = _new_runner()
 
     listed = runner.invoke(app, ["list"])
     assert listed.exit_code == 0
-    assert "NAME" in listed.stdout
-    assert "mock" in listed.stdout
+    assert "NAME" in _result_stdout(listed)
+    assert "mock" in _result_stdout(listed)
 
     listed_json = runner.invoke(app, ["list", "--json"])
     assert listed_json.exit_code == 0
-    assert json.loads(listed_json.stdout)["models"][0]["name"] == "mock"
+    assert json.loads(_result_stdout(listed_json))["models"][0]["name"] == "mock"
 
     running = runner.invoke(app, ["ps"])
     assert running.exit_code == 0
-    assert "NAME" in running.stdout
-    assert "mock" in running.stdout
+    assert "NAME" in _result_stdout(running)
+    assert "mock" in _result_stdout(running)
 
     running_json = runner.invoke(app, ["ps", "--json"])
     assert running_json.exit_code == 0
-    assert json.loads(running_json.stdout)["models"][0]["name"] == "mock"
+    assert json.loads(_result_stdout(running_json))["models"][0]["name"] == "mock"
 
     shown = runner.invoke(app, ["show", "mock"])
     assert shown.exit_code == 0
-    assert json.loads(shown.stdout)["name"] == "mock"
+    assert json.loads(_result_stdout(shown))["name"] == "mock"
 
     removed = runner.invoke(app, ["rm", "mock"])
     assert removed.exit_code == 0
-    assert json.loads(removed.stdout) == {"deleted": True, "model": "mock"}
+    assert json.loads(_result_stdout(removed)) == {"deleted": True, "model": "mock"}
 
 
 def test_run_auto_pulls_when_model_not_installed(monkeypatch, tmp_path: Path) -> None:
@@ -256,7 +282,7 @@ def test_run_auto_pulls_when_model_not_installed(monkeypatch, tmp_path: Path) ->
             return {"model": payload["model"], "forecasts": []}
 
     monkeypatch.setattr("tollama.cli.main.TollamaClient", _FakeClient)
-    runner = CliRunner(mix_stderr=False)
+    runner = _new_runner()
     result = runner.invoke(
         app,
         ["run", "mock", "--input", str(request_path), "--horizon", "7", "--no-stream"],
@@ -294,11 +320,11 @@ def test_run_streaming_outputs_ndjson_lines(monkeypatch, tmp_path: Path) -> None
             ]
 
     monkeypatch.setattr("tollama.cli.main.TollamaClient", _FakeClient)
-    runner = CliRunner(mix_stderr=False)
+    runner = _new_runner()
     result = runner.invoke(app, ["run", "mock", "--input", str(request_path)])
 
     assert result.exit_code == 0
-    lines = [line for line in result.stdout.splitlines() if line.strip()]
+    lines = [line for line in _result_stdout(result).splitlines() if line.strip()]
     assert len(lines) == 2
     assert json.loads(lines[0]) == {"status": "running forecast"}
     assert json.loads(lines[1]) == {"done": True, "response": {"model": "mock"}}
@@ -441,7 +467,7 @@ def test_run_errors_when_payload_sources_are_missing(monkeypatch) -> None:
     result = runner.invoke(app, ["run", "mock", "--no-stream"])
 
     assert result.exit_code != 0
-    assert "missing forecast request payload" in result.stdout
+    assert "missing forecast request payload" in _result_stdout(result)
 
 
 def test_run_rejects_non_json_input(tmp_path: Path) -> None:
@@ -451,7 +477,7 @@ def test_run_rejects_non_json_input(tmp_path: Path) -> None:
     runner = CliRunner()
     result = runner.invoke(app, ["run", "mock", "--input", str(request_path)])
     assert result.exit_code != 0
-    assert "input file is not valid JSON" in result.stdout
+    assert "input file is not valid JSON" in _result_stdout(result)
 
 
 def test_run_help_mentions_input_and_stream_flags() -> None:
@@ -460,7 +486,7 @@ def test_run_help_mentions_input_and_stream_flags() -> None:
     assert result.exit_code == 0
     # Rich may inject ANSI style escapes into option tokens when color is forced,
     # so normalize help text before checking for stable flag names.
-    normalized_stdout = re.sub(r"\x1b\[[0-9;]*m", "", result.stdout)
+    normalized_stdout = re.sub(r"\x1b\[[0-9;]*m", "", _result_stdout(result))
     assert "--input" in normalized_stdout
     assert "--stream" in normalized_stdout
     assert "--no-stream" in normalized_stdout
@@ -503,7 +529,7 @@ def test_run_warns_for_uni2ts_models_on_python_312_plus(monkeypatch, tmp_path: P
     assert result.exit_code == 0
     assert (
         "warning: Uni2TS/Moirai dependencies may fail to install on Python 3.12+"
-        in result.stdout
+        in _result_stdout(result)
     )
 
 
@@ -584,7 +610,7 @@ def test_run_dry_run_exits_zero_when_validation_succeeds(monkeypatch, tmp_path: 
     result = runner.invoke(app, ["run", "mock", "--input", str(request_path), "--dry-run"])
 
     assert result.exit_code == 0
-    body = json.loads(result.stdout)
+    body = json.loads(_result_stdout(result))
     assert body["valid"] is True
     assert captured["payload"]["model"] == "mock"
 
@@ -609,7 +635,7 @@ def test_run_dry_run_exits_two_when_validation_fails(monkeypatch, tmp_path: Path
     result = runner.invoke(app, ["run", "mock", "--input", str(request_path), "--dry-run"])
 
     assert result.exit_code == 2
-    body = json.loads(result.stdout)
+    body = json.loads(_result_stdout(result))
     assert body["valid"] is False
     assert body["errors"]
 
@@ -648,7 +674,7 @@ def test_doctor_json_output_and_exit_code_zero(monkeypatch, tmp_path: Path) -> N
     result = runner.invoke(app, ["doctor", "--json"])
 
     assert result.exit_code == 0
-    body = json.loads(result.stdout)
+    body = json.loads(_result_stdout(result))
     assert {"checks", "summary"} <= set(body)
     assert body["summary"]["warn"] == 0
     assert body["summary"]["fail"] == 0
@@ -688,8 +714,8 @@ def test_doctor_warn_exit_code_one(monkeypatch, tmp_path: Path) -> None:
     result = runner.invoke(app, ["doctor"])
 
     assert result.exit_code == 1
-    assert "Summary:" in result.stdout
-    assert "warning" in result.stdout
+    assert "Summary:" in _result_stdout(result)
+    assert "warning" in _result_stdout(result)
 
 
 def test_doctor_fail_exit_code_two(monkeypatch, tmp_path: Path) -> None:
@@ -711,11 +737,11 @@ def test_doctor_fail_exit_code_two(monkeypatch, tmp_path: Path) -> None:
 
     monkeypatch.setattr("tollama.cli.main.httpx.Client", _raise_http_client)
 
-    runner = CliRunner(mix_stderr=False)
+    runner = _new_runner()
     result = runner.invoke(app, ["doctor"])
 
     assert result.exit_code == 2
-    assert "daemon: unreachable" in result.stdout
+    assert "daemon: unreachable" in _result_stdout(result)
 
 
 def test_run_warnings_are_emitted_to_stderr_with_color(monkeypatch, tmp_path: Path) -> None:
@@ -743,7 +769,7 @@ def test_run_warnings_are_emitted_to_stderr_with_color(monkeypatch, tmp_path: Pa
             }
 
     monkeypatch.setattr("tollama.cli.main.TollamaClient", _FakeClient)
-    runner = CliRunner(mix_stderr=False)
+    runner = _new_runner()
     result = runner.invoke(
         app,
         ["run", "mock", "--input", str(request_path), "--no-stream"],
@@ -751,5 +777,5 @@ def test_run_warnings_are_emitted_to_stderr_with_color(monkeypatch, tmp_path: Pa
     )
 
     assert result.exit_code == 0
-    assert "warning: watch out" in result.stderr
-    assert "\x1b[" in result.stderr
+    assert "warning: watch out" in _result_stderr(result)
+    assert "\x1b[" in _result_stderr(result)
