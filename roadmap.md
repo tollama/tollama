@@ -422,6 +422,10 @@ Phase F - Product hardening:
   - `scripts/install_mcp.sh`
 - Agent context doc added:
   - `CLAUDE.md`
+- Focused validation added:
+  - `tests/test_client_http.py`
+  - `tests/test_mcp_tools.py`
+  - `tests/test_mcp_entrypoint.py`
 
 ### Planned work / TODO
 - Add full MCP end-to-end smoke test against a live Claude Desktop/SDK runtime.

@@ -343,7 +343,9 @@ Use OpenClaw’s `tools.exec.pathPrepend` (or install `tollama` into a standard 
 ## Claude Code / MCP Notes
 
 - MCP servers are not bundled in this skill folder.
-- Use these scripts as tool backends from your MCP bridge layer to keep behavior deterministic.
+- Repository-level MCP server is available via `tollama-mcp` (`pip install ".[mcp]"`).
+- Claude Desktop helper script is available at `scripts/install_mcp.sh`.
+- Use these scripts as tool backends from your MCP bridge layer when shell-first behavior is preferred.
 
 ---
 

@@ -693,12 +693,21 @@ Exposed MCP tools:
 - `tollama_pull`
 - `tollama_show`
 
+Quick checks:
+
+```bash
+tollama-mcp
+bash scripts/install_mcp.sh --dry-run --base-url "http://127.0.0.1:11435"
+```
+
 ## Architecture
 
 - `tollama.daemon`: Public API layer (`/api/*`, `/v1/health`, `/v1/forecast`) and runner supervision.
 - `tollama.runners`: Runner implementations that speak newline-delimited JSON over stdio.
 - `tollama.core`: Canonical data schemas (`ForecastRequest`, `ForecastResponse`) and protocol helpers.
 - `tollama.cli`: User CLI commands for serving and sending forecast requests.
+- `tollama.client`: Shared HTTP client abstraction for CLI/MCP integrations.
+- `tollama.mcp`: MCP tool server for Claude Code/native MCP clients.
 
 ### Daemon <-> Runner Protocol
 
@@ -723,11 +732,14 @@ Exposed MCP tools:
 .
 ├── src/
 │   └── tollama/
+│       ├── client/
 │       ├── cli/
 │       ├── core/
 │       ├── daemon/
+│       ├── mcp/
 │       └── runners/
 ├── examples/
+├── scripts/
 ├── tests/
 └── .github/workflows/
 ```
