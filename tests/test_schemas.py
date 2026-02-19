@@ -37,6 +37,18 @@ def test_forecast_request_roundtrip_is_lossless() -> None:
     )
 
 
+def test_forecast_request_freq_defaults_to_auto_and_preserves_explicit_freq() -> None:
+    payload = _example_request_payload()
+    del payload["series"][0]["freq"]
+    request = ForecastRequest.model_validate(payload)
+    assert request.series[0].freq == "auto"
+
+    payload = _example_request_payload()
+    payload["series"][0]["freq"] = "H"
+    request = ForecastRequest.model_validate(payload)
+    assert request.series[0].freq == "H"
+
+
 def test_forecast_request_rejects_invalid_payloads() -> None:
     invalid_horizon = _example_request_payload()
     invalid_horizon["horizon"] = "3"

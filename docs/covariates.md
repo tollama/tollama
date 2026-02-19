@@ -1,9 +1,10 @@
 # Covariates Contract
 
-`tollama` accepts two dynamic covariate groups per input series:
+`tollama` accepts two dynamic covariate groups and one static covariate map per input series:
 
 - `past_covariates`: aligned to history (`len(target)`).
 - `future_covariates`: aligned to forecast horizon (`prediction_length` / `horizon`).
+- `static_covariates`: key/value metadata per series (no time axis).
 
 ## Request Rules
 
@@ -18,6 +19,8 @@ For each `series[i]`:
 - Mixed numeric + string in one covariate array is rejected.
 - Known-future covariates are keys present in both `past_covariates` and `future_covariates`.
 - Past-only covariates are keys present only in `past_covariates`.
+- Static covariates are currently normalized/filtered in daemon compatibility checks,
+  but no active runner advertises `static_covariates=true` yet.
 
 ## Covariates Mode
 
@@ -28,6 +31,11 @@ Use `parameters.covariates_mode`:
 
 Warnings may come from daemon-side compatibility filtering and runner-side adapter behavior;
 the response merges both into `warnings[]`.
+
+For static covariates specifically:
+
+- `best_effort`: static covariates are dropped with warnings for current runners.
+- `strict`: static covariates are rejected with HTTP 400 for current runners.
 
 ## Family Mapping
 

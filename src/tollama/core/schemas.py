@@ -46,7 +46,7 @@ class SeriesInput(CanonicalModel):
     """Input series with optional covariates."""
 
     id: NonEmptyStr
-    freq: NonEmptyStr
+    freq: NonEmptyStr = "auto"
     timestamps: list[NonEmptyStr] = Field(min_length=1)
     target: SequenceValues = Field(min_length=1)
     actuals: SequenceValues | None = None

@@ -991,6 +991,63 @@ def test_forecast_metrics_best_effort_skips_undefined_with_warning(monkeypatch, 
     assert "metrics.mape skipped" in body["warnings"][0]
 
 
+def test_api_validate_returns_valid_true_for_valid_payload(monkeypatch, tmp_path) -> None:
+    _install_model(monkeypatch, tmp_path, "mock")
+    payload = _sample_forecast_payload()
+
+    with TestClient(create_app()) as client:
+        response = client.post("/api/validate", json=payload)
+
+    assert response.status_code == 200
+    assert response.json() == {"valid": True, "errors": [], "warnings": []}
+
+
+def test_api_validate_returns_errors_for_schema_invalid_payload(monkeypatch, tmp_path) -> None:
+    _install_model(monkeypatch, tmp_path, "mock")
+    payload = _sample_forecast_payload()
+    del payload["horizon"]
+
+    with TestClient(create_app()) as client:
+        response = client.post("/api/validate", json=payload)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["valid"] is False
+    assert body["warnings"] == []
+    assert body["errors"]
+    assert "horizon" in body["errors"][0]
+
+
+def test_api_validate_reports_covariate_contract_errors(monkeypatch, tmp_path) -> None:
+    _install_model(monkeypatch, tmp_path, "mock")
+    payload = _sample_forecast_payload()
+    payload["series"][0]["future_covariates"] = {"future_only": [1.0, 2.0]}
+
+    with TestClient(create_app()) as client:
+        response = client.post("/api/validate", json=payload)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["valid"] is False
+    assert body["errors"]
+    assert "future_covariates" in body["errors"][0]
+
+
+def test_api_validate_warns_when_model_is_not_installed(monkeypatch, tmp_path) -> None:
+    paths = TollamaPaths(base_dir=tmp_path / ".tollama")
+    monkeypatch.setenv("TOLLAMA_HOME", str(paths.base_dir))
+    payload = _sample_forecast_payload()
+
+    with TestClient(create_app()) as client:
+        response = client.post("/api/validate", json=payload)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["valid"] is True
+    assert body["errors"] == []
+    assert body["warnings"] == ["model not installed; covariate capability check used defaults"]
+
+
 def test_forecast_invalid_payload_returns_400(monkeypatch, tmp_path) -> None:
     _install_model(monkeypatch, tmp_path, "mock")
     payload = _sample_forecast_payload()

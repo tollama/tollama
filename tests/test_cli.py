@@ -7,6 +7,7 @@ import re
 from pathlib import Path
 from types import SimpleNamespace
 
+import httpx
 import pytest
 from typer.testing import CliRunner
 
@@ -42,7 +43,7 @@ def test_serve_runs_uvicorn_with_expected_defaults(monkeypatch) -> None:
 
     monkeypatch.setattr("tollama.cli.main.uvicorn.run", _fake_run)
 
-    runner = CliRunner()
+    runner = CliRunner(mix_stderr=False)
     result = runner.invoke(app, ["serve"])
     assert result.exit_code == 0
     assert captured == {
@@ -99,13 +100,13 @@ def test_pull_supports_streaming_and_non_stream(monkeypatch) -> None:
             return {"status": "success", "model": name}
 
     monkeypatch.setattr("tollama.cli.main.TollamaClient", _FakeClient)
-    runner = CliRunner()
+    runner = CliRunner(mix_stderr=False)
 
     streamed = runner.invoke(app, ["pull", "mock"])
     assert streamed.exit_code == 0
     lines = [line for line in streamed.stdout.splitlines() if line.strip()]
-    assert json.loads(lines[0]) == {"status": "pulling manifest"}
-    assert json.loads(lines[-1]) == {"status": "success", "model": "mock"}
+    assert lines == ['{"model": "mock", "status": "success"}']
+    assert "pulling manifest" in streamed.stderr
     assert captured["base_url"] == "http://localhost:11435"
     assert captured["pull"] == {
         "name": "mock",
@@ -189,15 +190,25 @@ def test_list_ps_show_and_rm_commands_call_api_client(monkeypatch) -> None:
             return {"deleted": True, "model": name}
 
     monkeypatch.setattr("tollama.cli.main.TollamaClient", _FakeClient)
-    runner = CliRunner()
+    runner = CliRunner(mix_stderr=False)
 
     listed = runner.invoke(app, ["list"])
     assert listed.exit_code == 0
-    assert json.loads(listed.stdout)["models"][0]["name"] == "mock"
+    assert "NAME" in listed.stdout
+    assert "mock" in listed.stdout
+
+    listed_json = runner.invoke(app, ["list", "--json"])
+    assert listed_json.exit_code == 0
+    assert json.loads(listed_json.stdout)["models"][0]["name"] == "mock"
 
     running = runner.invoke(app, ["ps"])
     assert running.exit_code == 0
-    assert json.loads(running.stdout)["models"][0]["name"] == "mock"
+    assert "NAME" in running.stdout
+    assert "mock" in running.stdout
+
+    running_json = runner.invoke(app, ["ps", "--json"])
+    assert running_json.exit_code == 0
+    assert json.loads(running_json.stdout)["models"][0]["name"] == "mock"
 
     shown = runner.invoke(app, ["show", "mock"])
     assert shown.exit_code == 0
@@ -245,7 +256,7 @@ def test_run_auto_pulls_when_model_not_installed(monkeypatch, tmp_path: Path) ->
             return {"model": payload["model"], "forecasts": []}
 
     monkeypatch.setattr("tollama.cli.main.TollamaClient", _FakeClient)
-    runner = CliRunner()
+    runner = CliRunner(mix_stderr=False)
     result = runner.invoke(
         app,
         ["run", "mock", "--input", str(request_path), "--horizon", "7", "--no-stream"],
@@ -283,7 +294,7 @@ def test_run_streaming_outputs_ndjson_lines(monkeypatch, tmp_path: Path) -> None
             ]
 
     monkeypatch.setattr("tollama.cli.main.TollamaClient", _FakeClient)
-    runner = CliRunner()
+    runner = CliRunner(mix_stderr=False)
     result = runner.invoke(app, ["run", "mock", "--input", str(request_path)])
 
     assert result.exit_code == 0
@@ -549,3 +560,196 @@ def test_resolve_default_request_path_prefers_specific_moirai_alias(
 
     resolved = _resolve_default_request_path("moirai-2.0-R-small")
     assert resolved == preferred
+
+
+def test_run_dry_run_exits_zero_when_validation_succeeds(monkeypatch, tmp_path: Path) -> None:
+    request_path = tmp_path / "request.json"
+    request_path.write_text(json.dumps(_sample_request_payload()), encoding="utf-8")
+    captured: dict[str, object] = {}
+
+    class _FakeClient:
+        def __init__(self, base_url: str, timeout: float) -> None:
+            captured["base_url"] = base_url
+            captured["timeout"] = timeout
+
+        def validate_request(self, payload: dict[str, object]) -> dict[str, object]:
+            captured["payload"] = payload
+            return {"valid": True, "errors": [], "warnings": []}
+
+        def show_model(self, name: str) -> dict[str, object]:
+            raise AssertionError("show_model should not be called in --dry-run mode")
+
+    monkeypatch.setattr("tollama.cli.main.TollamaClient", _FakeClient)
+    runner = CliRunner()
+    result = runner.invoke(app, ["run", "mock", "--input", str(request_path), "--dry-run"])
+
+    assert result.exit_code == 0
+    body = json.loads(result.stdout)
+    assert body["valid"] is True
+    assert captured["payload"]["model"] == "mock"
+
+
+def test_run_dry_run_exits_two_when_validation_fails(monkeypatch, tmp_path: Path) -> None:
+    request_path = tmp_path / "request.json"
+    request_path.write_text(json.dumps(_sample_request_payload()), encoding="utf-8")
+
+    class _FakeClient:
+        def __init__(self, base_url: str, timeout: float) -> None:
+            del base_url, timeout
+
+        def validate_request(self, payload: dict[str, object]) -> dict[str, object]:
+            del payload
+            return {"valid": False, "errors": ["field 'horizon': required"], "warnings": []}
+
+        def show_model(self, name: str) -> dict[str, object]:
+            raise AssertionError("show_model should not be called in --dry-run mode")
+
+    monkeypatch.setattr("tollama.cli.main.TollamaClient", _FakeClient)
+    runner = CliRunner()
+    result = runner.invoke(app, ["run", "mock", "--input", str(request_path), "--dry-run"])
+
+    assert result.exit_code == 2
+    body = json.loads(result.stdout)
+    assert body["valid"] is False
+    assert body["errors"]
+
+
+def test_doctor_json_output_and_exit_code_zero(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("TOLLAMA_HOME", str(tmp_path / ".tollama"))
+    monkeypatch.setenv("TOLLAMA_HF_TOKEN", "token")
+    monkeypatch.setattr("tollama.cli.main.FAMILY_PYTHON_CONSTRAINTS", {})
+    monkeypatch.setattr(
+        "tollama.cli.main.list_runtime_statuses",
+        lambda paths: [{"family": "torch", "installed": True}],
+    )
+    monkeypatch.setattr(
+        "tollama.cli.main.shutil.disk_usage",
+        lambda _path: SimpleNamespace(total=10, used=1, free=int(10 * 1024**3)),
+    )
+
+    class _FakeHTTPClient:
+        def __init__(self, *, base_url: str, timeout: float) -> None:
+            del base_url, timeout
+
+        def __enter__(self) -> _FakeHTTPClient:
+            return self
+
+        def __exit__(self, exc_type, exc, tb) -> bool:  # noqa: ANN001
+            del exc_type, exc, tb
+            return False
+
+        def get(self, path: str) -> SimpleNamespace:
+            assert path == "/v1/health"
+            return SimpleNamespace(is_success=True, status_code=200)
+
+    monkeypatch.setattr("tollama.cli.main.httpx.Client", _FakeHTTPClient)
+
+    runner = CliRunner()
+    result = runner.invoke(app, ["doctor", "--json"])
+
+    assert result.exit_code == 0
+    body = json.loads(result.stdout)
+    assert {"checks", "summary"} <= set(body)
+    assert body["summary"]["warn"] == 0
+    assert body["summary"]["fail"] == 0
+
+
+def test_doctor_warn_exit_code_one(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("TOLLAMA_HOME", str(tmp_path / ".tollama"))
+    monkeypatch.delenv("TOLLAMA_HF_TOKEN", raising=False)
+    monkeypatch.setattr("tollama.cli.main.FAMILY_PYTHON_CONSTRAINTS", {})
+    monkeypatch.setattr(
+        "tollama.cli.main.list_runtime_statuses",
+        lambda paths: [{"family": "torch", "installed": False}],
+    )
+    monkeypatch.setattr(
+        "tollama.cli.main.shutil.disk_usage",
+        lambda _path: SimpleNamespace(total=10, used=8, free=int(2 * 1024**3)),
+    )
+
+    class _FakeHTTPClient:
+        def __init__(self, *, base_url: str, timeout: float) -> None:
+            del base_url, timeout
+
+        def __enter__(self) -> _FakeHTTPClient:
+            return self
+
+        def __exit__(self, exc_type, exc, tb) -> bool:  # noqa: ANN001
+            del exc_type, exc, tb
+            return False
+
+        def get(self, path: str) -> SimpleNamespace:
+            assert path == "/v1/health"
+            return SimpleNamespace(is_success=True, status_code=200)
+
+    monkeypatch.setattr("tollama.cli.main.httpx.Client", _FakeHTTPClient)
+
+    runner = CliRunner()
+    result = runner.invoke(app, ["doctor"])
+
+    assert result.exit_code == 1
+    assert "Summary:" in result.stdout
+    assert "warning" in result.stdout
+
+
+def test_doctor_fail_exit_code_two(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("TOLLAMA_HOME", str(tmp_path / ".tollama"))
+    monkeypatch.setenv("TOLLAMA_HF_TOKEN", "token")
+    monkeypatch.setattr("tollama.cli.main.FAMILY_PYTHON_CONSTRAINTS", {})
+    monkeypatch.setattr(
+        "tollama.cli.main.list_runtime_statuses",
+        lambda paths: [{"family": "torch", "installed": True}],
+    )
+    monkeypatch.setattr(
+        "tollama.cli.main.shutil.disk_usage",
+        lambda _path: SimpleNamespace(total=10, used=1, free=int(10 * 1024**3)),
+    )
+
+    def _raise_http_client(*, base_url: str, timeout: float) -> object:
+        del base_url, timeout
+        raise httpx.HTTPError("unreachable")
+
+    monkeypatch.setattr("tollama.cli.main.httpx.Client", _raise_http_client)
+
+    runner = CliRunner(mix_stderr=False)
+    result = runner.invoke(app, ["doctor"])
+
+    assert result.exit_code == 2
+    assert "daemon: unreachable" in result.stdout
+
+
+def test_run_warnings_are_emitted_to_stderr_with_color(monkeypatch, tmp_path: Path) -> None:
+    request_path = tmp_path / "request.json"
+    request_path.write_text(json.dumps(_sample_request_payload()), encoding="utf-8")
+
+    class _FakeClient:
+        def __init__(self, base_url: str, timeout: float) -> None:
+            del base_url, timeout
+
+        def show_model(self, name: str) -> dict[str, object]:
+            return {"name": name}
+
+        def forecast(
+            self,
+            payload: dict[str, object],
+            *,
+            stream: bool,
+        ) -> dict[str, object] | list[dict[str, object]]:
+            del stream
+            return {
+                "model": payload["model"],
+                "forecasts": [],
+                "warnings": ["watch out"],
+            }
+
+    monkeypatch.setattr("tollama.cli.main.TollamaClient", _FakeClient)
+    runner = CliRunner(mix_stderr=False)
+    result = runner.invoke(
+        app,
+        ["run", "mock", "--input", str(request_path), "--no-stream"],
+        color=True,
+    )
+
+    assert result.exit_code == 0
+    assert "warning: watch out" in result.stderr
+    assert "\x1b[" in result.stderr

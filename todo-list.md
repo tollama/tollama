@@ -61,7 +61,8 @@
   - TODO: 공통 계층으로 완전 통합, Parquet 입력까지 일원화
 - [~] (P1) 전처리 공통 라이브러리화
   - 현재: covariates 정규화/strict-best_effort는 daemon 공통 처리
-  - TODO: 리샘플링/결측/스케일링/윈도잉/freq 정규화/타임존 처리의 공통 유틸 정리
+  - 현재: `freq="auto"` 기본 추론(타임스탬프 기반)은 daemon 공통 처리
+  - TODO: 리샘플링/결측/스케일링/윈도잉/타임존 처리의 공통 유틸 정리
 
 ### 4) 하드웨어 가속 자동 감지: Backend Selection
 
@@ -114,8 +115,10 @@
 ### Stage 1 (P0~P1): "사용자 경험이 Ollama처럼 느껴지는 제품"
 
 - [x] (P0) `/api/*` 기반 `pull/list/show/ps/forecast`, 스트리밍 진행률, `keep_alive` 완성
-- [~] (P1) `tollama config`, `tollama info`, `/api/info`, `tollama doctor`까지 UX 정리
-  - 현재: `config/info/api/info` 구현됨, `doctor` 미구현
+- [x] (P1) `tollama config`, `tollama info`, `/api/info`, `tollama doctor`까지 UX 정리
+  - 현재: `doctor` 구현(`pass/warn/fail`, `--json`, exit code `0/1/2`)
+  - 현재: `tollama run --dry-run` + `/api/validate` 구현(무추론 요청 검증)
+  - 현재: `tollama list`/`tollama ps` 테이블 기본 출력 + `--json` 호환 모드 지원
 - [ ] (P1) "pull이 런타임까지 설치"되는 installer(런타임 venv 자동 구성) 확립
 
 ### Stage 2 (P1): "공통 전처리/공변량 표준화"
@@ -149,8 +152,8 @@
   - 현재: `docs/covariates.md`에 모델별 매핑은 정리됨
   - TODO: patching/binning/flow 변환 단계 표준 설계 문서로 분리
 - [x] (P1) covariates strict/best_effort 정책 모델별 표준화 (warning 템플릿 포함)
-- [ ] (P1) `tollama doctor` 설계
-  - `pull/runner start/GPU/offline/forecast smoke test` 시나리오 확정
+- [x] (P1) `tollama doctor` 구현
+  - 현재: python constraint/runtime/disk/token/daemon/config 체크 + 요약/종료코드 제공
 - [~] (P0) 공개 릴리스 라이선스/컴플라이언스 체크리스트 운영
   - 현재: `docs/public-release-checklist.md` 추가(업스트림 라이선스 검증/서드파티 라이선스 인벤토리/제한 라이선스 정책)
   - TODO: 릴리스 태그마다 체크 결과(`docs/releases/`)를 남기고, `cc-by-nc-4.0` 모델 공개 정책을 최종 확정

@@ -29,6 +29,16 @@ def normalize_covariates(
     warnings: list[str] = []
 
     for series in inputs:
+        resolved_freq = series.freq
+        if resolved_freq == "auto":
+            inferred_freq = _infer_freq_from_timestamps(series.timestamps)
+            if inferred_freq is None:
+                raise ValueError(
+                    f"series {series.id!r}: freq='auto' but could not infer frequency from "
+                    f"{len(series.timestamps)} timestamps. Provide an explicit freq value.",
+                )
+            resolved_freq = inferred_freq
+
         expected_history = len(series.target)
         past_covariates = {
             name: list(values)
@@ -76,6 +86,7 @@ def normalize_covariates(
         normalized.append(
             series.model_copy(
                 update={
+                    "freq": resolved_freq,
                     "past_covariates": past_covariates or None,
                     "future_covariates": (
                         {name: future_covariates[name] for name in sorted(known_future)} or None
@@ -274,6 +285,26 @@ def _covariate_kind(values: CovariateValues) -> str:
     if has_string:
         return "categorical"
     return "numeric"
+
+
+def _infer_freq_from_timestamps(timestamps: list[str]) -> str | None:
+    try:
+        import pandas as pd
+    except ImportError as exc:
+        raise ValueError(
+            "pandas is required to infer frequency when freq='auto'. "
+            "Install pandas>=2.0,<3.0.",
+        ) from exc
+
+    try:
+        index = pd.DatetimeIndex(timestamps)
+        inferred = pd.infer_freq(index)
+    except Exception:  # noqa: BLE001
+        return None
+
+    if isinstance(inferred, str) and inferred:
+        return inferred
+    return None
 
 
 def _append_covariate_issue(

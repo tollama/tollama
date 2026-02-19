@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import sys
 from pathlib import Path
 from typing import Any, NoReturn
 
+import httpx
 import typer
 import uvicorn
 
@@ -15,6 +17,7 @@ from tollama.core.config import ConfigFileError, load_config, update_config
 from tollama.core.registry import get_model_spec
 from tollama.core.runtime_bootstrap import (
     FAMILY_EXTRAS,
+    FAMILY_PYTHON_CONSTRAINTS,
     BootstrapError,
     ensure_family_runtime,
     list_runtime_statuses,
@@ -56,6 +59,13 @@ _INT_CONFIG_KEYS = {"pull.max_workers"}
 
 _UNI2TS_PYTHON_WARNING = "Uni2TS/Moirai dependencies may fail to install on Python 3.12+"
 _RUN_TIMEOUT_SECONDS = 300.0
+_DOCTOR_TOKEN_ENV_KEYS = (
+    "TOLLAMA_HF_TOKEN",
+    "HF_TOKEN",
+    "HUGGINGFACE_HUB_TOKEN",
+    "HUGGING_FACE_HUB_TOKEN",
+    "HF_HUB_TOKEN",
+)
 
 
 def _exit_with_message(message: str, *, code: int = 2) -> NoReturn:
@@ -166,7 +176,7 @@ def pull(
     except RuntimeError as exc:
         typer.echo(f"Error: {exc}", err=True)
         raise typer.Exit(code=1) from exc
-    _emit_result(result)
+    _emit_result(result, stream_kind="pull")
 
 
 @config_app.command("list")
@@ -280,8 +290,49 @@ def info(
     typer.echo(_render_info_report(snapshot, verbose=verbose))
 
 
+@app.command("doctor")
+def doctor(
+    json_output: bool = typer.Option(False, "--json", help="Print JSON diagnostics output."),
+    base_url: str = typer.Option(
+        DEFAULT_BASE_URL,
+        help="Daemon base URL. Defaults to http://localhost:11435.",
+    ),
+    timeout: float = typer.Option(2.0, "--timeout", min=0.1, help="Daemon call timeout."),
+) -> None:
+    """Run local and daemon health checks with pass/warn/fail summaries."""
+    checks = _collect_doctor_checks(
+        base_url=base_url,
+        timeout=timeout,
+        paths=TollamaPaths.default(),
+    )
+    summary = {"pass": 0, "warn": 0, "fail": 0}
+    for check in checks:
+        status = check["status"]
+        if status in summary:
+            summary[status] += 1
+
+    if json_output:
+        typer.echo(json.dumps({"checks": checks, "summary": summary}, indent=2, sort_keys=True))
+    else:
+        typer.echo("tollama doctor")
+        for check in checks:
+            label = check["status"].upper()
+            typer.echo(f"  {label:<5} {check['message']}")
+        typer.echo(
+            "Summary: "
+            f"{summary['pass']} passed, {summary['warn']} warning, {summary['fail']} failed",
+        )
+
+    if summary["fail"] > 0:
+        raise typer.Exit(code=2)
+    if summary["warn"] > 0:
+        raise typer.Exit(code=1)
+    raise typer.Exit(code=0)
+
+
 @app.command("list")
 def list_models(
+    json_output: bool = typer.Option(False, "--json", help="Print JSON output."),
     base_url: str = typer.Option(
         DEFAULT_BASE_URL,
         help="Daemon base URL. Defaults to http://localhost:11435.",
@@ -295,11 +346,19 @@ def list_models(
     except RuntimeError as exc:
         typer.echo(f"Error: {exc}", err=True)
         raise typer.Exit(code=1) from exc
-    typer.echo(json.dumps(response, indent=2, sort_keys=True))
+    if json_output:
+        typer.echo(json.dumps(response, indent=2, sort_keys=True))
+        return
+
+    models = response.get("models")
+    if not isinstance(models, list):
+        models = []
+    typer.echo(_render_model_table(models))
 
 
 @app.command("ps")
 def ps(
+    json_output: bool = typer.Option(False, "--json", help="Print JSON output."),
     base_url: str = typer.Option(
         DEFAULT_BASE_URL,
         help="Daemon base URL. Defaults to http://localhost:11435.",
@@ -313,7 +372,14 @@ def ps(
     except RuntimeError as exc:
         typer.echo(f"Error: {exc}", err=True)
         raise typer.Exit(code=1) from exc
-    typer.echo(json.dumps(response, indent=2, sort_keys=True))
+    if json_output:
+        typer.echo(json.dumps(response, indent=2, sort_keys=True))
+        return
+
+    models = response.get("models")
+    if not isinstance(models, list):
+        models = []
+    typer.echo(_render_running_table(models))
 
 
 @app.command("show")
@@ -371,6 +437,11 @@ def run(
         "--stream/--no-stream",
         help="Enable or disable streaming forecast output.",
     ),
+    dry_run: bool = typer.Option(
+        False,
+        "--dry-run",
+        help="Validate request only without running inference.",
+    ),
     accept_license: bool = typer.Option(
         False,
         "--accept-license",
@@ -397,6 +468,17 @@ def run(
 
     client = TollamaClient(base_url=base_url, timeout=timeout)
 
+    if dry_run:
+        try:
+            validation_result = client.validate_request(payload)
+        except RuntimeError as exc:
+            typer.echo(f"Error: {exc}", err=True)
+            raise typer.Exit(code=1) from exc
+
+        typer.echo(json.dumps(validation_result, indent=2, sort_keys=True))
+        is_valid = bool(validation_result.get("valid"))
+        raise typer.Exit(code=0 if is_valid else 2)
+
     try:
         client.show_model(model)
     except DaemonHTTPError as exc:
@@ -412,7 +494,7 @@ def run(
         except RuntimeError as pull_exc:
             typer.echo(f"Error: {pull_exc}", err=True)
             raise typer.Exit(code=1) from pull_exc
-        _emit_result(pull_result)
+        _emit_result(pull_result, stream_kind="pull")
     except RuntimeError as exc:
         typer.echo(f"Error: {exc}", err=True)
         raise typer.Exit(code=1) from exc
@@ -422,7 +504,7 @@ def run(
     except RuntimeError as exc:
         typer.echo(f"Error: {exc}", err=True)
         raise typer.Exit(code=1) from exc
-    _emit_result(forecast_result)
+    _emit_result(forecast_result, stream_kind="forecast")
 
 
 def _emit_uni2ts_python_runtime_warning(model: str) -> None:
@@ -446,10 +528,19 @@ def _is_python_312_or_newer() -> bool:
     return (sys.version_info.major, sys.version_info.minor) >= (3, 12)
 
 
-def _emit_result(result: dict[str, Any] | list[dict[str, Any]]) -> None:
+def _emit_result(
+    result: dict[str, Any] | list[dict[str, Any]],
+    *,
+    stream_kind: str = "generic",
+) -> None:
     if isinstance(result, list):
         for item in result:
             _emit_warnings(item)
+            if stream_kind == "pull" and _is_pull_progress_event(item):
+                status = item.get("status")
+                if isinstance(status, str) and status:
+                    typer.echo(f" {status}", err=True)
+                continue
             typer.echo(json.dumps(item, sort_keys=True))
         return
     _emit_warnings(result)
@@ -461,7 +552,10 @@ def _emit_warnings(payload: dict[str, Any]) -> None:
     if isinstance(warnings, list):
         for warning in warnings:
             if isinstance(warning, str) and warning:
-                typer.echo(f"warning: {warning}", err=True)
+                typer.echo(
+                    typer.style(f"warning: {warning}", fg=typer.colors.YELLOW),
+                    err=True,
+                )
 
     response = payload.get("response")
     if isinstance(response, dict):
@@ -469,7 +563,288 @@ def _emit_warnings(payload: dict[str, Any]) -> None:
         if isinstance(nested, list):
             for warning in nested:
                 if isinstance(warning, str) and warning:
-                    typer.echo(f"warning: {warning}", err=True)
+                    typer.echo(
+                        typer.style(f"warning: {warning}", fg=typer.colors.YELLOW),
+                        err=True,
+                    )
+
+
+def _is_pull_progress_event(item: dict[str, Any]) -> bool:
+    status = item.get("status")
+    if not isinstance(status, str):
+        return False
+    return status not in {"success"}
+
+
+def _render_model_table(models: list[dict[str, Any]]) -> str:
+    rows: list[tuple[str, str, str, str]] = []
+    for model in models:
+        if not isinstance(model, dict):
+            continue
+        name = _string_or_dash(model.get("name") or model.get("model"))
+        family = "-"
+        details = model.get("details")
+        if isinstance(details, dict):
+            family = _string_or_dash(details.get("family"))
+        if family == "-":
+            family = _string_or_dash(model.get("family"))
+
+        size_value = model.get("size")
+        if isinstance(size_value, int) and not isinstance(size_value, bool):
+            size = _format_bytes(size_value)
+        else:
+            size = "-"
+
+        modified = _string_or_dash(model.get("modified_at"))
+        rows.append((name, family, size, modified))
+
+    if not rows:
+        return "No models installed."
+    return _render_table(("NAME", "FAMILY", "SIZE", "MODIFIED"), rows)
+
+
+def _render_running_table(models: list[dict[str, Any]]) -> str:
+    rows: list[tuple[str, str, str]] = []
+    for model in models:
+        if not isinstance(model, dict):
+            continue
+        name = _string_or_dash(model.get("name") or model.get("model"))
+        family = "-"
+        details = model.get("details")
+        if isinstance(details, dict):
+            family = _string_or_dash(details.get("family"))
+        if family == "-":
+            family = _string_or_dash(model.get("family"))
+        expires = _string_or_dash(model.get("expires_at"))
+        rows.append((name, family, expires))
+
+    if not rows:
+        return "No models loaded."
+    return _render_table(("NAME", "FAMILY", "EXPIRES"), rows)
+
+
+def _render_table(headers: tuple[str, ...], rows: list[tuple[str, ...]]) -> str:
+    widths = [len(header) for header in headers]
+    for row in rows:
+        for index, value in enumerate(row):
+            widths[index] = max(widths[index], len(value))
+
+    header_line = "  ".join(header.ljust(widths[idx]) for idx, header in enumerate(headers))
+    separator_line = "  ".join("-" * widths[idx] for idx in range(len(headers)))
+    row_lines = [
+        "  ".join(value.ljust(widths[idx]) for idx, value in enumerate(row))
+        for row in rows
+    ]
+    return "\n".join([header_line, separator_line, *row_lines])
+
+
+def _format_bytes(size: int) -> str:
+    if size < 0:
+        return "-"
+
+    value = float(size)
+    units = ("B", "KB", "MB", "GB", "TB")
+    unit_index = 0
+    while value >= 1024.0 and unit_index < len(units) - 1:
+        value /= 1024.0
+        unit_index += 1
+
+    if unit_index == 0:
+        return f"{int(value)} {units[unit_index]}"
+    if value >= 10:
+        return f"{value:.1f} {units[unit_index]}"
+    return f"{value:.2f} {units[unit_index]}"
+
+
+def _string_or_dash(value: Any) -> str:
+    if isinstance(value, str) and value:
+        return value
+    return "-"
+
+
+def _collect_doctor_checks(
+    *,
+    base_url: str,
+    timeout: float,
+    paths: TollamaPaths,
+) -> list[dict[str, str]]:
+    checks: list[dict[str, str]] = []
+
+    python_version = (
+        f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
+    )
+    for family in FAMILY_EXTRAS:
+        name = f"python_constraint_{family}"
+        constraint = FAMILY_PYTHON_CONSTRAINTS.get(family)
+        if constraint is None:
+            checks.append(
+                {
+                    "name": name,
+                    "status": "pass",
+                    "message": f"Python {python_version} has no special constraint for {family}",
+                },
+            )
+            continue
+
+        if _python_version_satisfies(constraint):
+            checks.append(
+                {
+                    "name": name,
+                    "status": "pass",
+                    "message": f"Python {python_version} satisfies {constraint} for {family}",
+                },
+            )
+        else:
+            checks.append(
+                {
+                    "name": name,
+                    "status": "fail",
+                    "message": f"Python {python_version} violates {constraint} for {family}",
+                },
+            )
+
+    for status in list_runtime_statuses(paths=paths):
+        family = str(status.get("family") or "unknown")
+        installed = bool(status.get("installed"))
+        checks.append(
+            {
+                "name": f"runtime_{family}",
+                "status": "pass" if installed else "warn",
+                "message": f"runtime_{family}: {'installed' if installed else 'not installed'}",
+            },
+        )
+
+    free_bytes = shutil.disk_usage(str(paths.base_dir.parent)).free
+    free_gib = free_bytes / (1024**3)
+    if free_gib < 1.0:
+        disk_status = "fail"
+    elif free_gib <= 5.0:
+        disk_status = "warn"
+    else:
+        disk_status = "pass"
+    checks.append(
+        {
+            "name": "disk_space",
+            "status": disk_status,
+            "message": f"disk_space: {free_gib:.1f} GiB free",
+        },
+    )
+
+    has_hf_token = any(os.environ.get(key) for key in _DOCTOR_TOKEN_ENV_KEYS)
+    checks.append(
+        {
+            "name": "hf_token",
+            "status": "pass" if has_hf_token else "warn",
+            "message": (
+                "hf_token: token environment variable detected"
+                if has_hf_token
+                else "hf_token: no token environment variable detected"
+            ),
+        },
+    )
+
+    try:
+        with httpx.Client(base_url=base_url.rstrip("/"), timeout=timeout) as client:
+            response = client.get("/v1/health")
+    except httpx.HTTPError as exc:
+        checks.append(
+            {
+                "name": "daemon",
+                "status": "fail",
+                "message": f"daemon: unreachable at {base_url} ({exc})",
+            },
+        )
+    else:
+        if response.is_success:
+            checks.append(
+                {
+                    "name": "daemon",
+                    "status": "pass",
+                    "message": f"daemon: reachable at {base_url}",
+                },
+            )
+        else:
+            checks.append(
+                {
+                    "name": "daemon",
+                    "status": "fail",
+                    "message": f"daemon: {base_url} returned HTTP {response.status_code}",
+                },
+            )
+
+    config_path = paths.config_path
+    if not config_path.exists():
+        checks.append(
+            {
+                "name": "config",
+                "status": "pass",
+                "message": f"config: missing at {config_path} (using defaults)",
+            },
+        )
+    else:
+        try:
+            load_config(paths)
+        except ConfigFileError as exc:
+            checks.append(
+                {
+                    "name": "config",
+                    "status": "fail",
+                    "message": f"config: invalid at {config_path} ({exc})",
+                },
+            )
+        else:
+            checks.append(
+                {
+                    "name": "config",
+                    "status": "pass",
+                    "message": f"config: valid at {config_path}",
+                },
+            )
+
+    return checks
+
+
+def _python_version_satisfies(constraint: str) -> bool:
+    current = (sys.version_info.major, sys.version_info.minor)
+    for operator in ("<=", ">=", "==", "<", ">"):
+        if not constraint.startswith(operator):
+            continue
+
+        raw_target = constraint[len(operator) :].strip()
+        target = _parse_version_tuple(raw_target)
+        if target is None:
+            return False
+        normalized_current = _normalize_version_tuple(current, len(target))
+        normalized_target = _normalize_version_tuple(target, len(target))
+
+        if operator == "<":
+            return normalized_current < normalized_target
+        if operator == "<=":
+            return normalized_current <= normalized_target
+        if operator == ">":
+            return normalized_current > normalized_target
+        if operator == ">=":
+            return normalized_current >= normalized_target
+        return normalized_current == normalized_target
+    return False
+
+
+def _parse_version_tuple(value: str) -> tuple[int, ...] | None:
+    parts = value.split(".")
+    if not parts:
+        return None
+    parsed: list[int] = []
+    for part in parts:
+        if not part.isdigit():
+            return None
+        parsed.append(int(part))
+    return tuple(parsed)
+
+
+def _normalize_version_tuple(value: tuple[int, ...], width: int) -> tuple[int, ...]:
+    if len(value) >= width:
+        return value[:width]
+    return (*value, *([0] * (width - len(value))))
 
 
 def _render_info_report(snapshot: dict[str, Any], *, verbose: bool) -> str:

@@ -81,8 +81,8 @@ tollama/
 - Canonical schemas are implemented in `ForecastRequest`, `ForecastResponse`, `SeriesInput`, and `SeriesForecast`.
 - Canonical request shape in production includes:
   - `model`, `horizon`, `series[]`, optional `quantiles[]`, optional `options`, optional `parameters`.
-  - `series[]` supports `id`, `freq`, `timestamps[]`, `target[]`, optional `actuals`,
-    `past_covariates`, `future_covariates`.
+  - `series[]` supports `id`, `freq` (defaults to `"auto"`), `timestamps[]`, `target[]`,
+    optional `actuals`, `past_covariates`, `future_covariates`, `static_covariates`.
   - per-covariate values are validated as homogeneous numeric or homogeneous string arrays.
 - Canonical response shape in production includes:
   - per-series `start_timestamp`, `mean[]`, optional `quantiles{q: []}`
@@ -99,7 +99,7 @@ tollama/
 
 ### Planned work / TODO
 - Add explicit compatibility/versioning policy for canonical schema evolution.
-- Add static covariates support in canonical adapters (currently planned).
+- Enable runner-level static covariate support (daemon pass-through/filtering is in place).
 
 ## 4) Internal communication: daemon <-> runner protocol [~]
 ### Current implementation status
@@ -360,6 +360,9 @@ Phase F - Product hardening:
 - Keep-alive semantics are supported for model unload behavior.
 - Pull defaults resolve from env/config/defaults with redaction in diagnostics.
 - Covariates default behavior is `best_effort`, with warnings surfaced to API and CLI.
+- `POST /api/validate` and `tollama run --dry-run` are implemented for no-inference request checks.
+- `tollama doctor` is implemented (`pass/warn/fail` checks + JSON mode).
+- `tollama list` / `tollama ps` default to table output with `--json` compatibility mode.
 
 ### Planned work / TODO
 - Standardize default quantiles to `[0.1, 0.5, 0.9]`.
@@ -386,6 +389,7 @@ Phase F - Product hardening:
   - no-auto-pull default (`--pull` required)
   - `/api/forecast` primary with `/v1/forecast` fallback only on `404`
   - daemon-only `available` resolution via `/api/info` or `tollama info --json --remote`
+  - `tollama-health.sh --runtimes` enriches health output with runtime install/running state
 - Skill scripts share exit code contract v2:
   - `0` success
   - `2` invalid input/request
@@ -404,7 +408,7 @@ Phase F - Product hardening:
 2. ~~Add per-family runtime bootstrap/install automation under `~/.tollama/runtimes/`.~~ ✓ Implemented.
 3. Add runtime metrics endpoint and structured runtime telemetry.
 4. Add cache/memory policy controls (LRU + limits + reclaim behavior).
-5. Add static covariates support and capability flags.
+5. Enable static covariates in runner adapters/capability flags (daemon-side pass-through done).
 6. Add explicit license receipt files under `~/.tollama/licenses/`.
 7. Add dedicated per-model capabilities endpoint for API consumers.
 8. Expand developer docs and operational playbooks.

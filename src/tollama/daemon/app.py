@@ -16,7 +16,7 @@ from threading import Lock, Thread
 from typing import Any
 
 import httpx
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import Body, FastAPI, HTTPException, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -200,6 +200,16 @@ class ApiForecastRequest(ForecastRequestWithKeepAlive):
     """Ollama-compatible forecast request payload."""
 
     stream: StrictBool = True
+
+
+class ValidateResponse(BaseModel):
+    """Forecast request validation response payload."""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    valid: StrictBool
+    errors: list[StrictStr] = Field(default_factory=list)
+    warnings: list[StrictStr] = Field(default_factory=list)
 
 
 @asynccontextmanager
@@ -409,6 +419,73 @@ def create_app(*, runner_manager: RunnerManager | None = None) -> FastAPI:
                 },
             )
         return {"available": available, "installed": installed}
+
+    @app.post("/api/validate", response_model=ValidateResponse)
+    def validate(payload: Any = Body(...)) -> ValidateResponse:
+        if not isinstance(payload, dict):
+            return ValidateResponse(
+                valid=False,
+                errors=[
+                    f"field '<root>': payload must be a JSON object (got: {payload!r})",
+                ],
+            )
+
+        try:
+            request = ForecastRequest.model_validate(payload)
+        except ValidationError as exc:
+            return ValidateResponse(
+                valid=False,
+                errors=_format_validation_errors(exc.errors()),
+            )
+
+        warnings: list[str] = []
+        model_manifest = _find_installed_manifest(request.model)
+        if model_manifest is None:
+            model_family = "unknown"
+            model_capabilities = ModelCapabilities()
+            warnings.append("model not installed; covariate capability check used defaults")
+        else:
+            family = model_manifest.get("family")
+            if not isinstance(family, str) or not family:
+                return ValidateResponse(
+                    valid=False,
+                    errors=[f"model {request.model!r} has invalid family metadata"],
+                    warnings=warnings,
+                )
+            model_family = family
+            model_capabilities = _resolve_model_capabilities(request.model, model_manifest)
+
+        try:
+            normalized_series, normalize_warnings = normalize_covariates(
+                request.series,
+                request.horizon,
+            )
+        except ValueError as exc:
+            return ValidateResponse(
+                valid=False,
+                errors=[str(exc)],
+                warnings=warnings,
+            )
+        warnings.extend(normalize_warnings)
+
+        try:
+            _, capability_warnings = apply_covariate_capabilities(
+                model_name=request.model,
+                model_family=model_family,
+                inputs=normalized_series,
+                capabilities=model_capabilities,
+                covariates_mode=request.parameters.covariates_mode,
+            )
+        except ValueError as exc:
+            return ValidateResponse(
+                valid=False,
+                errors=[str(exc)],
+                warnings=warnings,
+            )
+        warnings.extend(capability_warnings)
+
+        merged_warnings = _merge_warnings(None, warnings) or []
+        return ValidateResponse(valid=True, warnings=merged_warnings)
 
     @app.post("/v1/models/pull")
     def pull_model(payload: ModelPullRequest) -> dict[str, Any]:
@@ -958,6 +1035,39 @@ def _runner_error_detail(exc: RunnerCallError | RunnerProtocolError) -> dict[str
             detail["data"] = exc.data
         return detail
     return str(exc)
+
+
+def _format_validation_errors(errors: list[dict[str, Any]]) -> list[str]:
+    formatted: list[str] = []
+    for error in errors:
+        location = _format_error_location(error.get("loc"))
+        message = str(error.get("msg") or "invalid value")
+        entry = f"field '{location}': {message}"
+        if "input" in error:
+            entry = f"{entry} (got: {error.get('input')!r})"
+        formatted.append(entry)
+    return formatted
+
+
+def _format_error_location(location: Any) -> str:
+    if not isinstance(location, (list, tuple)):
+        return "<root>"
+
+    parts: list[str] = []
+    for item in location:
+        if item == "body":
+            continue
+        if isinstance(item, int):
+            if parts:
+                parts[-1] = f"{parts[-1]}[{item}]"
+            else:
+                parts.append(f"[{item}]")
+            continue
+        parts.append(str(item))
+
+    if not parts:
+        return "<root>"
+    return ".".join(parts)
 
 
 def _install_model(*, name: str, accept_license: bool) -> dict[str, Any]:

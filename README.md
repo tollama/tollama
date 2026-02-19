@@ -31,10 +31,14 @@ tollama serve
 
 # Terminal 2: Ollama-style lifecycle
 tollama list
+tollama list --json
 tollama pull mock
 tollama show mock
+tollama run mock --dry-run --input examples/request.json
 tollama run mock --input examples/request.json --no-stream
 tollama ps
+tollama ps --json
+tollama doctor
 tollama rm mock
 
 # Check daemon version endpoint
@@ -153,6 +157,7 @@ Before publishing a public release, follow `docs/public-release-checklist.md` fo
   - `POST /api/show`
   - `POST /api/pull`
   - `DELETE /api/delete`
+  - `POST /api/validate`
   - `POST /api/forecast`
 - Existing forecast and health endpoints remain under `/v1/*` for backward compatibility.
   - `GET /v1/health`
@@ -192,6 +197,7 @@ Unified covariates contract:
 - set `parameters.covariates_mode` to `best_effort` (default) or `strict`
 - in `best_effort`, unsupported covariates are ignored with response `warnings[]`
 - in `strict`, unsupported covariates return HTTP `400`
+- `series[].freq` defaults to `"auto"` when omitted and is inferred from timestamps
 
 ```json
 {

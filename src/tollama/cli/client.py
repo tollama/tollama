@@ -58,6 +58,15 @@ class TollamaClient:
             action=action,
         )
 
+    def validate_request(self, payload: dict[str, Any]) -> dict[str, Any]:
+        """Validate a forecast request without executing model inference."""
+        return self._request_json(
+            "POST",
+            "/api/validate",
+            json_payload=payload,
+            action="validate forecast request",
+        )
+
     def list_tags(self) -> dict[str, Any]:
         """Fetch installed model tags from the daemon."""
         return self._request_json("GET", "/api/tags", action="list model tags")

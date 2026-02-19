@@ -15,10 +15,11 @@ TIMEOUT_ARG=""
 HTTP_STATUS=""
 HTTP_BODY=""
 HTTP_ERROR=""
+INCLUDE_RUNTIMES=0
 
 usage() {
   cat <<'USAGE' >&2
-Usage: tollama-health.sh [--base-url URL] [--timeout SEC]
+Usage: tollama-health.sh [--base-url URL] [--timeout SEC] [--runtimes]
 USAGE
 }
 
@@ -130,6 +131,9 @@ while (($# > 0)); do
       }
       TIMEOUT_ARG="$1"
       ;;
+    --runtimes)
+      INCLUDE_RUNTIMES=1
+      ;;
     -h|--help)
       usage
       exit 0
@@ -196,5 +200,71 @@ if [[ ! "$VERSION_STATUS" =~ ^2 ]]; then
   exit "$exit_code"
 fi
 
-printf '{"base_url":"%s","timeout_seconds":%s,"health":{"status":%s},"version":{"status":%s}}\n' \
-  "$BASE_URL" "$TIMEOUT" "$HEALTH_STATUS" "$VERSION_STATUS"
+RUNTIMES_JSON=""
+if [[ "$INCLUDE_RUNTIMES" -eq 1 ]]; then
+  if http_get "/api/info"; then
+    :
+  else
+    rc=$?
+    exit_code="$(classify_curl_error "$rc" "${HTTP_ERROR:-}")"
+    echo "Error: GET ${BASE_URL}/api/info failed: ${HTTP_ERROR:-unknown error}" >&2
+    print_host_mismatch_hint
+    exit "$exit_code"
+  fi
+
+  INFO_STATUS="$HTTP_STATUS"
+  INFO_BODY="$HTTP_BODY"
+  if [[ ! "$INFO_STATUS" =~ ^2 ]]; then
+    exit_code="$(classify_http_status "$INFO_STATUS")"
+    echo "Error: GET ${BASE_URL}/api/info returned HTTP $INFO_STATUS: $(normalize_detail "$INFO_BODY")" >&2
+    print_host_mismatch_hint
+    exit "$exit_code"
+  fi
+
+  if ! command -v python3 >/dev/null 2>&1; then
+    echo "Error: python3 is required to parse /api/info runtimes." >&2
+    exit "$EXIT_INTERNAL"
+  fi
+
+  INFO_BODY_FILE="$(mktemp)"
+  printf '%s' "$INFO_BODY" > "$INFO_BODY_FILE"
+  if ! RUNTIMES_JSON="$(python3 - "$INFO_BODY_FILE" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as fh:
+    payload = json.load(fh)
+
+runners = payload.get("runners", [])
+if not isinstance(runners, list):
+    runners = []
+
+normalized = []
+for runner in runners:
+    if not isinstance(runner, dict):
+        continue
+    normalized.append(
+        {
+            "family": runner.get("family"),
+            "installed": bool(runner.get("installed")),
+            "running": bool(runner.get("running")),
+        }
+    )
+
+print(json.dumps(normalized, separators=(",", ":"), sort_keys=True))
+PY
+  )"; then
+    rm -f "$INFO_BODY_FILE"
+    echo "Error: failed to parse /api/info runtimes payload." >&2
+    exit "$EXIT_INTERNAL"
+  fi
+  rm -f "$INFO_BODY_FILE"
+fi
+
+if [[ "$INCLUDE_RUNTIMES" -eq 1 ]]; then
+  printf '{"base_url":"%s","timeout_seconds":%s,"health":{"status":%s},"version":{"status":%s},"runtimes":%s}\n' \
+    "$BASE_URL" "$TIMEOUT" "$HEALTH_STATUS" "$VERSION_STATUS" "$RUNTIMES_JSON"
+else
+  printf '{"base_url":"%s","timeout_seconds":%s,"health":{"status":%s},"version":{"status":%s}}\n' \
+    "$BASE_URL" "$TIMEOUT" "$HEALTH_STATUS" "$VERSION_STATUS"
+fi

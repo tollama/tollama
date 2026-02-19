@@ -213,6 +213,46 @@ def test_health_success_returns_zero_and_json(tmp_path: Path) -> None:
     BASH_BIN is None or MISSING_RUNTIME_BINS,
     reason="bash and runtime binaries required",
 )
+def test_health_runtimes_flag_includes_runtime_summary(tmp_path: Path) -> None:
+    curl_script = _build_fake_curl_script(
+        """
+        if [[ "$url" == *"/v1/health" ]]; then
+          status="200"
+          body='{"status":"ok"}'
+        elif [[ "$url" == *"/api/version" ]]; then
+          status="200"
+          body='{"version":"0.1.0"}'
+        elif [[ "$url" == *"/api/info" ]]; then
+          status="200"
+          body='{"runners":[{"family":"torch","installed":true,"running":false},{"family":"mock","installed":true,"running":true}]}'
+        else
+          status="404"
+          body='{"detail":"not found"}'
+        fi
+        """,
+    )
+    runtime_bin = _make_runtime_bin(tmp_path, curl_script=curl_script)
+
+    result = _run_script(
+        HEALTH_SCRIPT,
+        ["--base-url", "http://daemon.test:11435", "--timeout", "2", "--runtimes"],
+        env=_base_env(str(runtime_bin)),
+    )
+
+    assert result.returncode == 0
+    payload = json.loads(result.stdout)
+    assert payload["health"]["status"] == 200
+    assert payload["version"]["status"] == 200
+    assert payload["runtimes"] == [
+        {"family": "torch", "installed": True, "running": False},
+        {"family": "mock", "installed": True, "running": True},
+    ]
+
+
+@pytest.mark.skipif(
+    BASH_BIN is None or MISSING_RUNTIME_BINS,
+    reason="bash and runtime binaries required",
+)
 def test_health_failure_returns_exit_five_and_hint(tmp_path: Path) -> None:
     curl_script = _build_fake_curl_script(
         """
