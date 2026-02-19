@@ -77,10 +77,11 @@
 ### 5) 표준 예측 인터페이스: API Protocol
 
 - [~] (P0) 표준 출력 규격 확정
-  - 현재 Output: `mean`, `quantiles`, `warnings`, `usage`는 구현
+  - 현재 Output: `mean`, `quantiles`, `warnings`, `usage`, optional `metrics`(`mape`/`mase`) 구현
   - TODO Meta 확장: `execution_time`, `model_version/digest`, `device` 표준 필드화, `median` 명시 규격 보강
-- [ ] (P1) 신뢰도/품질 메타 지표 설계
-  - 예: 샘플 분산/예측 구간 폭, outlier rate, covariate 사용 여부
+- [~] (P1) 신뢰도/품질 메타 지표 설계
+  - 현재: 요청 `series.actuals` + `parameters.metrics` 기반 `mape`/`mase` 계산 및 응답 `metrics` 제공
+  - TODO: `mae/rmse/smape/wape/rmsse`, quantile 기반 pinball loss, interval coverage 확장
 - [ ] (P1) 포맷 지원 확대: JSON + Parquet (대용량/배치)
 
 ---

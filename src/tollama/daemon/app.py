@@ -33,6 +33,7 @@ from pydantic import (
 
 from tollama.core.config import ConfigFileError, TollamaConfig, load_config
 from tollama.core.env_override import set_env_temporarily
+from tollama.core.forecast_metrics import compute_forecast_metrics
 from tollama.core.hf_pull import (
     OfflineModelUnavailableError,
     PullError,
@@ -478,10 +479,20 @@ def _execute_forecast(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
+    runner_payload = forecast_payload.model_copy(
+        update={
+            "series": [
+                series.model_copy(update={"actuals": None})
+                for series in forecast_payload.series
+            ],
+            "parameters": forecast_payload.parameters.model_copy(update={"metrics": None}),
+        },
+    )
+
     exclude_fields = {"keep_alive"}
     if extra_exclude is not None:
         exclude_fields.update(extra_exclude)
-    params = forecast_payload.model_dump(mode="json", exclude_none=True, exclude=exclude_fields)
+    params = runner_payload.model_dump(mode="json", exclude_none=True, exclude=exclude_fields)
     params["model_name"] = forecast_payload.model
     params["model_family"] = model_family
     if model_local_dir is not None:
@@ -516,7 +527,14 @@ def _execute_forecast(
             detail=f"runner returned invalid forecast response: {exc}",
         ) from exc
 
-    merged_warnings = _merge_warnings(response.warnings, request_warnings)
+    metrics_payload, metrics_warnings = compute_forecast_metrics(
+        request=forecast_payload,
+        response=response,
+    )
+    if metrics_payload is not None:
+        response = response.model_copy(update={"metrics": metrics_payload})
+
+    merged_warnings = _merge_warnings(response.warnings, [*request_warnings, *metrics_warnings])
     if merged_warnings:
         response = response.model_copy(update={"warnings": merged_warnings})
 

@@ -28,6 +28,7 @@ SequenceValues = list[NumericValue]
 CovariateValue = NumericValue | StrictStr
 CovariateValues = list[CovariateValue]
 CovariateMode = Literal["best_effort", "strict"]
+MetricName = Literal["mape", "mase"]
 
 
 class CanonicalModel(BaseModel):
@@ -48,6 +49,7 @@ class SeriesInput(CanonicalModel):
     freq: NonEmptyStr
     timestamps: list[NonEmptyStr] = Field(min_length=1)
     target: SequenceValues = Field(min_length=1)
+    actuals: SequenceValues | None = None
     past_covariates: dict[NonEmptyStr, CovariateValues] | None = None
     future_covariates: dict[NonEmptyStr, CovariateValues] | None = None
     static_covariates: dict[NonEmptyStr, JsonValue] | None = None
@@ -81,11 +83,26 @@ class TimesFMParameters(CanonicalModel):
     force_on_cpu: StrictBool = False
 
 
+class MetricsParameters(CanonicalModel):
+    """Forecast accuracy metric parameters."""
+
+    names: list[MetricName] = Field(min_length=1)
+    mase_seasonality: PositiveInt = 1
+
+    @field_validator("names")
+    @classmethod
+    def validate_names(cls, value: list[MetricName]) -> list[MetricName]:
+        if len(value) != len(set(value)):
+            raise ValueError("metrics.names must be unique")
+        return value
+
+
 class ForecastParameters(CanonicalModel):
     """Shared forecast parameters independent of model family options."""
 
     covariates_mode: CovariateMode = "best_effort"
     timesfm: TimesFMParameters | None = None
+    metrics: MetricsParameters | None = None
 
 
 class ForecastRequest(CanonicalModel):
@@ -116,6 +133,7 @@ class ForecastRequest(CanonicalModel):
 
     @model_validator(mode="after")
     def validate_covariates(self) -> ForecastRequest:
+        metrics_parameters = self.parameters.metrics
         for series in self.series:
             past_covariates = series.past_covariates or {}
             future_covariates = series.future_covariates or {}
@@ -141,6 +159,19 @@ class ForecastRequest(CanonicalModel):
                     raise ValueError(
                         "covariate type must be consistent between past and future values; "
                         f"covariate {name!r} has past={past_kind} future={future_kind}",
+                    )
+
+            if metrics_parameters is not None:
+                actuals = series.actuals
+                if actuals is None:
+                    raise ValueError(
+                        "series.actuals is required when parameters.metrics is provided; "
+                        f"missing for series {series.id!r}",
+                    )
+                if len(actuals) != self.horizon:
+                    raise ValueError(
+                        f"series {series.id!r} actuals length must match horizon "
+                        f"({self.horizon}) when parameters.metrics is provided",
                     )
 
         return self
@@ -196,11 +227,26 @@ class SeriesForecast(CanonicalModel):
         return quantiles
 
 
+class SeriesMetrics(CanonicalModel):
+    """Calculated metrics for one series."""
+
+    id: NonEmptyStr
+    values: dict[NonEmptyStr, StrictFloat] = Field(min_length=1)
+
+
+class ForecastMetrics(CanonicalModel):
+    """Calculated metrics payload for one forecast response."""
+
+    aggregate: dict[NonEmptyStr, StrictFloat] = Field(min_length=1)
+    series: list[SeriesMetrics] = Field(min_length=1)
+
+
 class ForecastResponse(CanonicalModel):
     """Unified forecast response payload."""
 
     model: NonEmptyStr
     forecasts: list[SeriesForecast] = Field(min_length=1)
+    metrics: ForecastMetrics | None = None
     usage: dict[NonEmptyStr, JsonValue] | None = None
     warnings: list[NonEmptyStr] | None = None
 

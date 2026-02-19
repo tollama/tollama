@@ -81,15 +81,21 @@ tollama/
 - Canonical schemas are implemented in `ForecastRequest`, `ForecastResponse`, `SeriesInput`, and `SeriesForecast`.
 - Canonical request shape in production includes:
   - `model`, `horizon`, `series[]`, optional `quantiles[]`, optional `options`, optional `parameters`.
-  - `series[]` supports `id`, `freq`, `timestamps[]`, `target[]`, `past_covariates`, `future_covariates`.
+  - `series[]` supports `id`, `freq`, `timestamps[]`, `target[]`, optional `actuals`,
+    `past_covariates`, `future_covariates`.
   - per-covariate values are validated as homogeneous numeric or homogeneous string arrays.
 - Canonical response shape in production includes:
   - per-series `start_timestamp`, `mean[]`, optional `quantiles{q: []}`
+  - optional top-level `metrics` (`aggregate` + per-series metric values)
   - optional top-level `warnings[]`
   - optional `usage`
 - Implemented request parameters include:
   - `covariates_mode = "best_effort" | "strict"` (default `best_effort`)
   - `timesfm` knobs: `xreg_mode`, `ridge`, `force_on_cpu`
+  - optional `metrics`:
+    - `names` supports `mape`, `mase`
+    - `mase_seasonality` default `1`
+    - requires `series.actuals` with length `horizon`
 
 ### Planned work / TODO
 - Add explicit compatibility/versioning policy for canonical schema evolution.
@@ -276,9 +282,10 @@ tollama/
 - Sensitive values are redacted in diagnostics payloads.
 - Runner status reports include install/running state, restart count, and last error.
 - Forecast/pull paths map several failure classes to `400/404/409/502/503`.
+- Forecast endpoints support optional accuracy metrics (`mape`, `mase`) in response payloads.
 
 ### Planned work / TODO
-- Add `/metrics` endpoint with Prometheus-friendly counters/histograms.
+- Add runtime `/metrics` endpoint with Prometheus-friendly counters/histograms.
 - Add structured logging for routing decisions, load/unload timings, and crash recovery.
 - Add deeper telemetry for model load latency and inference latency distributions.
 
@@ -395,7 +402,7 @@ Phase F - Product hardening:
 ## Prioritized TODO backlog
 1. Implement supervisor restart backoff policy and startup handshake/health checks.
 2. ~~Add per-family runtime bootstrap/install automation under `~/.tollama/runtimes/`.~~ ✓ Implemented.
-3. Add metrics endpoint and structured runtime telemetry.
+3. Add runtime metrics endpoint and structured runtime telemetry.
 4. Add cache/memory policy controls (LRU + limits + reclaim behavior).
 5. Add static covariates support and capability flags.
 6. Add explicit license receipt files under `~/.tollama/licenses/`.

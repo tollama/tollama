@@ -56,6 +56,14 @@ def _sample_forecast_payload() -> dict[str, Any]:
     }
 
 
+def _sample_forecast_payload_with_metrics() -> dict[str, Any]:
+    payload = _sample_forecast_payload()
+    payload["series"][0]["actuals"] = [2.0, 4.0]
+    payload["series"][1]["actuals"] = [4.0, 2.0]
+    payload["parameters"] = {"metrics": {"names": ["mape", "mase"]}}
+    return payload
+
+
 def _install_model(monkeypatch, tmp_path, name: str = "mock") -> None:
     paths = TollamaPaths(base_dir=tmp_path / ".tollama")
     monkeypatch.setenv("TOLLAMA_HOME", str(paths.base_dir))
@@ -950,6 +958,39 @@ def test_forecast_routes_end_to_end_to_mock_runner(monkeypatch, tmp_path) -> Non
     assert second["start_timestamp"] == "2025-01-02"
 
 
+def test_forecast_returns_metrics_when_requested(monkeypatch, tmp_path) -> None:
+    _install_model(monkeypatch, tmp_path, "mock")
+    payload = _sample_forecast_payload_with_metrics()
+
+    with TestClient(create_app()) as client:
+        response = client.post("/v1/forecast", json=payload)
+
+    assert response.status_code == 200
+    body = response.json()
+    metrics = body.get("metrics")
+    assert isinstance(metrics, dict)
+    assert metrics["aggregate"] == pytest.approx({"mape": 43.75, "mase": 0.5})
+    assert metrics["series"][0]["id"] == "s1"
+    assert metrics["series"][1]["id"] == "s2"
+
+
+def test_forecast_metrics_best_effort_skips_undefined_with_warning(monkeypatch, tmp_path) -> None:
+    _install_model(monkeypatch, tmp_path, "mock")
+    payload = _sample_forecast_payload()
+    payload["series"][0]["actuals"] = [0.0, 0.0]
+    payload["series"][1]["actuals"] = [0.0, 0.0]
+    payload["parameters"] = {"metrics": {"names": ["mape"]}}
+
+    with TestClient(create_app()) as client:
+        response = client.post("/v1/forecast", json=payload)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body.get("metrics") is None
+    assert body["warnings"]
+    assert "metrics.mape skipped" in body["warnings"][0]
+
+
 def test_forecast_invalid_payload_returns_400(monkeypatch, tmp_path) -> None:
     _install_model(monkeypatch, tmp_path, "mock")
     payload = _sample_forecast_payload()
@@ -1309,6 +1350,25 @@ def test_forecast_passes_manifest_source_and_metadata_to_runner(monkeypatch, tmp
         "prediction_length": 30,
         "license": "apache-2.0",
     }
+
+
+def test_forecast_does_not_forward_metrics_inputs_to_runner(monkeypatch, tmp_path) -> None:
+    _install_model(monkeypatch, tmp_path, "mock")
+    runner_manager = _CapturingRunnerManager()
+    app = create_app(runner_manager=runner_manager)  # type: ignore[arg-type]
+
+    payload = _sample_forecast_payload()
+    payload["series"] = [payload["series"][0]]
+    payload["series"][0]["actuals"] = [2.0, 4.0]
+    payload["parameters"] = {"metrics": {"names": ["mape", "mase"]}}
+
+    with TestClient(app) as client:
+        response = client.post("/v1/forecast", json=payload)
+
+    assert response.status_code == 200
+    captured_params = runner_manager.captured["params"]
+    assert "actuals" not in captured_params["series"][0]
+    assert "metrics" not in captured_params["parameters"]
 
 
 def test_forecast_uses_default_runner_timeout(monkeypatch, tmp_path) -> None:

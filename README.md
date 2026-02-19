@@ -12,6 +12,8 @@ This repository provides a structured forecasting stack:
 - Typer CLI (`tollama`) for Ollama-style model lifecycle and forecasting
 - Unified covariates contract (`past_covariates` + `future_covariates`) with
   `best_effort`/`strict` handling and warnings
+- Optional forecast accuracy metrics (`MAPE`, `MASE`) via `series[].actuals`
+  and `parameters.metrics`
 - Ruff + Pytest + CI checks
 
 ## Quickstart
@@ -207,6 +209,64 @@ Unified covariates contract:
   ],
   "parameters": {"covariates_mode": "best_effort"},
   "options": {}
+}
+```
+
+### Forecast Accuracy Metrics (MAPE + MASE)
+
+`/api/forecast` and `/v1/forecast` can optionally calculate forecast accuracy
+metrics against provided actuals:
+
+- set `series[].actuals` (length must equal `horizon`)
+- set `parameters.metrics.names` to any of `["mape", "mase"]`
+- optional `parameters.metrics.mase_seasonality` (default `1`)
+- undefined cases are best-effort with response `warnings[]`:
+  - MAPE skips when all actual values are `0`
+  - MASE skips when `len(target) <= mase_seasonality` or naive denominator is `0`
+
+```json
+{
+  "model": "mock",
+  "horizon": 2,
+  "quantiles": [],
+  "series": [
+    {
+      "id": "s1",
+      "freq": "D",
+      "timestamps": ["2025-01-01", "2025-01-02"],
+      "target": [1.0, 3.0],
+      "actuals": [2.0, 4.0]
+    }
+  ],
+  "parameters": {
+    "metrics": {
+      "names": ["mape", "mase"],
+      "mase_seasonality": 1
+    }
+  },
+  "options": {}
+}
+```
+
+Example response:
+
+```json
+{
+  "model": "mock",
+  "forecasts": [
+    {
+      "id": "s1",
+      "freq": "D",
+      "start_timestamp": "2025-01-02",
+      "mean": [3.0, 3.0]
+    }
+  ],
+  "metrics": {
+    "aggregate": {"mape": 37.5, "mase": 0.5},
+    "series": [
+      {"id": "s1", "values": {"mape": 37.5, "mase": 0.5}}
+    ]
+  }
 }
 ```
 

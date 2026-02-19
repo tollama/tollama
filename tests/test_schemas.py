@@ -101,3 +101,56 @@ def test_forecast_request_rejects_future_only_covariates() -> None:
     series["future_covariates"] = {"future_only": [1.0, 2.0, 3.0]}
     with pytest.raises(ValidationError):
         ForecastRequest.model_validate(payload)
+
+
+def test_forecast_request_metrics_requires_actuals_and_horizon_alignment() -> None:
+    payload = _example_request_payload()
+    payload["parameters"] = {"metrics": {"names": ["mape", "mase"]}}
+
+    with pytest.raises(ValidationError):
+        ForecastRequest.model_validate(payload)
+
+    series = payload["series"][0]
+    series["actuals"] = [12.0, 13.0]
+    with pytest.raises(ValidationError):
+        ForecastRequest.model_validate(payload)
+
+    series["actuals"] = [12.0, 13.0, 14.0]
+    request = ForecastRequest.model_validate(payload)
+    assert request.parameters.metrics is not None
+    assert request.parameters.metrics.names == ["mape", "mase"]
+    assert request.parameters.metrics.mase_seasonality == 1
+
+
+def test_forecast_request_rejects_duplicate_metric_names() -> None:
+    payload = _example_request_payload()
+    payload["series"][0]["actuals"] = [12.0, 13.0, 14.0]
+    payload["parameters"] = {"metrics": {"names": ["mape", "mape"]}}
+    with pytest.raises(ValidationError):
+        ForecastRequest.model_validate(payload)
+
+
+def test_forecast_response_accepts_metrics_payload() -> None:
+    payload = {
+        "model": "naive",
+        "forecasts": [
+            {
+                "id": "series-1",
+                "freq": "D",
+                "start_timestamp": "2025-01-04",
+                "mean": [12.0, 13.0],
+            }
+        ],
+        "metrics": {
+            "aggregate": {"mape": 12.5, "mase": 0.8},
+            "series": [
+                {
+                    "id": "series-1",
+                    "values": {"mape": 12.5, "mase": 0.8},
+                }
+            ],
+        },
+    }
+    response = ForecastResponse.model_validate(payload)
+    assert response.metrics is not None
+    assert response.metrics.aggregate["mape"] == 12.5
