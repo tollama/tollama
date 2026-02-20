@@ -529,6 +529,7 @@ python -m pip install -e ".[langchain]"
 Available wrappers (in `src/tollama/skill/langchain.py`):
 
 - `TollamaForecastTool`
+- `TollamaAnalyzeTool`
 - `TollamaCompareTool`
 - `TollamaRecommendTool`
 - `TollamaHealthTool`
@@ -574,6 +575,22 @@ print(
     )
 )
 print(
+    tools["tollama_analyze"].invoke(
+        {
+            "request": {
+                "series": [
+                    {
+                        "id": "s1",
+                        "freq": "D",
+                        "timestamps": ["2025-01-01", "2025-01-02", "2025-01-03"],
+                        "target": [1.0, 2.0, 1.5],
+                    }
+                ]
+            }
+        }
+    )
+)
+print(
     tools["tollama_compare"].invoke(
         {
             "request": {
@@ -599,6 +616,7 @@ Tool contract summary:
 - `tollama_health`: no args, returns daemon `health` + `version`
 - `tollama_models`: args `{"mode":"installed|loaded|available"}`
 - `tollama_forecast`: args `{"request": <ForecastRequest dict>}`
+- `tollama_analyze`: args `{"request": <AnalyzeRequest dict>}`
 - `tollama_compare`: args `{"request": <CompareRequest dict>}`
 - `tollama_recommend`: args `{"horizon": int, ...}` for ranked model hints
 - all wrappers return structured `dict` payloads; errors use
@@ -616,7 +634,8 @@ PYTHONPATH=src python -m pytest -q tests/test_langchain_skill.py
 ## Additional Agent Wrappers
 
 `tollama` also provides wrapper factories for CrewAI, AutoGen, and smolagents.
-All wrappers reuse the same tool contracts (`health/models/forecast/compare/recommend`).
+All wrappers reuse the same tool contracts
+(`health/models/forecast/analyze/compare/recommend`).
 
 ```python
 from tollama.skill import (

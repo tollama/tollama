@@ -14,7 +14,7 @@ from tollama.client import (
     TollamaClientError,
 )
 from tollama.core.recommend import recommend_models
-from tollama.core.schemas import CompareRequest, ForecastRequest
+from tollama.core.schemas import AnalyzeRequest, CompareRequest, ForecastRequest
 
 try:
     from langchain_core.tools import BaseTool
@@ -42,6 +42,10 @@ class ModelsToolInput(_ToolInputBase):
 
 
 class ForecastToolInput(_ToolInputBase):
+    request: dict[str, Any]
+
+
+class AnalyzeToolInput(_ToolInputBase):
     request: dict[str, Any]
 
 
@@ -248,6 +252,61 @@ class TollamaForecastTool(_TollamaBaseTool):
         return response.model_dump(mode="json", exclude_none=True)
 
 
+class TollamaAnalyzeTool(_TollamaBaseTool):
+    """LangChain tool that validates and executes series analysis requests."""
+
+    name: str = "tollama_analyze"
+    description: str = (
+        "Analyze one or more time series for cadence, seasonality, trend, anomalies, "
+        "stationarity, and data quality. "
+        "Input schema: {request:{series,parameters?}} where series[] entries include "
+        "id, timestamps, and target. "
+        'Example: tool.invoke({"request":{"series":[{"id":"s1","freq":"D",'
+        '"timestamps":["2025-01-01","2025-01-02","2025-01-03"],"target":[10,11,12]}]}}).'
+    )
+    args_schema: type[BaseModel] = AnalyzeToolInput
+
+    def _run(
+        self,
+        request: dict[str, Any],
+        run_manager: Any | None = None,
+    ) -> dict[str, Any]:
+        del run_manager
+        try:
+            args = AnalyzeToolInput(request=request)
+            analyze_request = AnalyzeRequest.model_validate(args.request)
+        except ValidationError as exc:
+            return _invalid_request_payload(str(exc))
+
+        client = self._client()
+        try:
+            response = client.analyze(analyze_request)
+        except TollamaClientError as exc:
+            return _client_error_payload(exc)
+
+        return response.model_dump(mode="json", exclude_none=True)
+
+    async def _arun(
+        self,
+        request: dict[str, Any],
+        run_manager: Any | None = None,
+    ) -> dict[str, Any]:
+        del run_manager
+        try:
+            args = AnalyzeToolInput(request=request)
+            analyze_request = AnalyzeRequest.model_validate(args.request)
+        except ValidationError as exc:
+            return _invalid_request_payload(str(exc))
+
+        client = self._async_client()
+        try:
+            response = await client.analyze(analyze_request)
+        except TollamaClientError as exc:
+            return _client_error_payload(exc)
+
+        return response.model_dump(mode="json", exclude_none=True)
+
+
 class TollamaCompareTool(_TollamaBaseTool):
     """LangChain tool that runs a single request across multiple models."""
 
@@ -411,6 +470,7 @@ def get_tollama_tools(
     """Build the default tollama LangChain tool set."""
     return [
         TollamaForecastTool(base_url=base_url, timeout=timeout),
+        TollamaAnalyzeTool(base_url=base_url, timeout=timeout),
         TollamaCompareTool(base_url=base_url, timeout=timeout),
         TollamaRecommendTool(base_url=base_url, timeout=timeout),
         TollamaHealthTool(base_url=base_url, timeout=timeout),

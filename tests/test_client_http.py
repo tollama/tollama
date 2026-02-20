@@ -48,6 +48,36 @@ def _response_payload() -> dict[str, Any]:
     }
 
 
+def _analyze_request_payload() -> dict[str, Any]:
+    return {
+        "series": [
+            {
+                "id": "s1",
+                "freq": "D",
+                "timestamps": ["2025-01-01", "2025-01-02", "2025-01-03", "2025-01-04"],
+                "target": [1.0, 2.0, 1.5, 2.5],
+            }
+        ],
+        "parameters": {"max_lag": 2, "top_k_seasonality": 1},
+    }
+
+
+def _analyze_response_payload() -> dict[str, Any]:
+    return {
+        "results": [
+            {
+                "id": "s1",
+                "detected_frequency": "D",
+                "seasonality_periods": [2],
+                "trend": {"direction": "up", "slope": 0.2, "r2": 0.4},
+                "anomaly_indices": [],
+                "stationarity_flag": False,
+                "data_quality_score": 0.9,
+            }
+        ]
+    }
+
+
 def _client(handler: httpx.MockTransport) -> TollamaClient:
     return TollamaClient(base_url="http://daemon.test", timeout=3.0, transport=handler)
 
@@ -87,6 +117,18 @@ def test_models_available_reads_api_info() -> None:
     models = client.models("available")
 
     assert models == [{"name": "mock", "family": "mock"}]
+
+
+def test_analyze_returns_typed_response() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/api/analyze"
+        return httpx.Response(200, json=_analyze_response_payload())
+
+    client = _client(httpx.MockTransport(handler))
+    response = client.analyze(_analyze_request_payload())
+
+    assert len(response.results) == 1
+    assert response.results[0].id == "s1"
 
 
 def test_show_404_maps_to_model_missing_error() -> None:
@@ -185,3 +227,16 @@ async def test_async_models_available_reads_api_info() -> None:
     models = await client.models("available")
 
     assert models == [{"name": "mock", "family": "mock"}]
+
+
+@pytest.mark.asyncio
+async def test_async_analyze_returns_typed_response() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/api/analyze"
+        return httpx.Response(200, json=_analyze_response_payload())
+
+    client = _async_client(httpx.MockTransport(handler))
+    response = await client.analyze(_analyze_request_payload())
+
+    assert len(response.results) == 1
+    assert response.results[0].detected_frequency == "D"

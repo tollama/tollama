@@ -9,7 +9,7 @@ from typing import Any
 import pytest
 
 from tollama.client import ModelMissingError
-from tollama.core.schemas import CompareResponse, ForecastResponse
+from tollama.core.schemas import AnalyzeResponse, CompareResponse, ForecastResponse
 
 _HAS_LANGCHAIN = importlib.util.find_spec("langchain_core") is not None
 if _HAS_LANGCHAIN:
@@ -55,11 +55,25 @@ def _forecast_response() -> ForecastResponse:
     )
 
 
+def _analyze_request() -> dict[str, Any]:
+    return {
+        "series": [
+            {
+                "id": "s1",
+                "freq": "D",
+                "timestamps": ["2025-01-01", "2025-01-02", "2025-01-03", "2025-01-04"],
+                "target": [1.0, 2.0, 1.5, 2.5],
+            }
+        ]
+    }
+
+
 def test_get_tollama_tools_returns_preconfigured_tools(langchain_tools) -> None:
     tools = langchain_tools.get_tollama_tools(base_url="http://daemon.test", timeout=7.0)
 
     assert [tool.name for tool in tools] == [
         "tollama_forecast",
+        "tollama_analyze",
         "tollama_compare",
         "tollama_recommend",
         "tollama_health",
@@ -72,6 +86,7 @@ def test_get_tollama_tools_returns_preconfigured_tools(langchain_tools) -> None:
 
 def test_tool_descriptions_include_usage_guidance(langchain_tools) -> None:
     forecast_tool = langchain_tools.TollamaForecastTool()
+    analyze_tool = langchain_tools.TollamaAnalyzeTool()
     compare_tool = langchain_tools.TollamaCompareTool()
     recommend_tool = langchain_tools.TollamaRecommendTool()
     models_tool = langchain_tools.TollamaModelsTool()
@@ -81,6 +96,10 @@ def test_tool_descriptions_include_usage_guidance(langchain_tools) -> None:
     assert "horizon" in forecast_tool.description
     assert "series" in forecast_tool.description
     assert "Example:" in forecast_tool.description
+
+    assert "series" in analyze_tool.description
+    assert "seasonality" in analyze_tool.description
+    assert "Example:" in analyze_tool.description
 
     assert "models" in compare_tool.description
     assert "ok=true/false" in compare_tool.description
@@ -149,6 +168,42 @@ def test_tollama_forecast_tool_invalid_request_maps_to_invalid_request(langchain
     assert payload["error"]["exit_code"] == 2
 
 
+def test_tollama_analyze_tool_success(monkeypatch, langchain_tools) -> None:
+    class _FakeClient:
+        def analyze(self, _request: Any) -> AnalyzeResponse:
+            return AnalyzeResponse.model_validate(
+                {
+                    "results": [
+                        {
+                            "id": "s1",
+                            "detected_frequency": "D",
+                            "seasonality_periods": [2],
+                            "trend": {"direction": "up", "slope": 0.1, "r2": 0.4},
+                            "anomaly_indices": [],
+                            "stationarity_flag": False,
+                            "data_quality_score": 0.9,
+                        }
+                    ],
+                },
+            )
+
+    monkeypatch.setattr("tollama.skill.langchain._make_client", lambda **_: _FakeClient())
+    tool = langchain_tools.TollamaAnalyzeTool()
+
+    payload = tool._run(request=_analyze_request())
+
+    assert payload["results"][0]["id"] == "s1"
+
+
+def test_tollama_analyze_tool_invalid_request_maps_to_invalid_request(langchain_tools) -> None:
+    tool = langchain_tools.TollamaAnalyzeTool()
+
+    payload = tool._run(request={"series": []})
+
+    assert payload["error"]["category"] == "INVALID_REQUEST"
+    assert payload["error"]["exit_code"] == 2
+
+
 def test_tollama_forecast_tool_client_error_maps_to_error_payload(
     monkeypatch,
     langchain_tools,
@@ -200,6 +255,37 @@ async def test_tollama_forecast_tool_arun_uses_async_client(monkeypatch, langcha
 
     assert payload["model"] == "mock"
     assert payload["forecasts"][0]["id"] == "s1"
+
+
+@pytest.mark.asyncio
+async def test_tollama_analyze_tool_arun_uses_async_client(monkeypatch, langchain_tools) -> None:
+    class _FakeAsyncClient:
+        async def analyze(self, _request: Any) -> AnalyzeResponse:
+            return AnalyzeResponse.model_validate(
+                {
+                    "results": [
+                        {
+                            "id": "s1",
+                            "detected_frequency": "D",
+                            "seasonality_periods": [2],
+                            "trend": {"direction": "up", "slope": 0.1, "r2": 0.4},
+                            "anomaly_indices": [],
+                            "stationarity_flag": False,
+                            "data_quality_score": 0.9,
+                        }
+                    ],
+                },
+            )
+
+    monkeypatch.setattr(
+        "tollama.skill.langchain._make_async_client",
+        lambda **_: _FakeAsyncClient(),
+    )
+    tool = langchain_tools.TollamaAnalyzeTool()
+
+    payload = await tool._arun(request=_analyze_request())
+
+    assert payload["results"][0]["detected_frequency"] == "D"
 
 
 @pytest.mark.asyncio

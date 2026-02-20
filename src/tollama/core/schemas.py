@@ -29,6 +29,7 @@ CovariateValue = NumericValue | StrictStr
 CovariateValues = list[CovariateValue]
 CovariateMode = Literal["best_effort", "strict"]
 MetricName = Literal["mape", "mase", "mae", "rmse", "smape"]
+TrendDirection = Literal["up", "down", "flat"]
 
 
 class CanonicalModel(BaseModel):
@@ -224,6 +225,89 @@ class CompareRequest(CanonicalModel):
         }
         ForecastRequest.model_validate(validation_payload)
         return self
+
+
+class AnalyzeParameters(CanonicalModel):
+    """Controls for bounded and deterministic series analysis."""
+
+    max_points: PositiveInt = 5000
+    max_lag: PositiveInt = 365
+    top_k_seasonality: PositiveInt = 3
+    anomaly_iqr_k: StrictFloat = Field(default=1.5, gt=0.0)
+
+
+class AnalyzeRequest(CanonicalModel):
+    """Analyze one or more input time series."""
+
+    series: list[SeriesInput] = Field(min_length=1)
+    parameters: AnalyzeParameters = Field(
+        default_factory=AnalyzeParameters,
+        validation_alias=AliasChoices("parameters"),
+    )
+
+    @field_validator("series")
+    @classmethod
+    def validate_unique_ids(cls, value: list[SeriesInput]) -> list[SeriesInput]:
+        ids = [item.id for item in value]
+        if len(ids) != len(set(ids)):
+            raise ValueError("series ids must be unique")
+        return value
+
+
+class TrendAnalysis(CanonicalModel):
+    """Trend summary for one series."""
+
+    direction: TrendDirection
+    slope: StrictFloat
+    r2: StrictFloat = Field(ge=0.0, le=1.0)
+
+
+class SeriesAnalysis(CanonicalModel):
+    """Analysis output for one series."""
+
+    id: NonEmptyStr
+    detected_frequency: NonEmptyStr
+    seasonality_periods: list[PositiveInt] = Field(default_factory=list)
+    trend: TrendAnalysis
+    anomaly_indices: list[StrictInt] = Field(default_factory=list)
+    stationarity_flag: StrictBool | None = None
+    data_quality_score: StrictFloat = Field(ge=0.0, le=1.0)
+    warnings: list[NonEmptyStr] | None = None
+
+    @field_validator("seasonality_periods")
+    @classmethod
+    def validate_seasonality_periods(cls, value: list[PositiveInt]) -> list[PositiveInt]:
+        if value != sorted(value):
+            raise ValueError("seasonality_periods must be sorted in ascending order")
+        if len(value) != len(set(value)):
+            raise ValueError("seasonality_periods must be unique")
+        return value
+
+    @field_validator("anomaly_indices")
+    @classmethod
+    def validate_anomaly_indices(cls, value: list[StrictInt]) -> list[StrictInt]:
+        if any(index < 0 for index in value):
+            raise ValueError("anomaly_indices must be non-negative")
+        if value != sorted(value):
+            raise ValueError("anomaly_indices must be sorted in ascending order")
+        if len(value) != len(set(value)):
+            raise ValueError("anomaly_indices must be unique")
+        return value
+
+
+class AnalyzeResponse(CanonicalModel):
+    """Response payload for series analysis requests."""
+
+    results: list[SeriesAnalysis] = Field(min_length=1)
+    warnings: list[NonEmptyStr] | None = None
+
+    @field_validator("results")
+    @classmethod
+    def validate_unique_ids(cls, value: list[SeriesAnalysis]) -> list[SeriesAnalysis]:
+        ids = [item.id for item in value]
+        if len(ids) != len(set(ids)):
+            raise ValueError("results ids must be unique")
+        return value
 
 
 class SeriesForecast(CanonicalModel):

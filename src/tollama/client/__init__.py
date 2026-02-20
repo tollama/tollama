@@ -11,11 +11,11 @@ from .exceptions import (
     TollamaClientError,
 )
 from .http import (
-    AsyncTollamaClient,
     DEFAULT_BASE_URL,
     DEFAULT_DAEMON_HOST,
     DEFAULT_DAEMON_PORT,
     DEFAULT_TIMEOUT_SECONDS,
+    AsyncTollamaClient,
     TollamaClient,
 )
 

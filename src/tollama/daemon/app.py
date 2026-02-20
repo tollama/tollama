@@ -43,6 +43,8 @@ from tollama.core.pull_defaults import resolve_effective_pull_defaults
 from tollama.core.redact import redact_config_dict, redact_env_dict, redact_proxy_url
 from tollama.core.registry import ModelCapabilities, get_model_spec, list_registry_models
 from tollama.core.schemas import (
+    AnalyzeRequest,
+    AnalyzeResponse,
     CompareError,
     CompareRequest,
     CompareResponse,
@@ -51,6 +53,7 @@ from tollama.core.schemas import (
     ForecastRequest,
     ForecastResponse,
 )
+from tollama.core.series_analysis import analyze_series_request
 from tollama.core.storage import (
     TollamaPaths,
     install_from_registry,
@@ -570,6 +573,10 @@ def create_app(*, runner_manager: RunnerManager | None = None) -> FastAPI:
             results=results,
             summary=summary,
         )
+
+    @app.post("/api/analyze", response_model=AnalyzeResponse)
+    def analyze(payload: AnalyzeRequest) -> AnalyzeResponse:
+        return analyze_series_request(payload)
 
     @app.post("/v1/forecast", response_model=ForecastResponse)
     def forecast(payload: ForecastRequestWithKeepAlive) -> ForecastResponse:

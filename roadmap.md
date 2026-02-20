@@ -13,7 +13,8 @@ the optional future `packages/*` split as a migration phase.
 
 ## 0) Product goals [~]
 ### Current implementation status
-- Unified forecasting endpoint is available at `POST /api/forecast` and `POST /v1/forecast`.
+- Unified forecasting endpoints are available at `POST /api/forecast` and `POST /v1/forecast`.
+- Model-free series diagnostics endpoint is available at `POST /api/analyze`.
 - Ollama-style model lifecycle is available (`pull`, `list`, `show`, `ps`, `rm`) via HTTP and CLI.
 - Forecast routing uses model-family worker selection from installed manifests.
 - Multi-family adapters are shipped:
@@ -250,6 +251,7 @@ tollama/
   - `DELETE /api/delete`
   - `GET /api/ps`
   - `POST /api/forecast`
+  - `POST /api/analyze`
   - `POST /api/compare`
 - `GET /api/info` includes:
   - installed model capabilities
@@ -439,14 +441,14 @@ Phase F - Product hardening:
 - Shared HTTP client package added under `src/tollama/client/` and reused by CLI/MCP.
 - HTTP client contracts (`src/tollama/client/http.py`):
   - default base URL `http://localhost:11435`, default timeout `10s`
-  - endpoint coverage: health/version, tags/ps/info, show/pull/delete, forecast, validate
+  - endpoint coverage: health/version, tags/ps/info, show/pull/delete, forecast, analyze, validate
   - HTTP/status/request failures mapped into typed exceptions with category metadata
     (`INVALID_REQUEST`, `DAEMON_UNREACHABLE`, `MODEL_MISSING`, `LICENSE_REQUIRED`,
     `PERMISSION_DENIED`, `TIMEOUT`, `INTERNAL_ERROR`)
 - MCP server scaffold added under `src/tollama/mcp/`:
   - `server.py`, `tools.py`, `schemas.py`, `__main__.py`
   - tool set:
-    `tollama_health`, `tollama_models`, `tollama_forecast`, `tollama_compare`,
+    `tollama_health`, `tollama_models`, `tollama_forecast`, `tollama_analyze`, `tollama_compare`,
     `tollama_recommend`, `tollama_pull`, `tollama_show`
   - each tool now includes rich MCP descriptions with required inputs, model-name examples,
     and invocation examples for agent discoverability
@@ -454,6 +456,7 @@ Phase F - Product hardening:
   - strict input schemas (`extra="forbid"`, strict scalar typing, positive timeout)
   - `tollama_models(mode=installed|loaded|available)` mapped to `/api/tags|/api/ps|/api/info`
   - `tollama_forecast` is non-streaming and validates request via `ForecastRequest`
+  - `tollama_analyze` validates request via `AnalyzeRequest`
   - tool failures are emitted as JSON payload with `{error:{category,exit_code,message}}`
 - Optional dependency bundle added in `pyproject.toml`:
   - `.[mcp]` with `mcp>=1.0`
@@ -463,7 +466,7 @@ Phase F - Product hardening:
 - Agent context doc added:
   - `CLAUDE.md`
 - Optional LangChain SDK wrapper added under `src/tollama/skill/langchain.py`:
-  - `TollamaForecastTool`, `TollamaCompareTool`, `TollamaRecommendTool`,
+  - `TollamaForecastTool`, `TollamaAnalyzeTool`, `TollamaCompareTool`, `TollamaRecommendTool`,
     `TollamaHealthTool`, `TollamaModelsTool`
   - `get_tollama_tools(base_url="http://127.0.0.1:11435", timeout=10.0)`
   - optional extra `.[langchain]` with `langchain-core`

@@ -178,6 +178,7 @@ tools = get_tollama_tools(base_url="http://127.0.0.1:11435", timeout=10.0)
 Provided `BaseTool` wrappers:
 
 - `TollamaForecastTool`
+- `TollamaAnalyzeTool`
 - `TollamaCompareTool`
 - `TollamaRecommendTool`
 - `TollamaHealthTool`
@@ -189,6 +190,7 @@ Tool input contracts:
 - `tollama_health`: no runtime args (`{}`)
 - `tollama_models`: `{"mode": "installed"|"loaded"|"available"}`
 - `tollama_forecast`: `{"request": <ForecastRequest-compatible dict>}`
+- `tollama_analyze`: `{"request": <AnalyzeRequest-compatible dict>}`
 - `tollama_compare`: `{"request": <CompareRequest-compatible dict>}`
 - `tollama_recommend`:
   `{"horizon": int, "freq"?: str, "has_past_covariates"?: bool, ...}`
@@ -454,6 +456,7 @@ bash scripts/install_mcp.sh --base-url "http://127.0.0.1:11435"
 | `tollama_health` | `GET /v1/health`, `GET /api/version` | `base_url?`, `timeout?` | `{healthy, health, version}` |
 | `tollama_models` | `GET /api/tags` or `/api/ps` or `/api/info` | `mode=installed\|loaded\|available`, `base_url?`, `timeout?` | `{mode, items}` |
 | `tollama_forecast` | `POST /api/forecast` (non-stream) | `request`, `base_url?`, `timeout?` | canonical `ForecastResponse` JSON |
+| `tollama_analyze` | `POST /api/analyze` | `request`, `base_url?`, `timeout?` | canonical `AnalyzeResponse` JSON |
 | `tollama_compare` | `POST /api/compare` | `request`, `base_url?`, `timeout?` | canonical `CompareResponse` JSON |
 | `tollama_recommend` | registry metadata + capabilities | `horizon`, covariate flags, `top_k`, `allow_restricted_license` | ranked recommendation payload |
 | `tollama_pull` | `POST /api/pull` (non-stream) | `model`, `accept_license?`, `base_url?`, `timeout?` | daemon pull result JSON |
@@ -461,6 +464,7 @@ bash scripts/install_mcp.sh --base-url "http://127.0.0.1:11435"
 
 Notes:
 - `tollama_forecast` validates `request` with `ForecastRequest` before HTTP call.
+- `tollama_analyze` validates `request` with `AnalyzeRequest` before HTTP call.
 - MCP tool input schemas require `timeout > 0` when provided.
 - MCP integration is intentionally non-streaming for deterministic tool responses.
 
@@ -502,7 +506,7 @@ bash scripts/install_mcp.sh --dry-run --base-url "http://127.0.0.1:11435"
 
 - `tollama.daemon`: Public API layer (`/api/*`, `/v1/health`, `/v1/forecast`) and runner supervision.
 - `tollama.runners`: Runner implementations that speak newline-delimited JSON over stdio.
-- `tollama.core`: Canonical schemas (`ForecastRequest`, `ForecastResponse`, `CompareRequest`, `CompareResponse`) and protocol helpers.
+- `tollama.core`: Canonical schemas (`ForecastRequest`, `ForecastResponse`, `AnalyzeRequest`, `AnalyzeResponse`, `CompareRequest`, `CompareResponse`) and protocol helpers.
 - `tollama.cli`: User CLI commands for serving and sending forecast requests.
 - `tollama.sdk`: High-level Python convenience facade (`Tollama`, `TollamaForecastResult`).
 - `tollama.client`: Shared HTTP client abstraction for CLI/MCP integrations.

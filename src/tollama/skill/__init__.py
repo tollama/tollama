@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 _LANGCHAIN_EXPORTS = {
+    "TollamaAnalyzeTool",
     "TollamaCompareTool",
     "TollamaForecastTool",
     "TollamaHealthTool",
@@ -20,6 +21,7 @@ __all__ = sorted(_LANGCHAIN_EXPORTS | _CREWAI_EXPORTS | _AUTOGEN_EXPORTS | _SMOL
 def __getattr__(name: str):
     if name in _LANGCHAIN_EXPORTS:
         from .langchain import (
+            TollamaAnalyzeTool,
             TollamaCompareTool,
             TollamaForecastTool,
             TollamaHealthTool,
@@ -29,6 +31,7 @@ def __getattr__(name: str):
         )
 
         exports = {
+            "TollamaAnalyzeTool": TollamaAnalyzeTool,
             "TollamaCompareTool": TollamaCompareTool,
             "TollamaForecastTool": TollamaForecastTool,
             "TollamaHealthTool": TollamaHealthTool,

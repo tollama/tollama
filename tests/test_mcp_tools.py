@@ -7,9 +7,10 @@ from typing import Any
 import pytest
 
 from tollama.client import ModelMissingError
-from tollama.core.schemas import ForecastResponse
+from tollama.core.schemas import AnalyzeResponse, ForecastResponse
 from tollama.mcp.tools import (
     MCPToolError,
+    tollama_analyze,
     tollama_forecast,
     tollama_health,
     tollama_models,
@@ -47,6 +48,19 @@ def _forecast_response() -> ForecastResponse:
             ],
         }
     )
+
+
+def _analyze_request() -> dict[str, Any]:
+    return {
+        "series": [
+            {
+                "id": "s1",
+                "freq": "D",
+                "timestamps": ["2025-01-01", "2025-01-02", "2025-01-03", "2025-01-04"],
+                "target": [1.0, 2.0, 1.5, 2.5],
+            }
+        ]
+    }
 
 
 def test_tollama_health_success(monkeypatch) -> None:
@@ -91,6 +105,40 @@ def test_tollama_forecast_success(monkeypatch) -> None:
 def test_tollama_forecast_invalid_request_maps_to_invalid_request() -> None:
     with pytest.raises(MCPToolError) as exc_info:
         tollama_forecast(request={"model": "mock"})
+
+    assert exc_info.value.exit_code == 2
+    assert exc_info.value.category == "INVALID_REQUEST"
+
+
+def test_tollama_analyze_success(monkeypatch) -> None:
+    class _FakeClient:
+        def analyze(self, _request: Any) -> AnalyzeResponse:
+            return AnalyzeResponse.model_validate(
+                {
+                    "results": [
+                        {
+                            "id": "s1",
+                            "detected_frequency": "D",
+                            "seasonality_periods": [2],
+                            "trend": {"direction": "up", "slope": 0.2, "r2": 0.7},
+                            "anomaly_indices": [],
+                            "stationarity_flag": False,
+                            "data_quality_score": 0.9,
+                        }
+                    ],
+                },
+            )
+
+    monkeypatch.setattr("tollama.mcp.tools._make_client", lambda **_: _FakeClient())
+
+    payload = tollama_analyze(request=_analyze_request())
+
+    assert payload["results"][0]["id"] == "s1"
+
+
+def test_tollama_analyze_invalid_request_maps_to_invalid_request() -> None:
+    with pytest.raises(MCPToolError) as exc_info:
+        tollama_analyze(request={"series": []})
 
     assert exc_info.value.exit_code == 2
     assert exc_info.value.category == "INVALID_REQUEST"

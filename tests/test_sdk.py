@@ -5,7 +5,7 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-from tollama.core.schemas import ForecastRequest, ForecastResponse
+from tollama.core.schemas import AnalyzeRequest, AnalyzeResponse, ForecastRequest, ForecastResponse
 from tollama.sdk import Tollama
 
 
@@ -136,6 +136,40 @@ def test_tollama_export_is_available_from_package_root() -> None:
 
     assert ExportedTollama is Tollama
     assert ExportedTollama is not None
+
+
+def test_analyze_accepts_series_dict_and_returns_typed_payload() -> None:
+    captured: dict[str, AnalyzeRequest] = {}
+
+    class _FakeClient:
+        def analyze(self, request: AnalyzeRequest) -> AnalyzeResponse:
+            captured["request"] = request
+            return AnalyzeResponse.model_validate(
+                {
+                    "results": [
+                        {
+                            "id": "series_0",
+                            "detected_frequency": "D",
+                            "seasonality_periods": [2],
+                            "trend": {"direction": "up", "slope": 0.1, "r2": 0.5},
+                            "anomaly_indices": [],
+                            "stationarity_flag": True,
+                            "data_quality_score": 0.95,
+                        }
+                    ],
+                },
+            )
+
+    sdk = Tollama(client=_FakeClient())  # type: ignore[arg-type]
+    response = sdk.analyze(
+        series={"target": [1.0, 2.0, 3.0, 4.0], "freq": "D"},
+        parameters={"max_lag": 2},
+    )
+
+    request = captured["request"]
+    assert request.series[0].id == "series_0"
+    assert request.parameters.max_lag == 2
+    assert response.results[0].id == "series_0"
 
 
 def test_series_mapping_requires_target() -> None:

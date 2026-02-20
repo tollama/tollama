@@ -8,7 +8,13 @@ from typing import Any
 import pandas as pd
 
 from tollama.client import DEFAULT_BASE_URL, DEFAULT_TIMEOUT_SECONDS, TollamaClient
-from tollama.core.schemas import ForecastRequest, ForecastResponse, SeriesForecast
+from tollama.core.schemas import (
+    AnalyzeRequest,
+    AnalyzeResponse,
+    ForecastRequest,
+    ForecastResponse,
+    SeriesForecast,
+)
 
 SeriesPayload = Mapping[str, Any] | Sequence[Mapping[str, Any]] | pd.Series | pd.DataFrame
 
@@ -128,6 +134,22 @@ class Tollama:
     def show(self, model: str) -> dict[str, Any]:
         """Return model metadata payload."""
         return self._client.show(model)
+
+    def analyze(
+        self,
+        *,
+        series: SeriesPayload,
+        parameters: Mapping[str, Any] | None = None,
+    ) -> AnalyzeResponse:
+        """Run a validated series analysis request."""
+        payload: dict[str, Any] = {
+            "series": _coerce_series_payload(series),
+        }
+        if parameters is not None:
+            payload["parameters"] = dict(parameters)
+
+        request = AnalyzeRequest.model_validate(payload)
+        return self._client.analyze(request)
 
     def forecast(
         self,
@@ -359,4 +381,3 @@ def _forecast_timestamps(forecast: SeriesForecast) -> list[str | None]:
     except Exception:  # noqa: BLE001
         return [None for _ in range(horizon)]
     return [timestamp.isoformat() for timestamp in index]
-

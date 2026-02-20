@@ -15,7 +15,7 @@ from tollama.client import (
     TollamaClientError,
 )
 from tollama.core.recommend import recommend_models
-from tollama.core.schemas import CompareRequest, ForecastRequest
+from tollama.core.schemas import AnalyzeRequest, CompareRequest, ForecastRequest
 
 _MODEL_NAME_EXAMPLES = (
     "mock, chronos2, granite-ttm-r2, timesfm-2.5-200m, "
@@ -42,6 +42,10 @@ class _ModelsInput(_ToolInputBase):
 
 
 class _ForecastInput(_ToolInputBase):
+    request: dict[str, Any]
+
+
+class _AnalyzeInput(_ToolInputBase):
     request: dict[str, Any]
 
 
@@ -116,6 +120,23 @@ def get_agent_tool_specs(
                 "additionalProperties": False,
             },
             handler=lambda **kwargs: _forecast_handler(client=client, **kwargs),
+        ),
+        AgentToolSpec(
+            name="tollama_analyze",
+            description=(
+                "Analyze one or more series for frequency, seasonality, trend, "
+                "anomalies, stationarity, and data quality. "
+                "Requires request.series[]."
+            ),
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "request": {"type": "object"},
+                },
+                "required": ["request"],
+                "additionalProperties": False,
+            },
+            handler=lambda **kwargs: _analyze_handler(client=client, **kwargs),
         ),
         AgentToolSpec(
             name="tollama_compare",
@@ -232,6 +253,20 @@ def _compare_handler(*, client: TollamaClient, request: dict[str, Any]) -> dict[
 
     try:
         response = client.compare(compare_request)
+    except TollamaClientError as exc:
+        return _client_error_payload(exc)
+    return response.model_dump(mode="json", exclude_none=True)
+
+
+def _analyze_handler(*, client: TollamaClient, request: dict[str, Any]) -> dict[str, Any]:
+    try:
+        args = _AnalyzeInput(request=request)
+        analyze_request = AnalyzeRequest.model_validate(args.request)
+    except ValidationError as exc:
+        return _invalid_request_payload(str(exc))
+
+    try:
+        response = client.analyze(analyze_request)
     except TollamaClientError as exc:
         return _client_error_payload(exc)
     return response.model_dump(mode="json", exclude_none=True)

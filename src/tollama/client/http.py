@@ -7,7 +7,14 @@ from typing import Any
 
 import httpx
 
-from tollama.core.schemas import CompareRequest, CompareResponse, ForecastRequest, ForecastResponse
+from tollama.core.schemas import (
+    AnalyzeRequest,
+    AnalyzeResponse,
+    CompareRequest,
+    CompareResponse,
+    ForecastRequest,
+    ForecastResponse,
+)
 
 from .exceptions import (
     DaemonHTTPError,
@@ -153,6 +160,26 @@ class TollamaClient:
                 detail=str(exc),
             ) from exc
 
+    def analyze(
+        self,
+        payload: dict[str, Any] | AnalyzeRequest,
+    ) -> AnalyzeResponse:
+        """Submit a series-analysis request and validate response schema."""
+        request_payload = self._coerce_analyze_payload(payload)
+        response_payload = self._request_json(
+            "POST",
+            "/api/analyze",
+            json_payload=request_payload,
+            action="analyze series",
+        )
+        try:
+            return AnalyzeResponse.model_validate(response_payload)
+        except Exception as exc:  # noqa: BLE001
+            raise InvalidRequestError(
+                action="validate analyze response",
+                detail=str(exc),
+            ) from exc
+
     def validate_request(self, payload: dict[str, Any]) -> dict[str, Any]:
         """Validate a forecast request without executing model inference."""
         return self._request_json(
@@ -267,6 +294,11 @@ class TollamaClient:
 
     def _coerce_compare_payload(self, payload: dict[str, Any] | CompareRequest) -> dict[str, Any]:
         if isinstance(payload, CompareRequest):
+            return payload.model_dump(mode="json", exclude_none=True)
+        return dict(payload)
+
+    def _coerce_analyze_payload(self, payload: dict[str, Any] | AnalyzeRequest) -> dict[str, Any]:
+        if isinstance(payload, AnalyzeRequest):
             return payload.model_dump(mode="json", exclude_none=True)
         return dict(payload)
 
@@ -477,6 +509,26 @@ class AsyncTollamaClient:
                 detail=str(exc),
             ) from exc
 
+    async def analyze(
+        self,
+        payload: dict[str, Any] | AnalyzeRequest,
+    ) -> AnalyzeResponse:
+        """Submit a series-analysis request and validate response schema."""
+        request_payload = self._coerce_analyze_payload(payload)
+        response_payload = await self._request_json(
+            "POST",
+            "/api/analyze",
+            json_payload=request_payload,
+            action="analyze series",
+        )
+        try:
+            return AnalyzeResponse.model_validate(response_payload)
+        except Exception as exc:  # noqa: BLE001
+            raise InvalidRequestError(
+                action="validate analyze response",
+                detail=str(exc),
+            ) from exc
+
     async def list_tags(self) -> dict[str, Any]:
         """Fetch installed model tags from the daemon."""
         return await self._request_json("GET", "/api/tags", action="list model tags")
@@ -492,6 +544,11 @@ class AsyncTollamaClient:
 
     def _coerce_compare_payload(self, payload: dict[str, Any] | CompareRequest) -> dict[str, Any]:
         if isinstance(payload, CompareRequest):
+            return payload.model_dump(mode="json", exclude_none=True)
+        return dict(payload)
+
+    def _coerce_analyze_payload(self, payload: dict[str, Any] | AnalyzeRequest) -> dict[str, Any]:
+        if isinstance(payload, AnalyzeRequest):
             return payload.model_dump(mode="json", exclude_none=True)
         return dict(payload)
 

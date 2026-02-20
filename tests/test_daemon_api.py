@@ -64,6 +64,23 @@ def _sample_forecast_payload_with_metrics() -> dict[str, Any]:
     return payload
 
 
+def _sample_analyze_payload() -> dict[str, Any]:
+    return {
+        "series": [
+            {
+                "id": "s1",
+                "freq": "D",
+                "timestamps": ["2025-01-01", "2025-01-02", "2025-01-03", "2025-01-04"],
+                "target": [1.0, 2.0, 1.5, 2.5],
+            }
+        ],
+        "parameters": {
+            "max_lag": 2,
+            "top_k_seasonality": 1,
+        },
+    }
+
+
 def _install_model(monkeypatch, tmp_path, name: str = "mock") -> None:
     paths = TollamaPaths(base_dir=tmp_path / ".tollama")
     monkeypatch.setenv("TOLLAMA_HOME", str(paths.base_dir))
@@ -170,6 +187,30 @@ def test_version_endpoint_returns_string_version() -> None:
     assert response.status_code == 200
     body = response.json()
     assert isinstance(body.get("version"), str)
+
+
+def test_analyze_endpoint_returns_series_analysis_payload() -> None:
+    with TestClient(create_app()) as client:
+        response = client.post("/api/analyze", json=_sample_analyze_payload())
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert len(payload["results"]) == 1
+    result = payload["results"][0]
+    assert result["id"] == "s1"
+    assert "detected_frequency" in result
+    assert "trend" in result
+    assert "data_quality_score" in result
+
+
+def test_analyze_endpoint_rejects_invalid_payload() -> None:
+    payload = _sample_analyze_payload()
+    del payload["series"]
+
+    with TestClient(create_app()) as client:
+        response = client.post("/api/analyze", json=payload)
+
+    assert response.status_code == 400
 
 
 def test_api_info_returns_redacted_diagnostics(monkeypatch, tmp_path) -> None:

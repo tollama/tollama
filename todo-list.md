@@ -158,9 +158,9 @@
     `docs/openclaw-gateway-runbook.md`)
 - [x] (P1) Python SDK / LangChain Tool 래퍼 추가
   - 현재: `src/tollama/skill/langchain.py`에
-    `TollamaForecastTool`/`TollamaCompareTool`/`TollamaRecommendTool`/
+    `TollamaForecastTool`/`TollamaAnalyzeTool`/`TollamaCompareTool`/`TollamaRecommendTool`/
     `TollamaHealthTool`/`TollamaModelsTool` 구현
-  - 현재: LangChain 3개 툴 description에 schema/model/example 가이드 추가
+  - 현재: LangChain 주요 툴 description에 schema/model/example 가이드 추가
   - 현재: 팩토리 `get_tollama_tools(base_url="http://127.0.0.1:11435", timeout=10.0)` 제공
   - 현재: optional extra `.[langchain]`(`langchain-core`) 추가
   - 현재: `tests/test_langchain_skill.py` 검증 추가
@@ -175,7 +175,7 @@
   - 현재: `scripts/install_mcp.sh`, `CLAUDE.md` 추가
   - 현재: 실 SDK 환경 E2E smoke 완료(`tollama-mcp` stdio + live daemon tool call)
   - 현재: `README.md`/`roadmap.md`/`CLAUDE.md`에 MCP 구현 상세(툴 계약/에러 매핑/기본값) 반영
-  - 현재: MCP 7개 툴(`health/models/forecast/compare/recommend/pull/show`) description에
+  - 현재: MCP 8개 툴(`health/models/forecast/analyze/compare/recommend/pull/show`) description에
     입력 스키마/모델 예시/호출 예시 추가
   - TODO: Claude Desktop 운영 가이드(권한/세션/배포 정책) 보강
 - [x] (P1) Agentic 비교/추천 기능 1차
@@ -183,6 +183,13 @@
   - 현재: `tollama_compare` MCP/LangChain 툴 추가
   - 현재: `tollama_recommend` MCP/LangChain 툴 추가(registry+capability 기반 랭킹)
   - 현재: `tests/test_compare.py`, `tests/test_recommend.py` 추가
+- [x] (P1) Agentic 시계열 분석 기능 1차
+  - 현재: `/api/analyze` 추가(주기/계절성/추세/이상치/정상성/품질 점수)
+  - 현재: `TollamaClient`/`AsyncTollamaClient`/SDK `Tollama.analyze()` 추가
+  - 현재: `tollama_analyze` MCP/LangChain/CrewAI/AutoGen/smolagents 툴 추가
+  - 현재: `tests/test_series_analysis.py`, `tests/test_daemon_api.py`,
+    `tests/test_client_http.py`, `tests/test_mcp_tools.py`, `tests/test_langchain_skill.py`,
+    `tests/test_agent_wrappers.py`, `tests/test_sdk.py`, `tests/test_schemas.py` 검증 추가
 - [x] (P0) 온보딩 마찰 완화 1차
   - 현재: `tollama quickstart` 명령 추가(daemon 확인 -> pull -> demo forecast -> next steps 출력)
   - 현재: `README.md` 상단을 설치/quickstart/SDK/agent 중심으로 재구성
@@ -193,7 +200,7 @@
   - 현재: `pyproject.toml`에 PyPI 메타데이터(`keywords`, `classifiers`, `project.urls`) 보강
 - [x] (P2) LangChain async 툴 실행 경로 완성
   - 현재: `AsyncTollamaClient` 추가(`src/tollama/client/http.py`)
-  - 현재: `TollamaHealthTool`/`TollamaModelsTool`/`TollamaForecastTool`/
+  - 현재: `TollamaHealthTool`/`TollamaModelsTool`/`TollamaForecastTool`/`TollamaAnalyzeTool`/
     `TollamaCompareTool`/`TollamaRecommendTool`의 `_arun`이 실제 async 호출 사용
   - 현재: `tests/test_langchain_skill.py`, `tests/test_client_http.py` async 경로 검증 추가
 - [x] (P2) 추가 Agent 프레임워크 래퍼 제공
@@ -238,4 +245,4 @@
     aggregate `mape`/`mase`/`mae`/`rmse`/`smape` + SMAPE undefined warning 경로
   - pass: LangChain wrapper live 검증(`get_tollama_tools` 기반
     `tollama_health`/`tollama_models`/`tollama_forecast` + invalid-request 매핑)
-  - pass: LangChain wrapper 테스트(`PYTHONPATH=src python -m pytest -q tests/test_langchain_skill.py`, `6 passed`)
+  - pass: LangChain wrapper 테스트(`PYTHONPATH=src python -m pytest -q tests/test_langchain_skill.py`)

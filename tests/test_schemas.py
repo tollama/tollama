@@ -3,7 +3,13 @@
 import pytest
 from pydantic import ValidationError
 
-from tollama.core.schemas import ForecastRequest, ForecastResponse, SeriesForecast
+from tollama.core.schemas import (
+    AnalyzeRequest,
+    AnalyzeResponse,
+    ForecastRequest,
+    ForecastResponse,
+    SeriesForecast,
+)
 
 
 def _example_request_payload() -> dict[str, object]:
@@ -26,6 +32,25 @@ def _example_request_payload() -> dict[str, object]:
     }
 
 
+def _example_analyze_request_payload() -> dict[str, object]:
+    return {
+        "series": [
+            {
+                "id": "series-1",
+                "freq": "D",
+                "timestamps": ["2025-01-01", "2025-01-02", "2025-01-03", "2025-01-04"],
+                "target": [10.0, 11.0, 12.0, 11.5],
+            }
+        ],
+        "parameters": {
+            "max_points": 100,
+            "max_lag": 16,
+            "top_k_seasonality": 2,
+            "anomaly_iqr_k": 1.5,
+        },
+    }
+
+
 def test_forecast_request_roundtrip_is_lossless() -> None:
     request = ForecastRequest.model_validate(_example_request_payload())
     encoded = request.to_json()
@@ -35,6 +60,14 @@ def test_forecast_request_roundtrip_is_lossless() -> None:
         mode="json",
         exclude_none=True,
     )
+
+
+def test_analyze_request_roundtrip_is_lossless() -> None:
+    request = AnalyzeRequest.model_validate(_example_analyze_request_payload())
+    encoded = request.to_json()
+    decoded = AnalyzeRequest.model_validate_json(encoded)
+    assert decoded == request
+    assert decoded.parameters.max_points == 100
 
 
 def test_forecast_request_freq_defaults_to_auto_and_preserves_explicit_freq() -> None:
@@ -67,6 +100,27 @@ def test_forecast_request_rejects_invalid_payloads() -> None:
         ForecastRequest.model_validate(invalid_quantiles)
 
 
+def test_analyze_request_rejects_invalid_parameters() -> None:
+    payload = _example_analyze_request_payload()
+    payload["parameters"]["max_points"] = 0  # type: ignore[index]
+    with pytest.raises(ValidationError):
+        AnalyzeRequest.model_validate(payload)
+
+
+def test_analyze_request_requires_unique_series_ids() -> None:
+    payload = _example_analyze_request_payload()
+    payload["series"].append(  # type: ignore[union-attr]
+        {
+            "id": "series-1",
+            "freq": "D",
+            "timestamps": ["2025-01-01", "2025-01-02", "2025-01-03", "2025-01-04"],
+            "target": [1.0, 1.1, 1.2, 1.3],
+        }
+    )
+    with pytest.raises(ValidationError):
+        AnalyzeRequest.model_validate(payload)
+
+
 def test_forecast_response_rejects_mismatched_quantile_lengths() -> None:
     payload = {
         "model": "naive",
@@ -83,6 +137,24 @@ def test_forecast_response_rejects_mismatched_quantile_lengths() -> None:
 
     with pytest.raises(ValidationError):
         ForecastResponse.model_validate(payload)
+
+
+def test_analyze_response_rejects_unsorted_anomaly_indices() -> None:
+    payload = {
+        "results": [
+            {
+                "id": "series-1",
+                "detected_frequency": "D",
+                "seasonality_periods": [2, 4],
+                "trend": {"direction": "up", "slope": 0.2, "r2": 0.8},
+                "anomaly_indices": [3, 1],
+                "stationarity_flag": False,
+                "data_quality_score": 0.9,
+            }
+        ],
+    }
+    with pytest.raises(ValidationError):
+        AnalyzeResponse.model_validate(payload)
 
 
 def test_series_forecast_accepts_valid_quantiles() -> None:
