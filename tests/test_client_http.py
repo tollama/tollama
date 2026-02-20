@@ -260,6 +260,35 @@ def test_pipeline_returns_typed_response() -> None:
     assert response.auto_forecast.selection.chosen_model == "mock"
 
 
+def test_modelfile_client_methods_hit_expected_endpoints() -> None:
+    paths: list[tuple[str, str]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        paths.append((request.method, request.url.path))
+        if request.method == "GET" and request.url.path == "/api/modelfiles":
+            return httpx.Response(200, json={"modelfiles": []})
+        if request.method == "GET" and request.url.path == "/api/modelfiles/baseline":
+            return httpx.Response(200, json={"name": "baseline", "profile": {"model": "mock"}})
+        if request.method == "POST" and request.url.path == "/api/modelfiles":
+            return httpx.Response(200, json={"name": "baseline", "profile": {"model": "mock"}})
+        if request.method == "DELETE" and request.url.path == "/api/modelfiles/baseline":
+            return httpx.Response(200, json={"deleted": True, "name": "baseline"})
+        return httpx.Response(500, json={"detail": "unexpected path"})
+
+    client = _client(httpx.MockTransport(handler))
+    assert client.list_modelfiles() == {"modelfiles": []}
+    assert client.show_modelfile("baseline")["name"] == "baseline"
+    assert client.create_modelfile("baseline", profile={"model": "mock"})["name"] == "baseline"
+    assert client.remove_modelfile("baseline") == {"deleted": True, "name": "baseline"}
+
+    assert paths == [
+        ("GET", "/api/modelfiles"),
+        ("GET", "/api/modelfiles/baseline"),
+        ("POST", "/api/modelfiles"),
+        ("DELETE", "/api/modelfiles/baseline"),
+    ]
+
+
 def test_client_includes_api_key_header_when_configured() -> None:
     seen_header = {"authorization": None}
 

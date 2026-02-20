@@ -90,6 +90,46 @@ class TollamaClient:
         """Fetch daemon diagnostics payload."""
         return self._request_json("GET", "/api/info", action="daemon info")
 
+    def list_modelfiles(self) -> dict[str, Any]:
+        """List stored TSModelfile profiles."""
+        return self._request_json("GET", "/api/modelfiles", action="list modelfiles")
+
+    def show_modelfile(self, name: str) -> dict[str, Any]:
+        """Fetch one TSModelfile by name."""
+        return self._request_json(
+            "GET",
+            f"/api/modelfiles/{name}",
+            action=f"show modelfile {name!r}",
+        )
+
+    def create_modelfile(
+        self,
+        name: str,
+        *,
+        profile: dict[str, Any] | None = None,
+        content: str | None = None,
+    ) -> dict[str, Any]:
+        """Create or update one TSModelfile profile."""
+        payload: dict[str, Any] = {"name": name}
+        if profile is not None:
+            payload["profile"] = profile
+        if content is not None:
+            payload["content"] = content
+        return self._request_json(
+            "POST",
+            "/api/modelfiles",
+            json_payload=payload,
+            action=f"create modelfile {name!r}",
+        )
+
+    def remove_modelfile(self, name: str) -> dict[str, Any]:
+        """Delete one TSModelfile by name."""
+        return self._request_json(
+            "DELETE",
+            f"/api/modelfiles/{name}",
+            action=f"remove modelfile {name!r}",
+        )
+
     def forecast(
         self,
         payload: dict[str, Any] | ForecastRequest,
@@ -535,6 +575,46 @@ class AsyncTollamaClient:
     async def info(self) -> dict[str, Any]:
         """Fetch daemon diagnostics payload."""
         return await self._request_json("GET", "/api/info", action="daemon info")
+
+    async def list_modelfiles(self) -> dict[str, Any]:
+        """List stored TSModelfile profiles."""
+        return await self._request_json("GET", "/api/modelfiles", action="list modelfiles")
+
+    async def show_modelfile(self, name: str) -> dict[str, Any]:
+        """Fetch one TSModelfile by name."""
+        return await self._request_json(
+            "GET",
+            f"/api/modelfiles/{name}",
+            action=f"show modelfile {name!r}",
+        )
+
+    async def create_modelfile(
+        self,
+        name: str,
+        *,
+        profile: dict[str, Any] | None = None,
+        content: str | None = None,
+    ) -> dict[str, Any]:
+        """Create or update one TSModelfile profile."""
+        payload: dict[str, Any] = {"name": name}
+        if profile is not None:
+            payload["profile"] = profile
+        if content is not None:
+            payload["content"] = content
+        return await self._request_json(
+            "POST",
+            "/api/modelfiles",
+            json_payload=payload,
+            action=f"create modelfile {name!r}",
+        )
+
+    async def remove_modelfile(self, name: str) -> dict[str, Any]:
+        """Delete one TSModelfile by name."""
+        return await self._request_json(
+            "DELETE",
+            f"/api/modelfiles/{name}",
+            action=f"remove modelfile {name!r}",
+        )
 
     async def forecast(
         self,

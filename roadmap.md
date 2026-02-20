@@ -15,9 +15,12 @@ the optional future `packages/*` split as a migration phase.
 ### Current implementation status
 - Unified forecasting endpoints are available at `POST /api/forecast` and `POST /v1/forecast`.
 - Zero-config auto-forecast endpoint is available at `POST /api/auto-forecast`.
+- Auto-forecast `strategy="ensemble"` supports weighted `mean`/`median` aggregation with bounded parallel execution.
 - Model-free series diagnostics endpoint is available at `POST /api/analyze`.
 - Scenario analysis endpoint is available at `POST /api/what-if`.
 - Autonomous pipeline endpoint is available at `POST /api/pipeline`.
+- CSV/Parquet ingest paths are available via `data_url` forecasting and upload endpoints.
+- TSModelfile profile management is available via daemon + CLI.
 - Ollama-style model lifecycle is available (`pull`, `list`, `show`, `ps`, `rm`) via HTTP and CLI.
 - Forecast routing uses model-family worker selection from installed manifests.
 - Multi-family adapters are shipped:
@@ -106,6 +109,9 @@ tollama/
     - `names` supports `mape`, `mase`, `mae`, `rmse`, `smape`, `wape`, `rmsse`, `pinball`
     - `mase_seasonality` default `1`
     - requires `series.actuals` with length `horizon`
+  - optional file ingest:
+    - `data_url` + `ingest` (`format`, `timestamp_column`, `series_id_column`, `target_column`, `freq_column`)
+    - exactly one of `series` or `data_url` is required
 
 ### Planned work / TODO
 - Add explicit compatibility/versioning policy for canonical schema evolution.
@@ -152,6 +158,7 @@ tollama/
 - Implemented directories/files include:
   - `models/` manifests + snapshots
   - `config.json`
+  - `modelfiles/` TSModelfile YAML profiles
   - `runtimes/` path reserved in core paths
 
 ### Planned work / TODO
@@ -261,18 +268,24 @@ tollama/
   - `DELETE /api/delete`
   - `GET /api/ps`
   - `POST /api/forecast`
+  - `POST /api/forecast/upload`
+  - `POST /api/ingest/upload`
   - `POST /api/auto-forecast`
   - `POST /api/analyze`
   - `POST /api/what-if`
   - `POST /api/pipeline`
   - `POST /api/compare`
   - `GET /api/usage`
+  - `GET /api/modelfiles`
+  - `GET /api/modelfiles/{name}`
+  - `POST /api/modelfiles`
+  - `DELETE /api/modelfiles/{name}`
 - `GET /api/info` includes:
   - installed model capabilities
   - available model capabilities
   - runner statuses
 - CLI command surface today:
-  - `serve`, `quickstart`, `pull`, `list`, `ps`, `show`, `rm`, `run`, `info`, `config`
+  - `serve`, `quickstart`, `pull`, `list`, `ps`, `show`, `rm`, `run`, `info`, `config`, `modelfile`
 - CLI behavior includes:
   - warning output for forecast responses that include `warnings[]`
   - covariates capability summaries in `tollama info`

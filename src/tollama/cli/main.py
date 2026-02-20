@@ -37,8 +37,10 @@ from .info import collect_info
 app = typer.Typer(help="Ollama-style command-line interface for tollama.")
 config_app = typer.Typer(help="Manage local tollama defaults in ~/.tollama/config.json.")
 runtime_app = typer.Typer(help="Manage per-family isolated runner environments.")
+modelfile_app = typer.Typer(help="Manage TSModelfile forecast profiles.")
 app.add_typer(config_app, name="config")
 app.add_typer(runtime_app, name="runtime")
+app.add_typer(modelfile_app, name="modelfile")
 
 _CONFIG_KEY_PATHS: dict[str, tuple[str, str]] = {
     "pull.offline": ("pull", "offline"),
@@ -424,6 +426,149 @@ def rm(
     typer.echo(json.dumps(response, indent=2, sort_keys=True))
 
 
+@modelfile_app.command("list")
+def modelfile_list(
+    json_output: bool = typer.Option(False, "--json", help="Print JSON output."),
+    base_url: str = typer.Option(
+        DEFAULT_BASE_URL,
+        help="Daemon base URL. Defaults to http://localhost:11435.",
+    ),
+    timeout: float = typer.Option(10.0, min=0.1, help="HTTP timeout in seconds."),
+) -> None:
+    """List stored TSModelfile profiles."""
+    client = _make_client(base_url=base_url, timeout=timeout)
+    try:
+        response = client.list_modelfiles()
+    except RuntimeError as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+
+    if json_output:
+        typer.echo(json.dumps(response, indent=2, sort_keys=True))
+        return
+
+    items = response.get("modelfiles")
+    if not isinstance(items, list) or not items:
+        typer.echo("No modelfiles found.")
+        return
+
+    rows: list[tuple[str, str, str]] = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        profile = item.get("profile")
+        model = "-"
+        horizon = "-"
+        if isinstance(profile, dict):
+            model = _string_or_dash(profile.get("model"))
+            horizon_value = profile.get("horizon")
+            if isinstance(horizon_value, int):
+                horizon = str(horizon_value)
+        rows.append((_string_or_dash(item.get("name")), model, horizon))
+
+    typer.echo(_render_table(("NAME", "MODEL", "HORIZON"), rows))
+
+
+@modelfile_app.command("show")
+def modelfile_show(
+    name: str = typer.Argument(..., help="Modelfile name to inspect."),
+    base_url: str = typer.Option(
+        DEFAULT_BASE_URL,
+        help="Daemon base URL. Defaults to http://localhost:11435.",
+    ),
+    timeout: float = typer.Option(10.0, min=0.1, help="HTTP timeout in seconds."),
+) -> None:
+    """Show one TSModelfile profile."""
+    client = _make_client(base_url=base_url, timeout=timeout)
+    try:
+        response = client.show_modelfile(name)
+    except RuntimeError as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+    typer.echo(json.dumps(response, indent=2, sort_keys=True))
+
+
+@modelfile_app.command("create")
+def modelfile_create(
+    name: str = typer.Argument(..., help="Modelfile name."),
+    file: Path | None = typer.Option(
+        None,
+        "--file",
+        exists=True,
+        file_okay=True,
+        dir_okay=False,
+        help="YAML modelfile content path.",
+    ),
+    model: str | None = typer.Option(
+        None,
+        "--model",
+        help="Base model name (used when --file is omitted).",
+    ),
+    horizon: int | None = typer.Option(
+        None,
+        "--horizon",
+        min=1,
+        help="Default horizon (used when --file is omitted).",
+    ),
+    quantiles: str | None = typer.Option(
+        None,
+        "--quantiles",
+        help="Comma-separated quantiles, e.g. 0.1,0.5,0.9.",
+    ),
+    base_url: str = typer.Option(
+        DEFAULT_BASE_URL,
+        help="Daemon base URL. Defaults to http://localhost:11435.",
+    ),
+    timeout: float = typer.Option(10.0, min=0.1, help="HTTP timeout in seconds."),
+) -> None:
+    """Create or update one TSModelfile profile."""
+    if file is None and model is None:
+        typer.echo("Error: provide --file or --model", err=True)
+        raise typer.Exit(code=1)
+
+    payload: dict[str, Any] = {"name": name}
+    if file is not None:
+        payload["content"] = file.read_text(encoding="utf-8")
+    else:
+        profile: dict[str, Any] = {"model": model}
+        if horizon is not None:
+            profile["horizon"] = horizon
+        if quantiles is not None:
+            profile["quantiles"] = _parse_quantiles_option(quantiles)
+        payload["profile"] = profile
+
+    client = _make_client(base_url=base_url, timeout=timeout)
+    try:
+        response = client.create_modelfile(
+            name=name,
+            profile=payload.get("profile") if isinstance(payload.get("profile"), dict) else None,
+            content=payload.get("content") if isinstance(payload.get("content"), str) else None,
+        )
+    except RuntimeError as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+    typer.echo(json.dumps(response, indent=2, sort_keys=True))
+
+
+@modelfile_app.command("rm")
+def modelfile_rm(
+    name: str = typer.Argument(..., help="Modelfile name to remove."),
+    base_url: str = typer.Option(
+        DEFAULT_BASE_URL,
+        help="Daemon base URL. Defaults to http://localhost:11435.",
+    ),
+    timeout: float = typer.Option(10.0, min=0.1, help="HTTP timeout in seconds."),
+) -> None:
+    """Delete one TSModelfile profile."""
+    client = _make_client(base_url=base_url, timeout=timeout)
+    try:
+        response = client.remove_modelfile(name)
+    except RuntimeError as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+    typer.echo(json.dumps(response, indent=2, sort_keys=True))
+
+
 @app.command("run")
 def run(
     model: str = typer.Argument(..., help="Model name to run."),
@@ -757,6 +902,21 @@ def _string_or_dash(value: Any) -> str:
     if isinstance(value, str) and value:
         return value
     return "-"
+
+
+def _parse_quantiles_option(raw: str) -> list[float]:
+    values: list[float] = []
+    for chunk in raw.split(","):
+        normalized = chunk.strip()
+        if not normalized:
+            continue
+        try:
+            values.append(float(normalized))
+        except ValueError as exc:
+            raise typer.BadParameter(f"invalid quantile value: {normalized!r}") from exc
+    if not values:
+        raise typer.BadParameter("at least one quantile is required")
+    return values
 
 
 def _env_api_key() -> str | None:

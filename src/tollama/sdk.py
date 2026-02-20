@@ -3,11 +3,22 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from typing import Any
+from pathlib import Path
+from typing import Any, cast
 
 import pandas as pd
 
 from tollama.client import DEFAULT_BASE_URL, DEFAULT_TIMEOUT_SECONDS, TollamaClient
+from tollama.core.ingest import (
+    SERIES_ID_COLUMN_CANDIDATES as _SERIES_ID_COLUMN_CANDIDATES,
+)
+from tollama.core.ingest import (
+    TIMESTAMP_COLUMN_CANDIDATES as _TIMESTAMP_COLUMN_CANDIDATES,
+)
+from tollama.core.ingest import (
+    TabularFormat,
+    load_series_inputs_from_path,
+)
 from tollama.core.schemas import (
     AnalyzeRequest,
     AnalyzeResponse,
@@ -23,9 +34,6 @@ from tollama.core.schemas import (
 )
 
 SeriesPayload = Mapping[str, Any] | Sequence[Mapping[str, Any]] | pd.Series | pd.DataFrame
-
-_TIMESTAMP_COLUMN_CANDIDATES = ("timestamp", "timestamps", "ds", "time")
-_SERIES_ID_COLUMN_CANDIDATES = ("id", "series_id", "unique_id")
 
 
 class TollamaForecastResult:
@@ -187,6 +195,48 @@ class Tollama:
         response = self._client.forecast_response(request)
         return TollamaForecastResult(response=response)
 
+    def forecast_from_file(
+        self,
+        *,
+        model: str,
+        path: str | Path,
+        horizon: int,
+        format_hint: str | None = None,
+        timestamp_column: str | None = None,
+        series_id_column: str | None = None,
+        target_column: str | None = None,
+        freq_column: str | None = None,
+        quantiles: Sequence[float] | None = None,
+        options: Mapping[str, Any] | None = None,
+        timeout: float | None = None,
+        parameters: Mapping[str, Any] | None = None,
+    ) -> TollamaForecastResult:
+        """Load CSV/Parquet into canonical series payloads and run forecast."""
+        series = load_series_inputs_from_path(
+            path,
+            format_hint=cast(TabularFormat | None, format_hint),
+            timestamp_column=timestamp_column,
+            series_id_column=series_id_column,
+            target_column=target_column,
+            freq_column=freq_column,
+        )
+        payload: dict[str, Any] = {
+            "model": model,
+            "horizon": horizon,
+            "series": [item.model_dump(mode="python", exclude_none=True) for item in series],
+            "options": dict(options or {}),
+        }
+        if quantiles is not None:
+            payload["quantiles"] = list(quantiles)
+        if timeout is not None:
+            payload["timeout"] = timeout
+        if parameters is not None:
+            payload["parameters"] = dict(parameters)
+
+        request = ForecastRequest.model_validate(payload)
+        response = self._client.forecast_response(request)
+        return TollamaForecastResult(response=response)
+
     def auto_forecast(
         self,
         *,
@@ -196,6 +246,7 @@ class Tollama:
         model: str | None = None,
         allow_fallback: bool = False,
         ensemble_top_k: int = 3,
+        ensemble_method: str = "mean",
         quantiles: Sequence[float] | None = None,
         options: Mapping[str, Any] | None = None,
         timeout: float | None = None,
@@ -210,6 +261,7 @@ class Tollama:
             "options": dict(options or {}),
             "allow_fallback": allow_fallback,
             "ensemble_top_k": ensemble_top_k,
+            "ensemble_method": ensemble_method,
         }
         if model is not None:
             payload["model"] = model
@@ -269,6 +321,7 @@ class Tollama:
         model: str | None = None,
         allow_fallback: bool = False,
         ensemble_top_k: int = 3,
+        ensemble_method: str = "mean",
         quantiles: Sequence[float] | None = None,
         options: Mapping[str, Any] | None = None,
         timeout: float | None = None,
@@ -288,6 +341,7 @@ class Tollama:
             "options": dict(options or {}),
             "allow_fallback": allow_fallback,
             "ensemble_top_k": ensemble_top_k,
+            "ensemble_method": ensemble_method,
             "recommend_top_k": recommend_top_k,
             "allow_restricted_license": allow_restricted_license,
             "pull_if_missing": pull_if_missing,

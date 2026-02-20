@@ -1,0 +1,41 @@
+services:
+  tollama:
+    build:
+      context: .
+      target: runtime
+    image: tollama/tollama:local
+    container_name: tollama
+    ports:
+      - "11435:11435"
+    environment:
+      - TOLLAMA_HOST=0.0.0.0:11435
+    volumes:
+      - tollama_home:/home/tollama/.tollama
+
+  tollama-gpu:
+    build:
+      context: .
+      target: runtime
+    image: tollama/tollama:local-gpu
+    container_name: tollama-gpu
+    profiles:
+      - gpu
+    ports:
+      - "11436:11435"
+    environment:
+      - TOLLAMA_HOST=0.0.0.0:11435
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+    volumes:
+      - tollama_home_gpu:/home/tollama/.tollama
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+volumes:
+  tollama_home:
+  tollama_home_gpu:

@@ -9,6 +9,7 @@ import shutil
 import sys
 import time
 from collections.abc import Callable, Iterator
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -19,7 +20,7 @@ from threading import Lock, Thread
 from typing import Any
 
 import httpx
-from fastapi import Body, Depends, FastAPI, HTTPException, Request
+from fastapi import Body, Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, Response, StreamingResponse
@@ -36,6 +37,7 @@ from pydantic import (
 
 from tollama.core.auto_select import AutoSelection, select_auto_models
 from tollama.core.config import ConfigFileError, TollamaConfig, load_config
+from tollama.core.ensemble import EnsembleError, merge_forecast_responses
 from tollama.core.env_override import set_env_temporarily
 from tollama.core.explainability import generate_explanation
 from tollama.core.forecast_metrics import compute_forecast_metrics
@@ -43,6 +45,21 @@ from tollama.core.hf_pull import (
     OfflineModelUnavailableError,
     PullError,
     pull_snapshot_to_local_dir,
+)
+from tollama.core.ingest import (
+    IngestDependencyError,
+    IngestError,
+    load_series_inputs_from_bytes,
+    load_series_inputs_from_data_url,
+)
+from tollama.core.modelfile import (
+    ModelfileListResponse,
+    ModelfileUpsertRequest,
+    list_modelfiles,
+    load_modelfile,
+    merge_modelfile_defaults,
+    remove_modelfile,
+    write_modelfile,
 )
 from tollama.core.pipeline import run_pipeline_analysis
 from tollama.core.pull_defaults import resolve_effective_pull_defaults
@@ -64,9 +81,9 @@ from tollama.core.schemas import (
     ForecastRequest,
     ForecastResponse,
     ForecastTiming,
+    IngestOptions,
     PipelineRequest,
     PipelineResponse,
-    SeriesForecast,
     WhatIfError,
     WhatIfRequest,
     WhatIfResponse,
@@ -105,11 +122,15 @@ from .supervisor import (
 
 DEFAULT_FORECAST_TIMEOUT_SECONDS = 300.0
 FORECAST_TIMEOUT_ENV_NAME = "TOLLAMA_FORECAST_TIMEOUT_SECONDS"
+ALLOW_REMOTE_DATA_URL_ENV_NAME = "TOLLAMA_ALLOW_REMOTE_DATA_URL"
+AUTO_ENSEMBLE_MAX_WORKERS = 4
+AUTO_FORECAST_MEMBER_TIMEOUT_SECONDS = 10.0
 DEFAULT_MODIFIED_AT = "1970-01-01T00:00:00Z"
 INFO_ENV_KEYS = (
     "TOLLAMA_HOME",
     "TOLLAMA_HOST",
     FORECAST_TIMEOUT_ENV_NAME,
+    ALLOW_REMOTE_DATA_URL_ENV_NAME,
     "HF_HOME",
     "HF_HUB_OFFLINE",
     "HTTP_PROXY",
@@ -316,6 +337,131 @@ def create_app(*, runner_manager: RunnerManager | None = None) -> FastAPI:
             raise HTTPException(status_code=503, detail=usage_unavailable_hint())
         return usage_meter.snapshot(key_id=current_key_id(request))
 
+    @app.get("/api/modelfiles", response_model=ModelfileListResponse)
+    def modelfiles() -> ModelfileListResponse:
+        return ModelfileListResponse(modelfiles=list_modelfiles())
+
+    @app.get("/api/modelfiles/{name}")
+    def modelfile_show(name: str) -> dict[str, Any]:
+        try:
+            stored = load_modelfile(name)
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return stored.model_dump(mode="json", exclude_none=True)
+
+    @app.post("/api/modelfiles")
+    def modelfile_upsert(payload: ModelfileUpsertRequest) -> dict[str, Any]:
+        try:
+            profile = payload.resolved_profile()
+            stored = write_modelfile(payload.name, profile)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return stored.model_dump(mode="json", exclude_none=True)
+
+    @app.delete("/api/modelfiles/{name}")
+    def modelfile_delete(name: str) -> dict[str, Any]:
+        try:
+            removed = remove_modelfile(name)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        if not removed:
+            raise HTTPException(status_code=404, detail=f"modelfile {name!r} not found")
+        return {"deleted": True, "name": name}
+
+    @app.post("/api/ingest/upload")
+    async def ingest_upload(
+        file: UploadFile = File(...),
+        format_hint: str | None = Form(default=None),
+        timestamp_column: str | None = Form(default=None),
+        series_id_column: str | None = Form(default=None),
+        target_column: str | None = Form(default=None),
+        freq_column: str | None = Form(default=None),
+    ) -> dict[str, Any]:
+        file_payload = await file.read()
+        filename = file.filename or "upload.csv"
+        try:
+            ingest_options = IngestOptions.model_validate(
+                {
+                    "format": format_hint,
+                    "timestamp_column": timestamp_column,
+                    "series_id_column": series_id_column,
+                    "target_column": target_column,
+                    "freq_column": freq_column,
+                },
+            )
+            series = load_series_inputs_from_bytes(
+                file_payload,
+                filename=filename,
+                format_hint=ingest_options.format,
+                timestamp_column=ingest_options.timestamp_column,
+                series_id_column=ingest_options.series_id_column,
+                target_column=ingest_options.target_column,
+                freq_column=ingest_options.freq_column,
+            )
+        except IngestDependencyError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+        except (IngestError, ValidationError, UnicodeDecodeError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+        return {
+            "filename": filename,
+            "series": [item.model_dump(mode="json", exclude_none=True) for item in series],
+        }
+
+    @app.post("/api/forecast/upload", response_model=ForecastResponse)
+    async def forecast_upload(
+        request: Request,
+        payload: str = Form(...),
+        file: UploadFile = File(...),
+        format_hint: str | None = Form(default=None),
+        timestamp_column: str | None = Form(default=None),
+        series_id_column: str | None = Form(default=None),
+        target_column: str | None = Form(default=None),
+        freq_column: str | None = Form(default=None),
+    ) -> ForecastResponse:
+        try:
+            parsed_payload = _load_json_object(payload)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+        if "series" in parsed_payload or "data_url" in parsed_payload:
+            raise HTTPException(
+                status_code=400,
+                detail="payload for /api/forecast/upload must not include series or data_url",
+            )
+
+        file_payload = await file.read()
+        filename = file.filename or "upload.csv"
+        try:
+            ingest_options = IngestOptions.model_validate(
+                {
+                    "format": format_hint,
+                    "timestamp_column": timestamp_column,
+                    "series_id_column": series_id_column,
+                    "target_column": target_column,
+                    "freq_column": freq_column,
+                },
+            )
+            series = load_series_inputs_from_bytes(
+                file_payload,
+                filename=filename,
+                format_hint=ingest_options.format,
+                timestamp_column=ingest_options.timestamp_column,
+                series_id_column=ingest_options.series_id_column,
+                target_column=ingest_options.target_column,
+                freq_column=ingest_options.freq_column,
+            )
+            parsed_payload["series"] = [item.model_dump(mode="python") for item in series]
+            forecast_payload = ForecastRequestWithKeepAlive.model_validate(parsed_payload)
+        except IngestDependencyError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+        except (IngestError, ValidationError, UnicodeDecodeError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+        return _execute_forecast(app, payload=forecast_payload, request=request)
+
     @app.get("/api/info")
     def info() -> dict[str, Any]:
         _unload_expired_models(app)
@@ -509,8 +655,21 @@ def create_app(*, runner_manager: RunnerManager | None = None) -> FastAPI:
                 errors=_format_validation_errors(exc.errors()),
             )
 
+        try:
+            resolved_request = _prepare_forecast_payload(
+                ForecastRequestWithKeepAlive.model_validate(
+                    request.model_dump(mode="python", exclude_none=True),
+                )
+            )
+        except FileNotFoundError as exc:
+            return ValidateResponse(valid=False, errors=[str(exc)])
+        except IngestDependencyError as exc:
+            return ValidateResponse(valid=False, errors=[str(exc)])
+        except (IngestError, ValidationError, ValueError) as exc:
+            return ValidateResponse(valid=False, errors=[str(exc)])
+
         warnings: list[str] = []
-        model_manifest = _find_installed_manifest(request.model)
+        model_manifest = _find_installed_manifest(resolved_request.model)
         if model_manifest is None:
             model_family = "unknown"
             model_capabilities = ModelCapabilities()
@@ -520,16 +679,16 @@ def create_app(*, runner_manager: RunnerManager | None = None) -> FastAPI:
             if not isinstance(family, str) or not family:
                 return ValidateResponse(
                     valid=False,
-                    errors=[f"model {request.model!r} has invalid family metadata"],
+                    errors=[f"model {resolved_request.model!r} has invalid family metadata"],
                     warnings=warnings,
                 )
             model_family = family
-            model_capabilities = _resolve_model_capabilities(request.model, model_manifest)
+            model_capabilities = _resolve_model_capabilities(resolved_request.model, model_manifest)
 
         try:
             normalized_series, normalize_warnings = normalize_covariates(
-                request.series,
-                request.horizon,
+                resolved_request.series,
+                resolved_request.horizon,
             )
         except ValueError as exc:
             return ValidateResponse(
@@ -541,11 +700,11 @@ def create_app(*, runner_manager: RunnerManager | None = None) -> FastAPI:
 
         try:
             _, capability_warnings = apply_covariate_capabilities(
-                model_name=request.model,
+                model_name=resolved_request.model,
                 model_family=model_family,
                 inputs=normalized_series,
                 capabilities=model_capabilities,
-                covariates_mode=request.parameters.covariates_mode,
+                covariates_mode=resolved_request.parameters.covariates_mode,
             )
         except ValueError as exc:
             return ValidateResponse(
@@ -755,6 +914,15 @@ def _execute_forecast(
     request: Request | None = None,
     extra_exclude: set[str] | None = None,
 ) -> ForecastResponse:
+    try:
+        payload = _prepare_forecast_payload(payload)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except IngestDependencyError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except (IngestError, ValidationError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
     _enforce_rate_limit(app=app, request=request)
     request_started_at = time.perf_counter()
     _unload_expired_models(app)
@@ -894,6 +1062,59 @@ def _execute_forecast(
         device=_extract_usage_device(response.usage),
     )
     return response
+
+
+def _prepare_forecast_payload(
+    payload: ForecastRequestWithKeepAlive,
+) -> ForecastRequestWithKeepAlive:
+    resolved = _apply_modelfile_defaults(payload)
+    if resolved.data_url is None:
+        return resolved
+
+    ingest_options = resolved.ingest or IngestOptions()
+    allow_remote = _optional_bool_str(_env_or_none(ALLOW_REMOTE_DATA_URL_ENV_NAME)) is True
+    series = load_series_inputs_from_data_url(
+        resolved.data_url,
+        format_hint=ingest_options.format,
+        timestamp_column=ingest_options.timestamp_column,
+        series_id_column=ingest_options.series_id_column,
+        target_column=ingest_options.target_column,
+        freq_column=ingest_options.freq_column,
+        allow_remote=allow_remote,
+    )
+
+    hydrated = resolved.model_copy(
+        update={
+            "series": series,
+            "data_url": None,
+            "ingest": None,
+        },
+    )
+    return ForecastRequestWithKeepAlive.model_validate(
+        hydrated.model_dump(mode="python", exclude_none=True),
+    )
+
+
+def _apply_modelfile_defaults(
+    payload: ForecastRequestWithKeepAlive,
+) -> ForecastRequestWithKeepAlive:
+    modelfile_name = _optional_nonempty_str(payload.modelfile)
+    if modelfile_name is None:
+        return payload
+
+    try:
+        stored = load_modelfile(modelfile_name)
+    except FileNotFoundError:
+        raise
+
+    request_payload = payload.model_dump(mode="python")
+    merged_payload = merge_modelfile_defaults(
+        request_payload=request_payload,
+        profile=stored.profile,
+        request_fields_set=set(payload.model_fields_set),
+    )
+    merged_payload["modelfile"] = modelfile_name
+    return ForecastRequestWithKeepAlive.model_validate(merged_payload)
 
 
 def _elapsed_ms(started_at: float) -> float:
@@ -1040,6 +1261,7 @@ def _execute_auto_forecast(
             explicit_request = _auto_payload_to_forecast_payload(
                 payload=payload,
                 model=explicit_model,
+                default_timeout=AUTO_FORECAST_MEMBER_TIMEOUT_SECONDS,
             )
             try:
                 explicit_response = _execute_forecast(
@@ -1141,7 +1363,11 @@ def _execute_auto_candidates(
     last_error: HTTPException | None = None
     execution_warnings: list[str] = []
     for index, model in enumerate(candidate_models):
-        forecast_payload = _auto_payload_to_forecast_payload(payload=payload, model=model)
+        forecast_payload = _auto_payload_to_forecast_payload(
+            payload=payload,
+            model=model,
+            default_timeout=AUTO_FORECAST_MEMBER_TIMEOUT_SECONDS,
+        )
         try:
             response = _execute_forecast(app, payload=forecast_payload, request=request)
         except HTTPException as exc:
@@ -1174,24 +1400,52 @@ def _execute_auto_ensemble(
     request: Request | None = None,
 ) -> tuple[ForecastResponse, str, list[str]]:
     execution_warnings: list[str] = []
-    successful: list[ForecastResponse] = []
+    successful_by_model: dict[str, ForecastResponse] = {}
     score_by_model = {item.model: item.score for item in selection.ranked_candidates}
 
-    for model in selection.selected_models:
-        forecast_payload = _auto_payload_to_forecast_payload(payload=payload, model=model)
-        try:
-            successful.append(_execute_forecast(app, payload=forecast_payload, request=request))
-        except HTTPException as exc:
-            detail = _compare_error_message(exc)
-            execution_warnings.append(
-                f"ensemble member {model!r} failed ({exc.status_code}): {detail}",
-            )
+    max_workers = min(len(selection.selected_models), AUTO_ENSEMBLE_MAX_WORKERS)
+    with ThreadPoolExecutor(max_workers=max_workers) as pool:
+        futures = {
+            pool.submit(
+                _execute_forecast,
+                app,
+                payload=_auto_payload_to_forecast_payload(
+                    payload=payload,
+                    model=model,
+                    default_timeout=AUTO_FORECAST_MEMBER_TIMEOUT_SECONDS,
+                ),
+                request=request,
+            ): model
+            for model in selection.selected_models
+        }
+        for future in as_completed(futures):
+            model = futures[future]
+            try:
+                response = future.result()
+            except HTTPException as exc:
+                detail = _compare_error_message(exc)
+                execution_warnings.append(
+                    f"ensemble member {model!r} failed ({exc.status_code}): {detail}",
+                )
+                continue
+            except Exception as exc:  # noqa: BLE001
+                execution_warnings.append(
+                    f"ensemble member {model!r} failed (500): {exc}",
+                )
+                continue
+            successful_by_model[model] = response
 
-    if not successful:
+    if not successful_by_model:
         raise HTTPException(
             status_code=503,
             detail="all ensemble candidates failed to produce a forecast",
         )
+
+    successful = [
+        successful_by_model[model]
+        for model in selection.selected_models
+        if model in successful_by_model
+    ]
 
     if len(successful) == 1:
         merged_warnings = _merge_warnings(
@@ -1205,107 +1459,33 @@ def _execute_auto_ensemble(
         single = successful[0].model_copy(update={"warnings": merged_warnings})
         return single, successful[0].model, execution_warnings
 
-    merged = _merge_ensemble_forecasts(
-        responses=successful,
-        weights={
-            response.model: max(score_by_model.get(response.model, 1.0), 1.0)
-            for response in successful
-        },
-    )
+    try:
+        merged = merge_forecast_responses(
+            successful,
+            weights={
+                response.model: max(score_by_model.get(response.model, 1.0), 1.0)
+                for response in successful
+            },
+            method=payload.ensemble_method,
+            model_name="ensemble",
+        )
+    except EnsembleError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
     merged_warnings = _merge_warnings(
         merged.warnings,
         [
-            "ensemble strategy v1 returns mean-only forecasts; quantiles are omitted",
+            "ensemble strategy returns aggregated point forecasts only; quantiles are omitted",
             *execution_warnings,
         ],
     )
+    chosen_model = next(
+        model for model in selection.selected_models if model in successful_by_model
+    )
     return (
         merged.model_copy(update={"warnings": merged_warnings}),
-        successful[0].model,
+        chosen_model,
         execution_warnings,
-    )
-
-
-def _merge_ensemble_forecasts(
-    *,
-    responses: list[ForecastResponse],
-    weights: dict[str, float],
-) -> ForecastResponse:
-    if not responses:
-        raise HTTPException(
-            status_code=503,
-            detail="cannot merge empty ensemble responses",
-        )
-
-    base = responses[0]
-    merged_forecasts: list[SeriesForecast] = []
-    component_warnings: list[str] = []
-    for response in responses:
-        if response.warnings:
-            component_warnings.extend(
-                f"{response.model}: {warning}"
-                for warning in response.warnings
-            )
-
-    for series_index, base_series in enumerate(base.forecasts):
-        expected_horizon = len(base_series.mean)
-        weighted = [0.0] * expected_horizon
-        total_weight = 0.0
-
-        for response in responses:
-            if series_index >= len(response.forecasts):
-                raise HTTPException(
-                    status_code=502,
-                    detail=(
-                        "ensemble merge failed: model "
-                        f"{response.model!r} returned mismatched series count"
-                    ),
-                )
-            candidate_series = response.forecasts[series_index]
-            if candidate_series.id != base_series.id:
-                raise HTTPException(
-                    status_code=502,
-                    detail=(
-                        "ensemble merge failed: model "
-                        f"{response.model!r} returned series id {candidate_series.id!r} "
-                        f"but expected {base_series.id!r}"
-                    ),
-                )
-            if len(candidate_series.mean) != expected_horizon:
-                raise HTTPException(
-                    status_code=502,
-                    detail=(
-                        "ensemble merge failed: model "
-                        f"{response.model!r} returned horizon {len(candidate_series.mean)} "
-                        f"but expected {expected_horizon}"
-                    ),
-                )
-
-            weight = max(float(weights.get(response.model, 1.0)), 1.0)
-            total_weight += weight
-            for step, value in enumerate(candidate_series.mean):
-                weighted[step] += float(value) * weight
-
-        if total_weight <= 0.0:
-            raise HTTPException(
-                status_code=503,
-                detail="ensemble merge failed due to invalid weights",
-            )
-
-        merged_forecasts.append(
-            SeriesForecast(
-                id=base_series.id,
-                freq=base_series.freq,
-                start_timestamp=base_series.start_timestamp,
-                mean=[round(value / total_weight, 8) for value in weighted],
-                quantiles=None,
-            ),
-        )
-
-    return ForecastResponse(
-        model="ensemble",
-        forecasts=merged_forecasts,
-        warnings=_merge_warnings(None, component_warnings),
     )
 
 
@@ -1313,14 +1493,19 @@ def _auto_payload_to_forecast_payload(
     *,
     payload: AutoForecastRequest,
     model: str,
+    default_timeout: float | None = None,
 ) -> ForecastRequestWithKeepAlive:
+    timeout = payload.timeout
+    if timeout is None:
+        timeout = default_timeout
+
     return ForecastRequestWithKeepAlive(
         model=model,
         horizon=payload.horizon,
         quantiles=payload.quantiles,
         series=payload.series,
         options=payload.options,
-        timeout=payload.timeout,
+        timeout=timeout,
         keep_alive=payload.keep_alive,
         parameters=payload.parameters,
     )
@@ -1373,6 +1558,7 @@ def _execute_pipeline(
         allow_fallback=payload.allow_fallback,
         strategy=payload.strategy,
         ensemble_top_k=payload.ensemble_top_k,
+        ensemble_method=payload.ensemble_method,
         horizon=payload.horizon,
         quantiles=payload.quantiles,
         series=payload.series,
@@ -1508,6 +1694,16 @@ def _forecast_stream_lines(response: ForecastResponse) -> Iterator[str]:
 
 def _to_ndjson_line(payload: dict[str, Any]) -> str:
     return json.dumps(payload, separators=(",", ":"), sort_keys=True) + "\n"
+
+
+def _load_json_object(raw: str) -> dict[str, Any]:
+    try:
+        payload = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"payload must be valid JSON: {exc.msg}") from exc
+    if not isinstance(payload, dict):
+        raise ValueError("payload JSON must be an object")
+    return payload
 
 
 def _pull_stream_lines(

@@ -200,6 +200,36 @@ def test_forecast_request_rejects_invalid_payloads() -> None:
         ForecastRequest.model_validate(invalid_quantiles)
 
 
+def test_forecast_request_accepts_data_url_without_series() -> None:
+    payload = {
+        "model": "naive",
+        "horizon": 3,
+        "data_url": "file:///tmp/history.csv",
+        "ingest": {"format": "csv"},
+        "options": {},
+    }
+    request = ForecastRequest.model_validate(payload)
+    assert request.data_url == "file:///tmp/history.csv"
+    assert request.series == []
+
+
+def test_forecast_request_requires_series_or_data_url() -> None:
+    payload = {
+        "model": "naive",
+        "horizon": 3,
+        "options": {},
+    }
+    with pytest.raises(ValidationError):
+        ForecastRequest.model_validate(payload)
+
+
+def test_forecast_request_rejects_series_and_data_url_together() -> None:
+    payload = _example_request_payload()
+    payload["data_url"] = "file:///tmp/history.csv"
+    with pytest.raises(ValidationError):
+        ForecastRequest.model_validate(payload)
+
+
 def test_analyze_request_rejects_invalid_parameters() -> None:
     payload = _example_analyze_request_payload()
     payload["parameters"]["max_points"] = 0  # type: ignore[index]

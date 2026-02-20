@@ -123,3 +123,34 @@ def test_daemon_auto_forecast_falls_back_when_explicit_model_runner_fails(
     assert body["selection"]["fallback_used"] is True
     assert body["selection"]["chosen_model"] == "mock"
     assert body["response"]["model"] == "mock"
+
+
+def test_daemon_auto_forecast_ensemble_returns_single_when_only_one_model_succeeds(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    paths = TollamaPaths(base_dir=tmp_path / ".tollama")
+    monkeypatch.setenv("TOLLAMA_HOME", str(paths.base_dir))
+    install_from_registry("mock", accept_license=True, paths=paths)
+    install_from_registry("chronos2", accept_license=True, paths=paths)
+
+    payload = _auto_payload()
+    payload["strategy"] = "ensemble"
+    payload["ensemble_top_k"] = 2
+    payload["ensemble_method"] = "median"
+    manager = RunnerManager(
+        runner_commands={
+            "mock": ("tollama-runner-mock",),
+            "torch": ("tollama-runner-does-not-exist",),
+        },
+    )
+
+    with TestClient(create_app(runner_manager=manager)) as client:
+        response = client.post("/api/auto-forecast", json=payload)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["selection"]["strategy"] == "ensemble"
+    assert body["response"]["model"] == "mock"
+    warnings = body["response"].get("warnings") or []
+    assert any("only one model succeeded" in warning for warning in warnings)

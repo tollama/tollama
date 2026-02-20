@@ -31,8 +31,10 @@ CovariateMode = Literal["best_effort", "strict"]
 MetricName = Literal["mape", "mase", "mae", "rmse", "smape", "wape", "rmsse", "pinball"]
 TrendDirection = Literal["up", "down", "flat"]
 AutoForecastStrategy = Literal["auto", "fastest", "best_accuracy", "ensemble"]
+EnsembleMethod = Literal["mean", "median"]
 ScenarioOperation = Literal["multiply", "add", "replace"]
 ScenarioTargetField = Literal["target", "past_covariates", "future_covariates"]
+TabularFormat = Literal["csv", "parquet"]
 
 
 class CanonicalModel(BaseModel):
@@ -109,18 +111,31 @@ class ForecastParameters(CanonicalModel):
     metrics: MetricsParameters | None = None
 
 
+class IngestOptions(CanonicalModel):
+    """CSV/Parquet ingest options for data_url based forecasting."""
+
+    format: TabularFormat | None = None
+    timestamp_column: NonEmptyStr | None = None
+    series_id_column: NonEmptyStr | None = None
+    target_column: NonEmptyStr | None = None
+    freq_column: NonEmptyStr | None = None
+
+
 class ForecastRequest(CanonicalModel):
     """Unified forecast request payload."""
 
     model: NonEmptyStr
     horizon: PositiveInt
+    modelfile: NonEmptyStr | None = None
+    data_url: NonEmptyStr | None = None
     quantiles: list[Quantile] = Field(default_factory=list)
-    series: list[SeriesInput] = Field(min_length=1)
+    series: list[SeriesInput] = Field(default_factory=list)
     options: dict[NonEmptyStr, JsonValue] = Field(
         default_factory=dict,
         validation_alias=AliasChoices("options"),
     )
     timeout: float | None = Field(default=None, gt=0.0)
+    ingest: IngestOptions | None = None
     parameters: ForecastParameters = Field(
         default_factory=ForecastParameters,
         validation_alias=AliasChoices("parameters"),
@@ -137,6 +152,11 @@ class ForecastRequest(CanonicalModel):
 
     @model_validator(mode="after")
     def validate_covariates(self) -> ForecastRequest:
+        if not self.series and self.data_url is None:
+            raise ValueError("either series or data_url is required")
+        if self.series and self.data_url is not None:
+            raise ValueError("series and data_url cannot be combined")
+
         metrics_parameters = self.parameters.metrics
         for series in self.series:
             past_covariates = series.past_covariates or {}
@@ -237,6 +257,7 @@ class AutoForecastRequest(CanonicalModel):
     allow_fallback: StrictBool = False
     strategy: AutoForecastStrategy = "auto"
     ensemble_top_k: StrictInt = Field(default=3, ge=2, le=8)
+    ensemble_method: EnsembleMethod = "mean"
     horizon: PositiveInt
     quantiles: list[Quantile] = Field(default_factory=list)
     series: list[SeriesInput] = Field(min_length=1)
@@ -709,6 +730,7 @@ class PipelineRequest(CanonicalModel):
     allow_fallback: StrictBool = False
     strategy: AutoForecastStrategy = "auto"
     ensemble_top_k: StrictInt = Field(default=3, ge=2, le=8)
+    ensemble_method: EnsembleMethod = "mean"
     horizon: PositiveInt
     quantiles: list[Quantile] = Field(default_factory=list)
     series: list[SeriesInput] = Field(min_length=1)
@@ -744,6 +766,7 @@ class PipelineRequest(CanonicalModel):
             "allow_fallback": self.allow_fallback,
             "strategy": self.strategy,
             "ensemble_top_k": self.ensemble_top_k,
+            "ensemble_method": self.ensemble_method,
             "horizon": self.horizon,
             "quantiles": self.quantiles,
             "series": [series.model_dump(mode="python") for series in self.series],

@@ -28,16 +28,11 @@
 
 ### 1) 모델 설정 추상화: "Modelfile" 개념 도입
 
-- [ ] (P0) TSModelfile 스펙 정의 (YAML/텍스트 중 택1)
+- [x] (P0) TSModelfile 스펙 정의 (YAML)
   - 필수 필드(예시):
-    - `FROM <base_model>` (예: `timesfm-2.5-200m`, `chronos2`, `moirai-1.1`)
-    - `PARAM freq`, `PARAM horizon`, `PARAM context_length`
-    - `PARAM scaling` (`standard`/`minmax`/`none`)
-    - `PARAM patch_size` / `binning` 관련 옵션(모델별)
-    - `PARAM quantiles` 기본값
-    - `PARAM covariates_mode` (`best_effort`/`strict`)
-- [~] (P1) `tollama create`/`tollama show`에서 TSModelfile 기반 모델 등록/조회 지원
-  - 현재: `tollama show`, `/api/show`는 구현되어 있으나 Modelfile은 빈 문자열로 반환되고 `create`는 없음
+    - `model`, `horizon`, `quantiles`, `options`, `parameters`, `covariate_mappings`, `preprocessing`
+- [x] (P1) TSModelfile 등록/조회/삭제 API + CLI 지원
+  - 현재: daemon `GET/POST/DELETE /api/modelfiles*`, CLI `tollama modelfile create/list/show/rm` 구현
 - [ ] (P1) 모델별 최적 전처리 프리셋을 Modelfile 템플릿으로 제공
   - 목표: 사용자는 내부 로직 몰라도 `forecast(data)`만으로 맞는 전처리+추론 실행
 
@@ -58,7 +53,8 @@
   - 현재: `ForecastRequest`/`SeriesInput`에 `history(target+timestamps+freq)`, `past_covariates`, `future_covariates`, `static_covariates` 반영
 - [~] (P1) Unified Data Adapter 계층 구현
   - 현재: family별 adapter에서 변환 구현(Chronos binning/tokenization 계열, TimesFM/Moirai patch/window 계열, Sundial 샘플 기반, Toto variate 기반)
-  - TODO: 공통 계층으로 완전 통합, Parquet 입력까지 일원화
+  - 현재: `src/tollama/core/ingest.py`로 CSV/Parquet -> canonical `SeriesInput` 변환 경로 추가
+  - TODO: 공통 계층으로 완전 통합, covariates/전처리 규칙까지 일원화
 - [~] (P1) 전처리 공통 라이브러리화
   - 현재: covariates 정규화/strict-best_effort는 daemon 공통 처리
   - 현재: `freq="auto"` 기본 추론(타임스탬프 기반)은 daemon 공통 처리
@@ -87,7 +83,9 @@
   - 현재: 요청 `series.actuals` + `parameters.metrics` 기반
     `mape`/`mase`/`mae`/`rmse`/`smape`/`wape`/`rmsse`/`pinball` 계산 및 응답 `metrics` 제공
   - TODO: interval coverage 확장
-- [ ] (P1) 포맷 지원 확대: JSON + Parquet (대용량/배치)
+- [~] (P1) 포맷 지원 확대: JSON + Parquet (대용량/배치)
+  - 현재: `data_url` + upload endpoint로 CSV/Parquet 입력 forecast 지원
+  - TODO: 대용량 배치 출력(Parquet writer) 및 스트리밍 최적화
 
 ---
 
@@ -197,7 +195,7 @@
   - 현재: `/api/auto-forecast` 추가(설치 모델 기준 auto/fastest/best_accuracy/ensemble 선택)
   - 현재: `AutoForecastRequest/AutoSelectionInfo/AutoForecastResponse` 스키마 추가
   - 현재: explicit `model`은 기본 hard override, `allow_fallback=true`일 때만 fallback 수행
-  - 현재: ensemble v1은 mean-only 반환(quantiles 생략 + warning)
+  - 현재: ensemble은 weighted `mean`/`median` 집계 + bounded parallel 실행 (quantiles 생략 + warning)
   - 현재: `TollamaClient`/`AsyncTollamaClient`/SDK `Tollama.auto_forecast()` 추가
   - 현재: `tollama_auto_forecast` MCP/LangChain/CrewAI/AutoGen/smolagents 툴 추가
   - 현재: `tests/test_auto_forecast.py` + 연관 스키마/클라이언트/에이전트 래퍼 회귀 테스트 추가
@@ -244,7 +242,7 @@
   - 현재: 모델별 설치/실행 가이드를 `docs/models.md`로 분리
 - [x] (P1) 탐색성/배포 편의 1차
   - 현재: 노트북 추가(`examples/quickstart.ipynb`, `examples/agent_demo.ipynb`)
-  - 현재: 컨테이너 파일 추가(`Dockerfile`, `.dockerignore`)
+  - 현재: 컨테이너 파일 추가(`Dockerfile` multi-stage, `.dockerignore`, `docker-compose.yml` GPU profile)
   - 현재: `pyproject.toml`에 PyPI 메타데이터(`keywords`, `classifiers`, `project.urls`) 보강
 - [x] (P2) LangChain async 툴 실행 경로 완성
   - 현재: `AsyncTollamaClient` 추가(`src/tollama/client/http.py`)
@@ -261,8 +259,8 @@
 - [x] (P2) SDK vs raw 벤치마크 스크립트 추가
   - 현재: `benchmarks/tollama_vs_raw.py` (LOC + time-to-first-forecast 비교)
   - 현재: `tests/test_benchmark_tollama_vs_raw.py` 추가
-- [ ] (P1) TSModelfile 스펙 초안 작성 + parser 구현 계획
-  - 파일 포맷/키 목록/우선순위 규칙 정의
+- [x] (P1) TSModelfile 스펙 초안 작성 + parser 구현
+  - 현재: YAML parser(`src/tollama/core/modelfile.py`) + request 우선순위 규칙(`request > modelfile > defaults`) 반영
 - [~] (P1) Unified Data Adapter 설계 문서
   - 현재: `docs/covariates.md`에 모델별 매핑은 정리됨
   - TODO: patching/binning/flow 변환 단계 표준 설계 문서로 분리
@@ -287,10 +285,8 @@
   - pass: `bash scripts/e2e_skills_test.sh`
   - pass: MCP stdio SDK smoke(`tollama_health`, `tollama_models`, `tollama_show`, `tollama_forecast`)
 - [x] (P1) Phase 4 신규 기능 E2E 재검증
-  - 기준 일자: `2026-02-19`
-  - pass: OpenClaw skill 회귀(`bash scripts/e2e_skills_test.sh`)
-  - pass: metrics 확장 live 검증(`/api/forecast` non-stream):
-    aggregate `mape`/`mase`/`mae`/`rmse`/`smape` + SMAPE undefined warning 경로
-  - pass: LangChain wrapper live 검증(`get_tollama_tools` 기반
-    `tollama_health`/`tollama_models`/`tollama_forecast` + invalid-request 매핑)
-  - pass: LangChain wrapper 테스트(`PYTHONPATH=src python -m pytest -q tests/test_langchain_skill.py`)
+  - 기준 일자: `2026-02-20`
+  - pass: `ruff check .`
+  - pass: `pytest -q`
+  - pass: ingest/modelfile/ensemble 신규 테스트
+    (`tests/test_ingest.py`, `tests/test_modelfile.py`, `tests/test_ensemble.py`)

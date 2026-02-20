@@ -213,6 +213,99 @@ def test_analyze_endpoint_rejects_invalid_payload() -> None:
     assert response.status_code == 400
 
 
+def test_forecast_accepts_data_url_csv(monkeypatch, tmp_path) -> None:
+    _install_model(monkeypatch, tmp_path, name="mock")
+    data_path = tmp_path / "history.csv"
+    data_path.write_text(
+        "timestamp,target\n2025-01-01,1.0\n2025-01-02,2.0\n2025-01-03,3.0\n",
+        encoding="utf-8",
+    )
+
+    payload = {
+        "model": "mock",
+        "horizon": 2,
+        "data_url": str(data_path),
+        "ingest": {"format": "csv"},
+        "options": {},
+    }
+    with TestClient(create_app()) as client:
+        response = client.post("/v1/forecast", json=payload)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["model"] == "mock"
+    assert len(body["forecasts"]) == 1
+    assert len(body["forecasts"][0]["mean"]) == 2
+
+
+def test_modelfile_endpoints_and_forecast_reference(monkeypatch, tmp_path) -> None:
+    _install_model(monkeypatch, tmp_path, name="mock")
+    app = create_app()
+
+    with TestClient(app) as client:
+        upsert = client.post(
+            "/api/modelfiles",
+            json={
+                "name": "baseline",
+                "profile": {
+                    "model": "mock",
+                    "quantiles": [0.1, 0.9],
+                    "options": {"seed": 7},
+                },
+            },
+        )
+        assert upsert.status_code == 200
+
+        listed = client.get("/api/modelfiles")
+        assert listed.status_code == 200
+        names = [item["name"] for item in listed.json()["modelfiles"]]
+        assert "baseline" in names
+
+        forecast = client.post(
+            "/v1/forecast",
+            json={
+                "model": "mock",
+                "modelfile": "baseline",
+                "horizon": 2,
+                "series": [
+                    {
+                        "id": "s1",
+                        "freq": "D",
+                        "timestamps": ["2025-01-01", "2025-01-02", "2025-01-03"],
+                        "target": [1.0, 2.0, 3.0],
+                    }
+                ],
+                "options": {},
+            },
+        )
+        assert forecast.status_code == 200
+        body = forecast.json()
+        assert body["model"] == "mock"
+        assert body["forecasts"][0]["quantiles"] is not None
+
+
+def test_forecast_upload_endpoint(monkeypatch, tmp_path) -> None:
+    _install_model(monkeypatch, tmp_path, name="mock")
+    payload = {
+        "model": "mock",
+        "horizon": 2,
+        "options": {},
+    }
+    file_content = "timestamp,target\n2025-01-01,1.0\n2025-01-02,2.0\n2025-01-03,3.0\n"
+
+    with TestClient(create_app()) as client:
+        response = client.post(
+            "/api/forecast/upload",
+            data={"payload": json.dumps(payload)},
+            files={"file": ("history.csv", file_content, "text/csv")},
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["model"] == "mock"
+    assert len(body["forecasts"][0]["mean"]) == 2
+
+
 def test_api_info_returns_redacted_diagnostics(monkeypatch, tmp_path) -> None:
     paths = TollamaPaths(base_dir=tmp_path / ".tollama")
     monkeypatch.setenv("TOLLAMA_HOME", str(paths.base_dir))

@@ -142,6 +142,34 @@ def test_forecast_accepts_wide_pandas_dataframe_for_multi_series() -> None:
     assert result_frame.shape[0] == 2
 
 
+def test_forecast_from_file_loads_csv_and_calls_forecast(tmp_path) -> None:
+    captured: dict[str, ForecastRequest] = {}
+
+    class _FakeClient:
+        def forecast_response(self, request: ForecastRequest) -> ForecastResponse:
+            captured["request"] = request
+            return _single_series_response()
+
+    path = tmp_path / "history.csv"
+    path.write_text(
+        "timestamp,target\n2025-01-01,10.0\n2025-01-02,11.0\n2025-01-03,12.0\n",
+        encoding="utf-8",
+    )
+
+    sdk = Tollama(client=_FakeClient())  # type: ignore[arg-type]
+    result = sdk.forecast_from_file(
+        model="chronos2",
+        path=path,
+        horizon=3,
+        format_hint="csv",
+    )
+
+    request = captured["request"]
+    assert request.series[0].timestamps[0] == "2025-01-01"
+    assert request.series[0].target == [10.0, 11.0, 12.0]
+    assert result.mean == [15.1, 16.2, 17.3]
+
+
 def test_tollama_export_is_available_from_package_root() -> None:
     from tollama import Tollama as ExportedTollama
 
@@ -232,6 +260,7 @@ def test_auto_forecast_accepts_series_dict_and_returns_typed_payload() -> None:
     request = captured["request"]
     assert request.horizon == 3
     assert request.series[0].id == "series_0"
+    assert request.ensemble_method == "mean"
     assert response.selection.chosen_model == "mock"
     assert response.response.model == "mock"
 
@@ -387,5 +416,6 @@ def test_pipeline_accepts_series_dict_and_returns_typed_payload() -> None:
     request = captured["request"]
     assert request.horizon == 3
     assert request.series[0].id == "series_0"
+    assert request.ensemble_method == "mean"
     assert response.analysis.results[0].id == "series_0"
     assert response.auto_forecast.selection.chosen_model == "mock"

@@ -42,9 +42,18 @@ auto = t.auto_forecast(
     series={"target": [10, 11, 12, 13, 14], "freq": "D"},
     horizon=3,
     strategy="auto",
+    ensemble_method="mean",  # or "median" when strategy="ensemble"
 )
 print(auto.selection.chosen_model)
 print(auto.response.forecasts[0].mean)
+
+from_file = t.forecast_from_file(
+    model="chronos2",
+    path="examples/history.csv",
+    horizon=3,
+    format_hint="csv",
+)
+print(from_file.to_df())
 
 what_if = t.what_if(
     model="chronos2",
@@ -64,6 +73,48 @@ pipeline = t.pipeline(
 )
 print(pipeline.auto_forecast.response.model)
 ```
+
+## Data Ingest (CSV/Parquet)
+
+- `POST /v1/forecast` and `POST /api/forecast` now accept `data_url` + optional `ingest` options.
+- `POST /api/forecast/upload` accepts multipart upload (`payload` JSON + `file`) and runs forecast.
+- `POST /api/ingest/upload` accepts multipart upload and returns normalized `series` payloads.
+
+Example `data_url` request:
+
+```json
+{
+  "model": "mock",
+  "horizon": 3,
+  "data_url": "file:///tmp/history.csv",
+  "ingest": {"format": "csv"},
+  "options": {}
+}
+```
+
+Parquet requires optional dependency:
+
+```bash
+python -m pip install -e ".[ingest]"
+```
+
+## TSModelfile
+
+Create/list/show/remove forecast profiles:
+
+```bash
+tollama modelfile create baseline --file examples/modelfile.yaml
+tollama modelfile list
+tollama modelfile show baseline
+tollama modelfile rm baseline
+```
+
+Daemon APIs:
+
+- `GET /api/modelfiles`
+- `GET /api/modelfiles/{name}`
+- `POST /api/modelfiles`
+- `DELETE /api/modelfiles/{name}`
 
 ## Agent Integrations
 
@@ -139,6 +190,13 @@ Build and run:
 ```bash
 docker build -t tollama/tollama .
 docker run -p 11435:11435 tollama/tollama
+```
+
+Compose (CPU + optional GPU profile):
+
+```bash
+docker compose up --build tollama
+docker compose --profile gpu up --build tollama-gpu
 ```
 
 ## Persistent Pull Defaults

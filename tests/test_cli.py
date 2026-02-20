@@ -245,6 +245,68 @@ def test_list_ps_show_and_rm_commands_call_api_client(monkeypatch) -> None:
     assert json.loads(_result_stdout(removed)) == {"deleted": True, "model": "mock"}
 
 
+def test_modelfile_commands_call_api_client(monkeypatch, tmp_path: Path) -> None:
+    captured: dict[str, object] = {}
+
+    class _FakeClient:
+        def __init__(self, base_url: str, timeout: float) -> None:
+            captured["base_url"] = base_url
+            captured["timeout"] = timeout
+
+        def list_modelfiles(self) -> dict[str, object]:
+            return {
+                "modelfiles": [
+                    {
+                        "name": "baseline",
+                        "path": "/tmp/baseline.yaml",
+                        "profile": {"model": "mock", "horizon": 3},
+                    }
+                ]
+            }
+
+        def show_modelfile(self, name: str) -> dict[str, object]:
+            return {"name": name, "profile": {"model": "mock", "horizon": 3}}
+
+        def create_modelfile(
+            self,
+            name: str,
+            *,
+            profile: dict[str, object] | None = None,
+            content: str | None = None,
+        ) -> dict[str, object]:
+            captured["create"] = {"name": name, "profile": profile, "content": content}
+            return {"name": name, "path": "/tmp/baseline.yaml", "profile": {"model": "mock"}}
+
+        def remove_modelfile(self, name: str) -> dict[str, object]:
+            return {"deleted": True, "name": name}
+
+    monkeypatch.setattr("tollama.cli.main.TollamaClient", _FakeClient)
+    runner = _new_runner()
+
+    listed = runner.invoke(app, ["modelfile", "list"])
+    assert listed.exit_code == 0
+    assert "baseline" in _result_stdout(listed)
+
+    shown = runner.invoke(app, ["modelfile", "show", "baseline"])
+    assert shown.exit_code == 0
+    assert json.loads(_result_stdout(shown))["name"] == "baseline"
+
+    yaml_path = tmp_path / "baseline.yaml"
+    yaml_path.write_text("model: mock\nhorizon: 4\n", encoding="utf-8")
+    created = runner.invoke(app, ["modelfile", "create", "baseline", "--file", str(yaml_path)])
+    assert created.exit_code == 0
+    assert "baseline" in _result_stdout(created)
+    assert captured["create"] == {
+        "name": "baseline",
+        "profile": None,
+        "content": "model: mock\nhorizon: 4\n",
+    }
+
+    removed = runner.invoke(app, ["modelfile", "rm", "baseline"])
+    assert removed.exit_code == 0
+    assert json.loads(_result_stdout(removed)) == {"deleted": True, "name": "baseline"}
+
+
 def test_quickstart_pulls_model_and_runs_demo_forecast(monkeypatch) -> None:
     captured: dict[str, object] = {"calls": []}
 

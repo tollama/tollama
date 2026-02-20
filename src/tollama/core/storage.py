@@ -37,11 +37,19 @@ class TollamaPaths:
     def runtimes_dir(self) -> Path:
         return self.base_dir / "runtimes"
 
+    @property
+    def modelfiles_dir(self) -> Path:
+        return self.base_dir / "modelfiles"
+
     def model_dir(self, name: str) -> Path:
         return self.models_dir / name
 
     def manifest_path(self, name: str) -> Path:
         return self.model_dir(name) / "manifest.json"
+
+    def modelfile_path(self, name: str) -> Path:
+        validated_name = _validate_name(name)
+        return self.modelfiles_dir / f"{validated_name}.yaml"
 
     @property
     def config_path(self) -> Path:
