@@ -5,7 +5,14 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-from tollama.core.schemas import AnalyzeRequest, AnalyzeResponse, ForecastRequest, ForecastResponse
+from tollama.core.schemas import (
+    AnalyzeRequest,
+    AnalyzeResponse,
+    AutoForecastRequest,
+    AutoForecastResponse,
+    ForecastRequest,
+    ForecastResponse,
+)
 from tollama.sdk import Tollama
 
 
@@ -170,6 +177,59 @@ def test_analyze_accepts_series_dict_and_returns_typed_payload() -> None:
     assert request.series[0].id == "series_0"
     assert request.parameters.max_lag == 2
     assert response.results[0].id == "series_0"
+
+
+def test_auto_forecast_accepts_series_dict_and_returns_typed_payload() -> None:
+    captured: dict[str, AutoForecastRequest] = {}
+
+    class _FakeClient:
+        def auto_forecast(self, request: AutoForecastRequest) -> AutoForecastResponse:
+            captured["request"] = request
+            return AutoForecastResponse.model_validate(
+                {
+                    "strategy": "auto",
+                    "selection": {
+                        "strategy": "auto",
+                        "chosen_model": "mock",
+                        "selected_models": ["mock"],
+                        "candidates": [
+                            {
+                                "model": "mock",
+                                "family": "mock",
+                                "rank": 1,
+                                "score": 100.0,
+                                "reasons": ["selected"],
+                            }
+                        ],
+                        "rationale": ["selected"],
+                        "fallback_used": False,
+                    },
+                    "response": {
+                        "model": "mock",
+                        "forecasts": [
+                            {
+                                "id": "series_0",
+                                "freq": "D",
+                                "start_timestamp": "2025-01-06",
+                                "mean": [15.1, 16.2, 17.3],
+                            }
+                        ],
+                    },
+                },
+            )
+
+    sdk = Tollama(client=_FakeClient())  # type: ignore[arg-type]
+    response = sdk.auto_forecast(
+        series={"target": [1.0, 2.0, 3.0, 4.0], "freq": "D"},
+        horizon=3,
+        strategy="auto",
+    )
+
+    request = captured["request"]
+    assert request.horizon == 3
+    assert request.series[0].id == "series_0"
+    assert response.selection.chosen_model == "mock"
+    assert response.response.model == "mock"
 
 
 def test_series_mapping_requires_target() -> None:

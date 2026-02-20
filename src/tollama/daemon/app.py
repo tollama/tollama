@@ -19,7 +19,7 @@ import httpx
 from fastapi import Body, FastAPI, HTTPException, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import JSONResponse, Response, StreamingResponse
 from pydantic import (
     BaseModel,
     ConfigDict,
@@ -31,6 +31,7 @@ from pydantic import (
     ValidationError,
 )
 
+from tollama.core.auto_select import AutoSelection, select_auto_models
 from tollama.core.config import ConfigFileError, TollamaConfig, load_config
 from tollama.core.env_override import set_env_temporarily
 from tollama.core.forecast_metrics import compute_forecast_metrics
@@ -45,6 +46,10 @@ from tollama.core.registry import ModelCapabilities, get_model_spec, list_regist
 from tollama.core.schemas import (
     AnalyzeRequest,
     AnalyzeResponse,
+    AutoForecastRequest,
+    AutoForecastResponse,
+    AutoSelectionInfo,
+    AutoSelectionScore,
     CompareError,
     CompareRequest,
     CompareResponse,
@@ -52,6 +57,7 @@ from tollama.core.schemas import (
     CompareSummary,
     ForecastRequest,
     ForecastResponse,
+    SeriesForecast,
 )
 from tollama.core.series_analysis import analyze_series_request
 from tollama.core.storage import (
@@ -65,6 +71,13 @@ from tollama.core.storage import (
 
 from .covariates import apply_covariate_capabilities, normalize_covariates
 from .loaded_models import LoadedModelTracker, parse_keep_alive, to_utc_iso
+from .metrics import (
+    ForecastMetricsMiddleware,
+    PrometheusMetrics,
+    create_prometheus_metrics,
+    metrics_content_type,
+    metrics_unavailable_hint,
+)
 from .runner_manager import RunnerManager
 from .supervisor import (
     RunnerCallError,
@@ -240,6 +253,12 @@ def create_app(*, runner_manager: RunnerManager | None = None) -> FastAPI:
     app.state.config_provider = ConfigProvider()
     app.state.started_at = datetime.now(UTC)
     app.state.host_binding = _resolve_host_binding_from_env()
+    app.state.prometheus_metrics = _build_prometheus_metrics(app)
+    if app.state.prometheus_metrics is not None:
+        app.add_middleware(
+            ForecastMetricsMiddleware,
+            metrics=app.state.prometheus_metrics,
+        )
 
     @app.exception_handler(RequestValidationError)
     async def _request_validation_handler(
@@ -255,6 +274,16 @@ def create_app(*, runner_manager: RunnerManager | None = None) -> FastAPI:
     @app.get("/api/version")
     def version() -> dict[str, str]:
         return {"version": package_version}
+
+    @app.get("/metrics", include_in_schema=False)
+    def metrics() -> Response:
+        collector = _optional_prometheus_metrics(app)
+        if collector is None:
+            raise HTTPException(status_code=503, detail=metrics_unavailable_hint())
+
+        _unload_expired_models(app)
+        payload = collector.render_latest()
+        return Response(content=payload, media_type=metrics_content_type())
 
     @app.get("/api/info")
     def info() -> dict[str, Any]:
@@ -578,6 +607,10 @@ def create_app(*, runner_manager: RunnerManager | None = None) -> FastAPI:
     def analyze(payload: AnalyzeRequest) -> AnalyzeResponse:
         return analyze_series_request(payload)
 
+    @app.post("/api/auto-forecast", response_model=AutoForecastResponse)
+    def auto_forecast(payload: AutoForecastRequest) -> AutoForecastResponse:
+        return _execute_auto_forecast(app, payload=payload)
+
     @app.post("/v1/forecast", response_model=ForecastResponse)
     def forecast(payload: ForecastRequestWithKeepAlive) -> ForecastResponse:
         return _execute_forecast(app, payload=payload)
@@ -709,6 +742,398 @@ def _execute_forecast(
         device=None,
     )
     return response
+
+
+def _execute_auto_forecast(
+    app: FastAPI,
+    *,
+    payload: AutoForecastRequest,
+) -> AutoForecastResponse:
+    _unload_expired_models(app)
+    manifests = list_installed()
+    installed_by_name = {
+        name: manifest
+        for manifest in manifests
+        if isinstance((name := manifest.get("name")), str)
+    }
+    installed_models = sorted(installed_by_name)
+    if not installed_models:
+        raise HTTPException(
+            status_code=404,
+            detail="no installed models available for auto-forecast",
+        )
+
+    fallback_used = False
+    fallback_rationale: list[str] = []
+    blocked_models: set[str] = set()
+
+    if payload.model is not None:
+        explicit_model = payload.model
+        explicit_manifest = installed_by_name.get(explicit_model)
+        if explicit_manifest is None:
+            if not payload.allow_fallback:
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"model {explicit_model!r} is not installed",
+                )
+            fallback_used = True
+            blocked_models.add(explicit_model)
+            fallback_rationale.append(
+                f"explicit model {explicit_model!r} is not installed; "
+                "using fallback auto-selection",
+            )
+        else:
+            explicit_request = _auto_payload_to_forecast_payload(
+                payload=payload,
+                model=explicit_model,
+            )
+            try:
+                explicit_response = _execute_forecast(app, payload=explicit_request)
+            except HTTPException as exc:
+                if not payload.allow_fallback:
+                    raise
+                fallback_used = True
+                blocked_models.add(explicit_model)
+                fallback_rationale.append(
+                    "explicit model "
+                    f"{explicit_model!r} failed ({exc.status_code}): "
+                    f"{_compare_error_message(exc)}; "
+                    "using fallback auto-selection",
+                )
+            else:
+                return AutoForecastResponse(
+                    strategy=payload.strategy,
+                    selection=_manual_auto_selection_info(
+                        payload=payload,
+                        model=explicit_model,
+                        manifest=explicit_manifest,
+                    ),
+                    response=explicit_response,
+                )
+
+    candidate_models = [name for name in installed_models if name not in blocked_models]
+    if not candidate_models:
+        raise HTTPException(
+            status_code=404,
+            detail="no compatible installed models found for auto-forecast",
+        )
+
+    try:
+        selection = select_auto_models(
+            series=payload.series,
+            horizon=payload.horizon,
+            strategy=payload.strategy,
+            include_models=candidate_models,
+            ensemble_top_k=payload.ensemble_top_k,
+            allow_restricted_license=True,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    if payload.strategy == "ensemble":
+        forecast_response, chosen_model, execution_rationale = _execute_auto_ensemble(
+            app,
+            payload=payload,
+            selection=selection,
+        )
+        selection_info = _selection_info_from_auto_selection(
+            payload=payload,
+            selection=selection,
+            chosen_model=chosen_model,
+            fallback_used=fallback_used or bool(execution_rationale),
+            rationale_prefix=[*fallback_rationale, *execution_rationale],
+        )
+        return AutoForecastResponse(
+            strategy=payload.strategy,
+            selection=selection_info,
+            response=forecast_response,
+        )
+
+    forecast_response, chosen_model, execution_rationale = _execute_auto_candidates(
+        app,
+        payload=payload,
+        candidate_models=[item.model for item in selection.ranked_candidates],
+    )
+    selection_info = _selection_info_from_auto_selection(
+        payload=payload,
+        selection=selection,
+        chosen_model=chosen_model,
+        fallback_used=fallback_used or bool(execution_rationale),
+        rationale_prefix=[*fallback_rationale, *execution_rationale],
+    )
+    return AutoForecastResponse(
+        strategy=payload.strategy,
+        selection=selection_info,
+        response=forecast_response,
+    )
+
+
+def _execute_auto_candidates(
+    app: FastAPI,
+    *,
+    payload: AutoForecastRequest,
+    candidate_models: list[str],
+) -> tuple[ForecastResponse, str, list[str]]:
+    if not candidate_models:
+        raise HTTPException(status_code=404, detail="no candidate models were provided")
+
+    last_error: HTTPException | None = None
+    execution_warnings: list[str] = []
+    for index, model in enumerate(candidate_models):
+        forecast_payload = _auto_payload_to_forecast_payload(payload=payload, model=model)
+        try:
+            response = _execute_forecast(app, payload=forecast_payload)
+        except HTTPException as exc:
+            last_error = exc
+            detail = _compare_error_message(exc)
+            execution_warnings.append(
+                f"candidate model {model!r} failed ({exc.status_code}): {detail}",
+            )
+            continue
+
+        if index > 0 and execution_warnings:
+            merged_warnings = _merge_warnings(response.warnings, execution_warnings)
+            if merged_warnings is not None:
+                response = response.model_copy(update={"warnings": merged_warnings})
+        return response, model, execution_warnings
+
+    if last_error is not None:
+        raise last_error
+    raise HTTPException(
+        status_code=404,
+        detail="no compatible installed models found for auto-forecast",
+    )
+
+
+def _execute_auto_ensemble(
+    app: FastAPI,
+    *,
+    payload: AutoForecastRequest,
+    selection: AutoSelection,
+) -> tuple[ForecastResponse, str, list[str]]:
+    execution_warnings: list[str] = []
+    successful: list[ForecastResponse] = []
+    score_by_model = {item.model: item.score for item in selection.ranked_candidates}
+
+    for model in selection.selected_models:
+        forecast_payload = _auto_payload_to_forecast_payload(payload=payload, model=model)
+        try:
+            successful.append(_execute_forecast(app, payload=forecast_payload))
+        except HTTPException as exc:
+            detail = _compare_error_message(exc)
+            execution_warnings.append(
+                f"ensemble member {model!r} failed ({exc.status_code}): {detail}",
+            )
+
+    if not successful:
+        raise HTTPException(
+            status_code=503,
+            detail="all ensemble candidates failed to produce a forecast",
+        )
+
+    if len(successful) == 1:
+        merged_warnings = _merge_warnings(
+            successful[0].warnings,
+            [
+                "ensemble strategy requested but only one model succeeded; "
+                "returned single-model forecast",
+                *execution_warnings,
+            ],
+        )
+        single = successful[0].model_copy(update={"warnings": merged_warnings})
+        return single, successful[0].model, execution_warnings
+
+    merged = _merge_ensemble_forecasts(
+        responses=successful,
+        weights={
+            response.model: max(score_by_model.get(response.model, 1.0), 1.0)
+            for response in successful
+        },
+    )
+    merged_warnings = _merge_warnings(
+        merged.warnings,
+        [
+            "ensemble strategy v1 returns mean-only forecasts; quantiles are omitted",
+            *execution_warnings,
+        ],
+    )
+    return (
+        merged.model_copy(update={"warnings": merged_warnings}),
+        successful[0].model,
+        execution_warnings,
+    )
+
+
+def _merge_ensemble_forecasts(
+    *,
+    responses: list[ForecastResponse],
+    weights: dict[str, float],
+) -> ForecastResponse:
+    if not responses:
+        raise HTTPException(
+            status_code=503,
+            detail="cannot merge empty ensemble responses",
+        )
+
+    base = responses[0]
+    merged_forecasts: list[SeriesForecast] = []
+    component_warnings: list[str] = []
+    for response in responses:
+        if response.warnings:
+            component_warnings.extend(
+                f"{response.model}: {warning}"
+                for warning in response.warnings
+            )
+
+    for series_index, base_series in enumerate(base.forecasts):
+        expected_horizon = len(base_series.mean)
+        weighted = [0.0] * expected_horizon
+        total_weight = 0.0
+
+        for response in responses:
+            if series_index >= len(response.forecasts):
+                raise HTTPException(
+                    status_code=502,
+                    detail=(
+                        "ensemble merge failed: model "
+                        f"{response.model!r} returned mismatched series count"
+                    ),
+                )
+            candidate_series = response.forecasts[series_index]
+            if candidate_series.id != base_series.id:
+                raise HTTPException(
+                    status_code=502,
+                    detail=(
+                        "ensemble merge failed: model "
+                        f"{response.model!r} returned series id {candidate_series.id!r} "
+                        f"but expected {base_series.id!r}"
+                    ),
+                )
+            if len(candidate_series.mean) != expected_horizon:
+                raise HTTPException(
+                    status_code=502,
+                    detail=(
+                        "ensemble merge failed: model "
+                        f"{response.model!r} returned horizon {len(candidate_series.mean)} "
+                        f"but expected {expected_horizon}"
+                    ),
+                )
+
+            weight = max(float(weights.get(response.model, 1.0)), 1.0)
+            total_weight += weight
+            for step, value in enumerate(candidate_series.mean):
+                weighted[step] += float(value) * weight
+
+        if total_weight <= 0.0:
+            raise HTTPException(
+                status_code=503,
+                detail="ensemble merge failed due to invalid weights",
+            )
+
+        merged_forecasts.append(
+            SeriesForecast(
+                id=base_series.id,
+                freq=base_series.freq,
+                start_timestamp=base_series.start_timestamp,
+                mean=[round(value / total_weight, 8) for value in weighted],
+                quantiles=None,
+            ),
+        )
+
+    return ForecastResponse(
+        model="ensemble",
+        forecasts=merged_forecasts,
+        warnings=_merge_warnings(None, component_warnings),
+    )
+
+
+def _auto_payload_to_forecast_payload(
+    *,
+    payload: AutoForecastRequest,
+    model: str,
+) -> ForecastRequestWithKeepAlive:
+    return ForecastRequestWithKeepAlive(
+        model=model,
+        horizon=payload.horizon,
+        quantiles=payload.quantiles,
+        series=payload.series,
+        options=payload.options,
+        timeout=payload.timeout,
+        keep_alive=payload.keep_alive,
+        parameters=payload.parameters,
+    )
+
+
+def _manual_auto_selection_info(
+    *,
+    payload: AutoForecastRequest,
+    model: str,
+    manifest: dict[str, Any],
+) -> AutoSelectionInfo:
+    family = _manifest_family_or_500(manifest, model)
+    return AutoSelectionInfo(
+        strategy=payload.strategy,
+        chosen_model=model,
+        selected_models=[model],
+        candidates=[
+            AutoSelectionScore(
+                model=model,
+                family=family,
+                rank=1,
+                score=0.0,
+                reasons=["explicit model override applied"],
+            )
+        ],
+        rationale=["explicit model override applied"],
+        fallback_used=False,
+    )
+
+
+def _selection_info_from_auto_selection(
+    *,
+    payload: AutoForecastRequest,
+    selection: AutoSelection,
+    chosen_model: str,
+    fallback_used: bool,
+    rationale_prefix: list[str],
+) -> AutoSelectionInfo:
+    candidates: list[AutoSelectionScore] = []
+    chosen_reasons: list[str] = []
+    for rank, candidate in enumerate(selection.ranked_candidates, start=1):
+        candidates.append(
+            AutoSelectionScore(
+                model=candidate.model,
+                family=candidate.family,
+                rank=rank,
+                score=float(candidate.score),
+                reasons=list(candidate.reasons),
+            ),
+        )
+        if candidate.model == chosen_model:
+            chosen_reasons = list(candidate.reasons)
+
+    rationale = _dedupe_messages(
+        [
+            *rationale_prefix,
+            "strategy "
+            f"{payload.strategy!r} evaluated {len(selection.ranked_candidates)} "
+            "compatible installed models",
+            *chosen_reasons,
+        ],
+    )
+    if payload.strategy == "ensemble":
+        selected_models = list(selection.selected_models)
+    else:
+        selected_models = [chosen_model]
+
+    return AutoSelectionInfo(
+        strategy=payload.strategy,
+        chosen_model=chosen_model,
+        selected_models=selected_models,
+        candidates=candidates,
+        rationale=rationale or ["auto-selection completed"],
+        fallback_used=fallback_used,
+    )
 
 
 def _compare_error_category(status_code: int) -> str:
@@ -1375,6 +1800,18 @@ def _merge_warnings(
     return merged or None
 
 
+def _dedupe_messages(messages: list[str]) -> list[str]:
+    deduped: list[str] = []
+    seen: set[str] = set()
+    for message in messages:
+        normalized = message.strip()
+        if not normalized or normalized in seen:
+            continue
+        seen.add(normalized)
+        deduped.append(normalized)
+    return deduped
+
+
 def _optional_nonempty_str(value: Any) -> str | None:
     if not isinstance(value, str):
         return None
@@ -1660,6 +2097,40 @@ def _build_default_runner_manager() -> RunnerManager:
         auto_bootstrap=daemon_cfg.auto_bootstrap,
         paths=paths,
     )
+
+
+def _build_prometheus_metrics(app: FastAPI) -> PrometheusMetrics | None:
+    return create_prometheus_metrics(
+        get_loaded_models=lambda: _count_loaded_models(app),
+        get_runner_restarts=lambda: _count_runner_restarts(app),
+    )
+
+
+def _optional_prometheus_metrics(app: FastAPI) -> PrometheusMetrics | None:
+    metrics = getattr(app.state, "prometheus_metrics", None)
+    if isinstance(metrics, PrometheusMetrics):
+        return metrics
+    return None
+
+
+def _count_loaded_models(app: FastAPI) -> int:
+    tracker: LoadedModelTracker = app.state.loaded_model_tracker
+    return len(tracker.list_models())
+
+
+def _count_runner_restarts(app: FastAPI) -> int:
+    statuses = app.state.runner_manager.get_all_statuses()
+    total = 0
+    for status in statuses:
+        restarts = status.get("restarts") if isinstance(status, dict) else None
+        if isinstance(restarts, bool):
+            continue
+        if isinstance(restarts, int) and restarts > 0:
+            total += restarts
+            continue
+        if isinstance(restarts, float) and restarts > 0 and restarts.is_integer():
+            total += int(restarts)
+    return total
 
 
 app = create_app()

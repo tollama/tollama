@@ -15,7 +15,12 @@ from tollama.client import (
     TollamaClientError,
 )
 from tollama.core.recommend import recommend_models
-from tollama.core.schemas import AnalyzeRequest, CompareRequest, ForecastRequest
+from tollama.core.schemas import (
+    AnalyzeRequest,
+    AutoForecastRequest,
+    CompareRequest,
+    ForecastRequest,
+)
 
 _MODEL_NAME_EXAMPLES = (
     "mock, chronos2, granite-ttm-r2, timesfm-2.5-200m, "
@@ -42,6 +47,10 @@ class _ModelsInput(_ToolInputBase):
 
 
 class _ForecastInput(_ToolInputBase):
+    request: dict[str, Any]
+
+
+class _AutoForecastInput(_ToolInputBase):
     request: dict[str, Any]
 
 
@@ -120,6 +129,22 @@ def get_agent_tool_specs(
                 "additionalProperties": False,
             },
             handler=lambda **kwargs: _forecast_handler(client=client, **kwargs),
+        ),
+        AgentToolSpec(
+            name="tollama_auto_forecast",
+            description=(
+                "Run zero-config auto-forecast with model selection metadata. "
+                "Requires request.horizon and request.series[]."
+            ),
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "request": {"type": "object"},
+                },
+                "required": ["request"],
+                "additionalProperties": False,
+            },
+            handler=lambda **kwargs: _auto_forecast_handler(client=client, **kwargs),
         ),
         AgentToolSpec(
             name="tollama_analyze",
@@ -239,6 +264,20 @@ def _forecast_handler(*, client: TollamaClient, request: dict[str, Any]) -> dict
 
     try:
         response = client.forecast_response(forecast_request)
+    except TollamaClientError as exc:
+        return _client_error_payload(exc)
+    return response.model_dump(mode="json", exclude_none=True)
+
+
+def _auto_forecast_handler(*, client: TollamaClient, request: dict[str, Any]) -> dict[str, Any]:
+    try:
+        args = _AutoForecastInput(request=request)
+        auto_request = AutoForecastRequest.model_validate(args.request)
+    except ValidationError as exc:
+        return _invalid_request_payload(str(exc))
+
+    try:
+        response = client.auto_forecast(auto_request)
     except TollamaClientError as exc:
         return _client_error_payload(exc)
     return response.model_dump(mode="json", exclude_none=True)

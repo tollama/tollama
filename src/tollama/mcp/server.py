@@ -12,6 +12,9 @@ from .tools import (
     tollama_analyze as _tollama_analyze,
 )
 from .tools import (
+    tollama_auto_forecast as _tollama_auto_forecast,
+)
+from .tools import (
     tollama_compare as _tollama_compare,
 )
 from .tools import (
@@ -120,6 +123,28 @@ def create_server() -> Any:
     ) -> dict[str, Any]:
         try:
             return _tollama_forecast(request=request, base_url=base_url, timeout=timeout)
+        except MCPToolError as exc:
+            _raise_mcp_tool_error(exc)
+
+    @server.tool(
+        name="tollama_auto_forecast",
+        description=(
+            "Run zero-config auto-forecast (model optional) and return selection metadata plus "
+            "forecast payload. Required input: request.horizon and request.series[]. "
+            "Optional: request.strategy (auto|fastest|best_accuracy|ensemble), "
+            "request.model override, request.allow_fallback, and request.ensemble_top_k. "
+            'Example: tollama_auto_forecast({"request":{"horizon":3,"strategy":"auto",'
+            '"series":[{"id":"s1","freq":"D","timestamps":["2025-01-01","2025-01-02"],'
+            '"target":[10,11]}],"options":{}}}).'
+        ),
+    )
+    def tollama_auto_forecast(
+        request: dict[str, Any],
+        base_url: str | None = None,
+        timeout: float | None = None,
+    ) -> dict[str, Any]:
+        try:
+            return _tollama_auto_forecast(request=request, base_url=base_url, timeout=timeout)
         except MCPToolError as exc:
             _raise_mcp_tool_error(exc)
 

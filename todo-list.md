@@ -175,7 +175,7 @@
   - 현재: `scripts/install_mcp.sh`, `CLAUDE.md` 추가
   - 현재: 실 SDK 환경 E2E smoke 완료(`tollama-mcp` stdio + live daemon tool call)
   - 현재: `README.md`/`roadmap.md`/`CLAUDE.md`에 MCP 구현 상세(툴 계약/에러 매핑/기본값) 반영
-  - 현재: MCP 8개 툴(`health/models/forecast/analyze/compare/recommend/pull/show`) description에
+  - 현재: MCP 9개 툴(`health/models/forecast/auto_forecast/analyze/compare/recommend/pull/show`) description에
     입력 스키마/모델 예시/호출 예시 추가
   - TODO: Claude Desktop 운영 가이드(권한/세션/배포 정책) 보강
 - [x] (P1) Agentic 비교/추천 기능 1차
@@ -190,6 +190,20 @@
   - 현재: `tests/test_series_analysis.py`, `tests/test_daemon_api.py`,
     `tests/test_client_http.py`, `tests/test_mcp_tools.py`, `tests/test_langchain_skill.py`,
     `tests/test_agent_wrappers.py`, `tests/test_sdk.py`, `tests/test_schemas.py` 검증 추가
+- [x] (P1) Zero-config Auto-Forecast 1차
+  - 현재: `/api/auto-forecast` 추가(설치 모델 기준 auto/fastest/best_accuracy/ensemble 선택)
+  - 현재: `AutoForecastRequest/AutoSelectionInfo/AutoForecastResponse` 스키마 추가
+  - 현재: explicit `model`은 기본 hard override, `allow_fallback=true`일 때만 fallback 수행
+  - 현재: ensemble v1은 mean-only 반환(quantiles 생략 + warning)
+  - 현재: `TollamaClient`/`AsyncTollamaClient`/SDK `Tollama.auto_forecast()` 추가
+  - 현재: `tollama_auto_forecast` MCP/LangChain/CrewAI/AutoGen/smolagents 툴 추가
+  - 현재: `tests/test_auto_forecast.py` + 연관 스키마/클라이언트/에이전트 래퍼 회귀 테스트 추가
+- [x] (P1) Prometheus Metrics Endpoint 1차
+  - 현재: `GET /metrics` 추가(옵션 의존성: `prometheus-client`)
+  - 현재: `tollama_forecast_requests_total`, `tollama_forecast_latency_seconds`,
+    `tollama_models_loaded`, `tollama_runner_restarts_total` 노출
+  - 현재: `ForecastMetricsMiddleware`로 forecast/auto-forecast/compare 경로 계측
+  - 현재: `tests/test_daemon_metrics.py` 추가(성공/실패 카운터, gauge, restart counter)
 - [x] (P0) 온보딩 마찰 완화 1차
   - 현재: `tollama quickstart` 명령 추가(daemon 확인 -> pull -> demo forecast -> next steps 출력)
   - 현재: `README.md` 상단을 설치/quickstart/SDK/agent 중심으로 재구성

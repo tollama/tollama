@@ -6,6 +6,8 @@ from pydantic import ValidationError
 from tollama.core.schemas import (
     AnalyzeRequest,
     AnalyzeResponse,
+    AutoForecastRequest,
+    AutoForecastResponse,
     ForecastRequest,
     ForecastResponse,
     SeriesForecast,
@@ -51,6 +53,22 @@ def _example_analyze_request_payload() -> dict[str, object]:
     }
 
 
+def _example_auto_forecast_request_payload() -> dict[str, object]:
+    return {
+        "horizon": 3,
+        "strategy": "auto",
+        "series": [
+            {
+                "id": "series-1",
+                "freq": "D",
+                "timestamps": ["2025-01-01", "2025-01-02", "2025-01-03"],
+                "target": [10.0, 11.0, 12.0],
+            }
+        ],
+        "options": {},
+    }
+
+
 def test_forecast_request_roundtrip_is_lossless() -> None:
     request = ForecastRequest.model_validate(_example_request_payload())
     encoded = request.to_json()
@@ -68,6 +86,15 @@ def test_analyze_request_roundtrip_is_lossless() -> None:
     decoded = AnalyzeRequest.model_validate_json(encoded)
     assert decoded == request
     assert decoded.parameters.max_points == 100
+
+
+def test_auto_forecast_request_roundtrip_is_lossless() -> None:
+    request = AutoForecastRequest.model_validate(_example_auto_forecast_request_payload())
+    encoded = request.to_json()
+    decoded = AutoForecastRequest.model_validate_json(encoded)
+    assert decoded == request
+    assert decoded.model is None
+    assert decoded.strategy == "auto"
 
 
 def test_forecast_request_freq_defaults_to_auto_and_preserves_explicit_freq() -> None:
@@ -105,6 +132,13 @@ def test_analyze_request_rejects_invalid_parameters() -> None:
     payload["parameters"]["max_points"] = 0  # type: ignore[index]
     with pytest.raises(ValidationError):
         AnalyzeRequest.model_validate(payload)
+
+
+def test_auto_forecast_request_rejects_invalid_strategy() -> None:
+    payload = _example_auto_forecast_request_payload()
+    payload["strategy"] = "unknown"
+    with pytest.raises(ValidationError):
+        AutoForecastRequest.model_validate(payload)
 
 
 def test_analyze_request_requires_unique_series_ids() -> None:
@@ -155,6 +189,41 @@ def test_analyze_response_rejects_unsorted_anomaly_indices() -> None:
     }
     with pytest.raises(ValidationError):
         AnalyzeResponse.model_validate(payload)
+
+
+def test_auto_forecast_response_rejects_strategy_mismatch() -> None:
+    payload = {
+        "strategy": "fastest",
+        "selection": {
+            "strategy": "auto",
+            "chosen_model": "mock",
+            "selected_models": ["mock"],
+            "candidates": [
+                {
+                    "model": "mock",
+                    "family": "mock",
+                    "rank": 1,
+                    "score": 1.0,
+                    "reasons": ["test"],
+                }
+            ],
+            "rationale": ["test"],
+            "fallback_used": False,
+        },
+        "response": {
+            "model": "mock",
+            "forecasts": [
+                {
+                    "id": "series-1",
+                    "freq": "D",
+                    "start_timestamp": "2025-01-04",
+                    "mean": [12.0, 13.0],
+                }
+            ],
+        },
+    }
+    with pytest.raises(ValidationError):
+        AutoForecastResponse.model_validate(payload)
 
 
 def test_series_forecast_accepts_valid_quantiles() -> None:

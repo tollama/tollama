@@ -11,6 +11,8 @@ from tollama.client import DEFAULT_BASE_URL, DEFAULT_TIMEOUT_SECONDS, TollamaCli
 from tollama.core.schemas import (
     AnalyzeRequest,
     AnalyzeResponse,
+    AutoForecastRequest,
+    AutoForecastResponse,
     ForecastRequest,
     ForecastResponse,
     SeriesForecast,
@@ -179,6 +181,44 @@ class Tollama:
         request = ForecastRequest.model_validate(payload)
         response = self._client.forecast_response(request)
         return TollamaForecastResult(response=response)
+
+    def auto_forecast(
+        self,
+        *,
+        series: SeriesPayload,
+        horizon: int,
+        strategy: str = "auto",
+        model: str | None = None,
+        allow_fallback: bool = False,
+        ensemble_top_k: int = 3,
+        quantiles: Sequence[float] | None = None,
+        options: Mapping[str, Any] | None = None,
+        timeout: float | None = None,
+        keep_alive: str | int | float | None = None,
+        parameters: Mapping[str, Any] | None = None,
+    ) -> AutoForecastResponse:
+        """Run validated zero-config auto-forecast and return selection metadata."""
+        payload: dict[str, Any] = {
+            "horizon": horizon,
+            "strategy": strategy,
+            "series": _coerce_series_payload(series),
+            "options": dict(options or {}),
+            "allow_fallback": allow_fallback,
+            "ensemble_top_k": ensemble_top_k,
+        }
+        if model is not None:
+            payload["model"] = model
+        if quantiles is not None:
+            payload["quantiles"] = list(quantiles)
+        if timeout is not None:
+            payload["timeout"] = timeout
+        if keep_alive is not None:
+            payload["keep_alive"] = keep_alive
+        if parameters is not None:
+            payload["parameters"] = dict(parameters)
+
+        request = AutoForecastRequest.model_validate(payload)
+        return self._client.auto_forecast(request)
 
 
 def _coerce_series_payload(series: SeriesPayload) -> list[dict[str, Any]]:

@@ -63,6 +63,9 @@ mcp = [
 langchain = [
   "langchain-core>=0.2,<1.0",
 ]
+metrics = [
+  "prometheus-client>=0.20,<1.0",
+]
 runner_torch = [
   "chronos-forecasting>=2.0",
   "granite-tsfm>=0.3.0,<0.4",

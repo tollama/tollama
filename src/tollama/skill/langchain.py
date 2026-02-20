@@ -14,7 +14,12 @@ from tollama.client import (
     TollamaClientError,
 )
 from tollama.core.recommend import recommend_models
-from tollama.core.schemas import AnalyzeRequest, CompareRequest, ForecastRequest
+from tollama.core.schemas import (
+    AnalyzeRequest,
+    AutoForecastRequest,
+    CompareRequest,
+    ForecastRequest,
+)
 
 try:
     from langchain_core.tools import BaseTool
@@ -42,6 +47,10 @@ class ModelsToolInput(_ToolInputBase):
 
 
 class ForecastToolInput(_ToolInputBase):
+    request: dict[str, Any]
+
+
+class AutoForecastToolInput(_ToolInputBase):
     request: dict[str, Any]
 
 
@@ -246,6 +255,62 @@ class TollamaForecastTool(_TollamaBaseTool):
         client = self._async_client()
         try:
             response = await client.forecast_response(forecast_request)
+        except TollamaClientError as exc:
+            return _client_error_payload(exc)
+
+        return response.model_dump(mode="json", exclude_none=True)
+
+
+class TollamaAutoForecastTool(_TollamaBaseTool):
+    """LangChain tool that validates and executes non-streaming auto-forecast requests."""
+
+    name: str = "tollama_auto_forecast"
+    description: str = (
+        "Run zero-config auto-forecast against tollama (model optional). "
+        "Input schema: {request:{horizon,series,strategy?,model?,allow_fallback?,"
+        "ensemble_top_k?,quantiles?,options?,parameters?}}. "
+        "Returns strategy, selection rationale, and canonical forecast payload. "
+        'Example: tool.invoke({"request":{"horizon":3,"strategy":"auto",'
+        '"series":[{"id":"s1","freq":"D","timestamps":["2025-01-01","2025-01-02"],'
+        '"target":[10,11]}],"options":{}}}).'
+    )
+    args_schema: type[BaseModel] = AutoForecastToolInput
+
+    def _run(
+        self,
+        request: dict[str, Any],
+        run_manager: Any | None = None,
+    ) -> dict[str, Any]:
+        del run_manager
+        try:
+            args = AutoForecastToolInput(request=request)
+            auto_request = AutoForecastRequest.model_validate(args.request)
+        except ValidationError as exc:
+            return _invalid_request_payload(str(exc))
+
+        client = self._client()
+        try:
+            response = client.auto_forecast(auto_request)
+        except TollamaClientError as exc:
+            return _client_error_payload(exc)
+
+        return response.model_dump(mode="json", exclude_none=True)
+
+    async def _arun(
+        self,
+        request: dict[str, Any],
+        run_manager: Any | None = None,
+    ) -> dict[str, Any]:
+        del run_manager
+        try:
+            args = AutoForecastToolInput(request=request)
+            auto_request = AutoForecastRequest.model_validate(args.request)
+        except ValidationError as exc:
+            return _invalid_request_payload(str(exc))
+
+        client = self._async_client()
+        try:
+            response = await client.auto_forecast(auto_request)
         except TollamaClientError as exc:
             return _client_error_payload(exc)
 
@@ -470,6 +535,7 @@ def get_tollama_tools(
     """Build the default tollama LangChain tool set."""
     return [
         TollamaForecastTool(base_url=base_url, timeout=timeout),
+        TollamaAutoForecastTool(base_url=base_url, timeout=timeout),
         TollamaAnalyzeTool(base_url=base_url, timeout=timeout),
         TollamaCompareTool(base_url=base_url, timeout=timeout),
         TollamaRecommendTool(base_url=base_url, timeout=timeout),

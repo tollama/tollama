@@ -37,6 +37,14 @@ result = t.forecast(
 )
 print(result.mean)
 print(result.to_df())
+
+auto = t.auto_forecast(
+    series={"target": [10, 11, 12, 13, 14], "freq": "D"},
+    horizon=3,
+    strategy="auto",
+)
+print(auto.selection.chosen_model)
+print(auto.response.forecasts[0].mean)
 ```
 
 ## Agent Integrations
@@ -60,6 +68,20 @@ print(result.to_df())
 ```bash
 ruff check .
 pytest -q
+```
+
+## Prometheus Metrics
+
+Install optional metrics dependency:
+
+```bash
+python -m pip install -e ".[metrics]"
+```
+
+Daemon endpoint:
+
+```bash
+curl -s http://127.0.0.1:11435/metrics
 ```
 
 ## Benchmark Script
@@ -110,6 +132,9 @@ It includes:
 - installed + loaded models (including covariate capabilities when available)
 - registry-available models with covariate capability metadata
 - runner statuses for `mock`, `torch`, `timesfm`, `uni2ts`, `sundial`, and `toto`
+
+Prometheus-compatible metrics are also exposed at `GET /metrics` when the
+optional `prometheus-client` dependency is installed.
 
 `tollama info` renders the same payload and prints a short per-model covariates summary.
 
@@ -178,6 +203,7 @@ tools = get_tollama_tools(base_url="http://127.0.0.1:11435", timeout=10.0)
 Provided `BaseTool` wrappers:
 
 - `TollamaForecastTool`
+- `TollamaAutoForecastTool`
 - `TollamaAnalyzeTool`
 - `TollamaCompareTool`
 - `TollamaRecommendTool`
@@ -190,6 +216,7 @@ Tool input contracts:
 - `tollama_health`: no runtime args (`{}`)
 - `tollama_models`: `{"mode": "installed"|"loaded"|"available"}`
 - `tollama_forecast`: `{"request": <ForecastRequest-compatible dict>}`
+- `tollama_auto_forecast`: `{"request": <AutoForecastRequest-compatible dict>}`
 - `tollama_analyze`: `{"request": <AnalyzeRequest-compatible dict>}`
 - `tollama_compare`: `{"request": <CompareRequest-compatible dict>}`
 - `tollama_recommend`:
@@ -456,6 +483,7 @@ bash scripts/install_mcp.sh --base-url "http://127.0.0.1:11435"
 | `tollama_health` | `GET /v1/health`, `GET /api/version` | `base_url?`, `timeout?` | `{healthy, health, version}` |
 | `tollama_models` | `GET /api/tags` or `/api/ps` or `/api/info` | `mode=installed\|loaded\|available`, `base_url?`, `timeout?` | `{mode, items}` |
 | `tollama_forecast` | `POST /api/forecast` (non-stream) | `request`, `base_url?`, `timeout?` | canonical `ForecastResponse` JSON |
+| `tollama_auto_forecast` | `POST /api/auto-forecast` | `request`, `base_url?`, `timeout?` | canonical `AutoForecastResponse` JSON |
 | `tollama_analyze` | `POST /api/analyze` | `request`, `base_url?`, `timeout?` | canonical `AnalyzeResponse` JSON |
 | `tollama_compare` | `POST /api/compare` | `request`, `base_url?`, `timeout?` | canonical `CompareResponse` JSON |
 | `tollama_recommend` | registry metadata + capabilities | `horizon`, covariate flags, `top_k`, `allow_restricted_license` | ranked recommendation payload |
@@ -464,6 +492,7 @@ bash scripts/install_mcp.sh --base-url "http://127.0.0.1:11435"
 
 Notes:
 - `tollama_forecast` validates `request` with `ForecastRequest` before HTTP call.
+- `tollama_auto_forecast` validates `request` with `AutoForecastRequest` before HTTP call.
 - `tollama_analyze` validates `request` with `AnalyzeRequest` before HTTP call.
 - MCP tool input schemas require `timeout > 0` when provided.
 - MCP integration is intentionally non-streaming for deterministic tool responses.
@@ -506,7 +535,7 @@ bash scripts/install_mcp.sh --dry-run --base-url "http://127.0.0.1:11435"
 
 - `tollama.daemon`: Public API layer (`/api/*`, `/v1/health`, `/v1/forecast`) and runner supervision.
 - `tollama.runners`: Runner implementations that speak newline-delimited JSON over stdio.
-- `tollama.core`: Canonical schemas (`ForecastRequest`, `ForecastResponse`, `AnalyzeRequest`, `AnalyzeResponse`, `CompareRequest`, `CompareResponse`) and protocol helpers.
+- `tollama.core`: Canonical schemas (`Forecast*`, `AutoForecast*`, `Analyze*`, `Compare*`) and protocol helpers.
 - `tollama.cli`: User CLI commands for serving and sending forecast requests.
 - `tollama.sdk`: High-level Python convenience facade (`Tollama`, `TollamaForecastResult`).
 - `tollama.client`: Shared HTTP client abstraction for CLI/MCP integrations.

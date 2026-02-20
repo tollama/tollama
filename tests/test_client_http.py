@@ -78,6 +78,38 @@ def _analyze_response_payload() -> dict[str, Any]:
     }
 
 
+def _auto_forecast_request_payload() -> dict[str, Any]:
+    return {
+        "horizon": 2,
+        "strategy": "auto",
+        "series": _request_payload()["series"],
+        "options": {},
+    }
+
+
+def _auto_forecast_response_payload() -> dict[str, Any]:
+    return {
+        "strategy": "auto",
+        "selection": {
+            "strategy": "auto",
+            "chosen_model": "mock",
+            "selected_models": ["mock"],
+            "candidates": [
+                {
+                    "model": "mock",
+                    "family": "mock",
+                    "rank": 1,
+                    "score": 120.0,
+                    "reasons": ["fallback"],
+                }
+            ],
+            "rationale": ["selected mock"],
+            "fallback_used": False,
+        },
+        "response": _response_payload(),
+    }
+
+
 def _client(handler: httpx.MockTransport) -> TollamaClient:
     return TollamaClient(base_url="http://daemon.test", timeout=3.0, transport=handler)
 
@@ -129,6 +161,19 @@ def test_analyze_returns_typed_response() -> None:
 
     assert len(response.results) == 1
     assert response.results[0].id == "s1"
+
+
+def test_auto_forecast_returns_typed_response() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/api/auto-forecast"
+        return httpx.Response(200, json=_auto_forecast_response_payload())
+
+    client = _client(httpx.MockTransport(handler))
+    response = client.auto_forecast(_auto_forecast_request_payload())
+
+    assert response.strategy == "auto"
+    assert response.selection.chosen_model == "mock"
+    assert response.response.model == "mock"
 
 
 def test_show_404_maps_to_model_missing_error() -> None:
@@ -240,3 +285,16 @@ async def test_async_analyze_returns_typed_response() -> None:
 
     assert len(response.results) == 1
     assert response.results[0].detected_frequency == "D"
+
+
+@pytest.mark.asyncio
+async def test_async_auto_forecast_returns_typed_response() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/api/auto-forecast"
+        return httpx.Response(200, json=_auto_forecast_response_payload())
+
+    client = _async_client(httpx.MockTransport(handler))
+    response = await client.auto_forecast(_auto_forecast_request_payload())
+
+    assert response.selection.chosen_model == "mock"
+    assert response.response.forecasts[0].id == "s1"

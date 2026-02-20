@@ -19,18 +19,32 @@ def recommend_models(
     covariates_type: CovariatesType = "numeric",
     allow_restricted_license: bool = False,
     top_k: int = 3,
+    include_models: list[str] | set[str] | tuple[str, ...] | None = None,
 ) -> dict[str, Any]:
     """Recommend models ranked by compatibility and simple heuristics."""
     if horizon <= 0:
         raise ValueError("horizon must be > 0")
     if top_k <= 0:
         raise ValueError("top_k must be > 0")
+    include_model_set: set[str] | None = None
+    if include_models is not None:
+        include_model_set = {
+            item.strip()
+            for item in include_models
+            if isinstance(item, str) and item.strip()
+        }
+        if not include_model_set:
+            raise ValueError("include_models must include at least one model name")
 
     registry = list_registry_models()
 
     candidates: list[dict[str, Any]] = []
     excluded: list[dict[str, Any]] = []
+    considered_specs = 0
     for spec in registry:
+        if include_model_set is not None and spec.name not in include_model_set:
+            continue
+        considered_specs += 1
         exclusion_reasons = _collect_exclusion_reasons(
             spec=spec,
             horizon=horizon,
@@ -80,20 +94,26 @@ def recommend_models(
     for rank, candidate in enumerate(ranked, start=1):
         candidate["rank"] = rank
 
+    request_payload: dict[str, Any] = {
+        "horizon": horizon,
+        "freq": freq or "auto",
+        "has_past_covariates": has_past_covariates,
+        "has_future_covariates": has_future_covariates,
+        "has_static_covariates": has_static_covariates,
+        "covariates_type": covariates_type,
+        "allow_restricted_license": allow_restricted_license,
+        "top_k": top_k,
+    }
+    if include_model_set is not None:
+        request_payload["include_models"] = sorted(include_model_set)
+
     return {
         "request": {
-            "horizon": horizon,
-            "freq": freq or "auto",
-            "has_past_covariates": has_past_covariates,
-            "has_future_covariates": has_future_covariates,
-            "has_static_covariates": has_static_covariates,
-            "covariates_type": covariates_type,
-            "allow_restricted_license": allow_restricted_license,
-            "top_k": top_k,
+            **request_payload,
         },
         "recommendations": ranked[:top_k],
         "excluded": sorted(excluded, key=lambda item: str(item["model"])),
-        "total_candidates": len(registry),
+        "total_candidates": considered_specs,
         "compatible_candidates": len(ranked),
     }
 
@@ -221,4 +241,3 @@ def _is_restricted_license(spec: ModelSpec) -> bool:
     if spec.license.needs_acceptance:
         return True
     return "-nc" in license_type or "non-commercial" in notice
-

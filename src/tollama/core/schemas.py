@@ -30,6 +30,7 @@ CovariateValues = list[CovariateValue]
 CovariateMode = Literal["best_effort", "strict"]
 MetricName = Literal["mape", "mase", "mae", "rmse", "smape"]
 TrendDirection = Literal["up", "down", "flat"]
+AutoForecastStrategy = Literal["auto", "fastest", "best_accuracy", "ensemble"]
 
 
 class CanonicalModel(BaseModel):
@@ -227,6 +228,51 @@ class CompareRequest(CanonicalModel):
         return self
 
 
+class AutoForecastRequest(CanonicalModel):
+    """Auto-forecast request payload with optional model override."""
+
+    model: NonEmptyStr | None = None
+    allow_fallback: StrictBool = False
+    strategy: AutoForecastStrategy = "auto"
+    ensemble_top_k: StrictInt = Field(default=3, ge=2, le=8)
+    horizon: PositiveInt
+    quantiles: list[Quantile] = Field(default_factory=list)
+    series: list[SeriesInput] = Field(min_length=1)
+    options: dict[NonEmptyStr, JsonValue] = Field(
+        default_factory=dict,
+        validation_alias=AliasChoices("options"),
+    )
+    timeout: float | None = Field(default=None, gt=0.0)
+    keep_alive: StrictStr | StrictInt | StrictFloat | None = None
+    parameters: ForecastParameters = Field(
+        default_factory=ForecastParameters,
+        validation_alias=AliasChoices("parameters"),
+    )
+
+    @field_validator("quantiles")
+    @classmethod
+    def validate_quantiles(cls, value: list[Quantile]) -> list[Quantile]:
+        if value != sorted(value):
+            raise ValueError("quantiles must be sorted in ascending order")
+        if len(value) != len(set(value)):
+            raise ValueError("quantiles must be unique")
+        return value
+
+    @model_validator(mode="after")
+    def validate_forecast_compatibility(self) -> AutoForecastRequest:
+        validation_payload = {
+            "model": self.model or "__auto__",
+            "horizon": self.horizon,
+            "quantiles": self.quantiles,
+            "series": [series.model_dump(mode="python") for series in self.series],
+            "options": self.options,
+            "timeout": self.timeout,
+            "parameters": self.parameters.model_dump(mode="python"),
+        }
+        ForecastRequest.model_validate(validation_payload)
+        return self
+
+
 class AnalyzeParameters(CanonicalModel):
     """Controls for bounded and deterministic series analysis."""
 
@@ -382,6 +428,48 @@ class ForecastResponse(CanonicalModel):
     metrics: ForecastMetrics | None = None
     usage: dict[NonEmptyStr, JsonValue] | None = None
     warnings: list[NonEmptyStr] | None = None
+
+
+class AutoSelectionScore(CanonicalModel):
+    """One ranked model score used by auto-forecast selection."""
+
+    model: NonEmptyStr
+    family: NonEmptyStr
+    rank: PositiveInt
+    score: StrictFloat
+    reasons: list[NonEmptyStr] = Field(min_length=1)
+
+
+class AutoSelectionInfo(CanonicalModel):
+    """Selection metadata for auto-forecast requests."""
+
+    strategy: AutoForecastStrategy
+    chosen_model: NonEmptyStr
+    selected_models: list[NonEmptyStr] = Field(min_length=1)
+    candidates: list[AutoSelectionScore] = Field(min_length=1)
+    rationale: list[NonEmptyStr] = Field(min_length=1)
+    fallback_used: StrictBool = False
+
+    @field_validator("selected_models")
+    @classmethod
+    def validate_selected_models(cls, value: list[NonEmptyStr]) -> list[NonEmptyStr]:
+        if len(value) != len(set(value)):
+            raise ValueError("selected_models must be unique")
+        return value
+
+
+class AutoForecastResponse(CanonicalModel):
+    """Response payload for auto-forecast requests."""
+
+    strategy: AutoForecastStrategy
+    selection: AutoSelectionInfo
+    response: ForecastResponse
+
+    @model_validator(mode="after")
+    def validate_strategy_consistency(self) -> AutoForecastResponse:
+        if self.strategy != self.selection.strategy:
+            raise ValueError("strategy and selection.strategy must match")
+        return self
 
 
 class CompareError(CanonicalModel):

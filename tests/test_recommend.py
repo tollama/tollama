@@ -73,6 +73,18 @@ def test_recommend_models_rejects_non_positive_horizon() -> None:
         recommend_models(horizon=0)
 
 
+def test_recommend_models_include_models_filters_candidates() -> None:
+    payload = recommend_models(
+        horizon=12,
+        include_models=["mock"],
+        top_k=5,
+    )
+
+    assert payload["total_candidates"] == 1
+    assert payload["request"]["include_models"] == ["mock"]
+    assert all(item["model"] == "mock" for item in payload["recommendations"])
+
+
 def test_mcp_tollama_recommend_invalid_request_maps_to_mcp_error() -> None:
     with pytest.raises(MCPToolError) as exc_info:
         tollama_recommend(horizon=12, top_k=0)

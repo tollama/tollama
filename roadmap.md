@@ -14,6 +14,7 @@ the optional future `packages/*` split as a migration phase.
 ## 0) Product goals [~]
 ### Current implementation status
 - Unified forecasting endpoints are available at `POST /api/forecast` and `POST /v1/forecast`.
+- Zero-config auto-forecast endpoint is available at `POST /api/auto-forecast`.
 - Model-free series diagnostics endpoint is available at `POST /api/analyze`.
 - Ollama-style model lifecycle is available (`pull`, `list`, `show`, `ps`, `rm`) via HTTP and CLI.
 - Forecast routing uses model-family worker selection from installed manifests.
@@ -80,6 +81,8 @@ tollama/
 ## 3) Canonical forecasting contract [x]
 ### Current implementation status
 - Canonical schemas are implemented in `ForecastRequest`, `ForecastResponse`, `SeriesInput`, and `SeriesForecast`.
+- Auto-selection schemas are implemented in `AutoForecastRequest`, `AutoSelectionInfo`, and
+  `AutoForecastResponse`.
 - Canonical request shape in production includes:
   - `model`, `horizon`, `series[]`, optional `quantiles[]`, optional `options`, optional `parameters`.
   - `series[]` supports `id`, `freq` (defaults to `"auto"`), `timestamps[]`, `target[]`,
@@ -238,6 +241,7 @@ tollama/
 ## 11) Public API + CLI [x]
 ### Current implementation status
 - Implemented HTTP endpoints:
+  - `GET /metrics` (requires optional `prometheus-client`)
   - `GET /v1/health`
   - `GET /v1/models`
   - `POST /v1/models/pull`
@@ -251,6 +255,7 @@ tollama/
   - `DELETE /api/delete`
   - `GET /api/ps`
   - `POST /api/forecast`
+  - `POST /api/auto-forecast`
   - `POST /api/analyze`
   - `POST /api/compare`
 - `GET /api/info` includes:
@@ -448,14 +453,15 @@ Phase F - Product hardening:
 - MCP server scaffold added under `src/tollama/mcp/`:
   - `server.py`, `tools.py`, `schemas.py`, `__main__.py`
   - tool set:
-    `tollama_health`, `tollama_models`, `tollama_forecast`, `tollama_analyze`, `tollama_compare`,
-    `tollama_recommend`, `tollama_pull`, `tollama_show`
+    `tollama_health`, `tollama_models`, `tollama_forecast`, `tollama_auto_forecast`,
+    `tollama_analyze`, `tollama_compare`, `tollama_recommend`, `tollama_pull`, `tollama_show`
   - each tool now includes rich MCP descriptions with required inputs, model-name examples,
     and invocation examples for agent discoverability
 - MCP tool behavior/contracts:
   - strict input schemas (`extra="forbid"`, strict scalar typing, positive timeout)
   - `tollama_models(mode=installed|loaded|available)` mapped to `/api/tags|/api/ps|/api/info`
   - `tollama_forecast` is non-streaming and validates request via `ForecastRequest`
+  - `tollama_auto_forecast` validates request via `AutoForecastRequest`
   - `tollama_analyze` validates request via `AnalyzeRequest`
   - tool failures are emitted as JSON payload with `{error:{category,exit_code,message}}`
 - Optional dependency bundle added in `pyproject.toml`:
@@ -466,8 +472,8 @@ Phase F - Product hardening:
 - Agent context doc added:
   - `CLAUDE.md`
 - Optional LangChain SDK wrapper added under `src/tollama/skill/langchain.py`:
-  - `TollamaForecastTool`, `TollamaAnalyzeTool`, `TollamaCompareTool`, `TollamaRecommendTool`,
-    `TollamaHealthTool`, `TollamaModelsTool`
+  - `TollamaForecastTool`, `TollamaAutoForecastTool`, `TollamaAnalyzeTool`,
+    `TollamaCompareTool`, `TollamaRecommendTool`, `TollamaHealthTool`, `TollamaModelsTool`
   - `get_tollama_tools(base_url="http://127.0.0.1:11435", timeout=10.0)`
   - optional extra `.[langchain]` with `langchain-core`
   - tool descriptions now include schema guidance, model-name examples, and invocation examples

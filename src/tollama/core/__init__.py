@@ -34,6 +34,9 @@ from .registry import (
     list_registry_models,
 )
 from .schemas import (
+    AutoForecastRequest,
+    AutoForecastResponse,
+    AutoSelectionInfo,
     CompareRequest,
     CompareResponse,
     ForecastParameters,
@@ -54,6 +57,9 @@ from .storage import (
 )
 
 __all__ = [
+    "AutoForecastRequest",
+    "AutoForecastResponse",
+    "AutoSelectionInfo",
     "ConfigFileError",
     "CompareRequest",
     "CompareResponse",

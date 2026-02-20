@@ -7,10 +7,11 @@ from typing import Any
 import pytest
 
 from tollama.client import ModelMissingError
-from tollama.core.schemas import AnalyzeResponse, ForecastResponse
+from tollama.core.schemas import AnalyzeResponse, AutoForecastResponse, ForecastResponse
 from tollama.mcp.tools import (
     MCPToolError,
     tollama_analyze,
+    tollama_auto_forecast,
     tollama_forecast,
     tollama_health,
     tollama_models,
@@ -60,6 +61,15 @@ def _analyze_request() -> dict[str, Any]:
                 "target": [1.0, 2.0, 1.5, 2.5],
             }
         ]
+    }
+
+
+def _auto_forecast_request() -> dict[str, Any]:
+    return {
+        "horizon": 2,
+        "strategy": "auto",
+        "series": _forecast_request()["series"],
+        "options": {},
     }
 
 
@@ -139,6 +149,59 @@ def test_tollama_analyze_success(monkeypatch) -> None:
 def test_tollama_analyze_invalid_request_maps_to_invalid_request() -> None:
     with pytest.raises(MCPToolError) as exc_info:
         tollama_analyze(request={"series": []})
+
+    assert exc_info.value.exit_code == 2
+    assert exc_info.value.category == "INVALID_REQUEST"
+
+
+def test_tollama_auto_forecast_success(monkeypatch) -> None:
+    class _FakeClient:
+        def auto_forecast(self, _request: Any) -> AutoForecastResponse:
+            return AutoForecastResponse.model_validate(
+                {
+                    "strategy": "auto",
+                    "selection": {
+                        "strategy": "auto",
+                        "chosen_model": "mock",
+                        "selected_models": ["mock"],
+                        "candidates": [
+                            {
+                                "model": "mock",
+                                "family": "mock",
+                                "rank": 1,
+                                "score": 100.0,
+                                "reasons": ["selected"],
+                            }
+                        ],
+                        "rationale": ["selected"],
+                        "fallback_used": False,
+                    },
+                    "response": {
+                        "model": "mock",
+                        "forecasts": [
+                            {
+                                "id": "s1",
+                                "freq": "D",
+                                "start_timestamp": "2025-01-03",
+                                "mean": [3.0, 4.0],
+                            }
+                        ],
+                    },
+                },
+            )
+
+    monkeypatch.setattr("tollama.mcp.tools._make_client", lambda **_: _FakeClient())
+
+    payload = tollama_auto_forecast(request=_auto_forecast_request())
+
+    assert payload["strategy"] == "auto"
+    assert payload["selection"]["chosen_model"] == "mock"
+    assert payload["response"]["model"] == "mock"
+
+
+def test_tollama_auto_forecast_invalid_request_maps_to_invalid_request() -> None:
+    with pytest.raises(MCPToolError) as exc_info:
+        tollama_auto_forecast(request={"horizon": 2})
 
     assert exc_info.value.exit_code == 2
     assert exc_info.value.category == "INVALID_REQUEST"

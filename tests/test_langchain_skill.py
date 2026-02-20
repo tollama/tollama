@@ -9,7 +9,12 @@ from typing import Any
 import pytest
 
 from tollama.client import ModelMissingError
-from tollama.core.schemas import AnalyzeResponse, CompareResponse, ForecastResponse
+from tollama.core.schemas import (
+    AnalyzeResponse,
+    AutoForecastResponse,
+    CompareResponse,
+    ForecastResponse,
+)
 
 _HAS_LANGCHAIN = importlib.util.find_spec("langchain_core") is not None
 if _HAS_LANGCHAIN:
@@ -68,11 +73,21 @@ def _analyze_request() -> dict[str, Any]:
     }
 
 
+def _auto_forecast_request() -> dict[str, Any]:
+    return {
+        "horizon": 2,
+        "strategy": "auto",
+        "series": _forecast_request()["series"],
+        "options": {},
+    }
+
+
 def test_get_tollama_tools_returns_preconfigured_tools(langchain_tools) -> None:
     tools = langchain_tools.get_tollama_tools(base_url="http://daemon.test", timeout=7.0)
 
     assert [tool.name for tool in tools] == [
         "tollama_forecast",
+        "tollama_auto_forecast",
         "tollama_analyze",
         "tollama_compare",
         "tollama_recommend",
@@ -86,6 +101,7 @@ def test_get_tollama_tools_returns_preconfigured_tools(langchain_tools) -> None:
 
 def test_tool_descriptions_include_usage_guidance(langchain_tools) -> None:
     forecast_tool = langchain_tools.TollamaForecastTool()
+    auto_forecast_tool = langchain_tools.TollamaAutoForecastTool()
     analyze_tool = langchain_tools.TollamaAnalyzeTool()
     compare_tool = langchain_tools.TollamaCompareTool()
     recommend_tool = langchain_tools.TollamaRecommendTool()
@@ -96,6 +112,10 @@ def test_tool_descriptions_include_usage_guidance(langchain_tools) -> None:
     assert "horizon" in forecast_tool.description
     assert "series" in forecast_tool.description
     assert "Example:" in forecast_tool.description
+
+    assert "auto-forecast" in auto_forecast_tool.description
+    assert "strategy" in auto_forecast_tool.description
+    assert "Example:" in auto_forecast_tool.description
 
     assert "series" in analyze_tool.description
     assert "seasonality" in analyze_tool.description
@@ -163,6 +183,52 @@ def test_tollama_forecast_tool_invalid_request_maps_to_invalid_request(langchain
     tool = langchain_tools.TollamaForecastTool()
 
     payload = tool._run(request={"model": "mock"})
+
+    assert payload["error"]["category"] == "INVALID_REQUEST"
+    assert payload["error"]["exit_code"] == 2
+
+
+def test_tollama_auto_forecast_tool_success(monkeypatch, langchain_tools) -> None:
+    class _FakeClient:
+        def auto_forecast(self, _request: Any) -> AutoForecastResponse:
+            return AutoForecastResponse.model_validate(
+                {
+                    "strategy": "auto",
+                    "selection": {
+                        "strategy": "auto",
+                        "chosen_model": "mock",
+                        "selected_models": ["mock"],
+                        "candidates": [
+                            {
+                                "model": "mock",
+                                "family": "mock",
+                                "rank": 1,
+                                "score": 100.0,
+                                "reasons": ["selected"],
+                            }
+                        ],
+                        "rationale": ["selected"],
+                        "fallback_used": False,
+                    },
+                    "response": _forecast_response().model_dump(mode="json", exclude_none=True),
+                },
+            )
+
+    monkeypatch.setattr("tollama.skill.langchain._make_client", lambda **_: _FakeClient())
+    tool = langchain_tools.TollamaAutoForecastTool()
+
+    payload = tool._run(request=_auto_forecast_request())
+
+    assert payload["selection"]["chosen_model"] == "mock"
+    assert payload["response"]["model"] == "mock"
+
+
+def test_tollama_auto_forecast_tool_invalid_request_maps_to_invalid_request(
+    langchain_tools,
+) -> None:
+    tool = langchain_tools.TollamaAutoForecastTool()
+
+    payload = tool._run(request={"horizon": 2})
 
     assert payload["error"]["category"] == "INVALID_REQUEST"
     assert payload["error"]["exit_code"] == 2
@@ -255,6 +321,48 @@ async def test_tollama_forecast_tool_arun_uses_async_client(monkeypatch, langcha
 
     assert payload["model"] == "mock"
     assert payload["forecasts"][0]["id"] == "s1"
+
+
+@pytest.mark.asyncio
+async def test_tollama_auto_forecast_tool_arun_uses_async_client(
+    monkeypatch,
+    langchain_tools,
+) -> None:
+    class _FakeAsyncClient:
+        async def auto_forecast(self, _request: Any) -> AutoForecastResponse:
+            return AutoForecastResponse.model_validate(
+                {
+                    "strategy": "auto",
+                    "selection": {
+                        "strategy": "auto",
+                        "chosen_model": "mock",
+                        "selected_models": ["mock"],
+                        "candidates": [
+                            {
+                                "model": "mock",
+                                "family": "mock",
+                                "rank": 1,
+                                "score": 100.0,
+                                "reasons": ["selected"],
+                            }
+                        ],
+                        "rationale": ["selected"],
+                        "fallback_used": False,
+                    },
+                    "response": _forecast_response().model_dump(mode="json", exclude_none=True),
+                },
+            )
+
+    monkeypatch.setattr(
+        "tollama.skill.langchain._make_async_client",
+        lambda **_: _FakeAsyncClient(),
+    )
+    tool = langchain_tools.TollamaAutoForecastTool()
+
+    payload = await tool._arun(request=_auto_forecast_request())
+
+    assert payload["selection"]["chosen_model"] == "mock"
+    assert payload["response"]["forecasts"][0]["id"] == "s1"
 
 
 @pytest.mark.asyncio
