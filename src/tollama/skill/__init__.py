@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 __all__ = [
+    "TollamaCompareTool",
     "TollamaForecastTool",
     "TollamaHealthTool",
     "TollamaModelsTool",
@@ -16,6 +17,7 @@ def __getattr__(name: str):
         raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
     from .langchain import (
+        TollamaCompareTool,
         TollamaForecastTool,
         TollamaHealthTool,
         TollamaModelsTool,
@@ -24,6 +26,7 @@ def __getattr__(name: str):
     )
 
     exports = {
+        "TollamaCompareTool": TollamaCompareTool,
         "TollamaForecastTool": TollamaForecastTool,
         "TollamaHealthTool": TollamaHealthTool,
         "TollamaModelsTool": TollamaModelsTool,

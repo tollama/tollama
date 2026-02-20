@@ -60,6 +60,7 @@ def test_get_tollama_tools_returns_preconfigured_tools(langchain_tools) -> None:
 
     assert [tool.name for tool in tools] == [
         "tollama_forecast",
+        "tollama_compare",
         "tollama_recommend",
         "tollama_health",
         "tollama_models",
@@ -71,6 +72,7 @@ def test_get_tollama_tools_returns_preconfigured_tools(langchain_tools) -> None:
 
 def test_tool_descriptions_include_usage_guidance(langchain_tools) -> None:
     forecast_tool = langchain_tools.TollamaForecastTool()
+    compare_tool = langchain_tools.TollamaCompareTool()
     recommend_tool = langchain_tools.TollamaRecommendTool()
     models_tool = langchain_tools.TollamaModelsTool()
     health_tool = langchain_tools.TollamaHealthTool()
@@ -79,6 +81,10 @@ def test_tool_descriptions_include_usage_guidance(langchain_tools) -> None:
     assert "horizon" in forecast_tool.description
     assert "series" in forecast_tool.description
     assert "Example:" in forecast_tool.description
+
+    assert "models" in compare_tool.description
+    assert "ok=true/false" in compare_tool.description
+    assert "Example:" in compare_tool.description
 
     assert "horizon" in recommend_tool.description
     assert "covariates" in recommend_tool.description

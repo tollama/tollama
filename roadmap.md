@@ -250,6 +250,7 @@ tollama/
   - `DELETE /api/delete`
   - `GET /api/ps`
   - `POST /api/forecast`
+  - `POST /api/compare`
 - `GET /api/info` includes:
   - installed model capabilities
   - available model capabilities
@@ -444,7 +445,9 @@ Phase F - Product hardening:
     `PERMISSION_DENIED`, `TIMEOUT`, `INTERNAL_ERROR`)
 - MCP server scaffold added under `src/tollama/mcp/`:
   - `server.py`, `tools.py`, `schemas.py`, `__main__.py`
-  - tool set: `tollama_health`, `tollama_models`, `tollama_forecast`, `tollama_pull`, `tollama_show`
+  - tool set:
+    `tollama_health`, `tollama_models`, `tollama_forecast`, `tollama_compare`,
+    `tollama_recommend`, `tollama_pull`, `tollama_show`
   - each tool now includes rich MCP descriptions with required inputs, model-name examples,
     and invocation examples for agent discoverability
 - MCP tool behavior/contracts:
@@ -460,7 +463,8 @@ Phase F - Product hardening:
 - Agent context doc added:
   - `CLAUDE.md`
 - Optional LangChain SDK wrapper added under `src/tollama/skill/langchain.py`:
-  - `TollamaForecastTool`, `TollamaHealthTool`, `TollamaModelsTool`
+  - `TollamaForecastTool`, `TollamaCompareTool`, `TollamaRecommendTool`,
+    `TollamaHealthTool`, `TollamaModelsTool`
   - `get_tollama_tools(base_url="http://127.0.0.1:11435", timeout=10.0)`
   - optional extra `.[langchain]` with `langchain-core`
   - tool descriptions now include schema guidance, model-name examples, and invocation examples
@@ -471,6 +475,14 @@ Phase F - Product hardening:
 - Onboarding quickstart command added:
   - `tollama quickstart` validates daemon reachability, pulls a model, runs demo forecast,
     and prints next-step commands
+- Notebooks added for discoverability:
+  - `examples/quickstart.ipynb`
+  - `examples/agent_demo.ipynb`
+- Container packaging baseline added:
+  - `Dockerfile`
+  - `.dockerignore`
+- PyPI metadata/readiness updates:
+  - `pyproject.toml` now includes `keywords`, `classifiers`, and `project.urls`
 - Focused validation added:
   - `tests/test_client_http.py`
   - `tests/test_mcp_tools.py`

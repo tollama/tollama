@@ -50,12 +50,22 @@ print(result.to_df())
 - Model-family setup and per-model examples: `docs/models.md`
 - Covariates contract and compatibility matrix: `docs/covariates.md`
 - Full setup and dependency guide: `docs/how-to-run.md`
+- Notebooks: `examples/quickstart.ipynb`, `examples/agent_demo.ipynb`
 
 ## Local Checks
 
 ```bash
 ruff check .
 pytest -q
+```
+
+## Docker
+
+Build and run:
+
+```bash
+docker build -t tollama/tollama .
+docker run -p 11435:11435 tollama/tollama
 ```
 
 ## Persistent Pull Defaults
@@ -157,6 +167,8 @@ tools = get_tollama_tools(base_url="http://127.0.0.1:11435", timeout=10.0)
 Provided `BaseTool` wrappers:
 
 - `TollamaForecastTool`
+- `TollamaCompareTool`
+- `TollamaRecommendTool`
 - `TollamaHealthTool`
 - `TollamaModelsTool`
 - `get_tollama_tools(base_url="http://127.0.0.1:11435", timeout=10.0)`
@@ -166,6 +178,9 @@ Tool input contracts:
 - `tollama_health`: no runtime args (`{}`)
 - `tollama_models`: `{"mode": "installed"|"loaded"|"available"}`
 - `tollama_forecast`: `{"request": <ForecastRequest-compatible dict>}`
+- `tollama_compare`: `{"request": <CompareRequest-compatible dict>}`
+- `tollama_recommend`:
+  `{"horizon": int, "freq"?: str, "has_past_covariates"?: bool, ...}`
 
 Tool output/error behavior:
 
@@ -407,6 +422,8 @@ bash scripts/install_mcp.sh --base-url "http://127.0.0.1:11435"
 | `tollama_health` | `GET /v1/health`, `GET /api/version` | `base_url?`, `timeout?` | `{healthy, health, version}` |
 | `tollama_models` | `GET /api/tags` or `/api/ps` or `/api/info` | `mode=installed\|loaded\|available`, `base_url?`, `timeout?` | `{mode, items}` |
 | `tollama_forecast` | `POST /api/forecast` (non-stream) | `request`, `base_url?`, `timeout?` | canonical `ForecastResponse` JSON |
+| `tollama_compare` | `POST /api/compare` | `request`, `base_url?`, `timeout?` | canonical `CompareResponse` JSON |
+| `tollama_recommend` | registry metadata + capabilities | `horizon`, covariate flags, `top_k`, `allow_restricted_license` | ranked recommendation payload |
 | `tollama_pull` | `POST /api/pull` (non-stream) | `model`, `accept_license?`, `base_url?`, `timeout?` | daemon pull result JSON |
 | `tollama_show` | `POST /api/show` | `model`, `base_url?`, `timeout?` | daemon show payload JSON |
 
@@ -453,7 +470,7 @@ bash scripts/install_mcp.sh --dry-run --base-url "http://127.0.0.1:11435"
 
 - `tollama.daemon`: Public API layer (`/api/*`, `/v1/health`, `/v1/forecast`) and runner supervision.
 - `tollama.runners`: Runner implementations that speak newline-delimited JSON over stdio.
-- `tollama.core`: Canonical data schemas (`ForecastRequest`, `ForecastResponse`) and protocol helpers.
+- `tollama.core`: Canonical schemas (`ForecastRequest`, `ForecastResponse`, `CompareRequest`, `CompareResponse`) and protocol helpers.
 - `tollama.cli`: User CLI commands for serving and sending forecast requests.
 - `tollama.sdk`: High-level Python convenience facade (`Tollama`, `TollamaForecastResult`).
 - `tollama.client`: Shared HTTP client abstraction for CLI/MCP integrations.

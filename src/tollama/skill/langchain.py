@@ -13,7 +13,7 @@ from tollama.client import (
     TollamaClientError,
 )
 from tollama.core.recommend import recommend_models
-from tollama.core.schemas import ForecastRequest
+from tollama.core.schemas import CompareRequest, ForecastRequest
 
 _LANGCHAIN_IMPORT_HINT = (
     'LangChain dependency is not installed. Install with: pip install "tollama[langchain]"'
@@ -42,6 +42,10 @@ class ModelsToolInput(_ToolInputBase):
 
 
 class ForecastToolInput(_ToolInputBase):
+    request: dict[str, Any]
+
+
+class CompareToolInput(_ToolInputBase):
     request: dict[str, Any]
 
 
@@ -200,6 +204,50 @@ class TollamaForecastTool(_TollamaBaseTool):
         return self._run(request=request, run_manager=run_manager)
 
 
+class TollamaCompareTool(_TollamaBaseTool):
+    """LangChain tool that runs a single request across multiple models."""
+
+    name: str = "tollama_compare"
+    description: str = (
+        "Compare multiple models using the same forecast request payload. "
+        "Input schema: {request:{models,horizon,series,quantiles?,options?,timeout?,parameters?}}. "
+        "Returns per-model result objects with ok=true/false and response/error payloads. "
+        "Model values include "
+        f"{_MODEL_NAME_EXAMPLES}. "
+        'Example: tool.invoke({"request":{"models":["chronos2","timesfm-2.5-200m"],'
+        '"horizon":3,"series":[{"id":"s1","freq":"D","timestamps":["2025-01-01","2025-01-02"],'
+        '"target":[10,11]}],"options":{}}}).'
+    )
+    args_schema: type[BaseModel] = CompareToolInput
+
+    def _run(
+        self,
+        request: dict[str, Any],
+        run_manager: Any | None = None,
+    ) -> dict[str, Any]:
+        del run_manager
+        try:
+            args = CompareToolInput(request=request)
+            compare_request = CompareRequest.model_validate(args.request)
+        except ValidationError as exc:
+            return _invalid_request_payload(str(exc))
+
+        client = self._client()
+        try:
+            response = client.compare(compare_request)
+        except TollamaClientError as exc:
+            return _client_error_payload(exc)
+
+        return response.model_dump(mode="json", exclude_none=True)
+
+    async def _arun(
+        self,
+        request: dict[str, Any],
+        run_manager: Any | None = None,
+    ) -> dict[str, Any]:
+        return self._run(request=request, run_manager=run_manager)
+
+
 class TollamaRecommendTool(_TollamaBaseTool):
     """LangChain tool that recommends models from registry metadata."""
 
@@ -289,6 +337,7 @@ def get_tollama_tools(
     """Build the default tollama LangChain tool set."""
     return [
         TollamaForecastTool(base_url=base_url, timeout=timeout),
+        TollamaCompareTool(base_url=base_url, timeout=timeout),
         TollamaRecommendTool(base_url=base_url, timeout=timeout),
         TollamaHealthTool(base_url=base_url, timeout=timeout),
         TollamaModelsTool(base_url=base_url, timeout=timeout),

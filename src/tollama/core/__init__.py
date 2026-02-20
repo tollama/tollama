@@ -34,6 +34,8 @@ from .registry import (
     list_registry_models,
 )
 from .schemas import (
+    CompareRequest,
+    CompareResponse,
     ForecastParameters,
     ForecastRequest,
     ForecastResponse,
@@ -53,6 +55,8 @@ from .storage import (
 
 __all__ = [
     "ConfigFileError",
+    "CompareRequest",
+    "CompareResponse",
     "DaemonDefaults",
     "DEFAULT_REGISTRY_PATH",
     "ForecastParameters",

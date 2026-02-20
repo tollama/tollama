@@ -42,7 +42,15 @@ from tollama.core.hf_pull import (
 from tollama.core.pull_defaults import resolve_effective_pull_defaults
 from tollama.core.redact import redact_config_dict, redact_env_dict, redact_proxy_url
 from tollama.core.registry import ModelCapabilities, get_model_spec, list_registry_models
-from tollama.core.schemas import ForecastRequest, ForecastResponse
+from tollama.core.schemas import (
+    CompareError,
+    CompareRequest,
+    CompareResponse,
+    CompareResult,
+    CompareSummary,
+    ForecastRequest,
+    ForecastResponse,
+)
 from tollama.core.storage import (
     TollamaPaths,
     install_from_registry,
@@ -506,6 +514,63 @@ def create_app(*, runner_manager: RunnerManager | None = None) -> FastAPI:
             media_type="application/x-ndjson",
         )
 
+    @app.post("/api/compare", response_model=CompareResponse)
+    def compare(payload: CompareRequest) -> CompareResponse:
+        results: list[CompareResult] = []
+        for model in payload.models:
+            forecast_payload = ForecastRequestWithKeepAlive(
+                model=model,
+                horizon=payload.horizon,
+                quantiles=payload.quantiles,
+                series=payload.series,
+                options=payload.options,
+                timeout=payload.timeout,
+                keep_alive=payload.keep_alive,
+                parameters=payload.parameters,
+            )
+            try:
+                response = _execute_forecast(app, payload=forecast_payload)
+            except HTTPException as exc:
+                results.append(
+                    CompareResult(
+                        model=model,
+                        ok=False,
+                        error=CompareError(
+                            category=_compare_error_category(exc.status_code),
+                            status_code=exc.status_code,
+                            message=_compare_error_message(exc),
+                        ),
+                    ),
+                )
+                continue
+            except Exception as exc:  # noqa: BLE001
+                results.append(
+                    CompareResult(
+                        model=model,
+                        ok=False,
+                        error=CompareError(
+                            category="INTERNAL_ERROR",
+                            status_code=500,
+                            message=str(exc),
+                        ),
+                    ),
+                )
+                continue
+
+            results.append(CompareResult(model=model, ok=True, response=response))
+
+        summary = CompareSummary(
+            requested_models=len(payload.models),
+            succeeded=sum(1 for item in results if item.ok),
+            failed=sum(1 for item in results if not item.ok),
+        )
+        return CompareResponse(
+            models=list(payload.models),
+            horizon=payload.horizon,
+            results=results,
+            summary=summary,
+        )
+
     @app.post("/v1/forecast", response_model=ForecastResponse)
     def forecast(payload: ForecastRequestWithKeepAlive) -> ForecastResponse:
         return _execute_forecast(app, payload=payload)
@@ -637,6 +702,25 @@ def _execute_forecast(
         device=None,
     )
     return response
+
+
+def _compare_error_category(status_code: int) -> str:
+    if status_code == 400:
+        return "INVALID_REQUEST"
+    if status_code == 404:
+        return "MODEL_MISSING"
+    if status_code == 503:
+        return "RUNNER_UNAVAILABLE"
+    if status_code == 502:
+        return "RUNNER_ERROR"
+    return "DAEMON_ERROR"
+
+
+def _compare_error_message(exc: HTTPException) -> str:
+    detail = exc.detail
+    if isinstance(detail, str):
+        return detail
+    return str(detail)
 
 
 def _forecast_stream_lines(response: ForecastResponse) -> Iterator[str]:

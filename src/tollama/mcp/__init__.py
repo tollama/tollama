@@ -3,6 +3,7 @@
 from .server import create_server, run_server
 from .tools import (
     MCPToolError,
+    tollama_compare,
     tollama_forecast,
     tollama_health,
     tollama_models,
@@ -15,6 +16,7 @@ __all__ = [
     "MCPToolError",
     "create_server",
     "run_server",
+    "tollama_compare",
     "tollama_forecast",
     "tollama_health",
     "tollama_models",

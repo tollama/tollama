@@ -7,7 +7,7 @@ from typing import Any
 
 import httpx
 
-from tollama.core.schemas import ForecastRequest, ForecastResponse
+from tollama.core.schemas import CompareRequest, CompareResponse, ForecastRequest, ForecastResponse
 
 from .exceptions import (
     DaemonHTTPError,
@@ -133,6 +133,26 @@ class TollamaClient:
                 detail=str(exc),
             ) from exc
 
+    def compare(
+        self,
+        payload: dict[str, Any] | CompareRequest,
+    ) -> CompareResponse:
+        """Submit a model-comparison request and validate response schema."""
+        request_payload = self._coerce_compare_payload(payload)
+        response_payload = self._request_json(
+            "POST",
+            "/api/compare",
+            json_payload=request_payload,
+            action="compare models",
+        )
+        try:
+            return CompareResponse.model_validate(response_payload)
+        except Exception as exc:  # noqa: BLE001
+            raise InvalidRequestError(
+                action="validate compare response",
+                detail=str(exc),
+            ) from exc
+
     def validate_request(self, payload: dict[str, Any]) -> dict[str, Any]:
         """Validate a forecast request without executing model inference."""
         return self._request_json(
@@ -242,6 +262,11 @@ class TollamaClient:
 
     def _coerce_request_payload(self, payload: dict[str, Any] | ForecastRequest) -> dict[str, Any]:
         if isinstance(payload, ForecastRequest):
+            return payload.model_dump(mode="json", exclude_none=True)
+        return dict(payload)
+
+    def _coerce_compare_payload(self, payload: dict[str, Any] | CompareRequest) -> dict[str, Any]:
+        if isinstance(payload, CompareRequest):
             return payload.model_dump(mode="json", exclude_none=True)
         return dict(payload)
 

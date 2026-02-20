@@ -15,9 +15,10 @@ from tollama.client import (
     TollamaClientError,
 )
 from tollama.core.recommend import recommend_models
-from tollama.core.schemas import ForecastRequest
+from tollama.core.schemas import CompareRequest, ForecastRequest
 
 from .schemas import (
+    CompareToolInput,
     ForecastToolInput,
     HealthToolInput,
     ModelsToolInput,
@@ -122,6 +123,32 @@ def tollama_forecast(
     client = _make_client(base_url=args.base_url, timeout=args.timeout)
     try:
         response = client.forecast_response(forecast_request)
+    except TollamaClientError as exc:
+        _raise_from_client_error(exc)
+
+    return response.model_dump(mode="json", exclude_none=True)
+
+
+def tollama_compare(
+    *,
+    request: dict[str, Any],
+    base_url: str | None = None,
+    timeout: float | None = None,
+) -> dict[str, Any]:
+    """Run one request across multiple models and return per-model outcomes."""
+    try:
+        args = CompareToolInput(request=request, base_url=base_url, timeout=timeout)
+    except ValidationError as exc:
+        _raise_invalid_request(str(exc))
+
+    try:
+        compare_request = CompareRequest.model_validate(args.request)
+    except ValidationError as exc:
+        _raise_invalid_request(str(exc))
+
+    client = _make_client(base_url=args.base_url, timeout=args.timeout)
+    try:
+        response = client.compare(compare_request)
     except TollamaClientError as exc:
         _raise_from_client_error(exc)
 

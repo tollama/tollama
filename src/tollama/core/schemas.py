@@ -177,6 +177,55 @@ class ForecastRequest(CanonicalModel):
         return self
 
 
+class CompareRequest(CanonicalModel):
+    """Compare request payload for running one forecast request across multiple models."""
+
+    models: list[NonEmptyStr] = Field(min_length=2)
+    horizon: PositiveInt
+    quantiles: list[Quantile] = Field(default_factory=list)
+    series: list[SeriesInput] = Field(min_length=1)
+    options: dict[NonEmptyStr, JsonValue] = Field(
+        default_factory=dict,
+        validation_alias=AliasChoices("options"),
+    )
+    timeout: float | None = Field(default=None, gt=0.0)
+    keep_alive: StrictStr | StrictInt | StrictFloat | None = None
+    parameters: ForecastParameters = Field(
+        default_factory=ForecastParameters,
+        validation_alias=AliasChoices("parameters"),
+    )
+
+    @field_validator("models")
+    @classmethod
+    def validate_models(cls, value: list[NonEmptyStr]) -> list[NonEmptyStr]:
+        if len(value) != len(set(value)):
+            raise ValueError("models must be unique")
+        return value
+
+    @field_validator("quantiles")
+    @classmethod
+    def validate_quantiles(cls, value: list[Quantile]) -> list[Quantile]:
+        if value != sorted(value):
+            raise ValueError("quantiles must be sorted in ascending order")
+        if len(value) != len(set(value)):
+            raise ValueError("quantiles must be unique")
+        return value
+
+    @model_validator(mode="after")
+    def validate_forecast_compatibility(self) -> CompareRequest:
+        validation_payload = {
+            "model": self.models[0],
+            "horizon": self.horizon,
+            "quantiles": self.quantiles,
+            "series": [series.model_dump(mode="python") for series in self.series],
+            "options": self.options,
+            "timeout": self.timeout,
+            "parameters": self.parameters.model_dump(mode="python"),
+        }
+        ForecastRequest.model_validate(validation_payload)
+        return self
+
+
 class SeriesForecast(CanonicalModel):
     """Forecast output for one series."""
 
@@ -249,6 +298,58 @@ class ForecastResponse(CanonicalModel):
     metrics: ForecastMetrics | None = None
     usage: dict[NonEmptyStr, JsonValue] | None = None
     warnings: list[NonEmptyStr] | None = None
+
+
+class CompareError(CanonicalModel):
+    """Error payload for one failed model comparison result."""
+
+    category: NonEmptyStr
+    status_code: StrictInt = Field(ge=400, le=599)
+    message: NonEmptyStr
+
+
+class CompareResult(CanonicalModel):
+    """One model result in a compare response."""
+
+    model: NonEmptyStr
+    ok: StrictBool
+    response: ForecastResponse | None = None
+    error: CompareError | None = None
+
+    @model_validator(mode="after")
+    def validate_shape(self) -> CompareResult:
+        if self.ok and self.response is None:
+            raise ValueError("response is required when ok is true")
+        if self.ok and self.error is not None:
+            raise ValueError("error must be null when ok is true")
+        if not self.ok and self.error is None:
+            raise ValueError("error is required when ok is false")
+        if not self.ok and self.response is not None:
+            raise ValueError("response must be null when ok is false")
+        return self
+
+
+class CompareSummary(CanonicalModel):
+    """Summary for compare endpoint outcomes."""
+
+    requested_models: PositiveInt
+    succeeded: StrictInt = Field(ge=0)
+    failed: StrictInt = Field(ge=0)
+
+    @model_validator(mode="after")
+    def validate_counts(self) -> CompareSummary:
+        if self.succeeded + self.failed != self.requested_models:
+            raise ValueError("succeeded + failed must equal requested_models")
+        return self
+
+
+class CompareResponse(CanonicalModel):
+    """Response payload for model comparison requests."""
+
+    models: list[NonEmptyStr] = Field(min_length=1)
+    horizon: PositiveInt
+    results: list[CompareResult] = Field(min_length=1)
+    summary: CompareSummary
 
 
 def _validate_covariate_values(

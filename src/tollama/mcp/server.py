@@ -9,6 +9,9 @@ from .tools import (
     MCPToolError,
 )
 from .tools import (
+    tollama_compare as _tollama_compare,
+)
+from .tools import (
     tollama_forecast as _tollama_forecast,
 )
 from .tools import (
@@ -114,6 +117,30 @@ def create_server() -> Any:
     ) -> dict[str, Any]:
         try:
             return _tollama_forecast(request=request, base_url=base_url, timeout=timeout)
+        except MCPToolError as exc:
+            _raise_mcp_tool_error(exc)
+
+    @server.tool(
+        name="tollama_compare",
+        description=(
+            "Run the same forecast request across multiple models and return side-by-side results. "
+            "Required input: request.models, request.horizon, request.series[]. "
+            "Optional request fields mirror forecast (quantiles, options, timeout, parameters). "
+            "Each model result is returned with ok=true/false and response/error payload. "
+            "Supported model names include "
+            f"{_MODEL_NAME_EXAMPLES}. "
+            'Example: tollama_compare({"request":{"models":["chronos2","timesfm-2.5-200m"],'
+            '"horizon":3,"series":[{"id":"s1","freq":"D","timestamps":["2025-01-01","2025-01-02"],'
+            '"target":[10,11]}],"options":{}}}).'
+        ),
+    )
+    def tollama_compare(
+        request: dict[str, Any],
+        base_url: str | None = None,
+        timeout: float | None = None,
+    ) -> dict[str, Any]:
+        try:
+            return _tollama_compare(request=request, base_url=base_url, timeout=timeout)
         except MCPToolError as exc:
             _raise_mcp_tool_error(exc)
 

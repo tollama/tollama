@@ -6,6 +6,11 @@ This guide explains how to run `tollama`, install dependencies, and install all 
 
 This guide targets the current TSFM-capable registry entries in `model-registry/registry.yaml` (excluding local `mock`).
 
+## Notebooks
+
+- SDK quickstart notebook: `examples/quickstart.ipynb`
+- Agent-oriented notebook: `examples/agent_demo.ipynb`
+
 ## TSFM Model Matrix
 
 | Model name | Family | Hugging Face repo | Revision | License | `--accept-license` required | Runner extra |
@@ -256,6 +261,20 @@ Terminal 2 quick checks:
 ```bash
 curl http://localhost:11435/api/version
 curl http://localhost:11435/v1/health
+```
+
+## Docker One-Liner
+
+Build image:
+
+```bash
+docker build -t tollama/tollama .
+```
+
+Run daemon container:
+
+```bash
+docker run -p 11435:11435 tollama/tollama
 ```
 
 ## 5-Minute Quickstart
@@ -510,6 +529,8 @@ python -m pip install -e ".[langchain]"
 Available wrappers (in `src/tollama/skill/langchain.py`):
 
 - `TollamaForecastTool`
+- `TollamaCompareTool`
+- `TollamaRecommendTool`
 - `TollamaHealthTool`
 - `TollamaModelsTool`
 - `get_tollama_tools(base_url="http://127.0.0.1:11435", timeout=10.0)`
@@ -523,10 +544,40 @@ tools = {tool.name: tool for tool in get_tollama_tools()}
 print(tools["tollama_health"].invoke({}))
 print(tools["tollama_models"].invoke({"mode": "installed"}))
 print(
+    tools["tollama_recommend"].invoke(
+        {
+            "horizon": 12,
+            "freq": "D",
+            "has_future_covariates": True,
+            "covariates_type": "numeric",
+            "top_k": 3,
+        }
+    )
+)
+print(
     tools["tollama_forecast"].invoke(
         {
             "request": {
                 "model": "mock",
+                "horizon": 2,
+                "series": [
+                    {
+                        "id": "s1",
+                        "freq": "D",
+                        "timestamps": ["2025-01-01", "2025-01-02"],
+                        "target": [1.0, 2.0],
+                    }
+                ],
+                "options": {},
+            }
+        }
+    )
+)
+print(
+    tools["tollama_compare"].invoke(
+        {
+            "request": {
+                "models": ["mock", "chronos2"],
                 "horizon": 2,
                 "series": [
                     {
@@ -548,6 +599,8 @@ Tool contract summary:
 - `tollama_health`: no args, returns daemon `health` + `version`
 - `tollama_models`: args `{"mode":"installed|loaded|available"}`
 - `tollama_forecast`: args `{"request": <ForecastRequest dict>}`
+- `tollama_compare`: args `{"request": <CompareRequest dict>}`
+- `tollama_recommend`: args `{"horizon": int, ...}` for ranked model hints
 - all wrappers return structured `dict` payloads; errors use
   `{"error":{"category","exit_code","message"}}`
 - missing optional dependency hint:
