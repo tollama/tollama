@@ -169,6 +169,175 @@ def _pipeline_response_payload() -> dict[str, Any]:
     }
 
 
+def _generate_request_payload() -> dict[str, Any]:
+    return {
+        "series": [
+            {
+                "id": "s1",
+                "freq": "D",
+                "timestamps": [
+                    "2025-01-01",
+                    "2025-01-02",
+                    "2025-01-03",
+                    "2025-01-04",
+                    "2025-01-05",
+                ],
+                "target": [1.0, 2.0, 3.0, 2.5, 3.5],
+            }
+        ],
+        "count": 2,
+        "length": 5,
+        "method": "statistical",
+        "seed": 7,
+    }
+
+
+def _generate_response_payload() -> dict[str, Any]:
+    return {
+        "method": "statistical",
+        "generated": [
+            {
+                "id": "s1_synthetic_1",
+                "source_id": "s1",
+                "freq": "D",
+                "timestamps": [
+                    "2025-01-01",
+                    "2025-01-02",
+                    "2025-01-03",
+                    "2025-01-04",
+                    "2025-01-05",
+                ],
+                "target": [1.1, 2.1, 2.9, 2.6, 3.4],
+            },
+            {
+                "id": "s1_synthetic_2",
+                "source_id": "s1",
+                "freq": "D",
+                "timestamps": [
+                    "2025-01-01",
+                    "2025-01-02",
+                    "2025-01-03",
+                    "2025-01-04",
+                    "2025-01-05",
+                ],
+                "target": [0.9, 2.0, 3.2, 2.4, 3.7],
+            },
+        ],
+    }
+
+
+def _counterfactual_request_payload() -> dict[str, Any]:
+    return {
+        "model": "mock",
+        "intervention_index": 3,
+        "series": [
+            {
+                "id": "s1",
+                "freq": "D",
+                "timestamps": [
+                    "2025-01-01",
+                    "2025-01-02",
+                    "2025-01-03",
+                    "2025-01-04",
+                    "2025-01-05",
+                ],
+                "target": [10.0, 11.0, 12.0, 20.0, 22.0],
+            }
+        ],
+        "options": {},
+    }
+
+
+def _counterfactual_response_payload() -> dict[str, Any]:
+    return {
+        "model": "mock",
+        "horizon": 2,
+        "intervention_index": 3,
+        "baseline": _response_payload(),
+        "results": [
+            {
+                "id": "s1",
+                "actual": [20.0, 22.0],
+                "counterfactual": [12.0, 13.0],
+                "delta": [8.0, 9.0],
+                "absolute_delta": [8.0, 9.0],
+                "mean_absolute_delta": 8.5,
+                "total_delta": 17.0,
+                "average_delta_pct": 40.0,
+                "direction": "above_counterfactual",
+            }
+        ],
+    }
+
+
+def _scenario_tree_request_payload() -> dict[str, Any]:
+    return {
+        "model": "mock",
+        "horizon": 4,
+        "depth": 2,
+        "branch_quantiles": [0.1, 0.9],
+        "series": _request_payload()["series"],
+        "options": {},
+    }
+
+
+def _scenario_tree_response_payload() -> dict[str, Any]:
+    return {
+        "model": "mock",
+        "depth": 2,
+        "branch_quantiles": [0.1, 0.9],
+        "nodes": [
+            {
+                "node_id": "node_1",
+                "parent_id": None,
+                "series_id": "s1",
+                "depth": 0,
+                "step": 0,
+                "branch": "root",
+                "value": 2.0,
+                "probability": 1.0,
+            },
+            {
+                "node_id": "node_2",
+                "parent_id": "node_1",
+                "series_id": "s1",
+                "depth": 1,
+                "step": 1,
+                "branch": "q0.1",
+                "quantile": 0.1,
+                "value": 2.0,
+                "probability": 0.5,
+            },
+        ],
+    }
+
+
+def _report_request_payload() -> dict[str, Any]:
+    return {
+        "horizon": 2,
+        "strategy": "auto",
+        "series": _request_payload()["series"],
+        "options": {},
+        "pull_if_missing": True,
+        "include_baseline": True,
+    }
+
+
+def _report_response_payload() -> dict[str, Any]:
+    return {
+        "analysis": _analyze_response_payload(),
+        "recommendation": {
+            "request": {"horizon": 2, "freq": "D", "top_k": 3},
+            "recommendations": [{"model": "mock", "family": "mock", "rank": 1, "score": 100}],
+            "excluded": [],
+            "total_candidates": 1,
+            "compatible_candidates": 1,
+        },
+        "forecast": _auto_forecast_response_payload(),
+        "baseline": _response_payload(),
+    }
+
+
 def _client(handler: httpx.MockTransport) -> TollamaClient:
     return TollamaClient(base_url="http://daemon.test", timeout=3.0, transport=handler)
 
@@ -220,6 +389,58 @@ def test_analyze_returns_typed_response() -> None:
 
     assert len(response.results) == 1
     assert response.results[0].id == "s1"
+
+
+def test_generate_returns_typed_response() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/api/generate"
+        return httpx.Response(200, json=_generate_response_payload())
+
+    client = _client(httpx.MockTransport(handler))
+    response = client.generate(_generate_request_payload())
+
+    assert response.method == "statistical"
+    assert len(response.generated) == 2
+    assert response.generated[0].source_id == "s1"
+
+
+def test_counterfactual_returns_typed_response() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/api/counterfactual"
+        return httpx.Response(200, json=_counterfactual_response_payload())
+
+    client = _client(httpx.MockTransport(handler))
+    response = client.counterfactual(_counterfactual_request_payload())
+
+    assert response.model == "mock"
+    assert response.horizon == 2
+    assert response.results[0].direction == "above_counterfactual"
+
+
+def test_scenario_tree_returns_typed_response() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/api/scenario-tree"
+        return httpx.Response(200, json=_scenario_tree_response_payload())
+
+    client = _client(httpx.MockTransport(handler))
+    response = client.scenario_tree(_scenario_tree_request_payload())
+
+    assert response.model == "mock"
+    assert response.depth == 2
+    assert response.nodes[0].branch == "root"
+
+
+def test_report_returns_typed_response() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/api/report"
+        return httpx.Response(200, json=_report_response_payload())
+
+    client = _client(httpx.MockTransport(handler))
+    response = client.report(_report_request_payload())
+
+    assert response.analysis.results[0].id == "s1"
+    assert response.forecast.selection.chosen_model == "mock"
+    assert response.baseline is not None
 
 
 def test_auto_forecast_returns_typed_response() -> None:
@@ -416,6 +637,59 @@ async def test_async_analyze_returns_typed_response() -> None:
 
     assert len(response.results) == 1
     assert response.results[0].detected_frequency == "D"
+
+
+@pytest.mark.asyncio
+async def test_async_generate_returns_typed_response() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/api/generate"
+        return httpx.Response(200, json=_generate_response_payload())
+
+    client = _async_client(httpx.MockTransport(handler))
+    response = await client.generate(_generate_request_payload())
+
+    assert response.method == "statistical"
+    assert len(response.generated) == 2
+    assert response.generated[0].source_id == "s1"
+
+
+@pytest.mark.asyncio
+async def test_async_counterfactual_returns_typed_response() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/api/counterfactual"
+        return httpx.Response(200, json=_counterfactual_response_payload())
+
+    client = _async_client(httpx.MockTransport(handler))
+    response = await client.counterfactual(_counterfactual_request_payload())
+
+    assert response.model == "mock"
+    assert response.results[0].id == "s1"
+
+
+@pytest.mark.asyncio
+async def test_async_scenario_tree_returns_typed_response() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/api/scenario-tree"
+        return httpx.Response(200, json=_scenario_tree_response_payload())
+
+    client = _async_client(httpx.MockTransport(handler))
+    response = await client.scenario_tree(_scenario_tree_request_payload())
+
+    assert response.model == "mock"
+    assert response.nodes[1].parent_id == "node_1"
+
+
+@pytest.mark.asyncio
+async def test_async_report_returns_typed_response() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/api/report"
+        return httpx.Response(200, json=_report_response_payload())
+
+    client = _async_client(httpx.MockTransport(handler))
+    response = await client.report(_report_request_payload())
+
+    assert response.forecast.response.model == "mock"
+    assert response.recommendation["request"]["horizon"] == 2
 
 
 @pytest.mark.asyncio

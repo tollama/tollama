@@ -18,7 +18,13 @@ from .tools import (
     tollama_compare as _tollama_compare,
 )
 from .tools import (
+    tollama_counterfactual as _tollama_counterfactual,
+)
+from .tools import (
     tollama_forecast as _tollama_forecast,
+)
+from .tools import (
+    tollama_generate as _tollama_generate,
 )
 from .tools import (
     tollama_health as _tollama_health,
@@ -34,6 +40,12 @@ from .tools import (
 )
 from .tools import (
     tollama_recommend as _tollama_recommend,
+)
+from .tools import (
+    tollama_report as _tollama_report,
+)
+from .tools import (
+    tollama_scenario_tree as _tollama_scenario_tree,
 )
 from .tools import (
     tollama_show as _tollama_show,
@@ -173,6 +185,97 @@ def create_server() -> Any:
     ) -> dict[str, Any]:
         try:
             return _tollama_analyze(request=request, base_url=base_url, timeout=timeout)
+        except MCPToolError as exc:
+            _raise_mcp_tool_error(exc)
+
+    @server.tool(
+        name="tollama_generate",
+        description=(
+            "Generate model-free synthetic time series from historical statistical profiles. "
+            "Required input: request.series[]. Optional: request.count, request.length, "
+            "request.seed, request.variation, request.method='statistical'. "
+            'Example: tollama_generate({"request":{"series":[{"id":"s1","freq":"D",'
+            '"timestamps":["2025-01-01","2025-01-02","2025-01-03"],'
+            '"target":[10,11,12]}],"count":3,"length":7,"seed":42}}).'
+        ),
+    )
+    def tollama_generate(
+        request: dict[str, Any],
+        base_url: str | None = None,
+        timeout: float | None = None,
+    ) -> dict[str, Any]:
+        try:
+            return _tollama_generate(request=request, base_url=base_url, timeout=timeout)
+        except MCPToolError as exc:
+            _raise_mcp_tool_error(exc)
+
+    @server.tool(
+        name="tollama_counterfactual",
+        description=(
+            "Generate intervention counterfactual trajectories by forecasting from "
+            "pre-intervention history and comparing against observed post-intervention values. "
+            "Required input: request.model, request.series[], request.intervention_index. "
+            "Optional: request.intervention_label, request.quantiles, request.options, "
+            "request.parameters. "
+            'Example: tollama_counterfactual({"request":{"model":"mock","intervention_index":3,'
+            '"series":[{"id":"s1","freq":"D","timestamps":["2025-01-01","2025-01-02",'
+            '"2025-01-03","2025-01-04","2025-01-05"],"target":[10,11,12,30,31]}],'
+            '"options":{}}}).'
+        ),
+    )
+    def tollama_counterfactual(
+        request: dict[str, Any],
+        base_url: str | None = None,
+        timeout: float | None = None,
+    ) -> dict[str, Any]:
+        try:
+            return _tollama_counterfactual(request=request, base_url=base_url, timeout=timeout)
+        except MCPToolError as exc:
+            _raise_mcp_tool_error(exc)
+
+    @server.tool(
+        name="tollama_scenario_tree",
+        description=(
+            "Build a probabilistic scenario tree using recursive one-step quantile forecasts. "
+            "Required input: request.model, request.horizon, request.series[]. "
+            "Optional: request.depth, request.branch_quantiles, request.options, "
+            "request.parameters. "
+            'Example: tollama_scenario_tree({"request":{"model":"mock","horizon":4,"depth":2,'
+            '"branch_quantiles":[0.1,0.5,0.9],'
+            '"series":[{"id":"s1","freq":"D","timestamps":["2025-01-01","2025-01-02"],'
+            '"target":[10,11]}],"options":{}}}).'
+        ),
+    )
+    def tollama_scenario_tree(
+        request: dict[str, Any],
+        base_url: str | None = None,
+        timeout: float | None = None,
+    ) -> dict[str, Any]:
+        try:
+            return _tollama_scenario_tree(request=request, base_url=base_url, timeout=timeout)
+        except MCPToolError as exc:
+            _raise_mcp_tool_error(exc)
+
+    @server.tool(
+        name="tollama_report",
+        description=(
+            "Run one-call composite report: analyze -> recommend -> optional pull -> "
+            "auto-forecast with optional narrative and baseline inclusion. "
+            "Required input: request.horizon and request.series[]. "
+            "Optional: request.strategy, request.model, request.recommend_top_k, "
+            "request.include_baseline, request.response_options.narrative. "
+            'Example: tollama_report({"request":{"horizon":3,"strategy":"auto",'
+            '"series":[{"id":"s1","freq":"D","timestamps":["2025-01-01","2025-01-02"],'
+            '"target":[10,11]}],"options":{},"include_baseline":true}}).'
+        ),
+    )
+    def tollama_report(
+        request: dict[str, Any],
+        base_url: str | None = None,
+        timeout: float | None = None,
+    ) -> dict[str, Any]:
+        try:
+            return _tollama_report(request=request, base_url=base_url, timeout=timeout)
         except MCPToolError as exc:
             _raise_mcp_tool_error(exc)
 

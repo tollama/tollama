@@ -14,9 +14,14 @@ the optional future `packages/*` split as a migration phase.
 ## 0) Product goals [~]
 ### Current implementation status
 - Unified forecasting endpoints are available at `POST /api/forecast` and `POST /v1/forecast`.
+- Progressive refinement forecast SSE endpoint is available at `POST /api/forecast/progressive`.
 - Zero-config auto-forecast endpoint is available at `POST /api/auto-forecast`.
 - Auto-forecast `strategy="ensemble"` supports weighted `mean`/`median` aggregation with bounded parallel execution.
 - Model-free series diagnostics endpoint is available at `POST /api/analyze`.
+- Model-free synthetic generation endpoint is available at `POST /api/generate`.
+- Counterfactual endpoint is available at `POST /api/counterfactual`.
+- Scenario-tree endpoint is available at `POST /api/scenario-tree`.
+- Composite report endpoint is available at `POST /api/report`.
 - Scenario analysis endpoint is available at `POST /api/what-if`.
 - Autonomous pipeline endpoint is available at `POST /api/pipeline`.
 - CSV/Parquet ingest paths are available via `data_url` forecasting and upload endpoints.
@@ -31,6 +36,7 @@ the optional future `packages/*` split as a migration phase.
   `parameters.covariates_mode`, compatibility preflight, and response `warnings`.
 - Optional API-key auth is available through `config.auth.api_keys`.
 - Per-key usage metering endpoint is available at `GET /api/usage`.
+- Per-key daemon SSE event stream is available at `GET /api/events`.
 - v1 non-goals are still respected: no training/fine-tuning and no distributed scheduler.
 
 ### Planned work / TODO
@@ -92,6 +98,7 @@ tollama/
   `AutoForecastResponse`.
 - Canonical request shape in production includes:
   - `model`, `horizon`, `series[]`, optional `quantiles[]`, optional `options`, optional `parameters`.
+  - optional `response_options` (`narrative: true|false`, default `false`)
   - `series[]` supports `id`, `freq` (defaults to `"auto"`), `timestamps[]`, `target[]`,
     optional `actuals`, `past_covariates`, `future_covariates`, `static_covariates`.
   - per-covariate values are validated as homogeneous numeric or homogeneous string arrays.
@@ -100,6 +107,8 @@ tollama/
   - optional top-level `metrics` (`aggregate` + per-series metric values)
   - optional top-level `timing` (`model_load_ms`, `inference_ms`, `total_ms`)
   - optional top-level `explanation` (per-series trend/confidence/pattern summary)
+  - optional top-level `narrative` blocks (`ForecastResponse`, `AnalyzeResponse`,
+    `CompareResponse`, `PipelineResponse`) when `response_options.narrative=true`
   - optional top-level `warnings[]`
   - optional `usage` (`runner`, `device`, `peak_memory_mb`, plus adapter-specific keys)
 - Implemented request parameters include:
@@ -268,18 +277,39 @@ tollama/
   - `DELETE /api/delete`
   - `GET /api/ps`
   - `POST /api/forecast`
+  - `POST /api/forecast/progressive` (SSE)
   - `POST /api/forecast/upload`
   - `POST /api/ingest/upload`
   - `POST /api/auto-forecast`
   - `POST /api/analyze`
+  - `POST /api/generate`
+  - `POST /api/counterfactual`
+  - `POST /api/scenario-tree`
+  - `POST /api/report`
   - `POST /api/what-if`
   - `POST /api/pipeline`
   - `POST /api/compare`
   - `GET /api/usage`
+  - `GET /api/events`
   - `GET /api/modelfiles`
   - `GET /api/modelfiles/{name}`
   - `POST /api/modelfiles`
   - `DELETE /api/modelfiles/{name}`
+  - `GET /.well-known/agent-card.json`
+  - `GET /.well-known/agent.json` (legacy compatibility alias)
+  - `POST /a2a`
+- A2A JSON-RPC methods currently implemented:
+  - `message/send`
+  - `message/stream` (SSE)
+  - `tasks/get`
+  - `tasks/query`
+  - `tasks/cancel`
+- A2A behavior notes:
+  - discovery and RPC routes follow existing API-key auth policy
+    (authenticated discovery by default when keys are configured)
+  - task lifecycle supports `submitted -> working -> completed/failed/canceled/rejected`
+  - cancellation attempts a real runner-family stop when model family is identifiable
+  - streaming emits `TaskStatusUpdateEvent` and `TaskArtifactUpdateEvent`
 - `GET /api/info` includes:
   - installed model capabilities
   - available model capabilities
@@ -338,6 +368,11 @@ tollama/
   - pass: `chronos2`, `granite-ttm-r2`, `timesfm-2.5-200m`, `moirai-2.0-R-small`,
     `sundial-base-128m`
   - skipped: `toto-open-base-1.0` when `toto` dependency is not installed
+- A2A coverage added:
+  - `tests/test_a2a_agent_card.py`
+  - `tests/test_a2a_server.py`
+  - `tests/test_a2a_tasks.py`
+  - `tests/test_a2a_client.py`
 - Per-family runtime isolation smoke (`tollama runtime install --all` + one
   forecast per family) was re-validated on `2026-02-17` after updating the
   TimesFM dependency pin to commit `2dcc66fbfe2155adba1af66aa4d564a0ee52f61e`:

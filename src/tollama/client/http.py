@@ -14,10 +14,18 @@ from tollama.core.schemas import (
     AutoForecastResponse,
     CompareRequest,
     CompareResponse,
+    CounterfactualRequest,
+    CounterfactualResponse,
+    ForecastReport,
     ForecastRequest,
     ForecastResponse,
+    GenerateRequest,
+    GenerateResponse,
     PipelineRequest,
     PipelineResponse,
+    ReportRequest,
+    ScenarioTreeRequest,
+    ScenarioTreeResponse,
     WhatIfRequest,
     WhatIfResponse,
 )
@@ -228,6 +236,86 @@ class TollamaClient:
                 detail=str(exc),
             ) from exc
 
+    def generate(
+        self,
+        payload: dict[str, Any] | GenerateRequest,
+    ) -> GenerateResponse:
+        """Generate synthetic series payloads and validate response schema."""
+        request_payload = self._coerce_generate_payload(payload)
+        response_payload = self._request_json(
+            "POST",
+            "/api/generate",
+            json_payload=request_payload,
+            action="generate synthetic series",
+        )
+        try:
+            return GenerateResponse.model_validate(response_payload)
+        except Exception as exc:  # noqa: BLE001
+            raise InvalidRequestError(
+                action="validate generate response",
+                detail=str(exc),
+            ) from exc
+
+    def counterfactual(
+        self,
+        payload: dict[str, Any] | CounterfactualRequest,
+    ) -> CounterfactualResponse:
+        """Generate intervention counterfactuals and validate response schema."""
+        request_payload = self._coerce_counterfactual_payload(payload)
+        response_payload = self._request_json(
+            "POST",
+            "/api/counterfactual",
+            json_payload=request_payload,
+            action="counterfactual forecast",
+        )
+        try:
+            return CounterfactualResponse.model_validate(response_payload)
+        except Exception as exc:  # noqa: BLE001
+            raise InvalidRequestError(
+                action="validate counterfactual response",
+                detail=str(exc),
+            ) from exc
+
+    def scenario_tree(
+        self,
+        payload: dict[str, Any] | ScenarioTreeRequest,
+    ) -> ScenarioTreeResponse:
+        """Generate probabilistic scenario tree payload and validate response schema."""
+        request_payload = self._coerce_scenario_tree_payload(payload)
+        response_payload = self._request_json(
+            "POST",
+            "/api/scenario-tree",
+            json_payload=request_payload,
+            action="scenario-tree forecast",
+        )
+        try:
+            return ScenarioTreeResponse.model_validate(response_payload)
+        except Exception as exc:  # noqa: BLE001
+            raise InvalidRequestError(
+                action="validate scenario-tree response",
+                detail=str(exc),
+            ) from exc
+
+    def report(
+        self,
+        payload: dict[str, Any] | ReportRequest,
+    ) -> ForecastReport:
+        """Run composite report endpoint and validate response schema."""
+        request_payload = self._coerce_report_payload(payload)
+        response_payload = self._request_json(
+            "POST",
+            "/api/report",
+            json_payload=request_payload,
+            action="forecast report",
+        )
+        try:
+            return ForecastReport.model_validate(response_payload)
+        except Exception as exc:  # noqa: BLE001
+            raise InvalidRequestError(
+                action="validate report response",
+                detail=str(exc),
+            ) from exc
+
     def auto_forecast(
         self,
         payload: dict[str, Any] | AutoForecastRequest,
@@ -407,6 +495,32 @@ class TollamaClient:
 
     def _coerce_analyze_payload(self, payload: dict[str, Any] | AnalyzeRequest) -> dict[str, Any]:
         if isinstance(payload, AnalyzeRequest):
+            return payload.model_dump(mode="json", exclude_none=True)
+        return dict(payload)
+
+    def _coerce_generate_payload(self, payload: dict[str, Any] | GenerateRequest) -> dict[str, Any]:
+        if isinstance(payload, GenerateRequest):
+            return payload.model_dump(mode="json", exclude_none=True)
+        return dict(payload)
+
+    def _coerce_counterfactual_payload(
+        self,
+        payload: dict[str, Any] | CounterfactualRequest,
+    ) -> dict[str, Any]:
+        if isinstance(payload, CounterfactualRequest):
+            return payload.model_dump(mode="json", exclude_none=True)
+        return dict(payload)
+
+    def _coerce_scenario_tree_payload(
+        self,
+        payload: dict[str, Any] | ScenarioTreeRequest,
+    ) -> dict[str, Any]:
+        if isinstance(payload, ScenarioTreeRequest):
+            return payload.model_dump(mode="json", exclude_none=True)
+        return dict(payload)
+
+    def _coerce_report_payload(self, payload: dict[str, Any] | ReportRequest) -> dict[str, Any]:
+        if isinstance(payload, ReportRequest):
             return payload.model_dump(mode="json", exclude_none=True)
         return dict(payload)
 
@@ -713,6 +827,86 @@ class AsyncTollamaClient:
                 detail=str(exc),
             ) from exc
 
+    async def generate(
+        self,
+        payload: dict[str, Any] | GenerateRequest,
+    ) -> GenerateResponse:
+        """Generate synthetic series payloads and validate response schema."""
+        request_payload = self._coerce_generate_payload(payload)
+        response_payload = await self._request_json(
+            "POST",
+            "/api/generate",
+            json_payload=request_payload,
+            action="generate synthetic series",
+        )
+        try:
+            return GenerateResponse.model_validate(response_payload)
+        except Exception as exc:  # noqa: BLE001
+            raise InvalidRequestError(
+                action="validate generate response",
+                detail=str(exc),
+            ) from exc
+
+    async def counterfactual(
+        self,
+        payload: dict[str, Any] | CounterfactualRequest,
+    ) -> CounterfactualResponse:
+        """Generate intervention counterfactuals and validate response schema."""
+        request_payload = self._coerce_counterfactual_payload(payload)
+        response_payload = await self._request_json(
+            "POST",
+            "/api/counterfactual",
+            json_payload=request_payload,
+            action="counterfactual forecast",
+        )
+        try:
+            return CounterfactualResponse.model_validate(response_payload)
+        except Exception as exc:  # noqa: BLE001
+            raise InvalidRequestError(
+                action="validate counterfactual response",
+                detail=str(exc),
+            ) from exc
+
+    async def scenario_tree(
+        self,
+        payload: dict[str, Any] | ScenarioTreeRequest,
+    ) -> ScenarioTreeResponse:
+        """Generate probabilistic scenario tree payload and validate response schema."""
+        request_payload = self._coerce_scenario_tree_payload(payload)
+        response_payload = await self._request_json(
+            "POST",
+            "/api/scenario-tree",
+            json_payload=request_payload,
+            action="scenario-tree forecast",
+        )
+        try:
+            return ScenarioTreeResponse.model_validate(response_payload)
+        except Exception as exc:  # noqa: BLE001
+            raise InvalidRequestError(
+                action="validate scenario-tree response",
+                detail=str(exc),
+            ) from exc
+
+    async def report(
+        self,
+        payload: dict[str, Any] | ReportRequest,
+    ) -> ForecastReport:
+        """Run composite report endpoint and validate response schema."""
+        request_payload = self._coerce_report_payload(payload)
+        response_payload = await self._request_json(
+            "POST",
+            "/api/report",
+            json_payload=request_payload,
+            action="forecast report",
+        )
+        try:
+            return ForecastReport.model_validate(response_payload)
+        except Exception as exc:  # noqa: BLE001
+            raise InvalidRequestError(
+                action="validate report response",
+                detail=str(exc),
+            ) from exc
+
     async def auto_forecast(
         self,
         payload: dict[str, Any] | AutoForecastRequest,
@@ -793,6 +987,32 @@ class AsyncTollamaClient:
 
     def _coerce_analyze_payload(self, payload: dict[str, Any] | AnalyzeRequest) -> dict[str, Any]:
         if isinstance(payload, AnalyzeRequest):
+            return payload.model_dump(mode="json", exclude_none=True)
+        return dict(payload)
+
+    def _coerce_generate_payload(self, payload: dict[str, Any] | GenerateRequest) -> dict[str, Any]:
+        if isinstance(payload, GenerateRequest):
+            return payload.model_dump(mode="json", exclude_none=True)
+        return dict(payload)
+
+    def _coerce_counterfactual_payload(
+        self,
+        payload: dict[str, Any] | CounterfactualRequest,
+    ) -> dict[str, Any]:
+        if isinstance(payload, CounterfactualRequest):
+            return payload.model_dump(mode="json", exclude_none=True)
+        return dict(payload)
+
+    def _coerce_scenario_tree_payload(
+        self,
+        payload: dict[str, Any] | ScenarioTreeRequest,
+    ) -> dict[str, Any]:
+        if isinstance(payload, ScenarioTreeRequest):
+            return payload.model_dump(mode="json", exclude_none=True)
+        return dict(payload)
+
+    def _coerce_report_payload(self, payload: dict[str, Any] | ReportRequest) -> dict[str, Any]:
+        if isinstance(payload, ReportRequest):
             return payload.model_dump(mode="json", exclude_none=True)
         return dict(payload)
 

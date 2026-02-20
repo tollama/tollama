@@ -42,6 +42,30 @@ class AnalyzeToolInput(MCPInputBase):
     timeout: StrictFloat | None = Field(default=None, gt=0)
 
 
+class GenerateToolInput(MCPInputBase):
+    request: dict[str, Any]
+    base_url: StrictStr | None = None
+    timeout: StrictFloat | None = Field(default=None, gt=0)
+
+
+class CounterfactualToolInput(MCPInputBase):
+    request: dict[str, Any]
+    base_url: StrictStr | None = None
+    timeout: StrictFloat | None = Field(default=None, gt=0)
+
+
+class ScenarioTreeToolInput(MCPInputBase):
+    request: dict[str, Any]
+    base_url: StrictStr | None = None
+    timeout: StrictFloat | None = Field(default=None, gt=0)
+
+
+class ReportToolInput(MCPInputBase):
+    request: dict[str, Any]
+    base_url: StrictStr | None = None
+    timeout: StrictFloat | None = Field(default=None, gt=0)
+
+
 class WhatIfToolInput(MCPInputBase):
     request: dict[str, Any]
     base_url: StrictStr | None = None

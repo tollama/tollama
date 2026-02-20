@@ -203,6 +203,20 @@ def test_analyze_endpoint_returns_series_analysis_payload() -> None:
     assert "data_quality_score" in result
 
 
+def test_analyze_endpoint_returns_narrative_when_requested() -> None:
+    payload = _sample_analyze_payload()
+    payload["response_options"] = {"narrative": True}
+
+    with TestClient(create_app()) as client:
+        response = client.post("/api/analyze", json=payload)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert isinstance(body.get("narrative"), dict)
+    assert body["narrative"]["series"][0]["id"] == "s1"
+    assert body["narrative"]["series"][0]["trend_direction"] in {"up", "down", "flat"}
+
+
 def test_analyze_endpoint_rejects_invalid_payload() -> None:
     payload = _sample_analyze_payload()
     del payload["series"]
@@ -1107,6 +1121,22 @@ def test_forecast_routes_end_to_end_to_mock_runner(monkeypatch, tmp_path) -> Non
     assert isinstance(explanation, dict)
     assert explanation["series"][0]["id"] == "s1"
     assert explanation["series"][0]["trend_direction"] in {"up", "down", "flat"}
+
+
+def test_forecast_returns_narrative_when_requested(monkeypatch, tmp_path) -> None:
+    _install_model(monkeypatch, tmp_path, "mock")
+    payload = _sample_forecast_payload()
+    payload["response_options"] = {"narrative": True}
+
+    with TestClient(create_app()) as client:
+        response = client.post("/v1/forecast", json=payload)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert isinstance(body.get("narrative"), dict)
+    assert len(body["narrative"]["series"]) == 2
+    assert body["narrative"]["series"][0]["id"] in {"s1", "s2"}
+    assert "key_insight" in body["narrative"]["series"][0]
 
 
 def test_forecast_returns_metrics_when_requested(monkeypatch, tmp_path) -> None:

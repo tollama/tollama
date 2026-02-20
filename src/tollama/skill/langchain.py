@@ -18,8 +18,12 @@ from tollama.core.schemas import (
     AnalyzeRequest,
     AutoForecastRequest,
     CompareRequest,
+    CounterfactualRequest,
     ForecastRequest,
+    GenerateRequest,
     PipelineRequest,
+    ReportRequest,
+    ScenarioTreeRequest,
     WhatIfRequest,
 )
 
@@ -57,6 +61,22 @@ class AutoForecastToolInput(_ToolInputBase):
 
 
 class AnalyzeToolInput(_ToolInputBase):
+    request: dict[str, Any]
+
+
+class GenerateToolInput(_ToolInputBase):
+    request: dict[str, Any]
+
+
+class CounterfactualToolInput(_ToolInputBase):
+    request: dict[str, Any]
+
+
+class ScenarioTreeToolInput(_ToolInputBase):
+    request: dict[str, Any]
+
+
+class ReportToolInput(_ToolInputBase):
     request: dict[str, Any]
 
 
@@ -382,6 +402,232 @@ class TollamaAnalyzeTool(_TollamaBaseTool):
         return response.model_dump(mode="json", exclude_none=True)
 
 
+class TollamaGenerateTool(_TollamaBaseTool):
+    """LangChain tool that validates and executes synthetic generation requests."""
+
+    name: str = "tollama_generate"
+    description: str = (
+        "Generate model-free synthetic time series from historical input statistics. "
+        "Input schema: {request:{series,count?,length?,seed?,method?,variation?}}. "
+        "method defaults to statistical. Returns generated synthetic series payloads. "
+        'Example: tool.invoke({"request":{"series":[{"id":"s1","freq":"D",'
+        '"timestamps":["2025-01-01","2025-01-02","2025-01-03"],"target":[10,11,12]}],'
+        '"count":3,"length":7,"seed":42}}).'
+    )
+    args_schema: type[BaseModel] = GenerateToolInput
+
+    def _run(
+        self,
+        request: dict[str, Any],
+        run_manager: Any | None = None,
+    ) -> dict[str, Any]:
+        del run_manager
+        try:
+            args = GenerateToolInput(request=request)
+            generate_request = GenerateRequest.model_validate(args.request)
+        except ValidationError as exc:
+            return _invalid_request_payload(str(exc))
+
+        client = self._client()
+        try:
+            response = client.generate(generate_request)
+        except TollamaClientError as exc:
+            return _client_error_payload(exc)
+
+        return response.model_dump(mode="json", exclude_none=True)
+
+    async def _arun(
+        self,
+        request: dict[str, Any],
+        run_manager: Any | None = None,
+    ) -> dict[str, Any]:
+        del run_manager
+        try:
+            args = GenerateToolInput(request=request)
+            generate_request = GenerateRequest.model_validate(args.request)
+        except ValidationError as exc:
+            return _invalid_request_payload(str(exc))
+
+        client = self._async_client()
+        try:
+            response = await client.generate(generate_request)
+        except TollamaClientError as exc:
+            return _client_error_payload(exc)
+
+        return response.model_dump(mode="json", exclude_none=True)
+
+
+class TollamaCounterfactualTool(_TollamaBaseTool):
+    """LangChain tool that validates and executes counterfactual requests."""
+
+    name: str = "tollama_counterfactual"
+    description: str = (
+        "Generate intervention counterfactual trajectories. "
+        "Input schema: {request:{model,series,intervention_index,intervention_label?,"
+        "quantiles?,options?,timeout?,keep_alive?,parameters?}}. "
+        "Returns observed vs counterfactual post-intervention trajectories and divergence metrics. "
+        'Example: tool.invoke({"request":{"model":"mock","intervention_index":3,'
+        '"series":[{"id":"s1","freq":"D","timestamps":["2025-01-01","2025-01-02",'
+        '"2025-01-03","2025-01-04"],"target":[10,11,12,20]}],"options":{}}}).'
+    )
+    args_schema: type[BaseModel] = CounterfactualToolInput
+
+    def _run(
+        self,
+        request: dict[str, Any],
+        run_manager: Any | None = None,
+    ) -> dict[str, Any]:
+        del run_manager
+        try:
+            args = CounterfactualToolInput(request=request)
+            counterfactual_request = CounterfactualRequest.model_validate(args.request)
+        except ValidationError as exc:
+            return _invalid_request_payload(str(exc))
+
+        client = self._client()
+        try:
+            response = client.counterfactual(counterfactual_request)
+        except TollamaClientError as exc:
+            return _client_error_payload(exc)
+
+        return response.model_dump(mode="json", exclude_none=True)
+
+    async def _arun(
+        self,
+        request: dict[str, Any],
+        run_manager: Any | None = None,
+    ) -> dict[str, Any]:
+        del run_manager
+        try:
+            args = CounterfactualToolInput(request=request)
+            counterfactual_request = CounterfactualRequest.model_validate(args.request)
+        except ValidationError as exc:
+            return _invalid_request_payload(str(exc))
+
+        client = self._async_client()
+        try:
+            response = await client.counterfactual(counterfactual_request)
+        except TollamaClientError as exc:
+            return _client_error_payload(exc)
+
+        return response.model_dump(mode="json", exclude_none=True)
+
+
+class TollamaScenarioTreeTool(_TollamaBaseTool):
+    """LangChain tool that validates and executes scenario-tree requests."""
+
+    name: str = "tollama_scenario_tree"
+    description: str = (
+        "Build probabilistic scenario trees from recursive one-step quantile forecasts. "
+        "Input schema: {request:{model,horizon,series,depth?,branch_quantiles?,options?,"
+        "timeout?,keep_alive?,parameters?}}. "
+        "Returns flattened scenario-tree nodes with parent links and probabilities. "
+        'Example: tool.invoke({"request":{"model":"mock","horizon":4,"depth":2,'
+        '"branch_quantiles":[0.1,0.5,0.9],'
+        '"series":[{"id":"s1","freq":"D","timestamps":["2025-01-01","2025-01-02"],'
+        '"target":[10,11]}],"options":{}}}).'
+    )
+    args_schema: type[BaseModel] = ScenarioTreeToolInput
+
+    def _run(
+        self,
+        request: dict[str, Any],
+        run_manager: Any | None = None,
+    ) -> dict[str, Any]:
+        del run_manager
+        try:
+            args = ScenarioTreeToolInput(request=request)
+            scenario_tree_request = ScenarioTreeRequest.model_validate(args.request)
+        except ValidationError as exc:
+            return _invalid_request_payload(str(exc))
+
+        client = self._client()
+        try:
+            response = client.scenario_tree(scenario_tree_request)
+        except TollamaClientError as exc:
+            return _client_error_payload(exc)
+
+        return response.model_dump(mode="json", exclude_none=True)
+
+    async def _arun(
+        self,
+        request: dict[str, Any],
+        run_manager: Any | None = None,
+    ) -> dict[str, Any]:
+        del run_manager
+        try:
+            args = ScenarioTreeToolInput(request=request)
+            scenario_tree_request = ScenarioTreeRequest.model_validate(args.request)
+        except ValidationError as exc:
+            return _invalid_request_payload(str(exc))
+
+        client = self._async_client()
+        try:
+            response = await client.scenario_tree(scenario_tree_request)
+        except TollamaClientError as exc:
+            return _client_error_payload(exc)
+
+        return response.model_dump(mode="json", exclude_none=True)
+
+
+class TollamaReportTool(_TollamaBaseTool):
+    """LangChain tool that validates and executes composite report requests."""
+
+    name: str = "tollama_report"
+    description: str = (
+        "Run one-call structured report (analyze, recommend, optional pull, auto-forecast). "
+        "Input schema: {request:{horizon,series,strategy?,model?,recommend_top_k?,"
+        "pull_if_missing?,accept_license?,include_baseline?,response_options?,"
+        "quantiles?,options?,parameters?,analyze_parameters?}}. "
+        "Returns analysis diagnostics, recommendation payload, forecast response, and "
+        "optional narrative-ready summary. "
+        'Example: tool.invoke({"request":{"horizon":3,"strategy":"auto",'
+        '"series":[{"id":"s1","freq":"D","timestamps":["2025-01-01","2025-01-02"],'
+        '"target":[10,11]}],"options":{},"include_baseline":true}}).'
+    )
+    args_schema: type[BaseModel] = ReportToolInput
+
+    def _run(
+        self,
+        request: dict[str, Any],
+        run_manager: Any | None = None,
+    ) -> dict[str, Any]:
+        del run_manager
+        try:
+            args = ReportToolInput(request=request)
+            report_request = ReportRequest.model_validate(args.request)
+        except ValidationError as exc:
+            return _invalid_request_payload(str(exc))
+
+        client = self._client()
+        try:
+            response = client.report(report_request)
+        except TollamaClientError as exc:
+            return _client_error_payload(exc)
+
+        return response.model_dump(mode="json", exclude_none=True)
+
+    async def _arun(
+        self,
+        request: dict[str, Any],
+        run_manager: Any | None = None,
+    ) -> dict[str, Any]:
+        del run_manager
+        try:
+            args = ReportToolInput(request=request)
+            report_request = ReportRequest.model_validate(args.request)
+        except ValidationError as exc:
+            return _invalid_request_payload(str(exc))
+
+        client = self._async_client()
+        try:
+            response = await client.report(report_request)
+        except TollamaClientError as exc:
+            return _client_error_payload(exc)
+
+        return response.model_dump(mode="json", exclude_none=True)
+
+
 class TollamaWhatIfTool(_TollamaBaseTool):
     """LangChain tool that validates and executes what-if scenario requests."""
 
@@ -664,6 +910,10 @@ def get_tollama_tools(
         TollamaForecastTool(base_url=base_url, timeout=timeout),
         TollamaAutoForecastTool(base_url=base_url, timeout=timeout),
         TollamaAnalyzeTool(base_url=base_url, timeout=timeout),
+        TollamaGenerateTool(base_url=base_url, timeout=timeout),
+        TollamaCounterfactualTool(base_url=base_url, timeout=timeout),
+        TollamaScenarioTreeTool(base_url=base_url, timeout=timeout),
+        TollamaReportTool(base_url=base_url, timeout=timeout),
         TollamaWhatIfTool(base_url=base_url, timeout=timeout),
         TollamaPipelineTool(base_url=base_url, timeout=timeout),
         TollamaCompareTool(base_url=base_url, timeout=timeout),

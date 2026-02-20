@@ -8,10 +8,19 @@ from tollama.core.schemas import (
     AnalyzeResponse,
     AutoForecastRequest,
     AutoForecastResponse,
+    CounterfactualRequest,
+    CounterfactualResponse,
+    ForecastReport,
     ForecastRequest,
     ForecastResponse,
+    GenerateRequest,
+    GenerateResponse,
     PipelineRequest,
     PipelineResponse,
+    ProgressiveForecastEvent,
+    ReportRequest,
+    ScenarioTreeRequest,
+    ScenarioTreeResponse,
     SeriesForecast,
     WhatIfRequest,
     WhatIfResponse,
@@ -117,6 +126,82 @@ def _example_pipeline_request_payload() -> dict[str, object]:
     }
 
 
+def _example_generate_request_payload() -> dict[str, object]:
+    return {
+        "series": [
+            {
+                "id": "series-1",
+                "freq": "D",
+                "timestamps": [
+                    "2025-01-01",
+                    "2025-01-02",
+                    "2025-01-03",
+                    "2025-01-04",
+                    "2025-01-05",
+                ],
+                "target": [10.0, 11.0, 12.0, 11.5, 12.5],
+            }
+        ],
+        "count": 2,
+        "length": 5,
+        "seed": 7,
+        "method": "statistical",
+        "variation": {
+            "level_jitter": 0.1,
+            "trend_jitter": 0.1,
+            "seasonality_jitter": 0.1,
+            "noise_scale": 1.0,
+            "respect_non_negative": True,
+        },
+    }
+
+
+def _example_counterfactual_request_payload() -> dict[str, object]:
+    return {
+        "model": "naive",
+        "intervention_index": 3,
+        "series": [
+            {
+                "id": "series-1",
+                "freq": "D",
+                "timestamps": [
+                    "2025-01-01",
+                    "2025-01-02",
+                    "2025-01-03",
+                    "2025-01-04",
+                    "2025-01-05",
+                ],
+                "target": [10.0, 11.0, 12.0, 20.0, 22.0],
+            }
+        ],
+        "options": {},
+    }
+
+
+def _example_scenario_tree_request_payload() -> dict[str, object]:
+    return {
+        "model": "naive",
+        "horizon": 4,
+        "depth": 2,
+        "branch_quantiles": [0.1, 0.5, 0.9],
+        "series": [
+            {
+                "id": "series-1",
+                "freq": "D",
+                "timestamps": ["2025-01-01", "2025-01-02", "2025-01-03"],
+                "target": [10.0, 11.0, 12.0],
+            }
+        ],
+        "options": {},
+    }
+
+
+def _example_report_request_payload() -> dict[str, object]:
+    payload = _example_pipeline_request_payload()
+    payload["include_baseline"] = True
+    return payload
+
+
 def test_forecast_request_roundtrip_is_lossless() -> None:
     request = ForecastRequest.model_validate(_example_request_payload())
     encoded = request.to_json()
@@ -126,6 +211,13 @@ def test_forecast_request_roundtrip_is_lossless() -> None:
         mode="json",
         exclude_none=True,
     )
+
+
+def test_forecast_request_accepts_response_options_narrative() -> None:
+    payload = _example_request_payload()
+    payload["response_options"] = {"narrative": True}
+    request = ForecastRequest.model_validate(payload)
+    assert request.response_options.narrative is True
 
 
 def test_analyze_request_roundtrip_is_lossless() -> None:
@@ -161,6 +253,54 @@ def test_pipeline_request_roundtrip_is_lossless() -> None:
     assert decoded == request
     assert decoded.recommend_top_k == 3
     assert decoded.pull_if_missing is True
+
+
+def test_generate_request_roundtrip_is_lossless() -> None:
+    request = GenerateRequest.model_validate(_example_generate_request_payload())
+    encoded = request.to_json()
+    decoded = GenerateRequest.model_validate_json(encoded)
+    assert decoded == request
+    assert decoded.count == 2
+    assert decoded.method == "statistical"
+
+
+def test_generate_request_rejects_short_series() -> None:
+    payload = _example_generate_request_payload()
+    payload["series"][0]["timestamps"] = ["2025-01-01", "2025-01-02"]
+    payload["series"][0]["target"] = [1.0, 2.0]
+    with pytest.raises(ValidationError):
+        GenerateRequest.model_validate(payload)
+
+
+def test_counterfactual_request_roundtrip_is_lossless() -> None:
+    request = CounterfactualRequest.model_validate(_example_counterfactual_request_payload())
+    encoded = request.to_json()
+    decoded = CounterfactualRequest.model_validate_json(encoded)
+    assert decoded == request
+    assert decoded.intervention_index == 3
+
+
+def test_counterfactual_request_rejects_invalid_intervention_index() -> None:
+    payload = _example_counterfactual_request_payload()
+    payload["intervention_index"] = 5
+    with pytest.raises(ValidationError):
+        CounterfactualRequest.model_validate(payload)
+
+
+def test_scenario_tree_request_roundtrip_is_lossless() -> None:
+    request = ScenarioTreeRequest.model_validate(_example_scenario_tree_request_payload())
+    encoded = request.to_json()
+    decoded = ScenarioTreeRequest.model_validate_json(encoded)
+    assert decoded == request
+    assert decoded.depth == 2
+
+
+def test_report_request_roundtrip_is_lossless() -> None:
+    request = ReportRequest.model_validate(_example_report_request_payload())
+    encoded = request.to_json()
+    decoded = ReportRequest.model_validate_json(encoded)
+    assert decoded == request
+    assert decoded.include_baseline is True
 
 
 def test_what_if_request_rejects_duplicate_scenario_names() -> None:
@@ -327,6 +467,36 @@ def test_auto_forecast_response_rejects_strategy_mismatch() -> None:
     }
     with pytest.raises(ValidationError):
         AutoForecastResponse.model_validate(payload)
+
+
+def test_progressive_forecast_event_requires_response_on_completed_status() -> None:
+    payload = {
+        "event": "forecast.complete",
+        "stage": 1,
+        "strategy": "fastest",
+        "model": "mock",
+        "status": "completed",
+        "final": True,
+        "response": {
+            "model": "mock",
+            "forecasts": [
+                {
+                    "id": "series-1",
+                    "freq": "D",
+                    "start_timestamp": "2025-01-05",
+                    "mean": [1.0, 1.0],
+                }
+            ],
+        },
+    }
+    event = ProgressiveForecastEvent.model_validate(payload)
+    assert event.status == "completed"
+    assert event.response is not None
+
+    invalid = dict(payload)
+    invalid.pop("response")
+    with pytest.raises(ValidationError):
+        ProgressiveForecastEvent.model_validate(invalid)
 
 
 def test_series_forecast_accepts_valid_quantiles() -> None:
@@ -536,3 +706,209 @@ def test_pipeline_response_accepts_analysis_recommendation_and_auto_forecast() -
     response = PipelineResponse.model_validate(payload)
     assert response.analysis.results[0].id == "series-1"
     assert response.auto_forecast.response.model == "mock"
+
+
+def test_pipeline_response_accepts_top_level_narrative() -> None:
+    payload = {
+        "analysis": {
+            "results": [
+                {
+                    "id": "series-1",
+                    "detected_frequency": "D",
+                    "seasonality_periods": [],
+                    "trend": {"direction": "up", "slope": 0.2, "r2": 0.8},
+                    "anomaly_indices": [],
+                    "stationarity_flag": True,
+                    "data_quality_score": 0.9,
+                }
+            ]
+        },
+        "recommendation": {"request": {"horizon": 3}},
+        "auto_forecast": {
+            "strategy": "auto",
+            "selection": {
+                "strategy": "auto",
+                "chosen_model": "mock",
+                "selected_models": ["mock"],
+                "candidates": [
+                    {
+                        "model": "mock",
+                        "family": "mock",
+                        "rank": 1,
+                        "score": 1.0,
+                        "reasons": ["selected"],
+                    }
+                ],
+                "rationale": ["selected"],
+                "fallback_used": False,
+            },
+            "response": {
+                "model": "mock",
+                "forecasts": [
+                    {
+                        "id": "series-1",
+                        "freq": "D",
+                        "start_timestamp": "2025-01-04",
+                        "mean": [12.0, 13.0],
+                    }
+                ],
+            },
+        },
+        "narrative": {
+            "summary": "pipeline summary",
+            "chosen_model": "mock",
+            "warnings_count": 0,
+        },
+    }
+    response = PipelineResponse.model_validate(payload)
+    assert response.narrative is not None
+    assert response.narrative.chosen_model == "mock"
+
+
+def test_generate_response_accepts_generated_series_payload() -> None:
+    payload = {
+        "method": "statistical",
+        "generated": [
+            {
+                "id": "series-1_synthetic_1",
+                "source_id": "series-1",
+                "freq": "D",
+                "timestamps": ["2025-01-01", "2025-01-02", "2025-01-03"],
+                "target": [10.0, 11.0, 12.0],
+            }
+        ],
+    }
+    response = GenerateResponse.model_validate(payload)
+    assert response.generated[0].source_id == "series-1"
+
+
+def test_counterfactual_response_accepts_results_payload() -> None:
+    payload = {
+        "model": "mock",
+        "horizon": 2,
+        "intervention_index": 3,
+        "baseline": {
+            "model": "mock",
+            "forecasts": [
+                {
+                    "id": "series-1",
+                    "freq": "D",
+                    "start_timestamp": "2025-01-04",
+                    "mean": [12.0, 13.0],
+                }
+            ],
+        },
+        "results": [
+            {
+                "id": "series-1",
+                "actual": [20.0, 22.0],
+                "counterfactual": [12.0, 13.0],
+                "delta": [8.0, 9.0],
+                "absolute_delta": [8.0, 9.0],
+                "mean_absolute_delta": 8.5,
+                "total_delta": 17.0,
+                "average_delta_pct": 40.0,
+                "direction": "above_counterfactual",
+            }
+        ],
+    }
+    response = CounterfactualResponse.model_validate(payload)
+    assert response.results[0].id == "series-1"
+    assert response.results[0].direction == "above_counterfactual"
+
+
+def test_scenario_tree_response_accepts_flattened_nodes() -> None:
+    payload = {
+        "model": "mock",
+        "depth": 2,
+        "branch_quantiles": [0.1, 0.9],
+        "nodes": [
+            {
+                "node_id": "node_1",
+                "parent_id": None,
+                "series_id": "series-1",
+                "depth": 0,
+                "step": 0,
+                "branch": "root",
+                "value": 12.0,
+                "probability": 1.0,
+            },
+            {
+                "node_id": "node_2",
+                "parent_id": "node_1",
+                "series_id": "series-1",
+                "depth": 1,
+                "step": 1,
+                "branch": "q0.1",
+                "quantile": 0.1,
+                "value": 11.0,
+                "probability": 0.5,
+            },
+        ],
+    }
+    response = ScenarioTreeResponse.model_validate(payload)
+    assert response.nodes[0].parent_id is None
+    assert response.nodes[1].quantile == pytest.approx(0.1)
+
+
+def test_forecast_report_accepts_composite_payload() -> None:
+    payload = {
+        "analysis": {
+            "results": [
+                {
+                    "id": "series-1",
+                    "detected_frequency": "D",
+                    "seasonality_periods": [2],
+                    "trend": {"direction": "up", "slope": 0.1, "r2": 0.5},
+                    "anomaly_indices": [],
+                    "anomalies": [],
+                    "stationarity_flag": True,
+                    "data_quality_score": 0.9,
+                }
+            ]
+        },
+        "recommendation": {"request": {"horizon": 2, "freq": "D"}},
+        "forecast": {
+            "strategy": "auto",
+            "selection": {
+                "strategy": "auto",
+                "chosen_model": "mock",
+                "selected_models": ["mock"],
+                "candidates": [
+                    {
+                        "model": "mock",
+                        "family": "mock",
+                        "rank": 1,
+                        "score": 1.0,
+                        "reasons": ["selected"],
+                    }
+                ],
+                "rationale": ["selected"],
+                "fallback_used": False,
+            },
+            "response": {
+                "model": "mock",
+                "forecasts": [
+                    {
+                        "id": "series-1",
+                        "freq": "D",
+                        "start_timestamp": "2025-01-04",
+                        "mean": [12.0, 13.0],
+                    }
+                ],
+            },
+        },
+        "baseline": {
+            "model": "mock",
+            "forecasts": [
+                {
+                    "id": "series-1",
+                    "freq": "D",
+                    "start_timestamp": "2025-01-04",
+                    "mean": [12.0, 13.0],
+                }
+            ],
+        },
+    }
+    report = ForecastReport.model_validate(payload)
+    assert report.forecast.selection.chosen_model == "mock"

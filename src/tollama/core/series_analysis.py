@@ -12,6 +12,7 @@ from .schemas import (
     AnalyzeParameters,
     AnalyzeRequest,
     AnalyzeResponse,
+    AnomalyRecord,
     SeriesAnalysis,
     SeriesInput,
     TrendAnalysis,
@@ -76,6 +77,11 @@ def analyze_series(*, series: SeriesInput, parameters: AnalyzeParameters) -> Ser
 
     anomaly_indices, anomaly_warnings = detect_anomalies(values, iqr_k=parameters.anomaly_iqr_k)
     warnings.extend(anomaly_warnings)
+    anomalies = build_anomaly_records(
+        values=values,
+        anomaly_indices=anomaly_indices,
+        iqr_k=parameters.anomaly_iqr_k,
+    )
 
     stationarity_flag, stationarity_warnings = detect_stationarity(ordered_values)
     warnings.extend(stationarity_warnings)
@@ -93,6 +99,7 @@ def analyze_series(*, series: SeriesInput, parameters: AnalyzeParameters) -> Ser
         seasonality_periods=sorted(seasonality_periods),
         trend=trend,
         anomaly_indices=anomaly_indices,
+        anomalies=anomalies,
         stationarity_flag=stationarity_flag,
         data_quality_score=quality,
         warnings=deduped or None,
@@ -236,6 +243,109 @@ def detect_anomalies(values: list[float], *, iqr_k: float) -> tuple[list[int], l
         if math.isfinite(value) and (value < lower_bound or value > upper_bound)
     ]
     return anomaly_indices, warnings
+
+
+def build_anomaly_records(
+    *,
+    values: list[float],
+    anomaly_indices: list[int],
+    iqr_k: float,
+) -> list[AnomalyRecord]:
+    """Build structured anomaly records from detected anomaly indices."""
+    if not anomaly_indices:
+        return []
+
+    series = pd.Series(values, dtype="float64")
+    q1 = float(series.quantile(0.25))
+    q3 = float(series.quantile(0.75))
+    iqr = q3 - q1
+    if not math.isfinite(q1) or not math.isfinite(q3) or iqr <= 0.0:
+        return []
+
+    lower_bound = q1 - iqr_k * iqr
+    upper_bound = q3 + iqr_k * iqr
+    anomalies = set(anomaly_indices)
+    records: list[AnomalyRecord] = []
+    for index in sorted(anomaly_indices):
+        value = float(values[index])
+        anomaly_type = _classify_anomaly_type(
+            values=values,
+            anomalies=anomalies,
+            index=index,
+            lower_bound=lower_bound,
+            upper_bound=upper_bound,
+            iqr=iqr,
+        )
+        if value > upper_bound:
+            distance = value - upper_bound
+        else:
+            distance = lower_bound - value
+        severity = _severity_from_distance(distance=distance, iqr=iqr)
+        records.append(
+            AnomalyRecord(
+                index=index,
+                type=anomaly_type,
+                severity=severity,
+                value=value,
+                range_start=max(0, index - 1),
+                range_end=min(len(values) - 1, index + 1),
+                suggested_handling=_suggested_handling(anomaly_type),
+            )
+        )
+    return records
+
+
+def _classify_anomaly_type(
+    *,
+    values: list[float],
+    anomalies: set[int],
+    index: int,
+    lower_bound: float,
+    upper_bound: float,
+    iqr: float,
+) -> str:
+    if (index - 1 in anomalies) or (index + 1 in anomalies):
+        return "shift"
+
+    previous = values[index - 1] if index > 0 else values[index]
+    current = values[index]
+    following = values[index + 1] if index + 1 < len(values) else values[index]
+    step_before = current - previous
+    step_after = following - current
+    if (
+        step_before != 0.0
+        and step_after != 0.0
+        and step_before * step_after < 0.0
+        and (abs(step_before) > iqr or abs(step_after) > iqr)
+    ):
+        return "trend_break"
+
+    if current > upper_bound:
+        return "spike"
+    if current < lower_bound:
+        return "dip"
+    return "trend_break"
+
+
+def _severity_from_distance(*, distance: float, iqr: float) -> str:
+    if iqr <= 0.0:
+        return "low"
+    ratio = max(distance, 0.0) / iqr
+    if ratio >= 2.0:
+        return "high"
+    if ratio >= 1.0:
+        return "medium"
+    return "low"
+
+
+def _suggested_handling(anomaly_type: str) -> str:
+    if anomaly_type == "spike":
+        return "Validate event drivers and cap/clip if this is an external shock."
+    if anomaly_type == "dip":
+        return "Check data gaps and business outages before retraining."
+    if anomaly_type == "shift":
+        return "Evaluate regime change and retrain with a recent window."
+    return "Review structural change assumptions and segment the series if needed."
 
 
 def detect_stationarity(values: list[float]) -> tuple[bool | None, list[str]]:

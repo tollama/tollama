@@ -19,8 +19,12 @@ from tollama.core.schemas import (
     AnalyzeRequest,
     AutoForecastRequest,
     CompareRequest,
+    CounterfactualRequest,
     ForecastRequest,
+    GenerateRequest,
     PipelineRequest,
+    ReportRequest,
+    ScenarioTreeRequest,
     WhatIfRequest,
 )
 
@@ -28,12 +32,16 @@ from .schemas import (
     AnalyzeToolInput,
     AutoForecastToolInput,
     CompareToolInput,
+    CounterfactualToolInput,
     ForecastToolInput,
+    GenerateToolInput,
     HealthToolInput,
     ModelsToolInput,
     PipelineToolInput,
     PullToolInput,
     RecommendToolInput,
+    ReportToolInput,
+    ScenarioTreeToolInput,
     ShowToolInput,
     WhatIfToolInput,
 )
@@ -186,6 +194,110 @@ def tollama_analyze(
     client = _make_client(base_url=args.base_url, timeout=args.timeout)
     try:
         response = client.analyze(analyze_request)
+    except TollamaClientError as exc:
+        _raise_from_client_error(exc)
+
+    return response.model_dump(mode="json", exclude_none=True)
+
+
+def tollama_generate(
+    *,
+    request: dict[str, Any],
+    base_url: str | None = None,
+    timeout: float | None = None,
+) -> dict[str, Any]:
+    """Generate synthetic series and return canonical response payload."""
+    try:
+        args = GenerateToolInput(request=request, base_url=base_url, timeout=timeout)
+    except ValidationError as exc:
+        _raise_invalid_request(str(exc))
+
+    try:
+        generate_request = GenerateRequest.model_validate(args.request)
+    except ValidationError as exc:
+        _raise_invalid_request(str(exc))
+
+    client = _make_client(base_url=args.base_url, timeout=args.timeout)
+    try:
+        response = client.generate(generate_request)
+    except TollamaClientError as exc:
+        _raise_from_client_error(exc)
+
+    return response.model_dump(mode="json", exclude_none=True)
+
+
+def tollama_counterfactual(
+    *,
+    request: dict[str, Any],
+    base_url: str | None = None,
+    timeout: float | None = None,
+) -> dict[str, Any]:
+    """Generate intervention counterfactuals and return canonical response payload."""
+    try:
+        args = CounterfactualToolInput(request=request, base_url=base_url, timeout=timeout)
+    except ValidationError as exc:
+        _raise_invalid_request(str(exc))
+
+    try:
+        counterfactual_request = CounterfactualRequest.model_validate(args.request)
+    except ValidationError as exc:
+        _raise_invalid_request(str(exc))
+
+    client = _make_client(base_url=args.base_url, timeout=args.timeout)
+    try:
+        response = client.counterfactual(counterfactual_request)
+    except TollamaClientError as exc:
+        _raise_from_client_error(exc)
+
+    return response.model_dump(mode="json", exclude_none=True)
+
+
+def tollama_scenario_tree(
+    *,
+    request: dict[str, Any],
+    base_url: str | None = None,
+    timeout: float | None = None,
+) -> dict[str, Any]:
+    """Generate probabilistic scenario tree and return canonical response payload."""
+    try:
+        args = ScenarioTreeToolInput(request=request, base_url=base_url, timeout=timeout)
+    except ValidationError as exc:
+        _raise_invalid_request(str(exc))
+
+    try:
+        scenario_tree_request = ScenarioTreeRequest.model_validate(args.request)
+    except ValidationError as exc:
+        _raise_invalid_request(str(exc))
+
+    client = _make_client(base_url=args.base_url, timeout=args.timeout)
+    try:
+        response = client.scenario_tree(scenario_tree_request)
+    except TollamaClientError as exc:
+        _raise_from_client_error(exc)
+
+    return response.model_dump(mode="json", exclude_none=True)
+
+
+def tollama_report(
+    *,
+    request: dict[str, Any],
+    base_url: str | None = None,
+    timeout: float | None = None,
+) -> dict[str, Any]:
+    """Run composite report endpoint and return canonical response payload."""
+    try:
+        args = ReportToolInput(request=request, base_url=base_url, timeout=timeout)
+    except ValidationError as exc:
+        _raise_invalid_request(str(exc))
+
+    try:
+        report_request = ReportRequest.model_validate(args.request)
+    except ValidationError as exc:
+        _raise_invalid_request(str(exc))
+
+    client = _make_client(base_url=args.base_url, timeout=args.timeout)
+    try:
+        response = client.report(report_request)
     except TollamaClientError as exc:
         _raise_from_client_error(exc)
 

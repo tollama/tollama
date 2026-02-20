@@ -85,6 +85,23 @@ def test_pipeline_endpoint_pulls_explicit_missing_model(monkeypatch, tmp_path: P
     assert body["auto_forecast"]["response"]["model"] == "mock"
 
 
+def test_pipeline_endpoint_returns_narrative_when_requested(monkeypatch, tmp_path: Path) -> None:
+    paths = _setup_home(monkeypatch, tmp_path)
+    install_from_registry("mock", accept_license=True, paths=paths)
+    payload = _pipeline_payload()
+    payload["response_options"] = {"narrative": True}
+
+    with TestClient(create_app()) as client:
+        response = client.post("/api/pipeline", json=payload)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert isinstance(body.get("narrative"), dict)
+    assert body["narrative"]["chosen_model"] == "mock"
+    assert isinstance(body["analysis"].get("narrative"), dict)
+    assert isinstance(body["auto_forecast"]["response"].get("narrative"), dict)
+
+
 def test_pipeline_endpoint_returns_404_when_no_models_and_pull_disabled(
     monkeypatch,
     tmp_path: Path,

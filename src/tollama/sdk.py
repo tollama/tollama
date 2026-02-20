@@ -24,10 +24,18 @@ from tollama.core.schemas import (
     AnalyzeResponse,
     AutoForecastRequest,
     AutoForecastResponse,
+    CounterfactualRequest,
+    CounterfactualResponse,
+    ForecastReport,
     ForecastRequest,
     ForecastResponse,
+    GenerateRequest,
+    GenerateResponse,
     PipelineRequest,
     PipelineResponse,
+    ReportRequest,
+    ScenarioTreeRequest,
+    ScenarioTreeResponse,
     SeriesForecast,
     WhatIfRequest,
     WhatIfResponse,
@@ -165,6 +173,99 @@ class Tollama:
 
         request = AnalyzeRequest.model_validate(payload)
         return self._client.analyze(request)
+
+    def generate(
+        self,
+        *,
+        series: SeriesPayload,
+        count: int = 1,
+        length: int | None = None,
+        method: str = "statistical",
+        seed: int | None = None,
+        variation: Mapping[str, Any] | None = None,
+    ) -> GenerateResponse:
+        """Generate deterministic synthetic series from historical inputs."""
+        payload: dict[str, Any] = {
+            "series": _coerce_series_payload(series),
+            "count": count,
+            "method": method,
+        }
+        if length is not None:
+            payload["length"] = length
+        if seed is not None:
+            payload["seed"] = seed
+        if variation is not None:
+            payload["variation"] = dict(variation)
+
+        request = GenerateRequest.model_validate(payload)
+        return self._client.generate(request)
+
+    def counterfactual(
+        self,
+        *,
+        model: str,
+        series: SeriesPayload,
+        intervention_index: int,
+        intervention_label: str | None = None,
+        quantiles: Sequence[float] | None = None,
+        options: Mapping[str, Any] | None = None,
+        timeout: float | None = None,
+        keep_alive: str | int | float | None = None,
+        parameters: Mapping[str, Any] | None = None,
+    ) -> CounterfactualResponse:
+        """Generate counterfactual trajectory estimates around one intervention index."""
+        payload: dict[str, Any] = {
+            "model": model,
+            "series": _coerce_series_payload(series),
+            "intervention_index": intervention_index,
+            "options": dict(options or {}),
+        }
+        if intervention_label is not None:
+            payload["intervention_label"] = intervention_label
+        if quantiles is not None:
+            payload["quantiles"] = list(quantiles)
+        if timeout is not None:
+            payload["timeout"] = timeout
+        if keep_alive is not None:
+            payload["keep_alive"] = keep_alive
+        if parameters is not None:
+            payload["parameters"] = dict(parameters)
+
+        request = CounterfactualRequest.model_validate(payload)
+        return self._client.counterfactual(request)
+
+    def scenario_tree(
+        self,
+        *,
+        model: str,
+        series: SeriesPayload,
+        horizon: int,
+        depth: int = 2,
+        branch_quantiles: Sequence[float] | None = None,
+        options: Mapping[str, Any] | None = None,
+        timeout: float | None = None,
+        keep_alive: str | int | float | None = None,
+        parameters: Mapping[str, Any] | None = None,
+    ) -> ScenarioTreeResponse:
+        """Generate probabilistic branching futures from recursive one-step forecasts."""
+        payload: dict[str, Any] = {
+            "model": model,
+            "horizon": horizon,
+            "series": _coerce_series_payload(series),
+            "depth": depth,
+            "options": dict(options or {}),
+        }
+        if branch_quantiles is not None:
+            payload["branch_quantiles"] = list(branch_quantiles)
+        if timeout is not None:
+            payload["timeout"] = timeout
+        if keep_alive is not None:
+            payload["keep_alive"] = keep_alive
+        if parameters is not None:
+            payload["parameters"] = dict(parameters)
+
+        request = ScenarioTreeRequest.model_validate(payload)
+        return self._client.scenario_tree(request)
 
     def forecast(
         self,
@@ -311,6 +412,61 @@ class Tollama:
 
         request = WhatIfRequest.model_validate(payload)
         return self._client.what_if(request)
+
+    def report(
+        self,
+        *,
+        series: SeriesPayload,
+        horizon: int,
+        strategy: str = "auto",
+        model: str | None = None,
+        allow_fallback: bool = False,
+        ensemble_top_k: int = 3,
+        ensemble_method: str = "mean",
+        quantiles: Sequence[float] | None = None,
+        options: Mapping[str, Any] | None = None,
+        timeout: float | None = None,
+        keep_alive: str | int | float | None = None,
+        parameters: Mapping[str, Any] | None = None,
+        analyze_parameters: Mapping[str, Any] | None = None,
+        recommend_top_k: int = 3,
+        allow_restricted_license: bool = False,
+        pull_if_missing: bool = True,
+        accept_license: bool = False,
+        include_baseline: bool = True,
+        narrative: bool = False,
+    ) -> ForecastReport:
+        """Run composite report endpoint (analyze + recommend + auto-forecast)."""
+        payload: dict[str, Any] = {
+            "horizon": horizon,
+            "strategy": strategy,
+            "series": _coerce_series_payload(series),
+            "options": dict(options or {}),
+            "allow_fallback": allow_fallback,
+            "ensemble_top_k": ensemble_top_k,
+            "ensemble_method": ensemble_method,
+            "recommend_top_k": recommend_top_k,
+            "allow_restricted_license": allow_restricted_license,
+            "pull_if_missing": pull_if_missing,
+            "accept_license": accept_license,
+            "include_baseline": include_baseline,
+            "response_options": {"narrative": narrative},
+        }
+        if model is not None:
+            payload["model"] = model
+        if quantiles is not None:
+            payload["quantiles"] = list(quantiles)
+        if timeout is not None:
+            payload["timeout"] = timeout
+        if keep_alive is not None:
+            payload["keep_alive"] = keep_alive
+        if parameters is not None:
+            payload["parameters"] = dict(parameters)
+        if analyze_parameters is not None:
+            payload["analyze_parameters"] = dict(analyze_parameters)
+
+        request = ReportRequest.model_validate(payload)
+        return self._client.report(request)
 
     def pipeline(
         self,

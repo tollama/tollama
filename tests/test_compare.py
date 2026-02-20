@@ -99,6 +99,27 @@ def test_daemon_compare_endpoint_records_model_missing_error(monkeypatch, tmp_pa
     assert results["missing"]["error"]["status_code"] == 404
 
 
+def test_daemon_compare_endpoint_returns_narrative_when_requested(monkeypatch, tmp_path) -> None:
+    paths = TollamaPaths(base_dir=tmp_path / ".tollama")
+    monkeypatch.setenv("TOLLAMA_HOME", str(paths.base_dir))
+    install_from_registry("mock", accept_license=True, paths=paths)
+
+    payload = _compare_payload(models=["mock", "missing"])
+    payload["response_options"] = {"narrative": True}
+
+    manager = RunnerManager(runner_commands={"mock": ("tollama-runner-mock",)})
+    with TestClient(create_app(runner_manager=manager)) as client:
+        response = client.post("/api/compare", json=payload)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert isinstance(body.get("narrative"), dict)
+    assert body["narrative"]["best_model"] == "mock"
+    successful = [item for item in body["results"] if item["ok"]]
+    assert successful
+    assert isinstance(successful[0]["response"].get("narrative"), dict)
+
+
 def test_client_compare_returns_typed_response() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         assert request.url.path == "/api/compare"

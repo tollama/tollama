@@ -35,8 +35,10 @@ from pydantic import (
     ValidationError,
 )
 
+from tollama.a2a import A2AOperationHandlers, A2AServer
 from tollama.core.auto_select import AutoSelection, select_auto_models
 from tollama.core.config import ConfigFileError, TollamaConfig, load_config
+from tollama.core.counterfactual import generate_counterfactual
 from tollama.core.ensemble import EnsembleError, merge_forecast_responses
 from tollama.core.env_override import set_env_temporarily
 from tollama.core.explainability import generate_explanation
@@ -61,10 +63,20 @@ from tollama.core.modelfile import (
     remove_modelfile,
     write_modelfile,
 )
+from tollama.core.narratives import (
+    build_analysis_narrative,
+    build_comparison_narrative,
+    build_forecast_narrative,
+    build_pipeline_narrative,
+)
 from tollama.core.pipeline import run_pipeline_analysis
+from tollama.core.progressive import ProgressiveStage, build_progressive_stages
 from tollama.core.pull_defaults import resolve_effective_pull_defaults
+from tollama.core.recommend import recommend_models
 from tollama.core.redact import redact_config_dict, redact_env_dict, redact_proxy_url
 from tollama.core.registry import ModelCapabilities, get_model_spec, list_registry_models
+from tollama.core.report import build_forecast_report, build_report_narrative, run_report_analysis
+from tollama.core.scenario_tree import build_scenario_tree
 from tollama.core.scenarios import apply_scenario
 from tollama.core.schemas import (
     AnalyzeRequest,
@@ -78,12 +90,21 @@ from tollama.core.schemas import (
     CompareResponse,
     CompareResult,
     CompareSummary,
+    CounterfactualRequest,
+    CounterfactualResponse,
+    ForecastReport,
     ForecastRequest,
     ForecastResponse,
     ForecastTiming,
+    GenerateRequest,
+    GenerateResponse,
     IngestOptions,
     PipelineRequest,
     PipelineResponse,
+    ProgressiveForecastEvent,
+    ReportRequest,
+    ScenarioTreeRequest,
+    ScenarioTreeResponse,
     WhatIfError,
     WhatIfRequest,
     WhatIfResponse,
@@ -99,6 +120,7 @@ from tollama.core.storage import (
     remove_model,
     write_manifest,
 )
+from tollama.core.synthetic import generate_synthetic_series
 
 from .auth import current_key_id, require_api_key
 from .covariates import apply_covariate_capabilities, normalize_covariates
@@ -113,6 +135,7 @@ from .metrics import (
 )
 from .rate_limiter import TokenBucketRateLimiter, create_rate_limiter_from_env
 from .runner_manager import RunnerManager
+from .sse import EventStream, EventSubscription, format_sse_event
 from .supervisor import (
     RunnerCallError,
     RunnerError,
@@ -299,6 +322,7 @@ def create_app(*, runner_manager: RunnerManager | None = None) -> FastAPI:
     app.state.prometheus_metrics = _build_prometheus_metrics(app)
     app.state.usage_meter = _build_usage_meter()
     app.state.rate_limiter = _build_rate_limiter()
+    app.state.event_stream = EventStream()
     if app.state.prometheus_metrics is not None:
         app.add_middleware(
             ForecastMetricsMiddleware,
@@ -336,6 +360,43 @@ def create_app(*, runner_manager: RunnerManager | None = None) -> FastAPI:
         if usage_meter is None:
             raise HTTPException(status_code=503, detail=usage_unavailable_hint())
         return usage_meter.snapshot(key_id=current_key_id(request))
+
+    @app.get("/api/events")
+    def events(request: Request) -> StreamingResponse:
+        event_stream = _optional_event_stream(app)
+        if event_stream is None:
+            raise HTTPException(status_code=503, detail="event streaming is unavailable")
+
+        event_types = _parse_event_type_filter(request)
+        heartbeat_seconds = _parse_positive_float_query_param(
+            request.query_params.get("heartbeat"),
+            key="heartbeat",
+            default=15.0,
+        )
+        max_events = _parse_positive_int_query_param(
+            request.query_params.get("max_events"),
+            key="max_events",
+            default=None,
+        )
+
+        subscription = event_stream.subscribe(
+            key_id=current_key_id(request),
+            event_types=event_types,
+        )
+        return StreamingResponse(
+            _events_stream_lines(
+                event_stream=event_stream,
+                subscription=subscription,
+                heartbeat_seconds=heartbeat_seconds,
+                max_events=max_events,
+            ),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "X-Accel-Buffering": "no",
+            },
+        )
 
     @app.get("/api/modelfiles", response_model=ModelfileListResponse)
     def modelfiles() -> ModelfileListResponse:
@@ -741,6 +802,28 @@ def create_app(*, runner_manager: RunnerManager | None = None) -> FastAPI:
             media_type="application/x-ndjson",
         )
 
+    @app.post("/api/forecast/progressive", response_model=None)
+    def api_forecast_progressive(
+        payload: AutoForecastRequest,
+        request: Request,
+    ) -> StreamingResponse:
+        stages, plan_warnings = _resolve_progressive_stages(payload=payload)
+        return StreamingResponse(
+            _progressive_forecast_sse_lines(
+                app=app,
+                payload=payload,
+                request=request,
+                stages=stages,
+                plan_warnings=plan_warnings,
+            ),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "X-Accel-Buffering": "no",
+            },
+        )
+
     @app.post("/api/compare", response_model=CompareResponse)
     def compare(payload: CompareRequest, request: Request) -> CompareResponse:
         results: list[CompareResult] = []
@@ -754,6 +837,7 @@ def create_app(*, runner_manager: RunnerManager | None = None) -> FastAPI:
                 timeout=payload.timeout,
                 keep_alive=payload.keep_alive,
                 parameters=payload.parameters,
+                response_options=payload.response_options,
             )
             try:
                 response = _execute_forecast(app, payload=forecast_payload, request=request)
@@ -791,16 +875,101 @@ def create_app(*, runner_manager: RunnerManager | None = None) -> FastAPI:
             succeeded=sum(1 for item in results if item.ok),
             failed=sum(1 for item in results if not item.ok),
         )
-        return CompareResponse(
+        compare_response = CompareResponse(
             models=list(payload.models),
             horizon=payload.horizon,
             results=results,
             summary=summary,
         )
+        if payload.response_options.narrative:
+            compare_response = compare_response.model_copy(
+                update={"narrative": build_comparison_narrative(response=compare_response)},
+            )
+        return compare_response
 
     @app.post("/api/analyze", response_model=AnalyzeResponse)
-    def analyze(payload: AnalyzeRequest) -> AnalyzeResponse:
-        return analyze_series_request(payload)
+    def analyze(payload: AnalyzeRequest, request: Request) -> AnalyzeResponse:
+        response = analyze_series_request(payload)
+        if payload.response_options.narrative:
+            response = response.model_copy(
+                update={"narrative": build_analysis_narrative(response=response)},
+            )
+        key_id = _event_key_id(request)
+        _publish_event(
+            app=app,
+            key_id=key_id,
+            event="analysis.complete",
+            data={
+                "series_count": len(response.results),
+                "response": response.model_dump(mode="json", exclude_none=True),
+            },
+        )
+        for result in response.results:
+            anomaly_indices = list(result.anomaly_indices)
+            if not anomaly_indices:
+                continue
+            _publish_event(
+                app=app,
+                key_id=key_id,
+                event="anomaly.detected",
+                data={
+                    "series_id": result.id,
+                    "anomaly_count": len(anomaly_indices),
+                    "indices": anomaly_indices,
+                },
+            )
+        return response
+
+    @app.post("/api/generate", response_model=GenerateResponse)
+    def generate(payload: GenerateRequest) -> GenerateResponse:
+        try:
+            return generate_synthetic_series(payload)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/api/counterfactual", response_model=CounterfactualResponse)
+    def counterfactual(payload: CounterfactualRequest, request: Request) -> CounterfactualResponse:
+        def _forecast_executor(
+            counterfactual_forecast_request: ForecastRequest,
+        ) -> ForecastResponse:
+            request_payload = ForecastRequestWithKeepAlive.model_validate(
+                {
+                    **counterfactual_forecast_request.model_dump(mode="python", exclude_none=True),
+                    "keep_alive": payload.keep_alive,
+                },
+            )
+            return _execute_forecast(app, payload=request_payload, request=request)
+
+        try:
+            return generate_counterfactual(
+                payload=payload,
+                forecast_executor=_forecast_executor,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/api/scenario-tree", response_model=ScenarioTreeResponse)
+    def scenario_tree(payload: ScenarioTreeRequest, request: Request) -> ScenarioTreeResponse:
+        def _forecast_executor(tree_forecast_request: ForecastRequest) -> ForecastResponse:
+            request_payload = ForecastRequestWithKeepAlive.model_validate(
+                {
+                    **tree_forecast_request.model_dump(mode="python", exclude_none=True),
+                    "keep_alive": payload.keep_alive,
+                },
+            )
+            return _execute_forecast(app, payload=request_payload, request=request)
+
+        try:
+            return build_scenario_tree(
+                payload=payload,
+                forecast_executor=_forecast_executor,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/api/report", response_model=ForecastReport)
+    def report(payload: ReportRequest, request: Request) -> ForecastReport:
+        return _execute_report(app, payload=payload, request=request)
 
     @app.post("/api/auto-forecast", response_model=AutoForecastResponse)
     def auto_forecast(payload: AutoForecastRequest, request: Request) -> AutoForecastResponse:
@@ -904,6 +1073,75 @@ def create_app(*, runner_manager: RunnerManager | None = None) -> FastAPI:
     def forecast(payload: ForecastRequestWithKeepAlive, request: Request) -> ForecastResponse:
         return _execute_forecast(app, payload=payload, request=request)
 
+    def _a2a_forecast_handler(payload: dict[str, Any], auth_request: Any) -> dict[str, Any]:
+        forecast_payload = ForecastRequestWithKeepAlive.model_validate(payload)
+        response = _execute_forecast(app, payload=forecast_payload, request=auth_request)
+        return response.model_dump(mode="json", exclude_none=True)
+
+    def _a2a_auto_forecast_handler(payload: dict[str, Any], auth_request: Any) -> dict[str, Any]:
+        auto_payload = AutoForecastRequest.model_validate(payload)
+        response = _execute_auto_forecast(app, payload=auto_payload, request=auth_request)
+        return response.model_dump(mode="json", exclude_none=True)
+
+    def _a2a_analyze_handler(payload: dict[str, Any], _auth_request: Any) -> dict[str, Any]:
+        analyze_payload = AnalyzeRequest.model_validate(payload)
+        response = analyze_series_request(analyze_payload)
+        return response.model_dump(mode="json", exclude_none=True)
+
+    def _a2a_generate_handler(payload: dict[str, Any], _auth_request: Any) -> dict[str, Any]:
+        generate_payload = GenerateRequest.model_validate(payload)
+        response = generate_synthetic_series(generate_payload)
+        return response.model_dump(mode="json", exclude_none=True)
+
+    def _a2a_compare_handler(payload: dict[str, Any], auth_request: Any) -> dict[str, Any]:
+        compare_payload = CompareRequest.model_validate(payload)
+        response = compare(compare_payload, auth_request)
+        return response.model_dump(mode="json", exclude_none=True)
+
+    def _a2a_what_if_handler(payload: dict[str, Any], auth_request: Any) -> dict[str, Any]:
+        what_if_payload = WhatIfRequest.model_validate(payload)
+        response = what_if(what_if_payload, auth_request)
+        return response.model_dump(mode="json", exclude_none=True)
+
+    def _a2a_pipeline_handler(payload: dict[str, Any], auth_request: Any) -> dict[str, Any]:
+        pipeline_payload = PipelineRequest.model_validate(payload)
+        response = _execute_pipeline(app, payload=pipeline_payload, request=auth_request)
+        return response.model_dump(mode="json", exclude_none=True)
+
+    def _a2a_recommend_handler(payload: dict[str, Any], _auth_request: Any) -> dict[str, Any]:
+        try:
+            return recommend_models(**payload)
+        except TypeError as exc:
+            raise ValueError(f"invalid recommend request: {exc}") from exc
+
+    a2a_server = A2AServer(
+        app=app,
+        package_version=package_version,
+        handlers=A2AOperationHandlers(
+            forecast=_a2a_forecast_handler,
+            auto_forecast=_a2a_auto_forecast_handler,
+            analyze=_a2a_analyze_handler,
+            generate=_a2a_generate_handler,
+            compare=_a2a_compare_handler,
+            what_if=_a2a_what_if_handler,
+            pipeline=_a2a_pipeline_handler,
+            recommend=_a2a_recommend_handler,
+        ),
+    )
+    app.state.a2a_server = a2a_server
+
+    @app.get("/.well-known/agent-card.json")
+    def a2a_agent_card(request: Request) -> dict[str, object]:
+        return a2a_server.agent_card(request=request)
+
+    @app.get("/.well-known/agent.json", include_in_schema=False)
+    def a2a_agent_card_legacy(request: Request) -> dict[str, object]:
+        return a2a_server.agent_card(request=request)
+
+    @app.post("/a2a")
+    def a2a_jsonrpc(request: Request, payload: Any = Body(...)) -> Response:
+        return a2a_server.handle_jsonrpc(payload=payload, request=request)
+
     return app
 
 
@@ -934,6 +1172,16 @@ def _execute_forecast(
     model_source = _manifest_source(model_manifest)
     model_metadata = _manifest_metadata(model_manifest)
     model_capabilities = _resolve_model_capabilities(payload.model, model_manifest)
+    key_id = _event_key_id(request)
+    _publish_event(
+        app=app,
+        key_id=key_id,
+        event="model.loaded",
+        data={
+            "model": payload.model,
+            "family": model_family,
+        },
+    )
 
     try:
         normalized_series, normalize_warnings = normalize_covariates(
@@ -973,6 +1221,7 @@ def _execute_forecast(
     )
 
     exclude_fields = {"keep_alive"}
+    exclude_fields.add("response_options")
     if extra_exclude is not None:
         exclude_fields.update(extra_exclude)
     params = runner_payload.model_dump(mode="json", exclude_none=True, exclude=exclude_fields)
@@ -984,6 +1233,19 @@ def _execute_forecast(
         params["model_source"] = model_source
     if model_metadata is not None:
         params["model_metadata"] = model_metadata
+
+    _publish_event(
+        app=app,
+        key_id=key_id,
+        event="forecast.progress",
+        data={
+            "model": forecast_payload.model,
+            "family": model_family,
+            "status": "running",
+            "series_count": len(forecast_payload.series),
+            "horizon": forecast_payload.horizon,
+        },
+    )
 
     runner_started_at = time.perf_counter()
     try:
@@ -1023,6 +1285,11 @@ def _execute_forecast(
     if explanation is not None:
         response = response.model_copy(update={"explanation": explanation})
 
+    if forecast_payload.response_options.narrative:
+        narrative = build_forecast_narrative(request=forecast_payload, response=response)
+        if narrative is not None:
+            response = response.model_copy(update={"narrative": narrative})
+
     merged_warnings = _merge_warnings(response.warnings, [*request_warnings, *metrics_warnings])
     if merged_warnings:
         response = response.model_copy(update={"warnings": merged_warnings})
@@ -1038,6 +1305,17 @@ def _execute_forecast(
         request=request,
         response=response,
         series_processed=len(forecast_payload.series),
+    )
+    _publish_event(
+        app=app,
+        key_id=key_id,
+        event="forecast.complete",
+        data={
+            "model": response.model,
+            "family": model_family,
+            "series_count": len(response.forecasts),
+            "response": response.model_dump(mode="json", exclude_none=True),
+        },
     )
 
     tracker: LoadedModelTracker = app.state.loaded_model_tracker
@@ -1508,6 +1786,7 @@ def _auto_payload_to_forecast_payload(
         timeout=timeout,
         keep_alive=payload.keep_alive,
         parameters=payload.parameters,
+        response_options=payload.response_options,
     )
 
 
@@ -1524,6 +1803,7 @@ def _what_if_payload_to_forecast_payload(
         timeout=payload.timeout,
         keep_alive=payload.keep_alive,
         parameters=payload.parameters,
+        response_options=payload.response_options,
     )
 
 
@@ -1534,6 +1814,11 @@ def _execute_pipeline(
     request: Request | None = None,
 ) -> PipelineResponse:
     insights = run_pipeline_analysis(payload)
+    analysis_response = insights.analysis
+    if payload.response_options.narrative:
+        analysis_response = analysis_response.model_copy(
+            update={"narrative": build_analysis_narrative(response=analysis_response)},
+        )
     warnings: list[str] = []
     pulled_model: str | None = None
 
@@ -1566,16 +1851,81 @@ def _execute_pipeline(
         timeout=payload.timeout,
         keep_alive=payload.keep_alive,
         parameters=payload.parameters,
+        response_options=payload.response_options,
     )
     auto_forecast = _execute_auto_forecast(app, payload=auto_payload, request=request)
 
-    return PipelineResponse(
-        analysis=insights.analysis,
+    pipeline_response = PipelineResponse(
+        analysis=analysis_response,
         recommendation=insights.recommendation,
         pulled_model=pulled_model,
         auto_forecast=auto_forecast,
         warnings=warnings or None,
     )
+    if payload.response_options.narrative:
+        pipeline_response = pipeline_response.model_copy(
+            update={"narrative": build_pipeline_narrative(response=pipeline_response)},
+        )
+    return pipeline_response
+
+
+def _execute_report(
+    app: FastAPI,
+    *,
+    payload: ReportRequest,
+    request: Request | None = None,
+) -> ForecastReport:
+    insights = run_report_analysis(payload)
+    analysis_response = insights.analysis
+    if payload.response_options.narrative:
+        analysis_response = analysis_response.model_copy(
+            update={"narrative": build_analysis_narrative(response=analysis_response)},
+        )
+
+    warnings: list[str] = []
+    if payload.pull_if_missing and insights.preferred_model is not None:
+        if _find_installed_manifest(insights.preferred_model) is None:
+            try:
+                _install_model(
+                    name=insights.preferred_model,
+                    accept_license=payload.accept_license,
+                )
+            except HTTPException as exc:
+                warnings.append(
+                    "report pull step failed for model "
+                    f"{insights.preferred_model!r} ({exc.status_code}): "
+                    f"{_compare_error_message(exc)}",
+                )
+
+    auto_payload = AutoForecastRequest(
+        model=payload.model,
+        allow_fallback=payload.allow_fallback,
+        strategy=payload.strategy,
+        ensemble_top_k=payload.ensemble_top_k,
+        ensemble_method=payload.ensemble_method,
+        horizon=payload.horizon,
+        quantiles=payload.quantiles,
+        series=payload.series,
+        options=payload.options,
+        timeout=payload.timeout,
+        keep_alive=payload.keep_alive,
+        parameters=payload.parameters,
+        response_options=payload.response_options,
+    )
+    auto_forecast = _execute_auto_forecast(app, payload=auto_payload, request=request)
+
+    report = build_forecast_report(
+        analysis=analysis_response,
+        recommendation=insights.recommendation,
+        forecast=auto_forecast,
+        include_baseline=payload.include_baseline,
+        warnings=warnings,
+    )
+    if payload.response_options.narrative:
+        report = report.model_copy(
+            update={"narrative": build_report_narrative(report=report)},
+        )
+    return report
 
 
 def _manual_auto_selection_info(
@@ -1690,6 +2040,267 @@ def _forecast_stream_lines(response: ForecastResponse) -> Iterator[str]:
             "response": response.model_dump(mode="json", exclude_none=True),
         },
     )
+
+
+def _events_stream_lines(
+    *,
+    event_stream: EventStream,
+    subscription: EventSubscription,
+    heartbeat_seconds: float,
+    max_events: int | None,
+) -> Iterator[str]:
+    try:
+        yield from event_stream.iter_sse_lines(
+            subscription=subscription,
+            heartbeat_seconds=heartbeat_seconds,
+            max_events=max_events,
+        )
+    finally:
+        event_stream.unsubscribe(subscription)
+
+
+def _progressive_forecast_sse_lines(
+    *,
+    app: FastAPI,
+    payload: AutoForecastRequest,
+    request: Request | None,
+    stages: tuple[ProgressiveStage, ...],
+    plan_warnings: list[str],
+) -> Iterator[str]:
+    key_id = _event_key_id(request)
+    stage_count = len(stages)
+
+    yield "retry: 3000\n\n"
+    for warning in plan_warnings:
+        warning_payload = {"message": warning}
+        yield format_sse_event(event="forecast.warning", data=warning_payload)
+        _publish_event(
+            app=app,
+            key_id=key_id,
+            event="forecast.progress",
+            data={"status": "warning", **warning_payload},
+        )
+
+    for stage in stages:
+        is_final_stage = stage.index == stage_count
+        selected_event = ProgressiveForecastEvent(
+            event="model.selected",
+            stage=stage.index,
+            strategy=stage.strategy,
+            model=stage.model,
+            family=stage.family,
+            status="selected",
+            final=is_final_stage,
+        )
+        selected_payload = selected_event.model_dump(mode="json", exclude_none=True)
+        yield format_sse_event(event=selected_event.event, data=selected_payload)
+        _publish_event(
+            app=app,
+            key_id=key_id,
+            event=selected_event.event,
+            data=selected_payload,
+        )
+
+        running_event = ProgressiveForecastEvent(
+            event="forecast.progress",
+            stage=stage.index,
+            strategy=stage.strategy,
+            model=stage.model,
+            family=stage.family,
+            status="running",
+            final=is_final_stage,
+        )
+        running_payload = running_event.model_dump(mode="json", exclude_none=True)
+        yield format_sse_event(event=running_event.event, data=running_payload)
+        _publish_event(
+            app=app,
+            key_id=key_id,
+            event=running_event.event,
+            data=running_payload,
+        )
+
+        forecast_payload = _auto_payload_to_forecast_payload(
+            payload=payload,
+            model=stage.model,
+            default_timeout=AUTO_FORECAST_MEMBER_TIMEOUT_SECONDS,
+        )
+        try:
+            response = _execute_forecast(app, payload=forecast_payload, request=request)
+        except HTTPException as exc:
+            failed_event = ProgressiveForecastEvent(
+                event="forecast.complete",
+                stage=stage.index,
+                strategy=stage.strategy,
+                model=stage.model,
+                family=stage.family,
+                status="failed",
+                final=is_final_stage,
+                error=_compare_error_message(exc),
+            )
+            failed_payload = failed_event.model_dump(mode="json", exclude_none=True)
+            yield format_sse_event(event=failed_event.event, data=failed_payload)
+            _publish_event(
+                app=app,
+                key_id=key_id,
+                event=failed_event.event,
+                data=failed_payload,
+            )
+            if is_final_stage:
+                return
+            continue
+
+        completed_event = ProgressiveForecastEvent(
+            event="forecast.complete",
+            stage=stage.index,
+            strategy=stage.strategy,
+            model=stage.model,
+            family=stage.family,
+            status="completed",
+            final=is_final_stage,
+            response=response,
+        )
+        completed_payload = completed_event.model_dump(mode="json", exclude_none=True)
+        yield format_sse_event(event=completed_event.event, data=completed_payload)
+        _publish_event(
+            app=app,
+            key_id=key_id,
+            event=completed_event.event,
+            data=completed_payload,
+        )
+
+
+def _resolve_progressive_stages(
+    *,
+    payload: AutoForecastRequest,
+) -> tuple[tuple[ProgressiveStage, ...], list[str]]:
+    manifests = list_installed()
+    installed_by_name = {
+        name: manifest
+        for manifest in manifests
+        if isinstance((name := manifest.get("name")), str) and name.strip()
+    }
+    if not installed_by_name:
+        raise HTTPException(
+            status_code=404,
+            detail="no installed models available for progressive forecast",
+        )
+
+    available_models = sorted(installed_by_name)
+    preferred_model: str | None = None
+    plan_warnings: list[str] = []
+    if payload.model is not None:
+        if payload.model in installed_by_name:
+            preferred_model = payload.model
+        elif not payload.allow_fallback:
+            raise HTTPException(
+                status_code=404,
+                detail=f"model {payload.model!r} is not installed",
+            )
+        else:
+            plan_warnings.append(
+                f"explicit model {payload.model!r} is not installed; "
+                "using progressive auto-selection",
+            )
+
+    family_by_model: dict[str, str] = {}
+    for model_name, manifest in installed_by_name.items():
+        family = manifest.get("family")
+        if isinstance(family, str) and family.strip():
+            family_by_model[model_name] = family.strip()
+
+    try:
+        stages = build_progressive_stages(
+            series=payload.series,
+            horizon=payload.horizon,
+            include_models=available_models,
+            preferred_model=preferred_model,
+            family_by_model=family_by_model,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return stages, plan_warnings
+
+
+def _parse_event_type_filter(request: Request) -> set[str] | None:
+    raw_values: list[str] = []
+    raw_values.extend(request.query_params.getlist("event"))
+    events_raw = request.query_params.get("events")
+    if events_raw is not None:
+        raw_values.append(events_raw)
+
+    normalized = {
+        item.strip()
+        for chunk in raw_values
+        for item in chunk.split(",")
+        if item.strip()
+    }
+    return normalized or None
+
+
+def _parse_positive_int_query_param(
+    raw: str | None,
+    *,
+    key: str,
+    default: int | None,
+) -> int | None:
+    if raw is None:
+        return default
+    normalized = raw.strip()
+    if not normalized:
+        return default
+    if not normalized.isdigit():
+        raise HTTPException(status_code=400, detail=f"{key} must be a positive integer")
+    value = int(normalized)
+    if value <= 0:
+        raise HTTPException(status_code=400, detail=f"{key} must be a positive integer")
+    return value
+
+
+def _parse_positive_float_query_param(raw: str | None, *, key: str, default: float) -> float:
+    if raw is None:
+        return default
+    normalized = raw.strip()
+    if not normalized:
+        return default
+    try:
+        value = float(normalized)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=f"{key} must be a positive number") from exc
+    if value <= 0:
+        raise HTTPException(status_code=400, detail=f"{key} must be a positive number")
+    return value
+
+
+def _optional_event_stream(app: FastAPI) -> EventStream | None:
+    event_stream = getattr(app.state, "event_stream", None)
+    if isinstance(event_stream, EventStream):
+        return event_stream
+    return None
+
+
+def _publish_event(
+    *,
+    app: FastAPI,
+    key_id: str | None,
+    event: str,
+    data: dict[str, Any],
+) -> None:
+    event_stream = _optional_event_stream(app)
+    if event_stream is None:
+        return
+    try:
+        event_stream.publish(key_id=key_id, event=event, data=data)
+    except Exception:  # noqa: BLE001
+        return
+
+
+def _event_key_id(request: Any) -> str:
+    if request is None:
+        return "anonymous"
+    try:
+        return current_key_id(request)
+    except Exception:  # noqa: BLE001
+        return "anonymous"
 
 
 def _to_ndjson_line(payload: dict[str, Any]) -> str:

@@ -19,7 +19,11 @@ from tollama.core.schemas import (
     AnalyzeRequest,
     AutoForecastRequest,
     CompareRequest,
+    CounterfactualRequest,
     ForecastRequest,
+    GenerateRequest,
+    ReportRequest,
+    ScenarioTreeRequest,
 )
 
 _MODEL_NAME_EXAMPLES = (
@@ -55,6 +59,22 @@ class _AutoForecastInput(_ToolInputBase):
 
 
 class _AnalyzeInput(_ToolInputBase):
+    request: dict[str, Any]
+
+
+class _GenerateInput(_ToolInputBase):
+    request: dict[str, Any]
+
+
+class _CounterfactualInput(_ToolInputBase):
+    request: dict[str, Any]
+
+
+class _ScenarioTreeInput(_ToolInputBase):
+    request: dict[str, Any]
+
+
+class _ReportInput(_ToolInputBase):
     request: dict[str, Any]
 
 
@@ -162,6 +182,71 @@ def get_agent_tool_specs(
                 "additionalProperties": False,
             },
             handler=lambda **kwargs: _analyze_handler(client=client, **kwargs),
+        ),
+        AgentToolSpec(
+            name="tollama_generate",
+            description=(
+                "Generate model-free synthetic time series from historical statistical profiles. "
+                "Requires request.series[]. Optional request.count, request.length, request.seed."
+            ),
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "request": {"type": "object"},
+                },
+                "required": ["request"],
+                "additionalProperties": False,
+            },
+            handler=lambda **kwargs: _generate_handler(client=client, **kwargs),
+        ),
+        AgentToolSpec(
+            name="tollama_counterfactual",
+            description=(
+                "Generate intervention counterfactuals by forecasting from pre-intervention "
+                "history and comparing to observed post-intervention values. "
+                "Requires request.model, request.series[], request.intervention_index."
+            ),
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "request": {"type": "object"},
+                },
+                "required": ["request"],
+                "additionalProperties": False,
+            },
+            handler=lambda **kwargs: _counterfactual_handler(client=client, **kwargs),
+        ),
+        AgentToolSpec(
+            name="tollama_scenario_tree",
+            description=(
+                "Build probabilistic branching futures with recursive one-step quantile forecasts. "
+                "Requires request.model, request.horizon, request.series[]."
+            ),
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "request": {"type": "object"},
+                },
+                "required": ["request"],
+                "additionalProperties": False,
+            },
+            handler=lambda **kwargs: _scenario_tree_handler(client=client, **kwargs),
+        ),
+        AgentToolSpec(
+            name="tollama_report",
+            description=(
+                "Run one-call composite report (analyze, recommend, optional pull, auto-forecast). "
+                "Requires request.horizon and request.series[]."
+            ),
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "request": {"type": "object"},
+                },
+                "required": ["request"],
+                "additionalProperties": False,
+            },
+            handler=lambda **kwargs: _report_handler(client=client, **kwargs),
         ),
         AgentToolSpec(
             name="tollama_compare",
@@ -306,6 +391,62 @@ def _analyze_handler(*, client: TollamaClient, request: dict[str, Any]) -> dict[
 
     try:
         response = client.analyze(analyze_request)
+    except TollamaClientError as exc:
+        return _client_error_payload(exc)
+    return response.model_dump(mode="json", exclude_none=True)
+
+
+def _generate_handler(*, client: TollamaClient, request: dict[str, Any]) -> dict[str, Any]:
+    try:
+        args = _GenerateInput(request=request)
+        generate_request = GenerateRequest.model_validate(args.request)
+    except ValidationError as exc:
+        return _invalid_request_payload(str(exc))
+
+    try:
+        response = client.generate(generate_request)
+    except TollamaClientError as exc:
+        return _client_error_payload(exc)
+    return response.model_dump(mode="json", exclude_none=True)
+
+
+def _counterfactual_handler(*, client: TollamaClient, request: dict[str, Any]) -> dict[str, Any]:
+    try:
+        args = _CounterfactualInput(request=request)
+        counterfactual_request = CounterfactualRequest.model_validate(args.request)
+    except ValidationError as exc:
+        return _invalid_request_payload(str(exc))
+
+    try:
+        response = client.counterfactual(counterfactual_request)
+    except TollamaClientError as exc:
+        return _client_error_payload(exc)
+    return response.model_dump(mode="json", exclude_none=True)
+
+
+def _scenario_tree_handler(*, client: TollamaClient, request: dict[str, Any]) -> dict[str, Any]:
+    try:
+        args = _ScenarioTreeInput(request=request)
+        scenario_tree_request = ScenarioTreeRequest.model_validate(args.request)
+    except ValidationError as exc:
+        return _invalid_request_payload(str(exc))
+
+    try:
+        response = client.scenario_tree(scenario_tree_request)
+    except TollamaClientError as exc:
+        return _client_error_payload(exc)
+    return response.model_dump(mode="json", exclude_none=True)
+
+
+def _report_handler(*, client: TollamaClient, request: dict[str, Any]) -> dict[str, Any]:
+    try:
+        args = _ReportInput(request=request)
+        report_request = ReportRequest.model_validate(args.request)
+    except ValidationError as exc:
+        return _invalid_request_payload(str(exc))
+
+    try:
+        response = client.report(report_request)
     except TollamaClientError as exc:
         return _client_error_payload(exc)
     return response.model_dump(mode="json", exclude_none=True)

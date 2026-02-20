@@ -30,11 +30,23 @@ CovariateValues = list[CovariateValue]
 CovariateMode = Literal["best_effort", "strict"]
 MetricName = Literal["mape", "mase", "mae", "rmse", "smape", "wape", "rmsse", "pinball"]
 TrendDirection = Literal["up", "down", "flat"]
+ConfidenceLevel = Literal["high", "medium", "low", "unknown"]
+VolatilityChange = Literal["lower", "stable", "higher", "unknown"]
 AutoForecastStrategy = Literal["auto", "fastest", "best_accuracy", "ensemble"]
 EnsembleMethod = Literal["mean", "median"]
+GenerateMethod = Literal["statistical"]
+ProgressiveStageStrategy = Literal["fastest", "best_accuracy", "explicit"]
+ProgressiveEventStatus = Literal["selected", "running", "completed", "failed"]
 ScenarioOperation = Literal["multiply", "add", "replace"]
 ScenarioTargetField = Literal["target", "past_covariates", "future_covariates"]
+AnomalySeverity = Literal["low", "medium", "high"]
+AnomalyType = Literal["spike", "dip", "shift", "trend_break"]
+CounterfactualDirection = Literal["above_counterfactual", "below_counterfactual", "neutral"]
 TabularFormat = Literal["csv", "parquet"]
+
+
+def _default_branch_quantiles() -> list[float]:
+    return [0.1, 0.5, 0.9]
 
 
 class CanonicalModel(BaseModel):
@@ -111,6 +123,12 @@ class ForecastParameters(CanonicalModel):
     metrics: MetricsParameters | None = None
 
 
+class ResponseOptions(CanonicalModel):
+    """Optional response enrichments for deterministic payload extension."""
+
+    narrative: StrictBool = False
+
+
 class IngestOptions(CanonicalModel):
     """CSV/Parquet ingest options for data_url based forecasting."""
 
@@ -140,6 +158,7 @@ class ForecastRequest(CanonicalModel):
         default_factory=ForecastParameters,
         validation_alias=AliasChoices("parameters"),
     )
+    response_options: ResponseOptions = Field(default_factory=ResponseOptions)
 
     @field_validator("quantiles")
     @classmethod
@@ -218,6 +237,7 @@ class CompareRequest(CanonicalModel):
         default_factory=ForecastParameters,
         validation_alias=AliasChoices("parameters"),
     )
+    response_options: ResponseOptions = Field(default_factory=ResponseOptions)
 
     @field_validator("models")
     @classmethod
@@ -245,6 +265,7 @@ class CompareRequest(CanonicalModel):
             "options": self.options,
             "timeout": self.timeout,
             "parameters": self.parameters.model_dump(mode="python"),
+            "response_options": self.response_options.model_dump(mode="python"),
         }
         ForecastRequest.model_validate(validation_payload)
         return self
@@ -271,6 +292,7 @@ class AutoForecastRequest(CanonicalModel):
         default_factory=ForecastParameters,
         validation_alias=AliasChoices("parameters"),
     )
+    response_options: ResponseOptions = Field(default_factory=ResponseOptions)
 
     @field_validator("quantiles")
     @classmethod
@@ -313,6 +335,7 @@ class AnalyzeRequest(CanonicalModel):
         default_factory=AnalyzeParameters,
         validation_alias=AliasChoices("parameters"),
     )
+    response_options: ResponseOptions = Field(default_factory=ResponseOptions)
 
     @field_validator("series")
     @classmethod
@@ -331,6 +354,26 @@ class TrendAnalysis(CanonicalModel):
     r2: StrictFloat = Field(ge=0.0, le=1.0)
 
 
+class AnomalyRecord(CanonicalModel):
+    """Structured anomaly record with severity and handling hints."""
+
+    index: StrictInt = Field(ge=0)
+    type: AnomalyType
+    severity: AnomalySeverity
+    value: StrictFloat
+    range_start: StrictInt = Field(ge=0)
+    range_end: StrictInt = Field(ge=0)
+    suggested_handling: NonEmptyStr
+
+    @model_validator(mode="after")
+    def validate_range(self) -> AnomalyRecord:
+        if self.range_start > self.range_end:
+            raise ValueError("range_start must be less than or equal to range_end")
+        if self.index < self.range_start or self.index > self.range_end:
+            raise ValueError("index must be within [range_start, range_end]")
+        return self
+
+
 class SeriesAnalysis(CanonicalModel):
     """Analysis output for one series."""
 
@@ -339,6 +382,7 @@ class SeriesAnalysis(CanonicalModel):
     seasonality_periods: list[PositiveInt] = Field(default_factory=list)
     trend: TrendAnalysis
     anomaly_indices: list[StrictInt] = Field(default_factory=list)
+    anomalies: list[AnomalyRecord] = Field(default_factory=list)
     stationarity_flag: StrictBool | None = None
     data_quality_score: StrictFloat = Field(ge=0.0, le=1.0)
     warnings: list[NonEmptyStr] | None = None
@@ -363,12 +407,41 @@ class SeriesAnalysis(CanonicalModel):
             raise ValueError("anomaly_indices must be unique")
         return value
 
+    @field_validator("anomalies")
+    @classmethod
+    def validate_anomalies(cls, value: list[AnomalyRecord]) -> list[AnomalyRecord]:
+        indices = [item.index for item in value]
+        if indices != sorted(indices):
+            raise ValueError("anomalies must be sorted by index")
+        if len(indices) != len(set(indices)):
+            raise ValueError("anomalies must be unique by index")
+        return value
+
+
+class AnalysisNarrativeEntry(CanonicalModel):
+    """Deterministic narrative summary for one analyzed series."""
+
+    id: NonEmptyStr
+    summary: NonEmptyStr
+    trend_direction: TrendDirection
+    dominant_seasonality_period: PositiveInt | None = None
+    anomaly_count: StrictInt = Field(ge=0)
+    data_quality_score: StrictFloat = Field(ge=0.0, le=1.0)
+    key_risks: list[NonEmptyStr] = Field(default_factory=list)
+
+
+class AnalysisNarrative(CanonicalModel):
+    """Narrative-ready summary for analyze responses."""
+
+    series: list[AnalysisNarrativeEntry] = Field(min_length=1)
+
 
 class AnalyzeResponse(CanonicalModel):
     """Response payload for series analysis requests."""
 
     results: list[SeriesAnalysis] = Field(min_length=1)
     warnings: list[NonEmptyStr] | None = None
+    narrative: AnalysisNarrative | None = None
 
     @field_validator("results")
     @classmethod
@@ -467,6 +540,72 @@ class ForecastExplanation(CanonicalModel):
     series: list[SeriesForecastExplanation] = Field(min_length=1)
 
 
+class NarrativeTrend(CanonicalModel):
+    """Trend summary for one forecast narrative series."""
+
+    direction: TrendDirection
+    strength: StrictFloat = Field(ge=0.0, le=1.0)
+
+
+class NarrativeConfidence(CanonicalModel):
+    """Confidence summary for one forecast narrative series."""
+
+    level: ConfidenceLevel
+    spread_ratio: StrictFloat | None = Field(default=None, ge=0.0)
+    reason: NonEmptyStr
+
+
+class NarrativeSeasonality(CanonicalModel):
+    """Seasonality summary for one forecast narrative series."""
+
+    detected: StrictBool
+    period: PositiveInt | None = None
+
+
+class NarrativeAnomalies(CanonicalModel):
+    """Anomaly summary for one forecast narrative series."""
+
+    count: StrictInt = Field(ge=0)
+    indices: list[StrictInt] = Field(default_factory=list)
+
+    @field_validator("indices")
+    @classmethod
+    def validate_indices(cls, value: list[StrictInt]) -> list[StrictInt]:
+        if any(index < 0 for index in value):
+            raise ValueError("indices must be non-negative")
+        if value != sorted(value):
+            raise ValueError("indices must be sorted in ascending order")
+        if len(value) != len(set(value)):
+            raise ValueError("indices must be unique")
+        return value
+
+
+class NarrativeHistoryComparison(CanonicalModel):
+    """Forecast-vs-history comparison summary for one forecast narrative series."""
+
+    mean_delta_pct: StrictFloat | None = None
+    volatility_change: VolatilityChange
+
+
+class SeriesForecastNarrative(CanonicalModel):
+    """Deterministic narrative summary for one forecasted series."""
+
+    id: NonEmptyStr
+    summary: NonEmptyStr
+    trend: NarrativeTrend
+    confidence: NarrativeConfidence
+    seasonality: NarrativeSeasonality
+    anomalies: NarrativeAnomalies
+    key_insight: NonEmptyStr
+    comparison_to_history: NarrativeHistoryComparison
+
+
+class ForecastNarrative(CanonicalModel):
+    """Narrative-ready summary for forecast responses."""
+
+    series: list[SeriesForecastNarrative] = Field(min_length=1)
+
+
 class ForecastResponse(CanonicalModel):
     """Unified forecast response payload."""
 
@@ -475,6 +614,7 @@ class ForecastResponse(CanonicalModel):
     metrics: ForecastMetrics | None = None
     timing: ForecastTiming | None = None
     explanation: ForecastExplanation | None = None
+    narrative: ForecastNarrative | None = None
     usage: dict[NonEmptyStr, JsonValue] | None = None
     warnings: list[NonEmptyStr] | None = None
 
@@ -519,6 +659,316 @@ class AutoForecastResponse(CanonicalModel):
         if self.strategy != self.selection.strategy:
             raise ValueError("strategy and selection.strategy must match")
         return self
+
+
+class ProgressiveForecastEvent(CanonicalModel):
+    """Structured progressive forecast event payload for SSE streams."""
+
+    event: NonEmptyStr
+    stage: PositiveInt
+    strategy: ProgressiveStageStrategy
+    model: NonEmptyStr
+    family: NonEmptyStr | None = None
+    status: ProgressiveEventStatus
+    final: StrictBool = False
+    response: ForecastResponse | None = None
+    error: NonEmptyStr | None = None
+
+    @model_validator(mode="after")
+    def validate_shape(self) -> ProgressiveForecastEvent:
+        if self.status == "completed":
+            if self.response is None:
+                raise ValueError("response is required when status is 'completed'")
+            if self.error is not None:
+                raise ValueError("error must be null when status is 'completed'")
+        elif self.status == "failed":
+            if self.error is None:
+                raise ValueError("error is required when status is 'failed'")
+            if self.response is not None:
+                raise ValueError("response must be null when status is 'failed'")
+        else:
+            if self.response is not None:
+                raise ValueError("response must be null when status is not terminal")
+            if self.error is not None:
+                raise ValueError("error must be null when status is not terminal")
+        return self
+
+
+class GenerateVariation(CanonicalModel):
+    """Variation controls for synthetic time-series generation."""
+
+    level_jitter: StrictFloat = Field(default=0.2, ge=0.0, le=2.0)
+    trend_jitter: StrictFloat = Field(default=0.2, ge=0.0, le=2.0)
+    seasonality_jitter: StrictFloat = Field(default=0.2, ge=0.0, le=2.0)
+    noise_scale: StrictFloat = Field(default=1.0, ge=0.0, le=5.0)
+    respect_non_negative: StrictBool = True
+
+
+class GenerateRequest(CanonicalModel):
+    """Request payload for deterministic synthetic series generation."""
+
+    series: list[SeriesInput] = Field(min_length=1, max_length=32)
+    count: StrictInt = Field(default=1, ge=1, le=50)
+    length: StrictInt | None = Field(default=None, ge=3, le=5000)
+    method: GenerateMethod = "statistical"
+    seed: StrictInt | None = None
+    variation: GenerateVariation = Field(default_factory=GenerateVariation)
+
+    @field_validator("series")
+    @classmethod
+    def validate_unique_ids(cls, value: list[SeriesInput]) -> list[SeriesInput]:
+        ids = [item.id for item in value]
+        if len(ids) != len(set(ids)):
+            raise ValueError("series ids must be unique")
+        return value
+
+    @model_validator(mode="after")
+    def validate_series_lengths(self) -> GenerateRequest:
+        for series in self.series:
+            if len(series.target) < 3:
+                raise ValueError(
+                    "series.target must include at least 3 points for synthetic generation; "
+                    f"series {series.id!r} has {len(series.target)}",
+                )
+        return self
+
+
+class GeneratedSeries(CanonicalModel):
+    """One generated synthetic series."""
+
+    id: NonEmptyStr
+    source_id: NonEmptyStr
+    freq: NonEmptyStr
+    timestamps: list[NonEmptyStr] = Field(min_length=1)
+    target: SequenceValues = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def validate_lengths(self) -> GeneratedSeries:
+        if len(self.target) != len(self.timestamps):
+            raise ValueError("target length must match timestamps length")
+        return self
+
+
+class GenerateResponse(CanonicalModel):
+    """Response payload for synthetic generation requests."""
+
+    method: GenerateMethod
+    generated: list[GeneratedSeries] = Field(min_length=1)
+    warnings: list[NonEmptyStr] | None = None
+
+    @field_validator("generated")
+    @classmethod
+    def validate_unique_ids(cls, value: list[GeneratedSeries]) -> list[GeneratedSeries]:
+        ids = [item.id for item in value]
+        if len(ids) != len(set(ids)):
+            raise ValueError("generated series ids must be unique")
+        return value
+
+
+class CounterfactualRequest(CanonicalModel):
+    """Request payload for intervention counterfactual generation."""
+
+    model: NonEmptyStr
+    series: list[SeriesInput] = Field(min_length=1)
+    intervention_index: StrictInt = Field(ge=1)
+    intervention_label: NonEmptyStr | None = None
+    quantiles: list[Quantile] = Field(default_factory=list)
+    options: dict[NonEmptyStr, JsonValue] = Field(
+        default_factory=dict,
+        validation_alias=AliasChoices("options"),
+    )
+    timeout: float | None = Field(default=None, gt=0.0)
+    keep_alive: StrictStr | StrictInt | StrictFloat | None = None
+    parameters: ForecastParameters = Field(
+        default_factory=ForecastParameters,
+        validation_alias=AliasChoices("parameters"),
+    )
+    response_options: ResponseOptions = Field(default_factory=ResponseOptions)
+
+    @field_validator("series")
+    @classmethod
+    def validate_unique_ids(cls, value: list[SeriesInput]) -> list[SeriesInput]:
+        ids = [item.id for item in value]
+        if len(ids) != len(set(ids)):
+            raise ValueError("series ids must be unique")
+        return value
+
+    @field_validator("quantiles")
+    @classmethod
+    def validate_quantiles(cls, value: list[Quantile]) -> list[Quantile]:
+        if value != sorted(value):
+            raise ValueError("quantiles must be sorted in ascending order")
+        if len(value) != len(set(value)):
+            raise ValueError("quantiles must be unique")
+        return value
+
+    @model_validator(mode="after")
+    def validate_intervention_window(self) -> CounterfactualRequest:
+        post_lengths: set[int] = set()
+        for series in self.series:
+            if self.intervention_index >= len(series.target):
+                raise ValueError(
+                    "intervention_index must be less than each series length; "
+                    f"series {series.id!r} has length {len(series.target)}",
+                )
+            post_lengths.add(len(series.target) - self.intervention_index)
+
+        if len(post_lengths) > 1:
+            raise ValueError("all series must share the same post-intervention horizon")
+        return self
+
+
+class CounterfactualSeriesResult(CanonicalModel):
+    """Counterfactual divergence payload for one series."""
+
+    id: NonEmptyStr
+    actual: SequenceValues = Field(min_length=1)
+    counterfactual: SequenceValues = Field(min_length=1)
+    delta: SequenceValues = Field(min_length=1)
+    absolute_delta: SequenceValues = Field(min_length=1)
+    mean_absolute_delta: StrictFloat = Field(ge=0.0)
+    total_delta: StrictFloat
+    average_delta_pct: StrictFloat | None = None
+    direction: CounterfactualDirection
+
+    @model_validator(mode="after")
+    def validate_lengths(self) -> CounterfactualSeriesResult:
+        expected = len(self.actual)
+        if len(self.counterfactual) != expected:
+            raise ValueError("counterfactual length must match actual length")
+        if len(self.delta) != expected:
+            raise ValueError("delta length must match actual length")
+        if len(self.absolute_delta) != expected:
+            raise ValueError("absolute_delta length must match actual length")
+        return self
+
+
+class CounterfactualResponse(CanonicalModel):
+    """Response payload for intervention counterfactual requests."""
+
+    model: NonEmptyStr
+    horizon: PositiveInt
+    intervention_index: StrictInt = Field(ge=1)
+    intervention_label: NonEmptyStr | None = None
+    baseline: ForecastResponse
+    results: list[CounterfactualSeriesResult] = Field(min_length=1)
+    warnings: list[NonEmptyStr] | None = None
+
+    @field_validator("results")
+    @classmethod
+    def validate_unique_ids(
+        cls,
+        value: list[CounterfactualSeriesResult],
+    ) -> list[CounterfactualSeriesResult]:
+        ids = [item.id for item in value]
+        if len(ids) != len(set(ids)):
+            raise ValueError("results ids must be unique")
+        return value
+
+
+class ScenarioTreeRequest(CanonicalModel):
+    """Request payload for probabilistic scenario tree generation."""
+
+    model: NonEmptyStr
+    horizon: PositiveInt
+    series: list[SeriesInput] = Field(min_length=1)
+    depth: StrictInt = Field(default=2, ge=1, le=6)
+    branch_quantiles: list[Quantile] = Field(
+        default_factory=_default_branch_quantiles,
+        min_length=2,
+        max_length=7,
+    )
+    options: dict[NonEmptyStr, JsonValue] = Field(
+        default_factory=dict,
+        validation_alias=AliasChoices("options"),
+    )
+    timeout: float | None = Field(default=None, gt=0.0)
+    keep_alive: StrictStr | StrictInt | StrictFloat | None = None
+    parameters: ForecastParameters = Field(
+        default_factory=ForecastParameters,
+        validation_alias=AliasChoices("parameters"),
+    )
+    response_options: ResponseOptions = Field(default_factory=ResponseOptions)
+
+    @field_validator("series")
+    @classmethod
+    def validate_unique_ids(cls, value: list[SeriesInput]) -> list[SeriesInput]:
+        ids = [item.id for item in value]
+        if len(ids) != len(set(ids)):
+            raise ValueError("series ids must be unique")
+        return value
+
+    @field_validator("branch_quantiles")
+    @classmethod
+    def validate_branch_quantiles(cls, value: list[Quantile]) -> list[Quantile]:
+        if value != sorted(value):
+            raise ValueError("branch_quantiles must be sorted in ascending order")
+        if len(value) != len(set(value)):
+            raise ValueError("branch_quantiles must be unique")
+        return value
+
+    @model_validator(mode="after")
+    def validate_depth(self) -> ScenarioTreeRequest:
+        if self.depth > self.horizon:
+            raise ValueError("depth must be less than or equal to horizon")
+        return self
+
+
+class ScenarioTreeNode(CanonicalModel):
+    """One node in a flattened probabilistic scenario tree."""
+
+    node_id: NonEmptyStr
+    parent_id: NonEmptyStr | None = None
+    series_id: NonEmptyStr
+    depth: StrictInt = Field(ge=0)
+    step: StrictInt = Field(ge=0)
+    branch: NonEmptyStr
+    quantile: Quantile | None = None
+    value: StrictFloat | None = None
+    probability: StrictFloat = Field(gt=0.0, le=1.0)
+
+    @model_validator(mode="after")
+    def validate_structure(self) -> ScenarioTreeNode:
+        if self.depth != self.step:
+            raise ValueError("depth and step must match")
+        if self.depth == 0:
+            if self.parent_id is not None:
+                raise ValueError("root node must have parent_id=null")
+            return self
+        if self.parent_id is None:
+            raise ValueError("non-root nodes must have parent_id")
+        if self.quantile is None:
+            raise ValueError("non-root nodes must include quantile")
+        if self.value is None:
+            raise ValueError("non-root nodes must include value")
+        return self
+
+
+class ScenarioTreeResponse(CanonicalModel):
+    """Response payload for scenario-tree generation."""
+
+    model: NonEmptyStr
+    depth: PositiveInt
+    branch_quantiles: list[Quantile] = Field(min_length=2)
+    nodes: list[ScenarioTreeNode] = Field(min_length=1)
+    warnings: list[NonEmptyStr] | None = None
+
+    @field_validator("branch_quantiles")
+    @classmethod
+    def validate_branch_quantiles(cls, value: list[Quantile]) -> list[Quantile]:
+        if value != sorted(value):
+            raise ValueError("branch_quantiles must be sorted in ascending order")
+        if len(value) != len(set(value)):
+            raise ValueError("branch_quantiles must be unique")
+        return value
+
+    @field_validator("nodes")
+    @classmethod
+    def validate_unique_ids(cls, value: list[ScenarioTreeNode]) -> list[ScenarioTreeNode]:
+        ids = [item.node_id for item in value]
+        if len(ids) != len(set(ids)):
+            raise ValueError("nodes must be unique by node_id")
+        return value
 
 
 class WhatIfTransform(CanonicalModel):
@@ -576,6 +1026,7 @@ class WhatIfRequest(CanonicalModel):
         default_factory=ForecastParameters,
         validation_alias=AliasChoices("parameters"),
     )
+    response_options: ResponseOptions = Field(default_factory=ResponseOptions)
 
     @field_validator("quantiles")
     @classmethod
@@ -604,6 +1055,7 @@ class WhatIfRequest(CanonicalModel):
             "options": self.options,
             "timeout": self.timeout,
             "parameters": self.parameters.model_dump(mode="python"),
+            "response_options": self.response_options.model_dump(mode="python"),
         }
         ForecastRequest.model_validate(validation_payload)
 
@@ -661,6 +1113,23 @@ class CompareSummary(CanonicalModel):
         return self
 
 
+class CompareNarrativeEntry(CanonicalModel):
+    """Narrative ranking entry for one compared model."""
+
+    model: NonEmptyStr
+    rank: PositiveInt
+    score: StrictFloat | None = None
+
+
+class CompareNarrative(CanonicalModel):
+    """Narrative-ready summary for compare responses."""
+
+    summary: NonEmptyStr
+    criterion: NonEmptyStr
+    best_model: NonEmptyStr | None = None
+    rankings: list[CompareNarrativeEntry] = Field(default_factory=list)
+
+
 class CompareResponse(CanonicalModel):
     """Response payload for model comparison requests."""
 
@@ -668,6 +1137,7 @@ class CompareResponse(CanonicalModel):
     horizon: PositiveInt
     results: list[CompareResult] = Field(min_length=1)
     summary: CompareSummary
+    narrative: CompareNarrative | None = None
 
 
 class WhatIfError(CanonicalModel):
@@ -749,6 +1219,7 @@ class PipelineRequest(CanonicalModel):
     allow_restricted_license: StrictBool = False
     pull_if_missing: StrictBool = True
     accept_license: StrictBool = False
+    response_options: ResponseOptions = Field(default_factory=ResponseOptions)
 
     @field_validator("quantiles")
     @classmethod
@@ -774,15 +1245,26 @@ class PipelineRequest(CanonicalModel):
             "timeout": self.timeout,
             "keep_alive": self.keep_alive,
             "parameters": self.parameters.model_dump(mode="python"),
+            "response_options": self.response_options.model_dump(mode="python"),
         }
         AutoForecastRequest.model_validate(auto_payload)
         AnalyzeRequest.model_validate(
             {
                 "series": [series.model_dump(mode="python") for series in self.series],
                 "parameters": self.analyze_parameters.model_dump(mode="python"),
+                "response_options": self.response_options.model_dump(mode="python"),
             },
         )
         return self
+
+
+class PipelineNarrative(CanonicalModel):
+    """Narrative-ready summary for pipeline responses."""
+
+    summary: NonEmptyStr
+    chosen_model: NonEmptyStr
+    pulled_model: NonEmptyStr | None = None
+    warnings_count: StrictInt = Field(ge=0)
 
 
 class PipelineResponse(CanonicalModel):
@@ -793,6 +1275,35 @@ class PipelineResponse(CanonicalModel):
     pulled_model: NonEmptyStr | None = None
     auto_forecast: AutoForecastResponse
     warnings: list[NonEmptyStr] | None = None
+    narrative: PipelineNarrative | None = None
+
+
+class ReportRequest(PipelineRequest):
+    """Composite report request payload."""
+
+    include_baseline: StrictBool = True
+
+
+class ReportNarrative(CanonicalModel):
+    """Narrative-ready summary for report responses."""
+
+    summary: NonEmptyStr
+    chosen_model: NonEmptyStr
+    anomaly_count: StrictInt = Field(ge=0)
+    key_insights: list[NonEmptyStr] = Field(default_factory=list)
+    warnings_count: StrictInt = Field(ge=0)
+
+
+class ForecastReport(CanonicalModel):
+    """Composite report response payload."""
+
+    analysis: AnalyzeResponse
+    recommendation: dict[NonEmptyStr, JsonValue]
+    forecast: AutoForecastResponse
+    baseline: ForecastResponse | None = None
+    metrics: ForecastMetrics | None = None
+    warnings: list[NonEmptyStr] | None = None
+    narrative: ReportNarrative | None = None
 
 
 def _validate_covariate_values(

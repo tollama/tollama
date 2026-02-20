@@ -28,6 +28,10 @@ def test_autogen_wrappers_expose_tool_specs_and_function_map() -> None:
         "tollama_forecast",
         "tollama_auto_forecast",
         "tollama_analyze",
+        "tollama_generate",
+        "tollama_counterfactual",
+        "tollama_scenario_tree",
+        "tollama_report",
         "tollama_compare",
         "tollama_recommend",
     ]
@@ -71,8 +75,8 @@ def test_autogen_register_uses_register_function(monkeypatch: pytest.MonkeyPatch
     executor = object()
     result = register_autogen_tools(caller=caller, executor=executor)
 
-    assert result["count"] == 7
-    assert len(calls) == 7
+    assert result["count"] == 11
+    assert len(calls) == 11
     assert calls[0]["caller"] is caller
     assert calls[0]["executor"] is executor
     assert calls[0]["name"] == "tollama_health"

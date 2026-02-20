@@ -77,7 +77,7 @@
   - 현재 Output: `mean`, `quantiles`, `warnings`, `usage`, optional
     `metrics`(`mape`/`mase`/`mae`/`rmse`/`smape`/`wape`/`rmsse`/`pinball`),
     optional `timing`(`model_load_ms`/`inference_ms`/`total_ms`),
-    optional `explanation` 구현
+    optional `explanation`, optional `narrative`(요청 `response_options.narrative=true`) 구현
   - TODO Meta 확장: `model_version/digest`, `median` 명시 규격 보강
 - [~] (P1) 신뢰도/품질 메타 지표 설계
   - 현재: 요청 `series.actuals` + `parameters.metrics` 기반
@@ -176,9 +176,27 @@
   - 현재: `scripts/install_mcp.sh`, `CLAUDE.md` 추가
   - 현재: 실 SDK 환경 E2E smoke 완료(`tollama-mcp` stdio + live daemon tool call)
   - 현재: `README.md`/`roadmap.md`/`CLAUDE.md`에 MCP 구현 상세(툴 계약/에러 매핑/기본값) 반영
-  - 현재: MCP 11개 툴(`health/models/forecast/auto_forecast/analyze/what_if/pipeline/compare/recommend/pull/show`) description에
+  - 현재: MCP 15개 툴(`health/models/forecast/auto_forecast/analyze/generate/counterfactual/scenario_tree/report/what_if/pipeline/compare/recommend/pull/show`) description에
     입력 스키마/모델 예시/호출 예시 추가
   - TODO: Claude Desktop 운영 가이드(권한/세션/배포 정책) 보강
+- [~] (P1) A2A(Agent2Agent) 프로토콜 1차 도입
+  - 현재: discovery `GET /.well-known/agent-card.json` + legacy alias `GET /.well-known/agent.json` 추가
+  - 현재: JSON-RPC endpoint `POST /a2a` 추가
+  - 현재: 메서드 `message/send`, `message/stream(SSE)`, `tasks/get`, `tasks/query`, `tasks/cancel` 구현
+  - 현재: API key 설정 시 discovery + `/a2a` 모두 bearer 인증 적용(기본 authenticated discovery)
+  - 현재: in-memory task lifecycle + 모델 family 식별 시 cancel 시도(`runner_manager.stop`) 구현
+  - 현재: outbound helper `src/tollama/a2a/client.py` 추가(discover/send/get/query/cancel/poll)
+  - 현재: 회귀 테스트 `tests/test_a2a_agent_card.py`, `tests/test_a2a_server.py`,
+    `tests/test_a2a_tasks.py`, `tests/test_a2a_client.py` 추가
+  - TODO: `tasks/subscribe`, push notification config, extended agent card 확장
+- [x] (P1) Real-time SSE 스트리밍 1차
+  - 현재: `GET /api/events` 추가(키 범위 SSE 구독, event filter/heartbeat/max_events 지원)
+  - 현재: `/api/forecast`, `/api/analyze` 경로에서
+    `model.loaded`, `forecast.progress`, `forecast.complete`, `analysis.complete`,
+    `anomaly.detected` 이벤트 발행
+  - 현재: `POST /api/forecast/progressive` 추가(단계별 `model.selected` -> `forecast.progress` -> `forecast.complete`)
+  - 현재: `message/stream` A2A SSE 이벤트(`TaskStatusUpdateEvent`, `TaskArtifactUpdateEvent`) 구현
+  - 현재: 회귀 테스트 `tests/test_sse.py`, `tests/test_progressive.py`, `tests/test_a2a_server.py` 확장
 - [x] (P1) Agentic 비교/추천 기능 1차
   - 현재: `/api/compare` 추가(다중 모델 동일 요청 비교, per-model success/error 반환)
   - 현재: `tollama_compare` MCP/LangChain 툴 추가
@@ -191,6 +209,19 @@
   - 현재: `tests/test_series_analysis.py`, `tests/test_daemon_api.py`,
     `tests/test_client_http.py`, `tests/test_mcp_tools.py`, `tests/test_langchain_skill.py`,
     `tests/test_agent_wrappers.py`, `tests/test_sdk.py`, `tests/test_schemas.py` 검증 추가
+- [x] (P1) Synthetic Time Series Generation 1차(통계 기반, deterministic)
+  - 현재: `/api/generate` 추가(`GenerateRequest`/`GenerateResponse`)
+  - 현재: `src/tollama/core/synthetic.py` 추가(시계열 프로파일 기반 synthetic 생성)
+  - 현재: `TollamaClient`/`AsyncTollamaClient`/SDK `Tollama.generate()` 추가
+  - 현재: `tollama_generate` MCP/LangChain/CrewAI/AutoGen/smolagents/A2A 경로 추가
+  - 현재: `tests/test_synthetic.py` + 연관 client/MCP/LangChain/A2A/schema 회귀 테스트 추가
+- [x] (P1) Composite Report / Counterfactual / Scenario-Tree 1차
+  - 현재: `/api/report`, `/api/counterfactual`, `/api/scenario-tree` 추가
+  - 현재: core 모듈 `src/tollama/core/report.py`, `counterfactual.py`, `scenario_tree.py` 추가
+  - 현재: `Counterfactual*`, `ScenarioTree*`, `Report*`, `AnomalyRecord` 스키마 추가
+  - 현재: `TollamaClient`/`AsyncTollamaClient`/SDK 메서드(`report`, `counterfactual`, `scenario_tree`) 추가
+  - 현재: MCP/LangChain/CrewAI/AutoGen/smolagents 툴(`tollama_report`, `tollama_counterfactual`, `tollama_scenario_tree`) 추가
+  - 현재: 회귀 테스트 `tests/test_report.py`, `tests/test_counterfactual.py`, `tests/test_scenario_tree.py` 및 연동 계층 테스트 확장
 - [x] (P1) Zero-config Auto-Forecast 1차
   - 현재: `/api/auto-forecast` 추가(설치 모델 기준 auto/fastest/best_accuracy/ensemble 선택)
   - 현재: `AutoForecastRequest/AutoSelectionInfo/AutoForecastResponse` 스키마 추가
