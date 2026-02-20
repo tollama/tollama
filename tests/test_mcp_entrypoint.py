@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 import pytest
 
 from tollama.mcp import __main__ as mcp_main
+from tollama.mcp import server as mcp_server
 
 
 def test_main_runs_server_when_available(monkeypatch) -> None:
@@ -34,3 +37,36 @@ def test_main_exits_with_install_hint_on_runtime_error(monkeypatch, capsys) -> N
     captured = capsys.readouterr()
     assert exc_info.value.code == 1
     assert "pip install \"tollama[mcp]\"" in captured.err
+
+
+def test_create_server_registers_descriptions_for_all_tools(monkeypatch) -> None:
+    registered: dict[str, dict[str, Any]] = {}
+
+    class _FakeFastMCP:
+        def __init__(self, name: str) -> None:
+            self.name = name
+
+        def tool(self, *, name: str, description: str):  # noqa: ANN202
+            def _decorate(func):  # type: ignore[no-untyped-def]
+                registered[name] = {"description": description, "func": func}
+                return func
+
+            return _decorate
+
+    monkeypatch.setattr(mcp_server, "_load_fastmcp", lambda: _FakeFastMCP)
+
+    server = mcp_server.create_server()
+
+    assert isinstance(server, _FakeFastMCP)
+    assert set(registered) == {
+        "tollama_health",
+        "tollama_models",
+        "tollama_forecast",
+        "tollama_pull",
+        "tollama_show",
+    }
+    for payload in registered.values():
+        description = payload["description"]
+        assert "Example:" in description
+        assert "model" in description
+    assert "horizon" in registered["tollama_forecast"]["description"]

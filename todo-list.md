@@ -1,6 +1,6 @@
 # tollama Todo List (Ollama for TSFM)
 
-기준 시점: 2026-02-19 (repo 현재 구현 반영)
+기준 시점: 2026-02-20 (repo 현재 구현 반영)
 
 우선순위:
 - `P0` = 필수(MVP)
@@ -159,9 +159,14 @@
 - [x] (P1) Python SDK / LangChain Tool 래퍼 추가
   - 현재: `src/tollama/skill/langchain.py`에
     `TollamaForecastTool`/`TollamaHealthTool`/`TollamaModelsTool` 구현
+  - 현재: LangChain 3개 툴 description에 schema/model/example 가이드 추가
   - 현재: 팩토리 `get_tollama_tools(base_url="http://127.0.0.1:11435", timeout=10.0)` 제공
   - 현재: optional extra `.[langchain]`(`langchain-core`) 추가
   - 현재: `tests/test_langchain_skill.py` 검증 추가
+  - 현재: 고수준 SDK `src/tollama/sdk.py` 추가(`from tollama import Tollama`)
+    - dict/list/pandas Series/DataFrame 입력 정규화
+    - 결과 helper(`mean`, `quantiles`, `to_df()`) 제공
+    - `tests/test_sdk.py` 검증 추가
 - [~] (P1) MCP 서버(Claude Code 네이티브 연동) 1차 도입
   - 현재: 공통 HTTP client `src/tollama/client/` 신설(CLI/MCP 공용)
   - 현재: `src/tollama/mcp/` 서버/툴 핸들러/엔트리포인트 추가
@@ -169,7 +174,12 @@
   - 현재: `scripts/install_mcp.sh`, `CLAUDE.md` 추가
   - 현재: 실 SDK 환경 E2E smoke 완료(`tollama-mcp` stdio + live daemon tool call)
   - 현재: `README.md`/`roadmap.md`/`CLAUDE.md`에 MCP 구현 상세(툴 계약/에러 매핑/기본값) 반영
+  - 현재: MCP 5개 툴 description에 입력 스키마/모델 예시/호출 예시 추가
   - TODO: Claude Desktop 운영 가이드(권한/세션/배포 정책) 보강
+- [x] (P0) 온보딩 마찰 완화 1차
+  - 현재: `tollama quickstart` 명령 추가(daemon 확인 -> pull -> demo forecast -> next steps 출력)
+  - 현재: `README.md` 상단을 설치/quickstart/SDK/agent 중심으로 재구성
+  - 현재: 모델별 설치/실행 가이드를 `docs/models.md`로 분리
 - [ ] (P1) TSModelfile 스펙 초안 작성 + parser 구현 계획
   - 파일 포맷/키 목록/우선순위 규칙 정의
 - [~] (P1) Unified Data Adapter 설계 문서

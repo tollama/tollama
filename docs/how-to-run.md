@@ -258,6 +258,53 @@ curl http://localhost:11435/api/version
 curl http://localhost:11435/v1/health
 ```
 
+## 5-Minute Quickstart
+
+With daemon running in one terminal:
+
+```bash
+tollama quickstart
+```
+
+This command:
+
+- verifies daemon reachability
+- pulls `mock` (or `--model <name>`)
+- runs a demo non-streaming forecast
+- prints next-step commands
+
+Useful options:
+
+- `--model` to switch model for the demo
+- `--horizon` to change forecast horizon
+- `--accept-license` for gated model pulls
+- `--base-url` and `--timeout` for remote daemon setups
+
+## Python SDK Convenience API
+
+The base `tollama` package includes a high-level SDK facade:
+
+```python
+from tollama import Tollama
+
+t = Tollama()
+result = t.forecast(
+    model="chronos2",
+    series={"target": [10, 11, 12, 13, 14], "freq": "D"},
+    horizon=3,
+)
+print(result.mean)
+print(result.quantiles)
+print(result.to_df())
+```
+
+`Tollama.forecast(...)` accepts:
+
+- `dict` series payload (`target` required)
+- list of series payload dicts
+- `pandas.Series`
+- `pandas.DataFrame` (wide or long-format with `target`)
+
 ## Install All TSFM Models
 
 If any model is gated/private in your environment, set a token first:

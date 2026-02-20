@@ -245,6 +245,96 @@ def test_list_ps_show_and_rm_commands_call_api_client(monkeypatch) -> None:
     assert json.loads(_result_stdout(removed)) == {"deleted": True, "model": "mock"}
 
 
+def test_quickstart_pulls_model_and_runs_demo_forecast(monkeypatch) -> None:
+    captured: dict[str, object] = {"calls": []}
+
+    class _FakeClient:
+        def __init__(self, base_url: str, timeout: float) -> None:
+            captured["base_url"] = base_url
+            captured["timeout"] = timeout
+
+        def health(self) -> dict[str, object]:
+            cast_calls = captured["calls"]
+            assert isinstance(cast_calls, list)
+            cast_calls.append("health")
+            return {"health": {"status": "ok"}, "version": {"version": "0.1.0"}}
+
+        def pull_model(
+            self,
+            name: str,
+            *,
+            stream: bool,
+            accept_license: bool = False,
+        ) -> dict[str, object] | list[dict[str, object]]:
+            cast_calls = captured["calls"]
+            assert isinstance(cast_calls, list)
+            cast_calls.append("pull")
+            captured["pull"] = {
+                "name": name,
+                "stream": stream,
+                "accept_license": accept_license,
+            }
+            return {"status": "success", "model": name}
+
+        def forecast(
+            self,
+            payload: dict[str, object],
+            *,
+            stream: bool,
+        ) -> dict[str, object] | list[dict[str, object]]:
+            cast_calls = captured["calls"]
+            assert isinstance(cast_calls, list)
+            cast_calls.append("forecast")
+            captured["forecast"] = {"payload": payload, "stream": stream}
+            return {
+                "model": payload["model"],
+                "forecasts": [
+                    {
+                        "id": "demo_series",
+                        "freq": "D",
+                        "start_timestamp": "2025-01-06",
+                        "mean": [15.0, 16.0, 17.0],
+                    }
+                ],
+            }
+
+    monkeypatch.setattr("tollama.cli.main.TollamaClient", _FakeClient)
+    runner = _new_runner()
+    result = runner.invoke(app, ["quickstart"])
+
+    assert result.exit_code == 0
+    assert captured["base_url"] == "http://localhost:11435"
+    assert captured["timeout"] == 30.0
+    assert captured["calls"] == ["health", "pull", "forecast"]
+    assert captured["pull"] == {"name": "mock", "stream": False, "accept_license": False}
+    assert captured["forecast"]["stream"] is False
+    assert captured["forecast"]["payload"]["model"] == "mock"
+    assert captured["forecast"]["payload"]["horizon"] == 3
+
+    output = _result_stdout(result)
+    assert "tollama quickstart complete" in output
+    assert "Next steps:" in output
+    assert "tollama run mock --input examples/request.json --no-stream" in output
+
+
+def test_quickstart_prints_daemon_guidance_when_unreachable(monkeypatch) -> None:
+    class _FakeClient:
+        def __init__(self, base_url: str, timeout: float) -> None:
+            del base_url, timeout
+
+        def health(self) -> dict[str, object]:
+            raise RuntimeError("connection refused")
+
+    monkeypatch.setattr("tollama.cli.main.TollamaClient", _FakeClient)
+    runner = _new_runner()
+    result = runner.invoke(app, ["quickstart", "--base-url", "http://daemon.test"])
+
+    assert result.exit_code == 1
+    stderr = _result_stderr(result)
+    assert "unable to reach tollama daemon at http://daemon.test" in stderr
+    assert "tollama serve" in stderr
+
+
 def test_run_auto_pulls_when_model_not_installed(monkeypatch, tmp_path: Path) -> None:
     request_path = tmp_path / "request.json"
     request_path.write_text(json.dumps(_sample_request_payload()), encoding="utf-8")

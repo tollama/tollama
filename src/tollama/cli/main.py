@@ -59,6 +59,8 @@ _INT_CONFIG_KEYS = {"pull.max_workers"}
 
 _UNI2TS_PYTHON_WARNING = "Uni2TS/Moirai dependencies may fail to install on Python 3.12+"
 _RUN_TIMEOUT_SECONDS = 300.0
+_QUICKSTART_MODEL = "mock"
+_QUICKSTART_HORIZON = 3
 _DOCTOR_TOKEN_ENV_KEYS = (
     "TOLLAMA_HF_TOKEN",
     "HF_TOKEN",
@@ -505,6 +507,99 @@ def run(
         typer.echo(f"Error: {exc}", err=True)
         raise typer.Exit(code=1) from exc
     _emit_result(forecast_result, stream_kind="forecast")
+
+
+@app.command("quickstart")
+def quickstart(
+    model: str = typer.Option(
+        _QUICKSTART_MODEL,
+        "--model",
+        help="Model name to use for quickstart.",
+    ),
+    horizon: int = typer.Option(
+        _QUICKSTART_HORIZON,
+        "--horizon",
+        min=1,
+        help="Forecast horizon for quickstart demo payload.",
+    ),
+    accept_license: bool = typer.Option(
+        False,
+        "--accept-license",
+        help="Accept model license terms when required by pull.",
+    ),
+    base_url: str = typer.Option(
+        DEFAULT_BASE_URL,
+        help="Daemon base URL. Defaults to http://localhost:11435.",
+    ),
+    timeout: float = typer.Option(30.0, min=0.1, help="HTTP timeout in seconds."),
+) -> None:
+    """Pull a model, run demo forecast, and print next-step commands."""
+    client = TollamaClient(base_url=base_url, timeout=timeout)
+
+    try:
+        client.health()
+    except RuntimeError as exc:
+        typer.echo(f"Error: unable to reach tollama daemon at {base_url}: {exc}", err=True)
+        typer.echo("Start it with: tollama serve", err=True)
+        raise typer.Exit(code=1) from exc
+
+    try:
+        pull_result = client.pull_model(
+            name=model,
+            stream=False,
+            accept_license=accept_license,
+        )
+    except RuntimeError as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+
+    request_payload = _quickstart_request_payload(model=model, horizon=horizon)
+    try:
+        forecast_result = client.forecast(request_payload, stream=False)
+    except RuntimeError as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+
+    typer.echo("tollama quickstart complete")
+    typer.echo("")
+    typer.echo("Pull result:")
+    _emit_result(pull_result, stream_kind="pull")
+    typer.echo("")
+    typer.echo("Forecast result:")
+    _emit_result(forecast_result, stream_kind="forecast")
+    typer.echo("")
+    typer.echo("Next steps:")
+    typer.echo("  1. tollama list")
+    typer.echo("  2. tollama run mock --input examples/request.json --no-stream")
+    typer.echo(
+        "  3. python -c \"from tollama import Tollama; "
+        "print(Tollama().models('available'))\"",
+    )
+
+
+def _quickstart_request_payload(*, model: str, horizon: int) -> dict[str, Any]:
+    timestamps = [
+        "2025-01-01",
+        "2025-01-02",
+        "2025-01-03",
+        "2025-01-04",
+        "2025-01-05",
+    ]
+    target = [10.0, 11.0, 12.0, 13.0, 14.0]
+    return {
+        "model": model,
+        "horizon": horizon,
+        "quantiles": [0.1, 0.9],
+        "series": [
+            {
+                "id": "demo_series",
+                "freq": "D",
+                "timestamps": timestamps,
+                "target": target,
+            }
+        ],
+        "options": {},
+    }
 
 
 def _emit_uni2ts_python_runtime_warning(model: str) -> None:

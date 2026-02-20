@@ -25,6 +25,10 @@ from .tools import (
 )
 
 _MCP_IMPORT_HINT = 'MCP dependency is not installed. Install with: pip install "tollama[mcp]"'
+_MODEL_NAME_EXAMPLES = (
+    "mock, chronos2, granite-ttm-r2, timesfm-2.5-200m, "
+    "moirai-2.0-R-small, sundial-base-128m, toto-open-base-1.0"
+)
 
 
 def _load_fastmcp() -> type[Any]:
@@ -51,14 +55,32 @@ def create_server() -> Any:
     FastMCP = _load_fastmcp()
     server = FastMCP("tollama")
 
-    @server.tool(name="tollama_health")
+    @server.tool(
+        name="tollama_health",
+        description=(
+            "Check daemon reachability and version information. "
+            "No required inputs. Optional base_url and timeout overrides are supported. "
+            "Available models can be queried with tollama_models "
+            f"(examples include: {_MODEL_NAME_EXAMPLES}). "
+            'Example: tollama_health({"base_url":"http://127.0.0.1:11435","timeout":5.0}).'
+        ),
+    )
     def tollama_health(base_url: str | None = None, timeout: float | None = None) -> dict[str, Any]:
         try:
             return _tollama_health(base_url=base_url, timeout=timeout)
         except MCPToolError as exc:
             _raise_mcp_tool_error(exc)
 
-    @server.tool(name="tollama_models")
+    @server.tool(
+        name="tollama_models",
+        description=(
+            "List models from tollama by mode. "
+            "Required inputs: none. Optional mode values are installed, loaded, or available. "
+            "Available model names include "
+            f"{_MODEL_NAME_EXAMPLES}. "
+            'Example: tollama_models({"mode":"available"}).'
+        ),
+    )
     def tollama_models(
         mode: str = "installed",
         base_url: str | None = None,
@@ -69,7 +91,19 @@ def create_server() -> Any:
         except MCPToolError as exc:
             _raise_mcp_tool_error(exc)
 
-    @server.tool(name="tollama_forecast")
+    @server.tool(
+        name="tollama_forecast",
+        description=(
+            "Run a non-streaming forecast request and return canonical forecast JSON. "
+            "Required inputs: request.model, request.horizon, request.series[]. "
+            "Series entries must include id, timestamps, and target. "
+            "Supported model names include "
+            f"{_MODEL_NAME_EXAMPLES}. "
+            'Example: tollama_forecast({"request":{"model":"chronos2","horizon":3,'
+            '"series":[{"id":"s1","freq":"D","timestamps":["2025-01-01","2025-01-02"],'
+            '"target":[10,11]}],"options":{}}}).'
+        ),
+    )
     def tollama_forecast(
         request: dict[str, Any],
         base_url: str | None = None,
@@ -80,7 +114,16 @@ def create_server() -> Any:
         except MCPToolError as exc:
             _raise_mcp_tool_error(exc)
 
-    @server.tool(name="tollama_pull")
+    @server.tool(
+        name="tollama_pull",
+        description=(
+            "Pull an installed model manifest and snapshot into local storage. "
+            "Required input: model. Optional accept_license, base_url, and timeout. "
+            "Model name choices include "
+            f"{_MODEL_NAME_EXAMPLES}. "
+            'Example: tollama_pull({"model":"mock","accept_license":false}).'
+        ),
+    )
     def tollama_pull(
         model: str,
         accept_license: bool = False,
@@ -97,7 +140,16 @@ def create_server() -> Any:
         except MCPToolError as exc:
             _raise_mcp_tool_error(exc)
 
-    @server.tool(name="tollama_show")
+    @server.tool(
+        name="tollama_show",
+        description=(
+            "Fetch model metadata and capabilities from installed manifests. "
+            "Required input: model. Optional base_url and timeout. "
+            "Model names include "
+            f"{_MODEL_NAME_EXAMPLES}. "
+            'Example: tollama_show({"model":"timesfm-2.5-200m"}).'
+        ),
+    )
     def tollama_show(
         model: str,
         base_url: str | None = None,

@@ -17,6 +17,10 @@ from tollama.core.schemas import ForecastRequest
 _LANGCHAIN_IMPORT_HINT = (
     'LangChain dependency is not installed. Install with: pip install "tollama[langchain]"'
 )
+_MODEL_NAME_EXAMPLES = (
+    "mock, chronos2, granite-ttm-r2, timesfm-2.5-200m, "
+    "moirai-2.0-R-small, sundial-base-128m, toto-open-base-1.0"
+)
 
 try:
     from langchain_core.tools import BaseTool
@@ -74,7 +78,14 @@ class TollamaHealthTool(_TollamaBaseTool):
     """LangChain tool that returns tollama daemon health information."""
 
     name: str = "tollama_health"
-    description: str = "Fetch tollama daemon health and version information."
+    description: str = (
+        "Check tollama daemon status and version. "
+        "No required arguments; use optional tool config base_url/timeout. "
+        "Use this before forecast calls. "
+        "Model choices for follow-up operations include "
+        f"{_MODEL_NAME_EXAMPLES}. "
+        'Example: tool.invoke({}).'
+    )
     args_schema: type[BaseModel] = HealthToolInput
 
     def _run(self, run_manager: Any | None = None) -> dict[str, Any]:
@@ -98,7 +109,14 @@ class TollamaModelsTool(_TollamaBaseTool):
     """LangChain tool that returns model lists for a requested mode."""
 
     name: str = "tollama_models"
-    description: str = "List tollama models in installed, loaded, or available mode."
+    description: str = (
+        "List tollama models by mode. "
+        "Input schema: {mode?: 'installed'|'loaded'|'available'}. "
+        "Use available mode to discover installable models "
+        f"(for example: {_MODEL_NAME_EXAMPLES}). "
+        "Use loaded mode for currently active runners. "
+        'Example: tool.invoke({"mode":"available"}).'
+    )
     args_schema: type[BaseModel] = ModelsToolInput
 
     def _run(self, mode: str = "installed", run_manager: Any | None = None) -> dict[str, Any]:
@@ -130,7 +148,16 @@ class TollamaForecastTool(_TollamaBaseTool):
     """LangChain tool that validates and executes non-streaming forecasts."""
 
     name: str = "tollama_forecast"
-    description: str = "Run a non-streaming forecast request against tollama."
+    description: str = (
+        "Run a non-streaming forecast against tollama. "
+        "Input schema: {request:{model,horizon,series,quantiles?,options?,parameters?}}. "
+        "Each series item must include id, timestamps, and target. "
+        "Model values include "
+        f"{_MODEL_NAME_EXAMPLES}. "
+        'Example: tool.invoke({"request":{"model":"chronos2","horizon":3,'
+        '"series":[{"id":"s1","freq":"D","timestamps":["2025-01-01","2025-01-02"],'
+        '"target":[10,11]}],"options":{}}}).'
+    )
     args_schema: type[BaseModel] = ForecastToolInput
 
     def _run(

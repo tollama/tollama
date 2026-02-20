@@ -1,6 +1,6 @@
 # tollama roadmap (worker-per-model-family)
 
-Last updated: 2026-02-19
+Last updated: 2026-02-20
 
 Status legend:
 - `[x]` implemented
@@ -255,7 +255,7 @@ tollama/
   - available model capabilities
   - runner statuses
 - CLI command surface today:
-  - `serve`, `pull`, `list`, `ps`, `show`, `rm`, `run`, `info`, `config`
+  - `serve`, `quickstart`, `pull`, `list`, `ps`, `show`, `rm`, `run`, `info`, `config`
 - CLI behavior includes:
   - warning output for forecast responses that include `warnings[]`
   - covariates capability summaries in `tollama info`
@@ -445,6 +445,8 @@ Phase F - Product hardening:
 - MCP server scaffold added under `src/tollama/mcp/`:
   - `server.py`, `tools.py`, `schemas.py`, `__main__.py`
   - tool set: `tollama_health`, `tollama_models`, `tollama_forecast`, `tollama_pull`, `tollama_show`
+  - each tool now includes rich MCP descriptions with required inputs, model-name examples,
+    and invocation examples for agent discoverability
 - MCP tool behavior/contracts:
   - strict input schemas (`extra="forbid"`, strict scalar typing, positive timeout)
   - `tollama_models(mode=installed|loaded|available)` mapped to `/api/tags|/api/ps|/api/info`
@@ -461,11 +463,20 @@ Phase F - Product hardening:
   - `TollamaForecastTool`, `TollamaHealthTool`, `TollamaModelsTool`
   - `get_tollama_tools(base_url="http://127.0.0.1:11435", timeout=10.0)`
   - optional extra `.[langchain]` with `langchain-core`
+  - tool descriptions now include schema guidance, model-name examples, and invocation examples
+- High-level Python SDK convenience facade added:
+  - `src/tollama/sdk.py` with `Tollama` + `TollamaForecastResult`
+  - package export `from tollama import Tollama`
+  - supports dict/list/pandas Series/DataFrame series inputs and `result.to_df()`
+- Onboarding quickstart command added:
+  - `tollama quickstart` validates daemon reachability, pulls a model, runs demo forecast,
+    and prints next-step commands
 - Focused validation added:
   - `tests/test_client_http.py`
   - `tests/test_mcp_tools.py`
   - `tests/test_mcp_entrypoint.py`
   - `tests/test_langchain_skill.py`
+  - `tests/test_sdk.py`
 - MCP end-to-end SDK smoke passed on `2026-02-20` with stdio transport and live daemon.
 
 ### Planned work / TODO

@@ -68,6 +68,24 @@ def test_get_tollama_tools_returns_preconfigured_tools(langchain_tools) -> None:
         assert tool.timeout == 7.0
 
 
+def test_tool_descriptions_include_usage_guidance(langchain_tools) -> None:
+    forecast_tool = langchain_tools.TollamaForecastTool()
+    models_tool = langchain_tools.TollamaModelsTool()
+    health_tool = langchain_tools.TollamaHealthTool()
+
+    assert "request" in forecast_tool.description
+    assert "horizon" in forecast_tool.description
+    assert "series" in forecast_tool.description
+    assert "Example:" in forecast_tool.description
+
+    assert "mode" in models_tool.description
+    assert "available" in models_tool.description
+    assert "Example:" in models_tool.description
+
+    assert "status" in health_tool.description
+    assert "Example:" in health_tool.description
+
+
 def test_tollama_health_tool_success(monkeypatch, langchain_tools) -> None:
     class _FakeClient:
         def health(self) -> dict[str, Any]:
