@@ -27,6 +27,9 @@ from .tools import (
     tollama_models as _tollama_models,
 )
 from .tools import (
+    tollama_pipeline as _tollama_pipeline,
+)
+from .tools import (
     tollama_pull as _tollama_pull,
 )
 from .tools import (
@@ -196,6 +199,30 @@ def create_server() -> Any:
     ) -> dict[str, Any]:
         try:
             return _tollama_what_if(request=request, base_url=base_url, timeout=timeout)
+        except MCPToolError as exc:
+            _raise_mcp_tool_error(exc)
+
+    @server.tool(
+        name="tollama_pipeline",
+        description=(
+            "Run the full autonomous forecasting workflow in one call: "
+            "analyze -> recommend -> optional pull -> auto-forecast. "
+            "Required input: request.horizon and request.series[]. "
+            "Optional: request.strategy, request.model override, request.recommend_top_k, "
+            "request.pull_if_missing, request.accept_license, and "
+            "request.allow_restricted_license. "
+            'Example: tollama_pipeline({"request":{"horizon":3,"strategy":"auto",'
+            '"series":[{"id":"s1","freq":"D","timestamps":["2025-01-01","2025-01-02"],'
+            '"target":[10,11]}],"options":{},"pull_if_missing":true}}).'
+        ),
+    )
+    def tollama_pipeline(
+        request: dict[str, Any],
+        base_url: str | None = None,
+        timeout: float | None = None,
+    ) -> dict[str, Any]:
+        try:
+            return _tollama_pipeline(request=request, base_url=base_url, timeout=timeout)
         except MCPToolError as exc:
             _raise_mcp_tool_error(exc)
 

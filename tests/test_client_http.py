@@ -143,6 +143,32 @@ def _what_if_response_payload() -> dict[str, Any]:
     }
 
 
+def _pipeline_request_payload() -> dict[str, Any]:
+    return {
+        "horizon": 2,
+        "strategy": "auto",
+        "series": _request_payload()["series"],
+        "options": {},
+        "pull_if_missing": True,
+        "recommend_top_k": 3,
+    }
+
+
+def _pipeline_response_payload() -> dict[str, Any]:
+    return {
+        "analysis": _analyze_response_payload(),
+        "recommendation": {
+            "request": {"horizon": 2, "freq": "D", "top_k": 3},
+            "recommendations": [{"model": "mock", "family": "mock", "rank": 1, "score": 100}],
+            "excluded": [],
+            "total_candidates": 1,
+            "compatible_candidates": 1,
+        },
+        "pulled_model": None,
+        "auto_forecast": _auto_forecast_response_payload(),
+    }
+
+
 def _client(handler: httpx.MockTransport) -> TollamaClient:
     return TollamaClient(base_url="http://daemon.test", timeout=3.0, transport=handler)
 
@@ -220,6 +246,36 @@ def test_what_if_returns_typed_response() -> None:
     assert response.model == "mock"
     assert response.summary.succeeded == 1
     assert response.results[0].scenario == "high_demand"
+
+
+def test_pipeline_returns_typed_response() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/api/pipeline"
+        return httpx.Response(200, json=_pipeline_response_payload())
+
+    client = _client(httpx.MockTransport(handler))
+    response = client.pipeline(_pipeline_request_payload())
+
+    assert response.analysis.results[0].id == "s1"
+    assert response.auto_forecast.selection.chosen_model == "mock"
+
+
+def test_client_includes_api_key_header_when_configured() -> None:
+    seen_header = {"authorization": None}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen_header["authorization"] = request.headers.get("Authorization")
+        return httpx.Response(200, json={"models": []})
+
+    client = TollamaClient(
+        base_url="http://daemon.test",
+        timeout=3.0,
+        api_key="top-secret",
+        transport=httpx.MockTransport(handler),
+    )
+    client.list_tags()
+
+    assert seen_header["authorization"] == "Bearer top-secret"
 
 
 def test_show_404_maps_to_model_missing_error() -> None:
@@ -358,3 +414,35 @@ async def test_async_what_if_returns_typed_response() -> None:
     assert response.model == "mock"
     assert response.summary.requested_scenarios == 1
     assert response.results[0].ok is True
+
+
+@pytest.mark.asyncio
+async def test_async_pipeline_returns_typed_response() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/api/pipeline"
+        return httpx.Response(200, json=_pipeline_response_payload())
+
+    client = _async_client(httpx.MockTransport(handler))
+    response = await client.pipeline(_pipeline_request_payload())
+
+    assert response.analysis.results[0].id == "s1"
+    assert response.auto_forecast.selection.chosen_model == "mock"
+
+
+@pytest.mark.asyncio
+async def test_async_client_includes_api_key_header_when_configured() -> None:
+    seen_header = {"authorization": None}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen_header["authorization"] = request.headers.get("Authorization")
+        return httpx.Response(200, json={"models": []})
+
+    client = AsyncTollamaClient(
+        base_url="http://daemon.test",
+        timeout=3.0,
+        api_key="top-secret",
+        transport=httpx.MockTransport(handler),
+    )
+    await client.list_tags()
+
+    assert seen_header["authorization"] == "Bearer top-secret"

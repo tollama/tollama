@@ -12,6 +12,8 @@ from tollama.core.schemas import (
     AutoForecastResponse,
     ForecastRequest,
     ForecastResponse,
+    PipelineRequest,
+    PipelineResponse,
     WhatIfRequest,
     WhatIfResponse,
 )
@@ -308,3 +310,82 @@ def test_series_mapping_requires_target() -> None:
 
     with pytest.raises(ValueError, match="target"):
         sdk.forecast(model="chronos2", series={"freq": "D"}, horizon=2)
+
+
+def test_pipeline_accepts_series_dict_and_returns_typed_payload() -> None:
+    captured: dict[str, PipelineRequest] = {}
+
+    class _FakeClient:
+        def pipeline(self, request: PipelineRequest) -> PipelineResponse:
+            captured["request"] = request
+            return PipelineResponse.model_validate(
+                {
+                    "analysis": {
+                        "results": [
+                            {
+                                "id": "series_0",
+                                "detected_frequency": "D",
+                                "seasonality_periods": [2],
+                                "trend": {"direction": "up", "slope": 0.1, "r2": 0.5},
+                                "anomaly_indices": [],
+                                "stationarity_flag": True,
+                                "data_quality_score": 0.95,
+                            }
+                        ],
+                    },
+                    "recommendation": {
+                        "request": {"horizon": 3, "freq": "D", "top_k": 3},
+                        "recommendations": [
+                            {"model": "mock", "family": "mock", "rank": 1, "score": 100}
+                        ],
+                        "excluded": [],
+                        "total_candidates": 1,
+                        "compatible_candidates": 1,
+                    },
+                    "pulled_model": None,
+                    "auto_forecast": {
+                        "strategy": "auto",
+                        "selection": {
+                            "strategy": "auto",
+                            "chosen_model": "mock",
+                            "selected_models": ["mock"],
+                            "candidates": [
+                                {
+                                    "model": "mock",
+                                    "family": "mock",
+                                    "rank": 1,
+                                    "score": 100.0,
+                                    "reasons": ["selected"],
+                                }
+                            ],
+                            "rationale": ["selected"],
+                            "fallback_used": False,
+                        },
+                        "response": {
+                            "model": "mock",
+                            "forecasts": [
+                                {
+                                    "id": "series_0",
+                                    "freq": "D",
+                                    "start_timestamp": "2025-01-06",
+                                    "mean": [15.1, 16.2, 17.3],
+                                }
+                            ],
+                        },
+                    },
+                },
+            )
+
+    sdk = Tollama(client=_FakeClient())  # type: ignore[arg-type]
+    response = sdk.pipeline(
+        series={"target": [1.0, 2.0, 3.0, 4.0], "freq": "D"},
+        horizon=3,
+        strategy="auto",
+        pull_if_missing=True,
+    )
+
+    request = captured["request"]
+    assert request.horizon == 3
+    assert request.series[0].id == "series_0"
+    assert response.analysis.results[0].id == "series_0"
+    assert response.auto_forecast.selection.chosen_model == "mock"

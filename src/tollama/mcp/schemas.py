@@ -48,6 +48,12 @@ class WhatIfToolInput(MCPInputBase):
     timeout: StrictFloat | None = Field(default=None, gt=0)
 
 
+class PipelineToolInput(MCPInputBase):
+    request: dict[str, Any]
+    base_url: StrictStr | None = None
+    timeout: StrictFloat | None = Field(default=None, gt=0)
+
+
 class CompareToolInput(MCPInputBase):
     request: dict[str, Any]
     base_url: StrictStr | None = None

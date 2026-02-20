@@ -9,9 +9,11 @@ from .tools import (
     tollama_forecast,
     tollama_health,
     tollama_models,
+    tollama_pipeline,
     tollama_pull,
     tollama_recommend,
     tollama_show,
+    tollama_what_if,
 )
 
 __all__ = [
@@ -24,7 +26,9 @@ __all__ = [
     "tollama_forecast",
     "tollama_health",
     "tollama_models",
+    "tollama_pipeline",
     "tollama_pull",
     "tollama_recommend",
     "tollama_show",
+    "tollama_what_if",
 ]

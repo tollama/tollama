@@ -20,6 +20,7 @@ from tollama.core.schemas import (
     AutoForecastRequest,
     CompareRequest,
     ForecastRequest,
+    PipelineRequest,
     WhatIfRequest,
 )
 
@@ -30,6 +31,7 @@ from .schemas import (
     ForecastToolInput,
     HealthToolInput,
     ModelsToolInput,
+    PipelineToolInput,
     PullToolInput,
     RecommendToolInput,
     ShowToolInput,
@@ -210,6 +212,32 @@ def tollama_what_if(
     client = _make_client(base_url=args.base_url, timeout=args.timeout)
     try:
         response = client.what_if(what_if_request)
+    except TollamaClientError as exc:
+        _raise_from_client_error(exc)
+
+    return response.model_dump(mode="json", exclude_none=True)
+
+
+def tollama_pipeline(
+    *,
+    request: dict[str, Any],
+    base_url: str | None = None,
+    timeout: float | None = None,
+) -> dict[str, Any]:
+    """Run autonomous pipeline flow and return analysis + recommendation + forecast output."""
+    try:
+        args = PipelineToolInput(request=request, base_url=base_url, timeout=timeout)
+    except ValidationError as exc:
+        _raise_invalid_request(str(exc))
+
+    try:
+        pipeline_request = PipelineRequest.model_validate(args.request)
+    except ValidationError as exc:
+        _raise_invalid_request(str(exc))
+
+    client = _make_client(base_url=args.base_url, timeout=args.timeout)
+    try:
+        response = client.pipeline(pipeline_request)
     except TollamaClientError as exc:
         _raise_from_client_error(exc)
 

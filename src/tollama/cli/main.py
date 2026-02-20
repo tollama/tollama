@@ -68,6 +68,7 @@ _DOCTOR_TOKEN_ENV_KEYS = (
     "HUGGING_FACE_HUB_TOKEN",
     "HF_HUB_TOKEN",
 )
+_API_KEY_ENV_NAME = "TOLLAMA_API_KEY"
 
 
 def _exit_with_message(message: str, *, code: int = 2) -> NoReturn:
@@ -138,7 +139,7 @@ def pull(
     timeout: float = typer.Option(10.0, min=0.1, help="HTTP timeout in seconds."),
 ) -> None:
     """Pull a model from the registry into local storage."""
-    client = TollamaClient(base_url=base_url, timeout=timeout)
+    client = _make_client(base_url=base_url, timeout=timeout)
     stream = not no_stream
     resolved_token = token if token is not None else os.environ.get("TOLLAMA_HF_TOKEN")
     include_null_fields: set[str] = set()
@@ -282,6 +283,7 @@ def info(
             paths=TollamaPaths.default(),
             timeout_s=timeout,
             mode=mode,
+            api_key=_env_api_key(),
         )
     except RuntimeError as exc:
         _exit_with_message(f"Error: {exc}", code=1)
@@ -342,7 +344,7 @@ def list_models(
     timeout: float = typer.Option(10.0, min=0.1, help="HTTP timeout in seconds."),
 ) -> None:
     """List installed models via GET /api/tags."""
-    client = TollamaClient(base_url=base_url, timeout=timeout)
+    client = _make_client(base_url=base_url, timeout=timeout)
     try:
         response = client.list_tags()
     except RuntimeError as exc:
@@ -368,7 +370,7 @@ def ps(
     timeout: float = typer.Option(10.0, min=0.1, help="HTTP timeout in seconds."),
 ) -> None:
     """Show loaded models via GET /api/ps."""
-    client = TollamaClient(base_url=base_url, timeout=timeout)
+    client = _make_client(base_url=base_url, timeout=timeout)
     try:
         response = client.list_running()
     except RuntimeError as exc:
@@ -394,7 +396,7 @@ def show(
     timeout: float = typer.Option(10.0, min=0.1, help="HTTP timeout in seconds."),
 ) -> None:
     """Show model metadata via POST /api/show."""
-    client = TollamaClient(base_url=base_url, timeout=timeout)
+    client = _make_client(base_url=base_url, timeout=timeout)
     try:
         response = client.show_model(model)
     except RuntimeError as exc:
@@ -413,7 +415,7 @@ def rm(
     timeout: float = typer.Option(10.0, min=0.1, help="HTTP timeout in seconds."),
 ) -> None:
     """Delete a model via DELETE /api/delete."""
-    client = TollamaClient(base_url=base_url, timeout=timeout)
+    client = _make_client(base_url=base_url, timeout=timeout)
     try:
         response = client.remove_model(model)
     except RuntimeError as exc:
@@ -468,7 +470,7 @@ def run(
     if timeout is not None:
         payload["timeout"] = timeout
 
-    client = TollamaClient(base_url=base_url, timeout=timeout)
+    client = _make_client(base_url=base_url, timeout=timeout)
 
     if dry_run:
         try:
@@ -534,7 +536,7 @@ def quickstart(
     timeout: float = typer.Option(30.0, min=0.1, help="HTTP timeout in seconds."),
 ) -> None:
     """Pull a model, run demo forecast, and print next-step commands."""
-    client = TollamaClient(base_url=base_url, timeout=timeout)
+    client = _make_client(base_url=base_url, timeout=timeout)
 
     try:
         client.health()
@@ -757,6 +759,31 @@ def _string_or_dash(value: Any) -> str:
     return "-"
 
 
+def _env_api_key() -> str | None:
+    value = os.environ.get(_API_KEY_ENV_NAME)
+    if value is None:
+        return None
+    normalized = value.strip()
+    return normalized if normalized else None
+
+
+def _make_client(*, base_url: str, timeout: float) -> TollamaClient:
+    api_key = _env_api_key()
+    if api_key is not None:
+        try:
+            return TollamaClient(base_url=base_url, timeout=timeout, api_key=api_key)
+        except TypeError:
+            # Some tests monkeypatch ``TollamaClient`` with a legacy constructor.
+            return TollamaClient(base_url=base_url, timeout=timeout)  # type: ignore[call-arg]
+    return TollamaClient(base_url=base_url, timeout=timeout)
+
+
+def _auth_header(api_key: str | None) -> dict[str, str] | None:
+    if api_key is None:
+        return None
+    return {"Authorization": f"Bearer {api_key}"}
+
+
 def _collect_doctor_checks(
     *,
     base_url: str,
@@ -840,7 +867,11 @@ def _collect_doctor_checks(
 
     try:
         with httpx.Client(base_url=base_url.rstrip("/"), timeout=timeout) as client:
-            response = client.get("/v1/health")
+            auth_header = _auth_header(_env_api_key())
+            if auth_header is None:
+                response = client.get("/v1/health")
+            else:
+                response = client.get("/v1/health", headers=auth_header)
     except httpx.HTTPError as exc:
         checks.append(
             {

@@ -161,7 +161,7 @@
 - [x] (P1) Python SDK / LangChain Tool 래퍼 추가
   - 현재: `src/tollama/skill/langchain.py`에
     `TollamaForecastTool`/`TollamaAutoForecastTool`/`TollamaAnalyzeTool`/
-    `TollamaWhatIfTool`/`TollamaCompareTool`/`TollamaRecommendTool`/
+    `TollamaWhatIfTool`/`TollamaPipelineTool`/`TollamaCompareTool`/`TollamaRecommendTool`/
     `TollamaHealthTool`/`TollamaModelsTool` 구현
   - 현재: LangChain 주요 툴 description에 schema/model/example 가이드 추가
   - 현재: 팩토리 `get_tollama_tools(base_url="http://127.0.0.1:11435", timeout=10.0)` 제공
@@ -178,7 +178,7 @@
   - 현재: `scripts/install_mcp.sh`, `CLAUDE.md` 추가
   - 현재: 실 SDK 환경 E2E smoke 완료(`tollama-mcp` stdio + live daemon tool call)
   - 현재: `README.md`/`roadmap.md`/`CLAUDE.md`에 MCP 구현 상세(툴 계약/에러 매핑/기본값) 반영
-  - 현재: MCP 10개 툴(`health/models/forecast/auto_forecast/analyze/what_if/compare/recommend/pull/show`) description에
+  - 현재: MCP 11개 툴(`health/models/forecast/auto_forecast/analyze/what_if/pipeline/compare/recommend/pull/show`) description에
     입력 스키마/모델 예시/호출 예시 추가
   - TODO: Claude Desktop 운영 가이드(권한/세션/배포 정책) 보강
 - [x] (P1) Agentic 비교/추천 기능 1차
@@ -220,6 +220,24 @@
     `tollama_models_loaded`, `tollama_runner_restarts_total` 노출
   - 현재: `ForecastMetricsMiddleware`로 forecast/auto-forecast/compare 경로 계측
   - 현재: `tests/test_daemon_metrics.py` 추가(성공/실패 카운터, gauge, restart counter)
+- [x] (P1) API Key Auth 1차
+  - 현재: `config.json` `auth.api_keys` 기반 bearer 토큰 인증 추가
+  - 현재: 키 미설정 시 인증 비활성(local-first 기본), 설정 시 전 엔드포인트 인증 강제
+  - 현재: `TollamaClient`/`AsyncTollamaClient`/SDK/CLI에서 `api_key` 전달 지원
+  - 현재: `tests/test_auth.py`, `tests/test_config.py`, `tests/test_cli_info.py` 검증 추가
+- [x] (P1) Usage Metering + Rate Limiting 1차
+  - 현재: SQLite usage 집계(`~/.tollama/usage.db`) 추가
+    (`request_count`, `total_inference_ms`, `series_processed`)
+  - 현재: `GET /api/usage` 추가(키별 사용량 조회)
+  - 현재: optional token-bucket rate limiting 추가
+    (`TOLLAMA_RATE_LIMIT_PER_MINUTE`, `TOLLAMA_RATE_LIMIT_BURST`)
+  - 현재: `tests/test_metering.py` 검증 추가
+- [x] (P1) Agentic Pipeline Endpoint 1차
+  - 현재: `/api/pipeline` 추가(analyze -> recommend -> optional pull -> auto-forecast)
+  - 현재: `PipelineRequest`/`PipelineResponse` + `src/tollama/core/pipeline.py` 추가
+  - 현재: `TollamaClient`/`AsyncTollamaClient`/SDK `Tollama.pipeline()` 추가
+  - 현재: `tollama_pipeline` MCP/LangChain 툴 추가
+  - 현재: `tests/test_pipeline.py` + 연관 client/MCP/LangChain/SDK/schema 회귀 테스트 추가
 - [x] (P0) 온보딩 마찰 완화 1차
   - 현재: `tollama quickstart` 명령 추가(daemon 확인 -> pull -> demo forecast -> next steps 출력)
   - 현재: `README.md` 상단을 설치/quickstart/SDK/agent 중심으로 재구성

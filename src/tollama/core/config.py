@@ -36,6 +36,14 @@ class DaemonDefaults(BaseModel):
     runner_commands: dict[StrictStr, list[StrictStr]] | None = None
 
 
+class AuthConfig(BaseModel):
+    """Optional API key auth configuration."""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    api_keys: list[StrictStr] = Field(default_factory=list)
+
+
 class TollamaConfig(BaseModel):
     """Top-level persisted tollama config."""
 
@@ -44,6 +52,7 @@ class TollamaConfig(BaseModel):
     version: StrictInt = 1
     pull: PullDefaults = Field(default_factory=PullDefaults)
     daemon: DaemonDefaults = Field(default_factory=DaemonDefaults)
+    auth: AuthConfig = Field(default_factory=AuthConfig)
 
 
 class ConfigFileError(RuntimeError):

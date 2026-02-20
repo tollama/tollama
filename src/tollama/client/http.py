@@ -16,6 +16,8 @@ from tollama.core.schemas import (
     CompareResponse,
     ForecastRequest,
     ForecastResponse,
+    PipelineRequest,
+    PipelineResponse,
     WhatIfRequest,
     WhatIfResponse,
 )
@@ -44,11 +46,13 @@ class TollamaClient:
         self,
         base_url: str = DEFAULT_BASE_URL,
         timeout: float = DEFAULT_TIMEOUT_SECONDS,
+        api_key: str | None = None,
         *,
         transport: httpx.BaseTransport | None = None,
     ) -> None:
         self._base_url = base_url.rstrip("/")
         self._timeout = timeout
+        self._api_key = api_key
         self._transport = transport
 
     def health(self) -> dict[str, Any]:
@@ -224,6 +228,26 @@ class TollamaClient:
                 detail=str(exc),
             ) from exc
 
+    def pipeline(
+        self,
+        payload: dict[str, Any] | PipelineRequest,
+    ) -> PipelineResponse:
+        """Run full analyze/recommend/forecast pipeline and validate response schema."""
+        request_payload = self._coerce_pipeline_payload(payload)
+        response_payload = self._request_json(
+            "POST",
+            "/api/pipeline",
+            json_payload=request_payload,
+            action="pipeline forecast",
+        )
+        try:
+            return PipelineResponse.model_validate(response_payload)
+        except Exception as exc:  # noqa: BLE001
+            raise InvalidRequestError(
+                action="validate pipeline response",
+                detail=str(exc),
+            ) from exc
+
     def validate_request(self, payload: dict[str, Any]) -> dict[str, Any]:
         """Validate a forecast request without executing model inference."""
         return self._request_json(
@@ -359,6 +383,14 @@ class TollamaClient:
             return payload.model_dump(mode="json", exclude_none=True)
         return dict(payload)
 
+    def _coerce_pipeline_payload(
+        self,
+        payload: dict[str, Any] | PipelineRequest,
+    ) -> dict[str, Any]:
+        if isinstance(payload, PipelineRequest):
+            return payload.model_dump(mode="json", exclude_none=True)
+        return dict(payload)
+
     def _request_json(
         self,
         method: str,
@@ -426,7 +458,12 @@ class TollamaClient:
                 timeout=self._timeout,
                 transport=self._transport,
             ) as client:
-                response = client.request(method, path, json=json_payload)
+                response = client.request(
+                    method,
+                    path,
+                    json=json_payload,
+                    headers=self._request_headers(),
+                )
         except httpx.TimeoutException as exc:
             raise ForecastTimeoutError(action=action, detail=str(exc)) from exc
         except httpx.ConnectError as exc:
@@ -441,6 +478,14 @@ class TollamaClient:
             raise _map_http_error(action=action, status_code=response.status_code, detail=detail)
         return response
 
+    def _request_headers(self) -> dict[str, str] | None:
+        if self._api_key is None:
+            return None
+        token = self._api_key.strip()
+        if not token:
+            return None
+        return {"Authorization": f"Bearer {token}"}
+
 
 class AsyncTollamaClient:
     """Async HTTP client for LangChain and other async integrations."""
@@ -449,11 +494,13 @@ class AsyncTollamaClient:
         self,
         base_url: str = DEFAULT_BASE_URL,
         timeout: float = DEFAULT_TIMEOUT_SECONDS,
+        api_key: str | None = None,
         *,
         transport: httpx.AsyncBaseTransport | httpx.BaseTransport | None = None,
     ) -> None:
         self._base_url = base_url.rstrip("/")
         self._timeout = timeout
+        self._api_key = api_key
         self._transport = transport
 
     async def health(self) -> dict[str, Any]:
@@ -626,6 +673,26 @@ class AsyncTollamaClient:
                 detail=str(exc),
             ) from exc
 
+    async def pipeline(
+        self,
+        payload: dict[str, Any] | PipelineRequest,
+    ) -> PipelineResponse:
+        """Run full analyze/recommend/forecast pipeline and validate response schema."""
+        request_payload = self._coerce_pipeline_payload(payload)
+        response_payload = await self._request_json(
+            "POST",
+            "/api/pipeline",
+            json_payload=request_payload,
+            action="pipeline forecast",
+        )
+        try:
+            return PipelineResponse.model_validate(response_payload)
+        except Exception as exc:  # noqa: BLE001
+            raise InvalidRequestError(
+                action="validate pipeline response",
+                detail=str(exc),
+            ) from exc
+
     async def list_tags(self) -> dict[str, Any]:
         """Fetch installed model tags from the daemon."""
         return await self._request_json("GET", "/api/tags", action="list model tags")
@@ -659,6 +726,14 @@ class AsyncTollamaClient:
 
     def _coerce_what_if_payload(self, payload: dict[str, Any] | WhatIfRequest) -> dict[str, Any]:
         if isinstance(payload, WhatIfRequest):
+            return payload.model_dump(mode="json", exclude_none=True)
+        return dict(payload)
+
+    def _coerce_pipeline_payload(
+        self,
+        payload: dict[str, Any] | PipelineRequest,
+    ) -> dict[str, Any]:
+        if isinstance(payload, PipelineRequest):
             return payload.model_dump(mode="json", exclude_none=True)
         return dict(payload)
 
@@ -739,7 +814,12 @@ class AsyncTollamaClient:
                 timeout=self._timeout,
                 transport=self._transport,
             ) as client:
-                response = await client.request(method, path, json=json_payload)
+                response = await client.request(
+                    method,
+                    path,
+                    json=json_payload,
+                    headers=self._request_headers(),
+                )
         except httpx.TimeoutException as exc:
             raise ForecastTimeoutError(action=action, detail=str(exc)) from exc
         except httpx.ConnectError as exc:
@@ -753,6 +833,14 @@ class AsyncTollamaClient:
             detail = _extract_error_detail(response)
             raise _map_http_error(action=action, status_code=response.status_code, detail=detail)
         return response
+
+    def _request_headers(self) -> dict[str, str] | None:
+        if self._api_key is None:
+            return None
+        token = self._api_key.strip()
+        if not token:
+            return None
+        return {"Authorization": f"Bearer {token}"}
 
 
 def _extract_error_detail(response: httpx.Response) -> str:

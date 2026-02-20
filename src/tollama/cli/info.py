@@ -42,6 +42,7 @@ def collect_info(
     timeout_s: float = 2.0,
     *,
     mode: InfoMode = "auto",
+    api_key: str | None = None,
 ) -> dict[str, Any]:
     """Collect one diagnostics snapshot for `tollama info`."""
     resolved_base_url = base_url.rstrip("/") or base_url
@@ -53,7 +54,11 @@ def collect_info(
         )
 
     try:
-        remote_payload = _collect_remote_snapshot(base_url=resolved_base_url, timeout_s=timeout_s)
+        remote_payload = _collect_remote_snapshot(
+            base_url=resolved_base_url,
+            timeout_s=timeout_s,
+            api_key=api_key,
+        )
     except Exception as exc:  # noqa: BLE001
         if mode == "remote":
             raise RuntimeError(str(exc)) from exc
@@ -66,8 +71,13 @@ def collect_info(
     return _normalize_remote_snapshot(base_url=resolved_base_url, payload=remote_payload)
 
 
-def _collect_remote_snapshot(*, base_url: str, timeout_s: float) -> dict[str, Any]:
-    with _make_http_client(base_url=base_url, timeout_s=timeout_s) as client:
+def _collect_remote_snapshot(
+    *,
+    base_url: str,
+    timeout_s: float,
+    api_key: str | None,
+) -> dict[str, Any]:
+    with _make_http_client(base_url=base_url, timeout_s=timeout_s, api_key=api_key) as client:
         return _get_json(client, "/api/info")
 
 
@@ -268,8 +278,21 @@ def _get_json(client: httpx.Client, path: str) -> dict[str, Any]:
     return payload
 
 
-def _make_http_client(*, base_url: str, timeout_s: float) -> httpx.Client:
-    return httpx.Client(base_url=base_url, timeout=timeout_s)
+def _make_http_client(*, base_url: str, timeout_s: float, api_key: str | None) -> httpx.Client:
+    return httpx.Client(
+        base_url=base_url,
+        timeout=timeout_s,
+        headers=_auth_header(api_key),
+    )
+
+
+def _auth_header(api_key: str | None) -> dict[str, str] | None:
+    if api_key is None:
+        return None
+    token = api_key.strip()
+    if not token:
+        return None
+    return {"Authorization": f"Bearer {token}"}
 
 
 def _env_or_none(name: str) -> str | None:

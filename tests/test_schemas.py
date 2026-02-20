@@ -10,6 +10,8 @@ from tollama.core.schemas import (
     AutoForecastResponse,
     ForecastRequest,
     ForecastResponse,
+    PipelineRequest,
+    PipelineResponse,
     SeriesForecast,
     WhatIfRequest,
     WhatIfResponse,
@@ -97,6 +99,24 @@ def _example_what_if_request_payload() -> dict[str, object]:
     }
 
 
+def _example_pipeline_request_payload() -> dict[str, object]:
+    return {
+        "horizon": 3,
+        "strategy": "auto",
+        "series": [
+            {
+                "id": "series-1",
+                "freq": "D",
+                "timestamps": ["2025-01-01", "2025-01-02", "2025-01-03", "2025-01-04"],
+                "target": [10.0, 11.0, 12.0, 11.5],
+            }
+        ],
+        "options": {},
+        "pull_if_missing": True,
+        "recommend_top_k": 3,
+    }
+
+
 def test_forecast_request_roundtrip_is_lossless() -> None:
     request = ForecastRequest.model_validate(_example_request_payload())
     encoded = request.to_json()
@@ -132,6 +152,15 @@ def test_what_if_request_roundtrip_is_lossless() -> None:
     assert decoded == request
     assert decoded.scenarios[0].name == "high_demand"
     assert decoded.scenarios[0].transforms[0].operation == "multiply"
+
+
+def test_pipeline_request_roundtrip_is_lossless() -> None:
+    request = PipelineRequest.model_validate(_example_pipeline_request_payload())
+    encoded = request.to_json()
+    decoded = PipelineRequest.model_validate_json(encoded)
+    assert decoded == request
+    assert decoded.recommend_top_k == 3
+    assert decoded.pull_if_missing is True
 
 
 def test_what_if_request_rejects_duplicate_scenario_names() -> None:
@@ -419,3 +448,61 @@ def test_what_if_response_accepts_baseline_and_results() -> None:
     response = WhatIfResponse.model_validate(payload)
     assert response.summary.requested_scenarios == 1
     assert response.results[0].scenario == "high_demand"
+
+
+def test_pipeline_response_accepts_analysis_recommendation_and_auto_forecast() -> None:
+    payload = {
+        "analysis": {
+            "results": [
+                {
+                    "id": "series-1",
+                    "detected_frequency": "D",
+                    "seasonality_periods": [2],
+                    "trend": {"direction": "up", "slope": 0.2, "r2": 0.8},
+                    "anomaly_indices": [],
+                    "stationarity_flag": False,
+                    "data_quality_score": 0.9,
+                }
+            ]
+        },
+        "recommendation": {
+            "request": {"horizon": 3, "freq": "D", "top_k": 3},
+            "recommendations": [{"model": "mock", "family": "mock", "rank": 1, "score": 100}],
+            "excluded": [],
+            "total_candidates": 1,
+            "compatible_candidates": 1,
+        },
+        "auto_forecast": {
+            "strategy": "auto",
+            "selection": {
+                "strategy": "auto",
+                "chosen_model": "mock",
+                "selected_models": ["mock"],
+                "candidates": [
+                    {
+                        "model": "mock",
+                        "family": "mock",
+                        "rank": 1,
+                        "score": 1.0,
+                        "reasons": ["selected"],
+                    }
+                ],
+                "rationale": ["selected"],
+                "fallback_used": False,
+            },
+            "response": {
+                "model": "mock",
+                "forecasts": [
+                    {
+                        "id": "series-1",
+                        "freq": "D",
+                        "start_timestamp": "2025-01-04",
+                        "mean": [12.0, 13.0],
+                    }
+                ],
+            },
+        },
+    }
+    response = PipelineResponse.model_validate(payload)
+    assert response.analysis.results[0].id == "series-1"
+    assert response.auto_forecast.response.model == "mock"

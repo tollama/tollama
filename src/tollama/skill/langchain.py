@@ -19,6 +19,7 @@ from tollama.core.schemas import (
     AutoForecastRequest,
     CompareRequest,
     ForecastRequest,
+    PipelineRequest,
     WhatIfRequest,
 )
 
@@ -60,6 +61,10 @@ class AnalyzeToolInput(_ToolInputBase):
 
 
 class WhatIfToolInput(_ToolInputBase):
+    request: dict[str, Any]
+
+
+class PipelineToolInput(_ToolInputBase):
     request: dict[str, Any]
 
 
@@ -436,6 +441,64 @@ class TollamaWhatIfTool(_TollamaBaseTool):
         return response.model_dump(mode="json", exclude_none=True)
 
 
+class TollamaPipelineTool(_TollamaBaseTool):
+    """LangChain tool that executes the full autonomous pipeline in one request."""
+
+    name: str = "tollama_pipeline"
+    description: str = (
+        "Run full forecasting pipeline: analyze -> recommend -> optional pull -> auto-forecast. "
+        "Input schema: {request:{horizon,series,strategy?,model?,recommend_top_k?,"
+        "pull_if_missing?,accept_license?,allow_restricted_license?,quantiles?,options?,"
+        "parameters?,analyze_parameters?}}. "
+        "Returns analysis diagnostics, recommendation payload, pull outcome, and auto-forecast "
+        "response with selection metadata. "
+        'Example: tool.invoke({"request":{"horizon":3,"strategy":"auto",'
+        '"series":[{"id":"s1","freq":"D","timestamps":["2025-01-01","2025-01-02"],'
+        '"target":[10,11]}],"options":{},"pull_if_missing":true}}).'
+    )
+    args_schema: type[BaseModel] = PipelineToolInput
+
+    def _run(
+        self,
+        request: dict[str, Any],
+        run_manager: Any | None = None,
+    ) -> dict[str, Any]:
+        del run_manager
+        try:
+            args = PipelineToolInput(request=request)
+            pipeline_request = PipelineRequest.model_validate(args.request)
+        except ValidationError as exc:
+            return _invalid_request_payload(str(exc))
+
+        client = self._client()
+        try:
+            response = client.pipeline(pipeline_request)
+        except TollamaClientError as exc:
+            return _client_error_payload(exc)
+
+        return response.model_dump(mode="json", exclude_none=True)
+
+    async def _arun(
+        self,
+        request: dict[str, Any],
+        run_manager: Any | None = None,
+    ) -> dict[str, Any]:
+        del run_manager
+        try:
+            args = PipelineToolInput(request=request)
+            pipeline_request = PipelineRequest.model_validate(args.request)
+        except ValidationError as exc:
+            return _invalid_request_payload(str(exc))
+
+        client = self._async_client()
+        try:
+            response = await client.pipeline(pipeline_request)
+        except TollamaClientError as exc:
+            return _client_error_payload(exc)
+
+        return response.model_dump(mode="json", exclude_none=True)
+
+
 class TollamaCompareTool(_TollamaBaseTool):
     """LangChain tool that runs a single request across multiple models."""
 
@@ -602,6 +665,7 @@ def get_tollama_tools(
         TollamaAutoForecastTool(base_url=base_url, timeout=timeout),
         TollamaAnalyzeTool(base_url=base_url, timeout=timeout),
         TollamaWhatIfTool(base_url=base_url, timeout=timeout),
+        TollamaPipelineTool(base_url=base_url, timeout=timeout),
         TollamaCompareTool(base_url=base_url, timeout=timeout),
         TollamaRecommendTool(base_url=base_url, timeout=timeout),
         TollamaHealthTool(base_url=base_url, timeout=timeout),

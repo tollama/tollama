@@ -702,6 +702,76 @@ class WhatIfResponse(CanonicalModel):
     summary: WhatIfSummary
 
 
+class PipelineRequest(CanonicalModel):
+    """Full-flow pipeline request payload for analyze/recommend/forecast orchestration."""
+
+    model: NonEmptyStr | None = None
+    allow_fallback: StrictBool = False
+    strategy: AutoForecastStrategy = "auto"
+    ensemble_top_k: StrictInt = Field(default=3, ge=2, le=8)
+    horizon: PositiveInt
+    quantiles: list[Quantile] = Field(default_factory=list)
+    series: list[SeriesInput] = Field(min_length=1)
+    options: dict[NonEmptyStr, JsonValue] = Field(
+        default_factory=dict,
+        validation_alias=AliasChoices("options"),
+    )
+    timeout: float | None = Field(default=None, gt=0.0)
+    keep_alive: StrictStr | StrictInt | StrictFloat | None = None
+    parameters: ForecastParameters = Field(
+        default_factory=ForecastParameters,
+        validation_alias=AliasChoices("parameters"),
+    )
+    analyze_parameters: AnalyzeParameters = Field(default_factory=AnalyzeParameters)
+    recommend_top_k: StrictInt = Field(default=3, ge=1, le=20)
+    allow_restricted_license: StrictBool = False
+    pull_if_missing: StrictBool = True
+    accept_license: StrictBool = False
+
+    @field_validator("quantiles")
+    @classmethod
+    def validate_quantiles(cls, value: list[Quantile]) -> list[Quantile]:
+        if value != sorted(value):
+            raise ValueError("quantiles must be sorted in ascending order")
+        if len(value) != len(set(value)):
+            raise ValueError("quantiles must be unique")
+        return value
+
+    @model_validator(mode="after")
+    def validate_compatibility(self) -> PipelineRequest:
+        auto_payload = {
+            "model": self.model,
+            "allow_fallback": self.allow_fallback,
+            "strategy": self.strategy,
+            "ensemble_top_k": self.ensemble_top_k,
+            "horizon": self.horizon,
+            "quantiles": self.quantiles,
+            "series": [series.model_dump(mode="python") for series in self.series],
+            "options": self.options,
+            "timeout": self.timeout,
+            "keep_alive": self.keep_alive,
+            "parameters": self.parameters.model_dump(mode="python"),
+        }
+        AutoForecastRequest.model_validate(auto_payload)
+        AnalyzeRequest.model_validate(
+            {
+                "series": [series.model_dump(mode="python") for series in self.series],
+                "parameters": self.analyze_parameters.model_dump(mode="python"),
+            },
+        )
+        return self
+
+
+class PipelineResponse(CanonicalModel):
+    """Response payload for one full autonomous forecasting pipeline run."""
+
+    analysis: AnalyzeResponse
+    recommendation: dict[NonEmptyStr, JsonValue]
+    pulled_model: NonEmptyStr | None = None
+    auto_forecast: AutoForecastResponse
+    warnings: list[NonEmptyStr] | None = None
+
+
 def _validate_covariate_values(
     *,
     name: str,

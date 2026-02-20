@@ -88,8 +88,21 @@ def test_collect_info_remote_mode_uses_api_info_payload(monkeypatch, tmp_path: P
 
     transport = httpx.MockTransport(_handler)
 
-    def _mock_client_factory(*, base_url: str, timeout_s: float) -> httpx.Client:
-        return httpx.Client(base_url=base_url, timeout=timeout_s, transport=transport)
+    def _mock_client_factory(
+        *,
+        base_url: str,
+        timeout_s: float,
+        api_key: str | None,
+    ) -> httpx.Client:
+        headers: dict[str, str] | None = None
+        if api_key is not None:
+            headers = {"Authorization": f"Bearer {api_key}"}
+        return httpx.Client(
+            base_url=base_url,
+            timeout=timeout_s,
+            transport=transport,
+            headers=headers,
+        )
 
     monkeypatch.setattr("tollama.cli.info._make_http_client", _mock_client_factory)
 
@@ -111,6 +124,60 @@ def test_collect_info_remote_mode_raises_when_unreachable(tmp_path: Path) -> Non
     paths = TollamaPaths(base_dir=tmp_path / ".tollama")
     with pytest.raises(RuntimeError):
         collect_info(base_url="http://127.0.0.1:1", paths=paths, timeout_s=0.1, mode="remote")
+
+
+def test_collect_info_remote_mode_sends_bearer_token(monkeypatch, tmp_path: Path) -> None:
+    paths = TollamaPaths(base_dir=tmp_path / ".tollama")
+    monkeypatch.setenv("TOLLAMA_HOME", str(paths.base_dir))
+    captured: dict[str, str | None] = {"authorization": None}
+
+    def _handler(request: httpx.Request) -> httpx.Response:
+        captured["authorization"] = request.headers.get("Authorization")
+        return httpx.Response(
+            200,
+            json={
+                "daemon": {"version": "0.0.1", "reachable": True},
+                "paths": {
+                    "tollama_home": str(paths.base_dir),
+                    "config_path": str(paths.config_path),
+                    "config_exists": False,
+                },
+                "config": None,
+                "env": {},
+                "pull_defaults": {},
+                "models": {"installed": [], "loaded": []},
+                "runners": [],
+            },
+        )
+
+    transport = httpx.MockTransport(_handler)
+
+    def _mock_client_factory(
+        *,
+        base_url: str,
+        timeout_s: float,
+        api_key: str | None,
+    ) -> httpx.Client:
+        headers = {"Authorization": f"Bearer {api_key}"} if api_key else None
+        return httpx.Client(
+            base_url=base_url,
+            timeout=timeout_s,
+            transport=transport,
+            headers=headers,
+        )
+
+    monkeypatch.setattr("tollama.cli.info._make_http_client", _mock_client_factory)
+
+    info = collect_info(
+        base_url="http://localhost:11435",
+        paths=paths,
+        timeout_s=0.2,
+        mode="remote",
+        api_key="secret-key",
+    )
+
+    assert info["daemon"]["reachable"] is True
+    assert captured["authorization"] == "Bearer secret-key"
 
 
 def test_collect_info_never_exposes_token_value(monkeypatch, tmp_path: Path) -> None:

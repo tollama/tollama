@@ -19,7 +19,7 @@ from threading import Lock, Thread
 from typing import Any
 
 import httpx
-from fastapi import Body, FastAPI, HTTPException, Request
+from fastapi import Body, Depends, FastAPI, HTTPException, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, Response, StreamingResponse
@@ -44,6 +44,7 @@ from tollama.core.hf_pull import (
     PullError,
     pull_snapshot_to_local_dir,
 )
+from tollama.core.pipeline import run_pipeline_analysis
 from tollama.core.pull_defaults import resolve_effective_pull_defaults
 from tollama.core.redact import redact_config_dict, redact_env_dict, redact_proxy_url
 from tollama.core.registry import ModelCapabilities, get_model_spec, list_registry_models
@@ -63,6 +64,8 @@ from tollama.core.schemas import (
     ForecastRequest,
     ForecastResponse,
     ForecastTiming,
+    PipelineRequest,
+    PipelineResponse,
     SeriesForecast,
     WhatIfError,
     WhatIfRequest,
@@ -80,8 +83,10 @@ from tollama.core.storage import (
     write_manifest,
 )
 
+from .auth import current_key_id, require_api_key
 from .covariates import apply_covariate_capabilities, normalize_covariates
 from .loaded_models import LoadedModelTracker, parse_keep_alive, to_utc_iso
+from .metering import UsageMeter, create_usage_meter, usage_unavailable_hint
 from .metrics import (
     ForecastMetricsMiddleware,
     PrometheusMetrics,
@@ -89,6 +94,7 @@ from .metrics import (
     metrics_content_type,
     metrics_unavailable_hint,
 )
+from .rate_limiter import TokenBucketRateLimiter, create_rate_limiter_from_env
 from .runner_manager import RunnerManager
 from .supervisor import (
     RunnerCallError,
@@ -258,13 +264,20 @@ async def _lifespan(app: FastAPI):
 def create_app(*, runner_manager: RunnerManager | None = None) -> FastAPI:
     """Create a configured FastAPI daemon app."""
     package_version = _resolve_package_version()
-    app = FastAPI(title="tollama daemon", version=package_version, lifespan=_lifespan)
+    app = FastAPI(
+        title="tollama daemon",
+        version=package_version,
+        lifespan=_lifespan,
+        dependencies=[Depends(require_api_key)],
+    )
     app.state.runner_manager = runner_manager or _build_default_runner_manager()
     app.state.loaded_model_tracker = LoadedModelTracker()
     app.state.config_provider = ConfigProvider()
     app.state.started_at = datetime.now(UTC)
     app.state.host_binding = _resolve_host_binding_from_env()
     app.state.prometheus_metrics = _build_prometheus_metrics(app)
+    app.state.usage_meter = _build_usage_meter()
+    app.state.rate_limiter = _build_rate_limiter()
     if app.state.prometheus_metrics is not None:
         app.add_middleware(
             ForecastMetricsMiddleware,
@@ -295,6 +308,13 @@ def create_app(*, runner_manager: RunnerManager | None = None) -> FastAPI:
         _unload_expired_models(app)
         payload = collector.render_latest()
         return Response(content=payload, media_type=metrics_content_type())
+
+    @app.get("/api/usage")
+    def usage(request: Request) -> dict[str, object]:
+        usage_meter = _optional_usage_meter(app)
+        if usage_meter is None:
+            raise HTTPException(status_code=503, detail=usage_unavailable_hint())
+        return usage_meter.snapshot(key_id=current_key_id(request))
 
     @app.get("/api/info")
     def info() -> dict[str, Any]:
@@ -548,8 +568,13 @@ def create_app(*, runner_manager: RunnerManager | None = None) -> FastAPI:
         return {"removed": True, "name": name}
 
     @app.post("/api/forecast", response_model=None)
-    def api_forecast(payload: ApiForecastRequest) -> Any:
-        response = _execute_forecast(app, payload=payload, extra_exclude={"stream"})
+    def api_forecast(payload: ApiForecastRequest, request: Request) -> Any:
+        response = _execute_forecast(
+            app,
+            payload=payload,
+            request=request,
+            extra_exclude={"stream"},
+        )
         if not payload.stream:
             return response
         return StreamingResponse(
@@ -558,7 +583,7 @@ def create_app(*, runner_manager: RunnerManager | None = None) -> FastAPI:
         )
 
     @app.post("/api/compare", response_model=CompareResponse)
-    def compare(payload: CompareRequest) -> CompareResponse:
+    def compare(payload: CompareRequest, request: Request) -> CompareResponse:
         results: list[CompareResult] = []
         for model in payload.models:
             forecast_payload = ForecastRequestWithKeepAlive(
@@ -572,7 +597,7 @@ def create_app(*, runner_manager: RunnerManager | None = None) -> FastAPI:
                 parameters=payload.parameters,
             )
             try:
-                response = _execute_forecast(app, payload=forecast_payload)
+                response = _execute_forecast(app, payload=forecast_payload, request=request)
             except HTTPException as exc:
                 results.append(
                     CompareResult(
@@ -619,13 +644,13 @@ def create_app(*, runner_manager: RunnerManager | None = None) -> FastAPI:
         return analyze_series_request(payload)
 
     @app.post("/api/auto-forecast", response_model=AutoForecastResponse)
-    def auto_forecast(payload: AutoForecastRequest) -> AutoForecastResponse:
-        return _execute_auto_forecast(app, payload=payload)
+    def auto_forecast(payload: AutoForecastRequest, request: Request) -> AutoForecastResponse:
+        return _execute_auto_forecast(app, payload=payload, request=request)
 
     @app.post("/api/what-if", response_model=WhatIfResponse)
-    def what_if(payload: WhatIfRequest) -> WhatIfResponse:
+    def what_if(payload: WhatIfRequest, request: Request) -> WhatIfResponse:
         baseline_payload = _what_if_payload_to_forecast_payload(payload=payload)
-        baseline_response = _execute_forecast(app, payload=baseline_payload)
+        baseline_response = _execute_forecast(app, payload=baseline_payload, request=request)
 
         results: list[WhatIfResult] = []
         for scenario in payload.scenarios:
@@ -640,7 +665,11 @@ def create_app(*, runner_manager: RunnerManager | None = None) -> FastAPI:
                         exclude_none=True,
                     ),
                 )
-                scenario_response = _execute_forecast(app, payload=scenario_payload)
+                scenario_response = _execute_forecast(
+                    app,
+                    payload=scenario_payload,
+                    request=request,
+                )
             except HTTPException as exc:
                 if not payload.continue_on_error:
                     raise
@@ -708,9 +737,13 @@ def create_app(*, runner_manager: RunnerManager | None = None) -> FastAPI:
             summary=summary,
         )
 
+    @app.post("/api/pipeline", response_model=PipelineResponse)
+    def pipeline(payload: PipelineRequest, request: Request) -> PipelineResponse:
+        return _execute_pipeline(app, payload=payload, request=request)
+
     @app.post("/v1/forecast", response_model=ForecastResponse)
-    def forecast(payload: ForecastRequestWithKeepAlive) -> ForecastResponse:
-        return _execute_forecast(app, payload=payload)
+    def forecast(payload: ForecastRequestWithKeepAlive, request: Request) -> ForecastResponse:
+        return _execute_forecast(app, payload=payload, request=request)
 
     return app
 
@@ -719,8 +752,10 @@ def _execute_forecast(
     app: FastAPI,
     *,
     payload: ForecastRequestWithKeepAlive,
+    request: Request | None = None,
     extra_exclude: set[str] | None = None,
 ) -> ForecastResponse:
+    _enforce_rate_limit(app=app, request=request)
     request_started_at = time.perf_counter()
     _unload_expired_models(app)
     forecast_timeout_seconds = _resolve_forecast_timeout_seconds(payload.timeout)
@@ -830,6 +865,12 @@ def _execute_forecast(
         runner_roundtrip_ms=runner_roundtrip_ms,
         total_ms=_elapsed_ms(request_started_at),
     )
+    _record_usage(
+        app=app,
+        request=request,
+        response=response,
+        series_processed=len(forecast_payload.series),
+    )
 
     tracker: LoadedModelTracker = app.state.loaded_model_tracker
     if keep_alive_policy.unload_immediately:
@@ -920,10 +961,47 @@ def _extract_usage_device(usage: dict[str, Any] | None) -> str | None:
     return None
 
 
+def _enforce_rate_limit(*, app: FastAPI, request: Request | None) -> None:
+    limiter = _optional_rate_limiter(app)
+    if limiter is None:
+        return
+
+    key = current_key_id(request) if request is not None else "anonymous"
+    if limiter.allow(key_id=key):
+        return
+    raise HTTPException(status_code=429, detail="rate limit exceeded")
+
+
+def _record_usage(
+    *,
+    app: FastAPI,
+    request: Request | None,
+    response: ForecastResponse,
+    series_processed: int,
+) -> None:
+    meter = _optional_usage_meter(app)
+    if meter is None:
+        return
+
+    timing = response.timing
+    inference_ms = timing.inference_ms if timing is not None else 0.0
+    inference_value = float(inference_ms) if inference_ms is not None else 0.0
+    key = current_key_id(request) if request is not None else "anonymous"
+    try:
+        meter.record_usage(
+            key_id=key,
+            inference_ms=inference_value,
+            series_processed=series_processed,
+        )
+    except Exception:  # noqa: BLE001
+        return
+
+
 def _execute_auto_forecast(
     app: FastAPI,
     *,
     payload: AutoForecastRequest,
+    request: Request | None = None,
 ) -> AutoForecastResponse:
     _unload_expired_models(app)
     manifests = list_installed()
@@ -964,7 +1042,11 @@ def _execute_auto_forecast(
                 model=explicit_model,
             )
             try:
-                explicit_response = _execute_forecast(app, payload=explicit_request)
+                explicit_response = _execute_forecast(
+                    app,
+                    payload=explicit_request,
+                    request=request,
+                )
             except HTTPException as exc:
                 if not payload.allow_fallback:
                     raise
@@ -1011,6 +1093,7 @@ def _execute_auto_forecast(
             app,
             payload=payload,
             selection=selection,
+            request=request,
         )
         selection_info = _selection_info_from_auto_selection(
             payload=payload,
@@ -1029,6 +1112,7 @@ def _execute_auto_forecast(
         app,
         payload=payload,
         candidate_models=[item.model for item in selection.ranked_candidates],
+        request=request,
     )
     selection_info = _selection_info_from_auto_selection(
         payload=payload,
@@ -1049,6 +1133,7 @@ def _execute_auto_candidates(
     *,
     payload: AutoForecastRequest,
     candidate_models: list[str],
+    request: Request | None = None,
 ) -> tuple[ForecastResponse, str, list[str]]:
     if not candidate_models:
         raise HTTPException(status_code=404, detail="no candidate models were provided")
@@ -1058,7 +1143,7 @@ def _execute_auto_candidates(
     for index, model in enumerate(candidate_models):
         forecast_payload = _auto_payload_to_forecast_payload(payload=payload, model=model)
         try:
-            response = _execute_forecast(app, payload=forecast_payload)
+            response = _execute_forecast(app, payload=forecast_payload, request=request)
         except HTTPException as exc:
             last_error = exc
             detail = _compare_error_message(exc)
@@ -1086,6 +1171,7 @@ def _execute_auto_ensemble(
     *,
     payload: AutoForecastRequest,
     selection: AutoSelection,
+    request: Request | None = None,
 ) -> tuple[ForecastResponse, str, list[str]]:
     execution_warnings: list[str] = []
     successful: list[ForecastResponse] = []
@@ -1094,7 +1180,7 @@ def _execute_auto_ensemble(
     for model in selection.selected_models:
         forecast_payload = _auto_payload_to_forecast_payload(payload=payload, model=model)
         try:
-            successful.append(_execute_forecast(app, payload=forecast_payload))
+            successful.append(_execute_forecast(app, payload=forecast_payload, request=request))
         except HTTPException as exc:
             detail = _compare_error_message(exc)
             execution_warnings.append(
@@ -1253,6 +1339,56 @@ def _what_if_payload_to_forecast_payload(
         timeout=payload.timeout,
         keep_alive=payload.keep_alive,
         parameters=payload.parameters,
+    )
+
+
+def _execute_pipeline(
+    app: FastAPI,
+    *,
+    payload: PipelineRequest,
+    request: Request | None = None,
+) -> PipelineResponse:
+    insights = run_pipeline_analysis(payload)
+    warnings: list[str] = []
+    pulled_model: str | None = None
+
+    if payload.pull_if_missing and insights.preferred_model is not None:
+        if _find_installed_manifest(insights.preferred_model) is None:
+            try:
+                _install_model(
+                    name=insights.preferred_model,
+                    accept_license=payload.accept_license,
+                )
+            except HTTPException as exc:
+                warnings.append(
+                    "pipeline pull step failed for model "
+                    f"{insights.preferred_model!r} ({exc.status_code}): "
+                    f"{_compare_error_message(exc)}",
+                )
+            else:
+                pulled_model = insights.preferred_model
+
+    auto_payload = AutoForecastRequest(
+        model=payload.model,
+        allow_fallback=payload.allow_fallback,
+        strategy=payload.strategy,
+        ensemble_top_k=payload.ensemble_top_k,
+        horizon=payload.horizon,
+        quantiles=payload.quantiles,
+        series=payload.series,
+        options=payload.options,
+        timeout=payload.timeout,
+        keep_alive=payload.keep_alive,
+        parameters=payload.parameters,
+    )
+    auto_forecast = _execute_auto_forecast(app, payload=auto_payload, request=request)
+
+    return PipelineResponse(
+        analysis=insights.analysis,
+        recommendation=insights.recommendation,
+        pulled_model=pulled_model,
+        auto_forecast=auto_forecast,
+        warnings=warnings or None,
     )
 
 
@@ -2310,10 +2446,36 @@ def _build_prometheus_metrics(app: FastAPI) -> PrometheusMetrics | None:
     )
 
 
+def _build_usage_meter() -> UsageMeter | None:
+    try:
+        paths = TollamaPaths.default()
+        return create_usage_meter(db_path=paths.base_dir / "usage.db")
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _build_rate_limiter() -> TokenBucketRateLimiter | None:
+    return create_rate_limiter_from_env(env=os.environ)
+
+
 def _optional_prometheus_metrics(app: FastAPI) -> PrometheusMetrics | None:
     metrics = getattr(app.state, "prometheus_metrics", None)
     if isinstance(metrics, PrometheusMetrics):
         return metrics
+    return None
+
+
+def _optional_usage_meter(app: FastAPI) -> UsageMeter | None:
+    usage_meter = getattr(app.state, "usage_meter", None)
+    if isinstance(usage_meter, UsageMeter):
+        return usage_meter
+    return None
+
+
+def _optional_rate_limiter(app: FastAPI) -> TokenBucketRateLimiter | None:
+    limiter = getattr(app.state, "rate_limiter", None)
+    if isinstance(limiter, TokenBucketRateLimiter):
+        return limiter
     return None
 
 

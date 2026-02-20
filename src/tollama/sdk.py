@@ -15,6 +15,8 @@ from tollama.core.schemas import (
     AutoForecastResponse,
     ForecastRequest,
     ForecastResponse,
+    PipelineRequest,
+    PipelineResponse,
     SeriesForecast,
     WhatIfRequest,
     WhatIfResponse,
@@ -118,10 +120,11 @@ class Tollama:
         self,
         base_url: str = DEFAULT_BASE_URL,
         timeout: float = DEFAULT_TIMEOUT_SECONDS,
+        api_key: str | None = None,
         *,
         client: TollamaClient | None = None,
     ) -> None:
-        self._client = client or TollamaClient(base_url=base_url, timeout=timeout)
+        self._client = client or TollamaClient(base_url=base_url, timeout=timeout, api_key=api_key)
 
     def health(self) -> dict[str, Any]:
         """Return daemon health and version payload."""
@@ -256,6 +259,55 @@ class Tollama:
 
         request = WhatIfRequest.model_validate(payload)
         return self._client.what_if(request)
+
+    def pipeline(
+        self,
+        *,
+        series: SeriesPayload,
+        horizon: int,
+        strategy: str = "auto",
+        model: str | None = None,
+        allow_fallback: bool = False,
+        ensemble_top_k: int = 3,
+        quantiles: Sequence[float] | None = None,
+        options: Mapping[str, Any] | None = None,
+        timeout: float | None = None,
+        keep_alive: str | int | float | None = None,
+        parameters: Mapping[str, Any] | None = None,
+        analyze_parameters: Mapping[str, Any] | None = None,
+        recommend_top_k: int = 3,
+        allow_restricted_license: bool = False,
+        pull_if_missing: bool = True,
+        accept_license: bool = False,
+    ) -> PipelineResponse:
+        """Run full pipeline orchestration and return analysis + selection + forecast payload."""
+        payload: dict[str, Any] = {
+            "horizon": horizon,
+            "strategy": strategy,
+            "series": _coerce_series_payload(series),
+            "options": dict(options or {}),
+            "allow_fallback": allow_fallback,
+            "ensemble_top_k": ensemble_top_k,
+            "recommend_top_k": recommend_top_k,
+            "allow_restricted_license": allow_restricted_license,
+            "pull_if_missing": pull_if_missing,
+            "accept_license": accept_license,
+        }
+        if model is not None:
+            payload["model"] = model
+        if quantiles is not None:
+            payload["quantiles"] = list(quantiles)
+        if timeout is not None:
+            payload["timeout"] = timeout
+        if keep_alive is not None:
+            payload["keep_alive"] = keep_alive
+        if parameters is not None:
+            payload["parameters"] = dict(parameters)
+        if analyze_parameters is not None:
+            payload["analyze_parameters"] = dict(analyze_parameters)
+
+        request = PipelineRequest.model_validate(payload)
+        return self._client.pipeline(request)
 
 
 def _coerce_series_payload(series: SeriesPayload) -> list[dict[str, Any]]:

@@ -17,6 +17,7 @@ the optional future `packages/*` split as a migration phase.
 - Zero-config auto-forecast endpoint is available at `POST /api/auto-forecast`.
 - Model-free series diagnostics endpoint is available at `POST /api/analyze`.
 - Scenario analysis endpoint is available at `POST /api/what-if`.
+- Autonomous pipeline endpoint is available at `POST /api/pipeline`.
 - Ollama-style model lifecycle is available (`pull`, `list`, `show`, `ps`, `rm`) via HTTP and CLI.
 - Forecast routing uses model-family worker selection from installed manifests.
 - Multi-family adapters are shipped:
@@ -25,7 +26,9 @@ the optional future `packages/*` split as a migration phase.
   - uni2ts runner: Moirai
 - Unified covariates contract is implemented with `past_covariates`, `future_covariates`,
   `parameters.covariates_mode`, compatibility preflight, and response `warnings`.
-- v1 non-goals are still respected: no training/fine-tuning, no distributed scheduler, no multi-tenant auth.
+- Optional API-key auth is available through `config.auth.api_keys`.
+- Per-key usage metering endpoint is available at `GET /api/usage`.
+- v1 non-goals are still respected: no training/fine-tuning and no distributed scheduler.
 
 ### Planned work / TODO
 - Strengthen VRAM reclaim policy with explicit idle strategy and crash recovery behavior.
@@ -261,7 +264,9 @@ tollama/
   - `POST /api/auto-forecast`
   - `POST /api/analyze`
   - `POST /api/what-if`
+  - `POST /api/pipeline`
   - `POST /api/compare`
+  - `GET /api/usage`
 - `GET /api/info` includes:
   - installed model capabilities
   - available model capabilities
@@ -297,6 +302,10 @@ tollama/
 - Forecast endpoints support optional accuracy metrics
   (`mape`, `mase`, `mae`, `rmse`, `smape`, `wape`, `rmsse`, `pinball`) in response payloads.
 - Forecast responses include timing + enriched usage metadata and deterministic explainability payloads.
+- Daemon persists per-key usage aggregates in SQLite (`~/.tollama/usage.db`) and exposes them via
+  `GET /api/usage`.
+- Optional token-bucket request limiting is available via environment configuration
+  (`TOLLAMA_RATE_LIMIT_PER_MINUTE`, `TOLLAMA_RATE_LIMIT_BURST`).
 
 ### Planned work / TODO
 - Add structured logging for routing decisions, load/unload timings, and crash recovery.
@@ -446,8 +455,9 @@ Phase F - Product hardening:
 - Shared HTTP client package added under `src/tollama/client/` and reused by CLI/MCP.
 - HTTP client contracts (`src/tollama/client/http.py`):
   - default base URL `http://localhost:11435`, default timeout `10s`
+  - optional API key auth header support
   - endpoint coverage: health/version, tags/ps/info, show/pull/delete,
-    forecast/auto-forecast/analyze/what-if/compare, validate
+    forecast/auto-forecast/analyze/what-if/pipeline/compare, validate
   - HTTP/status/request failures mapped into typed exceptions with category metadata
     (`INVALID_REQUEST`, `DAEMON_UNREACHABLE`, `MODEL_MISSING`, `LICENSE_REQUIRED`,
     `PERMISSION_DENIED`, `TIMEOUT`, `INTERNAL_ERROR`)
@@ -455,7 +465,7 @@ Phase F - Product hardening:
   - `server.py`, `tools.py`, `schemas.py`, `__main__.py`
   - tool set:
     `tollama_health`, `tollama_models`, `tollama_forecast`, `tollama_auto_forecast`,
-    `tollama_analyze`, `tollama_what_if`, `tollama_compare`, `tollama_recommend`,
+    `tollama_analyze`, `tollama_what_if`, `tollama_pipeline`, `tollama_compare`, `tollama_recommend`,
     `tollama_pull`, `tollama_show`
   - each tool now includes rich MCP descriptions with required inputs, model-name examples,
     and invocation examples for agent discoverability
@@ -466,6 +476,7 @@ Phase F - Product hardening:
   - `tollama_auto_forecast` validates request via `AutoForecastRequest`
   - `tollama_analyze` validates request via `AnalyzeRequest`
   - `tollama_what_if` validates request via `WhatIfRequest`
+  - `tollama_pipeline` validates request via `PipelineRequest`
   - tool failures are emitted as JSON payload with `{error:{category,exit_code,message}}`
 - Optional dependency bundle added in `pyproject.toml`:
   - `.[mcp]` with `mcp>=1.0`
@@ -476,7 +487,8 @@ Phase F - Product hardening:
   - `CLAUDE.md`
 - Optional LangChain SDK wrapper added under `src/tollama/skill/langchain.py`:
   - `TollamaForecastTool`, `TollamaAutoForecastTool`, `TollamaAnalyzeTool`,
-    `TollamaCompareTool`, `TollamaRecommendTool`, `TollamaHealthTool`, `TollamaModelsTool`
+    `TollamaWhatIfTool`, `TollamaPipelineTool`, `TollamaCompareTool`,
+    `TollamaRecommendTool`, `TollamaHealthTool`, `TollamaModelsTool`
   - `get_tollama_tools(base_url="http://127.0.0.1:11435", timeout=10.0)`
   - optional extra `.[langchain]` with `langchain-core`
   - tool descriptions now include schema guidance, model-name examples, and invocation examples
@@ -522,7 +534,7 @@ Phase F - Product hardening:
 ## Prioritized TODO backlog
 1. Implement supervisor restart backoff policy and startup handshake/health checks.
 2. ~~Add per-family runtime bootstrap/install automation under `~/.tollama/runtimes/`.~~ ✓ Implemented.
-3. Add runtime metrics endpoint and structured runtime telemetry.
+3. Expand structured runtime telemetry beyond current `/metrics` and `/api/usage` endpoints.
 4. Add cache/memory policy controls (LRU + limits + reclaim behavior).
 5. Enable static covariates in runner adapters/capability flags (daemon-side pass-through done).
 6. Add explicit license receipt files under `~/.tollama/licenses/`.

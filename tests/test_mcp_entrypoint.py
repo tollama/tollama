@@ -65,6 +65,7 @@ def test_create_server_registers_descriptions_for_all_tools(monkeypatch) -> None
         "tollama_auto_forecast",
         "tollama_analyze",
         "tollama_what_if",
+        "tollama_pipeline",
         "tollama_compare",
         "tollama_pull",
         "tollama_show",

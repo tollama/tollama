@@ -11,6 +11,7 @@ from tollama.core.schemas import (
     AnalyzeResponse,
     AutoForecastResponse,
     ForecastResponse,
+    PipelineResponse,
     WhatIfResponse,
 )
 from tollama.mcp.tools import (
@@ -20,6 +21,7 @@ from tollama.mcp.tools import (
     tollama_forecast,
     tollama_health,
     tollama_models,
+    tollama_pipeline,
     tollama_show,
     tollama_what_if,
 )
@@ -93,6 +95,16 @@ def _what_if_request() -> dict[str, Any]:
             }
         ],
         "options": {},
+    }
+
+
+def _pipeline_request() -> dict[str, Any]:
+    return {
+        "horizon": 2,
+        "strategy": "auto",
+        "series": _forecast_request()["series"],
+        "options": {},
+        "pull_if_missing": True,
     }
 
 
@@ -285,6 +297,82 @@ def test_tollama_what_if_success(monkeypatch) -> None:
 def test_tollama_what_if_invalid_request_maps_to_invalid_request() -> None:
     with pytest.raises(MCPToolError) as exc_info:
         tollama_what_if(request={"model": "mock"})
+
+    assert exc_info.value.exit_code == 2
+    assert exc_info.value.category == "INVALID_REQUEST"
+
+
+def test_tollama_pipeline_success(monkeypatch) -> None:
+    class _FakeClient:
+        def pipeline(self, _request: Any) -> PipelineResponse:
+            return PipelineResponse.model_validate(
+                {
+                    "analysis": {
+                        "results": [
+                            {
+                                "id": "s1",
+                                "detected_frequency": "D",
+                                "seasonality_periods": [2],
+                                "trend": {"direction": "up", "slope": 0.2, "r2": 0.7},
+                                "anomaly_indices": [],
+                                "stationarity_flag": False,
+                                "data_quality_score": 0.9,
+                            }
+                        ],
+                    },
+                    "recommendation": {
+                        "request": {"horizon": 2, "freq": "D", "top_k": 3},
+                        "recommendations": [
+                            {"model": "mock", "family": "mock", "rank": 1, "score": 100}
+                        ],
+                        "excluded": [],
+                        "total_candidates": 1,
+                        "compatible_candidates": 1,
+                    },
+                    "auto_forecast": {
+                        "strategy": "auto",
+                        "selection": {
+                            "strategy": "auto",
+                            "chosen_model": "mock",
+                            "selected_models": ["mock"],
+                            "candidates": [
+                                {
+                                    "model": "mock",
+                                    "family": "mock",
+                                    "rank": 1,
+                                    "score": 100.0,
+                                    "reasons": ["selected"],
+                                }
+                            ],
+                            "rationale": ["selected"],
+                            "fallback_used": False,
+                        },
+                        "response": {
+                            "model": "mock",
+                            "forecasts": [
+                                {
+                                    "id": "s1",
+                                    "freq": "D",
+                                    "start_timestamp": "2025-01-03",
+                                    "mean": [3.0, 4.0],
+                                }
+                            ],
+                        },
+                    },
+                },
+            )
+
+    monkeypatch.setattr("tollama.mcp.tools._make_client", lambda **_: _FakeClient())
+
+    payload = tollama_pipeline(request=_pipeline_request())
+
+    assert payload["analysis"]["results"][0]["id"] == "s1"
+    assert payload["auto_forecast"]["selection"]["chosen_model"] == "mock"
+
+
+def test_tollama_pipeline_invalid_request_maps_to_invalid_request() -> None:
+    with pytest.raises(MCPToolError) as exc_info:
+        tollama_pipeline(request={"horizon": 2})
 
     assert exc_info.value.exit_code == 2
     assert exc_info.value.category == "INVALID_REQUEST"

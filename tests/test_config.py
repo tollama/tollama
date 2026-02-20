@@ -135,3 +135,18 @@ def test_daemon_defaults_auto_bootstrap_can_be_disabled(monkeypatch, tmp_path) -
 
     reloaded = load_config(paths)
     assert reloaded.daemon.auto_bootstrap is False
+
+
+def test_auth_defaults_api_keys_to_empty_list(monkeypatch, tmp_path) -> None:
+    paths = _paths_from_env(monkeypatch, tmp_path)
+    config = load_config(paths)
+    assert config.auth.api_keys == []
+
+
+def test_auth_api_keys_round_trip(monkeypatch, tmp_path) -> None:
+    paths = _paths_from_env(monkeypatch, tmp_path)
+    updated = update_config(paths, {"auth": {"api_keys": ["key-1", "key-2"]}})
+    assert updated.auth.api_keys == ["key-1", "key-2"]
+
+    reloaded = load_config(paths)
+    assert reloaded.auth.api_keys == ["key-1", "key-2"]

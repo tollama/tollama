@@ -14,6 +14,7 @@ from tollama.core.schemas import (
     AutoForecastResponse,
     CompareResponse,
     ForecastResponse,
+    PipelineResponse,
     WhatIfResponse,
 )
 
@@ -100,6 +101,16 @@ def _what_if_request() -> dict[str, Any]:
     }
 
 
+def _pipeline_request() -> dict[str, Any]:
+    return {
+        "horizon": 2,
+        "strategy": "auto",
+        "series": _forecast_request()["series"],
+        "options": {},
+        "pull_if_missing": True,
+    }
+
+
 def test_get_tollama_tools_returns_preconfigured_tools(langchain_tools) -> None:
     tools = langchain_tools.get_tollama_tools(base_url="http://daemon.test", timeout=7.0)
 
@@ -108,6 +119,7 @@ def test_get_tollama_tools_returns_preconfigured_tools(langchain_tools) -> None:
         "tollama_auto_forecast",
         "tollama_analyze",
         "tollama_what_if",
+        "tollama_pipeline",
         "tollama_compare",
         "tollama_recommend",
         "tollama_health",
@@ -123,6 +135,7 @@ def test_tool_descriptions_include_usage_guidance(langchain_tools) -> None:
     auto_forecast_tool = langchain_tools.TollamaAutoForecastTool()
     analyze_tool = langchain_tools.TollamaAnalyzeTool()
     what_if_tool = langchain_tools.TollamaWhatIfTool()
+    pipeline_tool = langchain_tools.TollamaPipelineTool()
     compare_tool = langchain_tools.TollamaCompareTool()
     recommend_tool = langchain_tools.TollamaRecommendTool()
     models_tool = langchain_tools.TollamaModelsTool()
@@ -144,6 +157,10 @@ def test_tool_descriptions_include_usage_guidance(langchain_tools) -> None:
     assert "scenario" in what_if_tool.description
     assert "transforms" in what_if_tool.description
     assert "Example:" in what_if_tool.description
+
+    assert "pipeline" in pipeline_tool.description
+    assert "analyze" in pipeline_tool.description
+    assert "Example:" in pipeline_tool.description
 
     assert "models" in compare_tool.description
     assert "ok=true/false" in compare_tool.description
@@ -334,6 +351,74 @@ def test_tollama_what_if_tool_invalid_request_maps_to_invalid_request(langchain_
     assert payload["error"]["exit_code"] == 2
 
 
+def test_tollama_pipeline_tool_success(monkeypatch, langchain_tools) -> None:
+    class _FakeClient:
+        def pipeline(self, _request: Any) -> PipelineResponse:
+            return PipelineResponse.model_validate(
+                {
+                    "analysis": {
+                        "results": [
+                            {
+                                "id": "s1",
+                                "detected_frequency": "D",
+                                "seasonality_periods": [2],
+                                "trend": {"direction": "up", "slope": 0.1, "r2": 0.4},
+                                "anomaly_indices": [],
+                                "stationarity_flag": False,
+                                "data_quality_score": 0.9,
+                            }
+                        ],
+                    },
+                    "recommendation": {
+                        "request": {"horizon": 2, "freq": "D", "top_k": 3},
+                        "recommendations": [
+                            {"model": "mock", "family": "mock", "rank": 1, "score": 100}
+                        ],
+                        "excluded": [],
+                        "total_candidates": 1,
+                        "compatible_candidates": 1,
+                    },
+                    "auto_forecast": {
+                        "strategy": "auto",
+                        "selection": {
+                            "strategy": "auto",
+                            "chosen_model": "mock",
+                            "selected_models": ["mock"],
+                            "candidates": [
+                                {
+                                    "model": "mock",
+                                    "family": "mock",
+                                    "rank": 1,
+                                    "score": 100.0,
+                                    "reasons": ["selected"],
+                                }
+                            ],
+                            "rationale": ["selected"],
+                            "fallback_used": False,
+                        },
+                        "response": _forecast_response().model_dump(mode="json", exclude_none=True),
+                    },
+                },
+            )
+
+    monkeypatch.setattr("tollama.skill.langchain._make_client", lambda **_: _FakeClient())
+    tool = langchain_tools.TollamaPipelineTool()
+
+    payload = tool._run(request=_pipeline_request())
+
+    assert payload["analysis"]["results"][0]["id"] == "s1"
+    assert payload["auto_forecast"]["selection"]["chosen_model"] == "mock"
+
+
+def test_tollama_pipeline_tool_invalid_request_maps_to_invalid_request(langchain_tools) -> None:
+    tool = langchain_tools.TollamaPipelineTool()
+
+    payload = tool._run(request={"horizon": 2})
+
+    assert payload["error"]["category"] == "INVALID_REQUEST"
+    assert payload["error"]["exit_code"] == 2
+
+
 def test_tollama_forecast_tool_client_error_maps_to_error_payload(
     monkeypatch,
     langchain_tools,
@@ -492,6 +577,72 @@ async def test_tollama_what_if_tool_arun_uses_async_client(monkeypatch, langchai
 
     assert payload["summary"]["requested_scenarios"] == 1
     assert payload["results"][0]["ok"] is True
+
+
+@pytest.mark.asyncio
+async def test_tollama_pipeline_tool_arun_uses_async_client(
+    monkeypatch,
+    langchain_tools,
+) -> None:
+    class _FakeAsyncClient:
+        async def pipeline(self, _request: Any) -> PipelineResponse:
+            return PipelineResponse.model_validate(
+                {
+                    "analysis": {
+                        "results": [
+                            {
+                                "id": "s1",
+                                "detected_frequency": "D",
+                                "seasonality_periods": [2],
+                                "trend": {"direction": "up", "slope": 0.1, "r2": 0.4},
+                                "anomaly_indices": [],
+                                "stationarity_flag": False,
+                                "data_quality_score": 0.9,
+                            }
+                        ],
+                    },
+                    "recommendation": {
+                        "request": {"horizon": 2, "freq": "D", "top_k": 3},
+                        "recommendations": [
+                            {"model": "mock", "family": "mock", "rank": 1, "score": 100}
+                        ],
+                        "excluded": [],
+                        "total_candidates": 1,
+                        "compatible_candidates": 1,
+                    },
+                    "auto_forecast": {
+                        "strategy": "auto",
+                        "selection": {
+                            "strategy": "auto",
+                            "chosen_model": "mock",
+                            "selected_models": ["mock"],
+                            "candidates": [
+                                {
+                                    "model": "mock",
+                                    "family": "mock",
+                                    "rank": 1,
+                                    "score": 100.0,
+                                    "reasons": ["selected"],
+                                }
+                            ],
+                            "rationale": ["selected"],
+                            "fallback_used": False,
+                        },
+                        "response": _forecast_response().model_dump(mode="json", exclude_none=True),
+                    },
+                },
+            )
+
+    monkeypatch.setattr(
+        "tollama.skill.langchain._make_async_client",
+        lambda **_: _FakeAsyncClient(),
+    )
+    tool = langchain_tools.TollamaPipelineTool()
+
+    payload = await tool._arun(request=_pipeline_request())
+
+    assert payload["analysis"]["results"][0]["id"] == "s1"
+    assert payload["auto_forecast"]["selection"]["chosen_model"] == "mock"
 
 
 @pytest.mark.asyncio
