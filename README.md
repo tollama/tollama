@@ -43,6 +43,9 @@ print(result.to_df())
 
 - MCP server: `tollama-mcp`
 - LangChain tools: `tollama.skill.langchain.get_tollama_tools(...)`
+- CrewAI tools: `tollama.skill.get_crewai_tools(...)`
+- AutoGen specs/map: `tollama.skill.get_autogen_tool_specs(...)`, `tollama.skill.get_autogen_function_map(...)`
+- smolagents tools: `tollama.skill.get_smolagents_tools(...)`
 - OpenClaw skill: `skills/tollama-forecast/`
 
 ## Model Guides
@@ -57,6 +60,14 @@ print(result.to_df())
 ```bash
 ruff check .
 pytest -q
+```
+
+## Benchmark Script
+
+Compare SDK ergonomics and time-to-first-forecast versus raw client calls:
+
+```bash
+PYTHONPATH=src python benchmarks/tollama_vs_raw.py --model mock --iterations 3 --warmup 1
 ```
 
 ## Docker
@@ -189,6 +200,8 @@ Tool output/error behavior:
   `{"error":{"category","exit_code","message"}}`
 - invalid local input validation maps to
   `{"error":{"category":"INVALID_REQUEST","exit_code":2,...}}`
+- async calls use real non-blocking `_arun` implementations backed by
+  `AsyncTollamaClient` (no sync fallback stubs)
 - if `langchain_core` is missing, import raises:
   `pip install "tollama[langchain]"`
 
@@ -196,6 +209,25 @@ Validation test:
 
 ```bash
 PYTHONPATH=src python -m pytest -q tests/test_langchain_skill.py
+```
+
+## Additional Agent Wrappers (Python)
+
+These wrappers reuse the same tool contracts via
+`src/tollama/skill/framework_common.py`.
+
+```python
+from tollama.skill import (
+    get_autogen_function_map,
+    get_autogen_tool_specs,
+    get_crewai_tools,
+    get_smolagents_tools,
+)
+
+crewai_tools = get_crewai_tools()
+smolagents_tools = get_smolagents_tools()
+autogen_tools = get_autogen_tool_specs()
+autogen_function_map = get_autogen_function_map()
 ```
 
 ## OpenClaw Integration (Skill: `tollama-forecast`)

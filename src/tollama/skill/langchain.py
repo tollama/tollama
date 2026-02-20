@@ -9,24 +9,24 @@ from pydantic import BaseModel, ConfigDict, ValidationError
 from tollama.client import (
     DEFAULT_BASE_URL,
     DEFAULT_TIMEOUT_SECONDS,
+    AsyncTollamaClient,
     TollamaClient,
     TollamaClientError,
 )
 from tollama.core.recommend import recommend_models
 from tollama.core.schemas import CompareRequest, ForecastRequest
 
-_LANGCHAIN_IMPORT_HINT = (
-    'LangChain dependency is not installed. Install with: pip install "tollama[langchain]"'
-)
+try:
+    from langchain_core.tools import BaseTool
+except ImportError as exc:  # pragma: no cover - depends on optional extra
+    raise ImportError(
+        'LangChain dependency is not installed. Install with: pip install "tollama[langchain]"',
+    ) from exc
+
 _MODEL_NAME_EXAMPLES = (
     "mock, chronos2, granite-ttm-r2, timesfm-2.5-200m, "
     "moirai-2.0-R-small, sundial-base-128m, toto-open-base-1.0"
 )
-
-try:
-    from langchain_core.tools import BaseTool
-except ImportError as exc:  # pragma: no cover - depends on optional extra
-    raise ImportError(_LANGCHAIN_IMPORT_HINT) from exc
 
 
 class _ToolInputBase(BaseModel):
@@ -64,6 +64,10 @@ def _make_client(*, base_url: str, timeout: float) -> TollamaClient:
     return TollamaClient(base_url=base_url, timeout=timeout)
 
 
+def _make_async_client(*, base_url: str, timeout: float) -> AsyncTollamaClient:
+    return AsyncTollamaClient(base_url=base_url, timeout=timeout)
+
+
 def _error_payload(*, category: str, exit_code: int, message: str) -> dict[str, Any]:
     return {
         "error": {
@@ -88,6 +92,9 @@ class _TollamaBaseTool(BaseTool):
 
     def _client(self) -> TollamaClient:
         return _make_client(base_url=self.base_url, timeout=float(self.timeout))
+
+    def _async_client(self) -> AsyncTollamaClient:
+        return _make_async_client(base_url=self.base_url, timeout=float(self.timeout))
 
 
 class TollamaHealthTool(_TollamaBaseTool):
@@ -118,7 +125,17 @@ class TollamaHealthTool(_TollamaBaseTool):
         }
 
     async def _arun(self, run_manager: Any | None = None) -> dict[str, Any]:
-        return self._run(run_manager=run_manager)
+        del run_manager
+        client = self._async_client()
+        try:
+            payload = await client.health()
+        except TollamaClientError as exc:
+            return _client_error_payload(exc)
+        return {
+            "healthy": True,
+            "health": payload.get("health", {}),
+            "version": payload.get("version", {}),
+        }
 
 
 class TollamaModelsTool(_TollamaBaseTool):
@@ -157,7 +174,21 @@ class TollamaModelsTool(_TollamaBaseTool):
         mode: str = "installed",
         run_manager: Any | None = None,
     ) -> dict[str, Any]:
-        return self._run(mode=mode, run_manager=run_manager)
+        del run_manager
+        try:
+            args = ModelsToolInput(mode=mode)
+        except ValidationError as exc:
+            return _invalid_request_payload(str(exc))
+
+        client = self._async_client()
+        try:
+            items = await client.models(mode=args.mode)
+        except TollamaClientError as exc:
+            return _client_error_payload(exc)
+        return {
+            "mode": args.mode,
+            "items": items,
+        }
 
 
 class TollamaForecastTool(_TollamaBaseTool):
@@ -201,7 +232,20 @@ class TollamaForecastTool(_TollamaBaseTool):
         request: dict[str, Any],
         run_manager: Any | None = None,
     ) -> dict[str, Any]:
-        return self._run(request=request, run_manager=run_manager)
+        del run_manager
+        try:
+            args = ForecastToolInput(request=request)
+            forecast_request = ForecastRequest.model_validate(args.request)
+        except ValidationError as exc:
+            return _invalid_request_payload(str(exc))
+
+        client = self._async_client()
+        try:
+            response = await client.forecast_response(forecast_request)
+        except TollamaClientError as exc:
+            return _client_error_payload(exc)
+
+        return response.model_dump(mode="json", exclude_none=True)
 
 
 class TollamaCompareTool(_TollamaBaseTool):
@@ -245,7 +289,20 @@ class TollamaCompareTool(_TollamaBaseTool):
         request: dict[str, Any],
         run_manager: Any | None = None,
     ) -> dict[str, Any]:
-        return self._run(request=request, run_manager=run_manager)
+        del run_manager
+        try:
+            args = CompareToolInput(request=request)
+            compare_request = CompareRequest.model_validate(args.request)
+        except ValidationError as exc:
+            return _invalid_request_payload(str(exc))
+
+        client = self._async_client()
+        try:
+            response = await client.compare(compare_request)
+        except TollamaClientError as exc:
+            return _client_error_payload(exc)
+
+        return response.model_dump(mode="json", exclude_none=True)
 
 
 class TollamaRecommendTool(_TollamaBaseTool):
@@ -317,17 +374,34 @@ class TollamaRecommendTool(_TollamaBaseTool):
         top_k: int = 3,
         run_manager: Any | None = None,
     ) -> dict[str, Any]:
-        return self._run(
-            horizon=horizon,
-            freq=freq,
-            has_past_covariates=has_past_covariates,
-            has_future_covariates=has_future_covariates,
-            has_static_covariates=has_static_covariates,
-            covariates_type=covariates_type,
-            allow_restricted_license=allow_restricted_license,
-            top_k=top_k,
-            run_manager=run_manager,
-        )
+        del run_manager
+        try:
+            args = RecommendToolInput(
+                horizon=horizon,
+                freq=freq,
+                has_past_covariates=has_past_covariates,
+                has_future_covariates=has_future_covariates,
+                has_static_covariates=has_static_covariates,
+                covariates_type=covariates_type,
+                allow_restricted_license=allow_restricted_license,
+                top_k=top_k,
+            )
+        except ValidationError as exc:
+            return _invalid_request_payload(str(exc))
+
+        try:
+            return recommend_models(
+                horizon=args.horizon,
+                freq=args.freq,
+                has_past_covariates=args.has_past_covariates,
+                has_future_covariates=args.has_future_covariates,
+                has_static_covariates=args.has_static_covariates,
+                covariates_type=args.covariates_type,
+                allow_restricted_license=args.allow_restricted_license,
+                top_k=args.top_k,
+            )
+        except ValueError as exc:
+            return _invalid_request_payload(str(exc))
 
 
 def get_tollama_tools(

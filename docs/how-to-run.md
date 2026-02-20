@@ -603,6 +603,7 @@ Tool contract summary:
 - `tollama_recommend`: args `{"horizon": int, ...}` for ranked model hints
 - all wrappers return structured `dict` payloads; errors use
   `{"error":{"category","exit_code","message"}}`
+- async invocations are fully implemented via `_arun` + `AsyncTollamaClient`
 - missing optional dependency hint:
   `pip install "tollama[langchain]"`
 
@@ -610,6 +611,40 @@ LangChain wrapper validation command:
 
 ```bash
 PYTHONPATH=src python -m pytest -q tests/test_langchain_skill.py
+```
+
+## Additional Agent Wrappers
+
+`tollama` also provides wrapper factories for CrewAI, AutoGen, and smolagents.
+All wrappers reuse the same tool contracts (`health/models/forecast/compare/recommend`).
+
+```python
+from tollama.skill import (
+    get_autogen_function_map,
+    get_autogen_tool_specs,
+    get_crewai_tools,
+    get_smolagents_tools,
+)
+
+crewai_tools = get_crewai_tools()
+smolagents_tools = get_smolagents_tools()
+autogen_tools = get_autogen_tool_specs()
+autogen_function_map = get_autogen_function_map()
+```
+
+Validation test:
+
+```bash
+PYTHONPATH=src python -m pytest -q tests/test_agent_wrappers.py
+```
+
+## Benchmark
+
+Compare time-to-first-forecast and request ergonomics (`LOC`) between the SDK
+and raw client calls:
+
+```bash
+PYTHONPATH=src python benchmarks/tollama_vs_raw.py --model mock --iterations 3 --warmup 1
 ```
 
 ## Development Checks

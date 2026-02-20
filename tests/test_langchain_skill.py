@@ -9,7 +9,7 @@ from typing import Any
 import pytest
 
 from tollama.client import ModelMissingError
-from tollama.core.schemas import ForecastResponse
+from tollama.core.schemas import CompareResponse, ForecastResponse
 
 _HAS_LANGCHAIN = importlib.util.find_spec("langchain_core") is not None
 if _HAS_LANGCHAIN:
@@ -164,3 +164,135 @@ def test_tollama_forecast_tool_client_error_maps_to_error_payload(
 
     assert payload["error"]["category"] == "MODEL_MISSING"
     assert payload["error"]["exit_code"] == 4
+
+
+@pytest.mark.asyncio
+async def test_tollama_health_tool_arun_uses_async_client(monkeypatch, langchain_tools) -> None:
+    class _FakeAsyncClient:
+        async def health(self) -> dict[str, Any]:
+            return {"health": {"status": "ok"}, "version": {"version": "0.2.0"}}
+
+    monkeypatch.setattr(
+        "tollama.skill.langchain._make_async_client",
+        lambda **_: _FakeAsyncClient(),
+    )
+    tool = langchain_tools.TollamaHealthTool()
+
+    payload = await tool._arun()
+
+    assert payload["healthy"] is True
+    assert payload["version"]["version"] == "0.2.0"
+
+
+@pytest.mark.asyncio
+async def test_tollama_forecast_tool_arun_uses_async_client(monkeypatch, langchain_tools) -> None:
+    class _FakeAsyncClient:
+        async def forecast_response(self, _request: Any) -> ForecastResponse:
+            return _forecast_response()
+
+    monkeypatch.setattr(
+        "tollama.skill.langchain._make_async_client",
+        lambda **_: _FakeAsyncClient(),
+    )
+    tool = langchain_tools.TollamaForecastTool()
+
+    payload = await tool._arun(request=_forecast_request())
+
+    assert payload["model"] == "mock"
+    assert payload["forecasts"][0]["id"] == "s1"
+
+
+@pytest.mark.asyncio
+async def test_tollama_compare_tool_arun_uses_async_client(monkeypatch, langchain_tools) -> None:
+    class _FakeAsyncClient:
+        async def compare(self, _request: Any) -> Any:
+            return CompareResponse.model_validate(
+                {
+                    "models": ["mock", "chronos2"],
+                    "horizon": 2,
+                    "results": [
+                        {
+                            "model": "mock",
+                            "ok": True,
+                            "response": {
+                                "model": "mock",
+                                "forecasts": [
+                                    {
+                                        "id": "s1",
+                                        "freq": "D",
+                                        "start_timestamp": "2025-01-03",
+                                        "mean": [3.0, 4.0],
+                                    }
+                                ],
+                            },
+                        },
+                        {
+                            "model": "chronos2",
+                            "ok": False,
+                            "error": {
+                                "category": "RUNNER_UNAVAILABLE",
+                                "status_code": 503,
+                                "message": "runner unavailable",
+                            },
+                        },
+                    ],
+                    "summary": {"requested_models": 2, "succeeded": 1, "failed": 1},
+                },
+            )
+
+    monkeypatch.setattr(
+        "tollama.skill.langchain._make_async_client",
+        lambda **_: _FakeAsyncClient(),
+    )
+    tool = langchain_tools.TollamaCompareTool()
+    payload = await tool._arun(
+        request={
+            "models": ["mock", "chronos2"],
+            "horizon": 2,
+            "series": [
+                {
+                    "id": "s1",
+                    "freq": "D",
+                    "timestamps": ["2025-01-01", "2025-01-02"],
+                    "target": [1.0, 2.0],
+                }
+            ],
+            "options": {},
+        },
+    )
+
+    assert payload["summary"]["succeeded"] == 1
+
+
+@pytest.mark.asyncio
+async def test_tollama_models_tool_arun_uses_async_client(monkeypatch, langchain_tools) -> None:
+    class _FakeAsyncClient:
+        async def models(self, mode: str = "installed") -> list[dict[str, Any]]:
+            return [{"name": "mock", "mode": mode}]
+
+    monkeypatch.setattr(
+        "tollama.skill.langchain._make_async_client",
+        lambda **_: _FakeAsyncClient(),
+    )
+    tool = langchain_tools.TollamaModelsTool()
+
+    payload = await tool._arun(mode="available")
+
+    assert payload["mode"] == "available"
+    assert payload["items"] == [{"name": "mock", "mode": "available"}]
+
+
+@pytest.mark.asyncio
+async def test_tollama_recommend_tool_arun_success(langchain_tools) -> None:
+    tool = langchain_tools.TollamaRecommendTool()
+
+    payload = await tool._arun(
+        horizon=24,
+        has_past_covariates=True,
+        has_future_covariates=True,
+        covariates_type="numeric",
+        top_k=3,
+    )
+
+    assert payload["request"]["horizon"] == 24
+    assert payload["recommendations"]

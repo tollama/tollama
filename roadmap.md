@@ -468,6 +468,16 @@ Phase F - Product hardening:
   - `get_tollama_tools(base_url="http://127.0.0.1:11435", timeout=10.0)`
   - optional extra `.[langchain]` with `langchain-core`
   - tool descriptions now include schema guidance, model-name examples, and invocation examples
+  - async tool paths now use real `_arun` implementations backed by
+    `AsyncTollamaClient` (no sync `_run` delegation stubs)
+- Additional agent framework wrappers added under `src/tollama/skill/`:
+  - `crewai.py`: `get_crewai_tools(...)`
+  - `autogen.py`: `get_autogen_tool_specs(...)`,
+    `get_autogen_function_map(...)`, `register_autogen_tools(...)`
+  - `smolagents.py`: `get_smolagents_tools(...)`
+  - shared framework-neutral contracts in `framework_common.py`
+- Benchmark script added for SDK-vs-raw comparison:
+  - `benchmarks/tollama_vs_raw.py` reports effective LOC and time-to-first-forecast
 - High-level Python SDK convenience facade added:
   - `src/tollama/sdk.py` with `Tollama` + `TollamaForecastResult`
   - package export `from tollama import Tollama`
@@ -488,6 +498,8 @@ Phase F - Product hardening:
   - `tests/test_mcp_tools.py`
   - `tests/test_mcp_entrypoint.py`
   - `tests/test_langchain_skill.py`
+  - `tests/test_agent_wrappers.py`
+  - `tests/test_benchmark_tollama_vs_raw.py`
   - `tests/test_sdk.py`
 - MCP end-to-end SDK smoke passed on `2026-02-20` with stdio transport and live daemon.
 

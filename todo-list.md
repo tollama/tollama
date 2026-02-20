@@ -191,6 +191,21 @@
   - 현재: 노트북 추가(`examples/quickstart.ipynb`, `examples/agent_demo.ipynb`)
   - 현재: 컨테이너 파일 추가(`Dockerfile`, `.dockerignore`)
   - 현재: `pyproject.toml`에 PyPI 메타데이터(`keywords`, `classifiers`, `project.urls`) 보강
+- [x] (P2) LangChain async 툴 실행 경로 완성
+  - 현재: `AsyncTollamaClient` 추가(`src/tollama/client/http.py`)
+  - 현재: `TollamaHealthTool`/`TollamaModelsTool`/`TollamaForecastTool`/
+    `TollamaCompareTool`/`TollamaRecommendTool`의 `_arun`이 실제 async 호출 사용
+  - 현재: `tests/test_langchain_skill.py`, `tests/test_client_http.py` async 경로 검증 추가
+- [x] (P2) 추가 Agent 프레임워크 래퍼 제공
+  - 현재: `src/tollama/skill/crewai.py` (`get_crewai_tools`)
+  - 현재: `src/tollama/skill/autogen.py`
+    (`get_autogen_tool_specs`, `get_autogen_function_map`, `register_autogen_tools`)
+  - 현재: `src/tollama/skill/smolagents.py` (`get_smolagents_tools`)
+  - 현재: 공통 스펙 어댑터 `src/tollama/skill/framework_common.py` 재사용
+  - 현재: `tests/test_agent_wrappers.py` 추가
+- [x] (P2) SDK vs raw 벤치마크 스크립트 추가
+  - 현재: `benchmarks/tollama_vs_raw.py` (LOC + time-to-first-forecast 비교)
+  - 현재: `tests/test_benchmark_tollama_vs_raw.py` 추가
 - [ ] (P1) TSModelfile 스펙 초안 작성 + parser 구현 계획
   - 파일 포맷/키 목록/우선순위 규칙 정의
 - [~] (P1) Unified Data Adapter 설계 문서

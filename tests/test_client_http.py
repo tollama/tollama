@@ -8,6 +8,7 @@ import httpx
 import pytest
 
 from tollama.client import (
+    AsyncTollamaClient,
     DaemonUnreachableError,
     ForecastTimeoutError,
     InvalidRequestError,
@@ -49,6 +50,10 @@ def _response_payload() -> dict[str, Any]:
 
 def _client(handler: httpx.MockTransport) -> TollamaClient:
     return TollamaClient(base_url="http://daemon.test", timeout=3.0, transport=handler)
+
+
+def _async_client(handler: httpx.MockTransport) -> AsyncTollamaClient:
+    return AsyncTollamaClient(base_url="http://daemon.test", timeout=3.0, transport=handler)
 
 
 def test_forecast_non_stream_falls_back_to_v1_on_api_404() -> None:
@@ -145,3 +150,38 @@ def test_timeout_error_maps_to_forecast_timeout() -> None:
         client.forecast(_request_payload(), stream=False)
 
     assert exc_info.value.exit_code == 6
+
+
+@pytest.mark.asyncio
+async def test_async_forecast_non_stream_falls_back_to_v1_on_api_404() -> None:
+    paths: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        paths.append(request.url.path)
+        if request.url.path == "/api/forecast":
+            return httpx.Response(404, json={"detail": "not found"})
+        if request.url.path == "/v1/forecast":
+            return httpx.Response(200, json=_response_payload())
+        return httpx.Response(500, json={"detail": "unexpected path"})
+
+    client = _async_client(httpx.MockTransport(handler))
+    result = await client.forecast(_request_payload(), stream=False)
+
+    assert isinstance(result, dict)
+    assert result["model"] == "mock"
+    assert paths == ["/api/forecast", "/v1/forecast"]
+
+
+@pytest.mark.asyncio
+async def test_async_models_available_reads_api_info() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/api/info"
+        return httpx.Response(
+            200,
+            json={"models": {"available": [{"name": "mock", "family": "mock"}]}},
+        )
+
+    client = _async_client(httpx.MockTransport(handler))
+    models = await client.models("available")
+
+    assert models == [{"name": "mock", "family": "mock"}]

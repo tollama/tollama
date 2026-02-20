@@ -353,6 +353,241 @@ class TollamaClient:
         return response
 
 
+class AsyncTollamaClient:
+    """Async HTTP client for LangChain and other async integrations."""
+
+    def __init__(
+        self,
+        base_url: str = DEFAULT_BASE_URL,
+        timeout: float = DEFAULT_TIMEOUT_SECONDS,
+        *,
+        transport: httpx.AsyncBaseTransport | httpx.BaseTransport | None = None,
+    ) -> None:
+        self._base_url = base_url.rstrip("/")
+        self._timeout = timeout
+        self._transport = transport
+
+    async def health(self) -> dict[str, Any]:
+        """Fetch daemon health and version details."""
+        health_payload = await self._request_json("GET", "/v1/health", action="daemon health")
+        version_payload = await self._request_json("GET", "/api/version", action="daemon version")
+        return {
+            "health": health_payload,
+            "version": version_payload,
+        }
+
+    async def models(self, mode: str = "installed") -> list[dict[str, Any]]:
+        """Return model items for installed/loaded/available views."""
+        normalized_mode = mode.strip().lower()
+        if normalized_mode == "installed":
+            payload = await self.list_tags()
+            return _coerce_dict_list(payload.get("models"))
+        if normalized_mode == "loaded":
+            payload = await self.list_running()
+            return _coerce_dict_list(payload.get("models"))
+        if normalized_mode == "available":
+            payload = await self.info()
+            models_payload = payload.get("models") if isinstance(payload, dict) else None
+            available = (
+                models_payload.get("available")
+                if isinstance(models_payload, dict)
+                else None
+            )
+            return _coerce_dict_list(available)
+        raise InvalidRequestError(action="list models", detail=f"unsupported mode: {mode!r}")
+
+    async def info(self) -> dict[str, Any]:
+        """Fetch daemon diagnostics payload."""
+        return await self._request_json("GET", "/api/info", action="daemon info")
+
+    async def forecast(
+        self,
+        payload: dict[str, Any] | ForecastRequest,
+        *,
+        stream: bool = True,
+    ) -> dict[str, Any] | list[dict[str, Any]]:
+        """Submit an Ollama-compatible forecast request."""
+        request_payload = self._coerce_request_payload(payload)
+        request_payload["stream"] = stream
+        action = f"forecast with model {request_payload.get('model')!r}"
+        if stream:
+            try:
+                return await self._request_ndjson(
+                    "POST",
+                    "/api/forecast",
+                    json_payload=request_payload,
+                    action=action,
+                )
+            except ModelMissingError:
+                return await self._request_ndjson(
+                    "POST",
+                    "/v1/forecast",
+                    json_payload=request_payload,
+                    action=action,
+                )
+
+        try:
+            return await self._request_json(
+                "POST",
+                "/api/forecast",
+                json_payload=request_payload,
+                action=action,
+            )
+        except ModelMissingError:
+            return await self._request_json(
+                "POST",
+                "/v1/forecast",
+                json_payload=request_payload,
+                action=action,
+            )
+
+    async def forecast_response(self, request: ForecastRequest) -> ForecastResponse:
+        """Submit a non-streaming forecast and validate response schema."""
+        response_payload = await self.forecast(request, stream=False)
+        if not isinstance(response_payload, dict):
+            raise TollamaClientError(
+                action=f"forecast with model {request.model!r}",
+                detail="daemon returned unexpected non-object response",
+            )
+        try:
+            return ForecastResponse.model_validate(response_payload)
+        except Exception as exc:  # noqa: BLE001
+            raise InvalidRequestError(
+                action="validate forecast response",
+                detail=str(exc),
+            ) from exc
+
+    async def compare(
+        self,
+        payload: dict[str, Any] | CompareRequest,
+    ) -> CompareResponse:
+        """Submit a model-comparison request and validate response schema."""
+        request_payload = self._coerce_compare_payload(payload)
+        response_payload = await self._request_json(
+            "POST",
+            "/api/compare",
+            json_payload=request_payload,
+            action="compare models",
+        )
+        try:
+            return CompareResponse.model_validate(response_payload)
+        except Exception as exc:  # noqa: BLE001
+            raise InvalidRequestError(
+                action="validate compare response",
+                detail=str(exc),
+            ) from exc
+
+    async def list_tags(self) -> dict[str, Any]:
+        """Fetch installed model tags from the daemon."""
+        return await self._request_json("GET", "/api/tags", action="list model tags")
+
+    async def list_running(self) -> dict[str, Any]:
+        """Fetch loaded model process state from the daemon."""
+        return await self._request_json("GET", "/api/ps", action="list loaded models")
+
+    def _coerce_request_payload(self, payload: dict[str, Any] | ForecastRequest) -> dict[str, Any]:
+        if isinstance(payload, ForecastRequest):
+            return payload.model_dump(mode="json", exclude_none=True)
+        return dict(payload)
+
+    def _coerce_compare_payload(self, payload: dict[str, Any] | CompareRequest) -> dict[str, Any]:
+        if isinstance(payload, CompareRequest):
+            return payload.model_dump(mode="json", exclude_none=True)
+        return dict(payload)
+
+    async def _request_json(
+        self,
+        method: str,
+        path: str,
+        *,
+        json_payload: dict[str, Any] | None = None,
+        action: str,
+    ) -> dict[str, Any]:
+        response = await self._send_request(
+            method,
+            path,
+            json_payload=json_payload,
+            action=action,
+        )
+        try:
+            data = response.json()
+        except ValueError as exc:
+            raise TollamaClientError(
+                action=action,
+                detail="daemon returned non-JSON response",
+            ) from exc
+
+        if not isinstance(data, dict):
+            raise TollamaClientError(
+                action=action,
+                detail="daemon returned unexpected JSON payload",
+            )
+        return data
+
+    async def _request_ndjson(
+        self,
+        method: str,
+        path: str,
+        *,
+        json_payload: dict[str, Any] | None = None,
+        action: str,
+    ) -> list[dict[str, Any]]:
+        response = await self._send_request(
+            method,
+            path,
+            json_payload=json_payload,
+            action=action,
+        )
+        entries: list[dict[str, Any]] = []
+        for raw_line in response.text.splitlines():
+            line = raw_line.strip()
+            if not line:
+                continue
+            try:
+                payload = json.loads(line)
+            except json.JSONDecodeError as exc:
+                raise TollamaClientError(
+                    action=action,
+                    detail="daemon returned non-NDJSON response",
+                ) from exc
+            if not isinstance(payload, dict):
+                raise TollamaClientError(
+                    action=action,
+                    detail="daemon returned unexpected NDJSON payload",
+                )
+            entries.append(payload)
+        return entries
+
+    async def _send_request(
+        self,
+        method: str,
+        path: str,
+        *,
+        json_payload: dict[str, Any] | None = None,
+        action: str,
+    ) -> httpx.Response:
+        try:
+            async with httpx.AsyncClient(
+                base_url=self._base_url,
+                timeout=self._timeout,
+                transport=self._transport,
+            ) as client:
+                response = await client.request(method, path, json=json_payload)
+        except httpx.TimeoutException as exc:
+            raise ForecastTimeoutError(action=action, detail=str(exc)) from exc
+        except httpx.ConnectError as exc:
+            raise DaemonUnreachableError(action=action, detail=str(exc)) from exc
+        except httpx.RequestError as exc:
+            raise DaemonUnreachableError(action=action, detail=str(exc)) from exc
+        except httpx.HTTPError as exc:
+            raise TollamaClientError(action=action, detail=str(exc)) from exc
+
+        if response.is_error:
+            detail = _extract_error_detail(response)
+            raise _map_http_error(action=action, status_code=response.status_code, detail=detail)
+        return response
+
+
 def _extract_error_detail(response: httpx.Response) -> str:
     text = response.text.strip()
     if not text:
