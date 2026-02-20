@@ -14,6 +14,7 @@ from tollama.client import (
     TollamaClient,
     TollamaClientError,
 )
+from tollama.core.recommend import recommend_models
 from tollama.core.schemas import ForecastRequest
 
 from .schemas import (
@@ -21,6 +22,7 @@ from .schemas import (
     HealthToolInput,
     ModelsToolInput,
     PullToolInput,
+    RecommendToolInput,
     ShowToolInput,
 )
 
@@ -170,3 +172,44 @@ def tollama_show(
         _raise_from_client_error(exc)
     except TollamaClientError as exc:
         _raise_from_client_error(exc)
+
+
+def tollama_recommend(
+    *,
+    horizon: int,
+    freq: str | None = None,
+    has_past_covariates: bool = False,
+    has_future_covariates: bool = False,
+    has_static_covariates: bool = False,
+    covariates_type: str = "numeric",
+    allow_restricted_license: bool = False,
+    top_k: int = 3,
+) -> dict[str, Any]:
+    """Recommend models based on request characteristics."""
+    try:
+        args = RecommendToolInput(
+            horizon=horizon,
+            freq=freq,
+            has_past_covariates=has_past_covariates,
+            has_future_covariates=has_future_covariates,
+            has_static_covariates=has_static_covariates,
+            covariates_type=covariates_type,
+            allow_restricted_license=allow_restricted_license,
+            top_k=top_k,
+        )
+    except ValidationError as exc:
+        _raise_invalid_request(str(exc))
+
+    try:
+        return recommend_models(
+            horizon=args.horizon,
+            freq=args.freq,
+            has_past_covariates=args.has_past_covariates,
+            has_future_covariates=args.has_future_covariates,
+            has_static_covariates=args.has_static_covariates,
+            covariates_type=args.covariates_type,
+            allow_restricted_license=args.allow_restricted_license,
+            top_k=args.top_k,
+        )
+    except ValueError as exc:
+        _raise_invalid_request(str(exc))

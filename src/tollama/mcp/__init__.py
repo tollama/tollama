@@ -7,6 +7,7 @@ from .tools import (
     tollama_health,
     tollama_models,
     tollama_pull,
+    tollama_recommend,
     tollama_show,
 )
 
@@ -18,5 +19,6 @@ __all__ = [
     "tollama_health",
     "tollama_models",
     "tollama_pull",
+    "tollama_recommend",
     "tollama_show",
 ]

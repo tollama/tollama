@@ -21,6 +21,9 @@ from .tools import (
     tollama_pull as _tollama_pull,
 )
 from .tools import (
+    tollama_recommend as _tollama_recommend,
+)
+from .tools import (
     tollama_show as _tollama_show,
 )
 
@@ -157,6 +160,44 @@ def create_server() -> Any:
     ) -> dict[str, Any]:
         try:
             return _tollama_show(model=model, base_url=base_url, timeout=timeout)
+        except MCPToolError as exc:
+            _raise_mcp_tool_error(exc)
+
+    @server.tool(
+        name="tollama_recommend",
+        description=(
+            "Recommend forecast models from registry metadata and capability flags. "
+            "Required input: horizon. Optional inputs: freq, has_past_covariates, "
+            "has_future_covariates, has_static_covariates, covariates_type, "
+            "allow_restricted_license, and top_k. "
+            "Uses model metadata and covariate compatibility to return ranked suggestions. "
+            "Model pool includes "
+            f"{_MODEL_NAME_EXAMPLES}. "
+            'Example: tollama_recommend({"horizon":48,"freq":"D","has_future_covariates":true,'
+            '"covariates_type":"numeric","top_k":3}).'
+        ),
+    )
+    def tollama_recommend(
+        horizon: int,
+        freq: str | None = None,
+        has_past_covariates: bool = False,
+        has_future_covariates: bool = False,
+        has_static_covariates: bool = False,
+        covariates_type: str = "numeric",
+        allow_restricted_license: bool = False,
+        top_k: int = 3,
+    ) -> dict[str, Any]:
+        try:
+            return _tollama_recommend(
+                horizon=horizon,
+                freq=freq,
+                has_past_covariates=has_past_covariates,
+                has_future_covariates=has_future_covariates,
+                has_static_covariates=has_static_covariates,
+                covariates_type=covariates_type,
+                allow_restricted_license=allow_restricted_license,
+                top_k=top_k,
+            )
         except MCPToolError as exc:
             _raise_mcp_tool_error(exc)
 

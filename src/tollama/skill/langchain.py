@@ -12,6 +12,7 @@ from tollama.client import (
     TollamaClient,
     TollamaClientError,
 )
+from tollama.core.recommend import recommend_models
 from tollama.core.schemas import ForecastRequest
 
 _LANGCHAIN_IMPORT_HINT = (
@@ -42,6 +43,17 @@ class ModelsToolInput(_ToolInputBase):
 
 class ForecastToolInput(_ToolInputBase):
     request: dict[str, Any]
+
+
+class RecommendToolInput(_ToolInputBase):
+    horizon: int
+    freq: str | None = None
+    has_past_covariates: bool = False
+    has_future_covariates: bool = False
+    has_static_covariates: bool = False
+    covariates_type: Literal["numeric", "categorical"] = "numeric"
+    allow_restricted_license: bool = False
+    top_k: int = 3
 
 
 def _make_client(*, base_url: str, timeout: float) -> TollamaClient:
@@ -188,6 +200,88 @@ class TollamaForecastTool(_TollamaBaseTool):
         return self._run(request=request, run_manager=run_manager)
 
 
+class TollamaRecommendTool(_TollamaBaseTool):
+    """LangChain tool that recommends models from registry metadata."""
+
+    name: str = "tollama_recommend"
+    description: str = (
+        "Recommend tollama models for a forecasting task. "
+        "Input schema: {horizon,freq?,has_past_covariates?,has_future_covariates?,"
+        "has_static_covariates?,covariates_type?,allow_restricted_license?,top_k?}. "
+        "Recommendations use registry metadata and capability compatibility. "
+        "Candidate model names include "
+        f"{_MODEL_NAME_EXAMPLES}. "
+        'Example: tool.invoke({"horizon":48,"freq":"D","has_future_covariates":true,'
+        '"covariates_type":"numeric","top_k":3}).'
+    )
+    args_schema: type[BaseModel] = RecommendToolInput
+
+    def _run(
+        self,
+        horizon: int,
+        freq: str | None = None,
+        has_past_covariates: bool = False,
+        has_future_covariates: bool = False,
+        has_static_covariates: bool = False,
+        covariates_type: str = "numeric",
+        allow_restricted_license: bool = False,
+        top_k: int = 3,
+        run_manager: Any | None = None,
+    ) -> dict[str, Any]:
+        del run_manager
+        try:
+            args = RecommendToolInput(
+                horizon=horizon,
+                freq=freq,
+                has_past_covariates=has_past_covariates,
+                has_future_covariates=has_future_covariates,
+                has_static_covariates=has_static_covariates,
+                covariates_type=covariates_type,
+                allow_restricted_license=allow_restricted_license,
+                top_k=top_k,
+            )
+        except ValidationError as exc:
+            return _invalid_request_payload(str(exc))
+
+        try:
+            return recommend_models(
+                horizon=args.horizon,
+                freq=args.freq,
+                has_past_covariates=args.has_past_covariates,
+                has_future_covariates=args.has_future_covariates,
+                has_static_covariates=args.has_static_covariates,
+                covariates_type=args.covariates_type,
+                allow_restricted_license=args.allow_restricted_license,
+                top_k=args.top_k,
+            )
+        except ValueError as exc:
+            return _invalid_request_payload(str(exc))
+
+    async def _arun(
+        self,
+        horizon: int,
+        freq: str | None = None,
+        has_past_covariates: bool = False,
+        has_future_covariates: bool = False,
+        has_static_covariates: bool = False,
+        covariates_type: str = "numeric",
+        allow_restricted_license: bool = False,
+        top_k: int = 3,
+        run_manager: Any | None = None,
+    ) -> dict[str, Any]:
+        return self._run(
+            horizon=horizon,
+            freq=freq,
+            has_past_covariates=has_past_covariates,
+            has_future_covariates=has_future_covariates,
+            has_static_covariates=has_static_covariates,
+            covariates_type=covariates_type,
+            allow_restricted_license=allow_restricted_license,
+            top_k=top_k,
+            run_manager=run_manager,
+        )
+
+
 def get_tollama_tools(
     base_url: str = "http://127.0.0.1:11435",
     timeout: float = 10.0,
@@ -195,6 +289,7 @@ def get_tollama_tools(
     """Build the default tollama LangChain tool set."""
     return [
         TollamaForecastTool(base_url=base_url, timeout=timeout),
+        TollamaRecommendTool(base_url=base_url, timeout=timeout),
         TollamaHealthTool(base_url=base_url, timeout=timeout),
         TollamaModelsTool(base_url=base_url, timeout=timeout),
     ]

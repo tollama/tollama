@@ -6,6 +6,7 @@ __all__ = [
     "TollamaForecastTool",
     "TollamaHealthTool",
     "TollamaModelsTool",
+    "TollamaRecommendTool",
     "get_tollama_tools",
 ]
 
@@ -18,6 +19,7 @@ def __getattr__(name: str):
         TollamaForecastTool,
         TollamaHealthTool,
         TollamaModelsTool,
+        TollamaRecommendTool,
         get_tollama_tools,
     )
 
@@ -25,6 +27,7 @@ def __getattr__(name: str):
         "TollamaForecastTool": TollamaForecastTool,
         "TollamaHealthTool": TollamaHealthTool,
         "TollamaModelsTool": TollamaModelsTool,
+        "TollamaRecommendTool": TollamaRecommendTool,
         "get_tollama_tools": get_tollama_tools,
     }
     return exports[name]

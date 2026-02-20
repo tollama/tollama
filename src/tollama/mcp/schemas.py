@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictFloat, StrictStr
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictFloat, StrictInt, StrictStr
 
 
 class MCPInputBase(BaseModel):
@@ -41,3 +41,14 @@ class ShowToolInput(MCPInputBase):
     model: StrictStr = Field(min_length=1)
     base_url: StrictStr | None = None
     timeout: StrictFloat | None = Field(default=None, gt=0)
+
+
+class RecommendToolInput(MCPInputBase):
+    horizon: StrictInt = Field(gt=0)
+    freq: StrictStr | None = None
+    has_past_covariates: StrictBool = False
+    has_future_covariates: StrictBool = False
+    has_static_covariates: StrictBool = False
+    covariates_type: Literal["numeric", "categorical"] = "numeric"
+    allow_restricted_license: StrictBool = False
+    top_k: StrictInt = Field(default=3, ge=1, le=20)
