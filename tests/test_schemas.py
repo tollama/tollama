@@ -11,6 +11,8 @@ from tollama.core.schemas import (
     ForecastRequest,
     ForecastResponse,
     SeriesForecast,
+    WhatIfRequest,
+    WhatIfResponse,
 )
 
 
@@ -69,6 +71,32 @@ def _example_auto_forecast_request_payload() -> dict[str, object]:
     }
 
 
+def _example_what_if_request_payload() -> dict[str, object]:
+    return {
+        "model": "naive",
+        "horizon": 3,
+        "series": [
+            {
+                "id": "series-1",
+                "freq": "D",
+                "timestamps": ["2025-01-01", "2025-01-02", "2025-01-03"],
+                "target": [10.0, 11.0, 12.0],
+                "past_covariates": {"temperature": [20.0, 21.0, 22.0]},
+                "future_covariates": {"temperature": [23.0, 24.0, 25.0]},
+            }
+        ],
+        "scenarios": [
+            {
+                "name": "high_demand",
+                "transforms": [
+                    {"operation": "multiply", "field": "target", "value": 1.2},
+                ],
+            }
+        ],
+        "options": {},
+    }
+
+
 def test_forecast_request_roundtrip_is_lossless() -> None:
     request = ForecastRequest.model_validate(_example_request_payload())
     encoded = request.to_json()
@@ -95,6 +123,22 @@ def test_auto_forecast_request_roundtrip_is_lossless() -> None:
     assert decoded == request
     assert decoded.model is None
     assert decoded.strategy == "auto"
+
+
+def test_what_if_request_roundtrip_is_lossless() -> None:
+    request = WhatIfRequest.model_validate(_example_what_if_request_payload())
+    encoded = request.to_json()
+    decoded = WhatIfRequest.model_validate_json(encoded)
+    assert decoded == request
+    assert decoded.scenarios[0].name == "high_demand"
+    assert decoded.scenarios[0].transforms[0].operation == "multiply"
+
+
+def test_what_if_request_rejects_duplicate_scenario_names() -> None:
+    payload = _example_what_if_request_payload()
+    payload["scenarios"] = [payload["scenarios"][0], payload["scenarios"][0]]
+    with pytest.raises(ValidationError):
+        WhatIfRequest.model_validate(payload)
 
 
 def test_forecast_request_freq_defaults_to_auto_and_preserves_explicit_freq() -> None:
@@ -317,8 +361,61 @@ def test_forecast_response_accepts_metrics_payload() -> None:
                 }
             ],
         },
+        "timing": {
+            "model_load_ms": 1.2,
+            "inference_ms": 4.8,
+            "total_ms": 7.5,
+        },
+        "usage": {
+            "runner": "tollama-mock",
+            "device": "cpu",
+            "peak_memory_mb": 42.0,
+        },
     }
     response = ForecastResponse.model_validate(payload)
     assert response.metrics is not None
     assert response.metrics.aggregate["mape"] == 12.5
     assert response.metrics.aggregate["smape"] == 14.0
+    assert response.timing is not None
+    assert response.timing.total_ms == 7.5
+    assert response.usage is not None
+    assert response.usage["runner"] == "tollama-mock"
+
+
+def test_what_if_response_accepts_baseline_and_results() -> None:
+    payload = {
+        "model": "naive",
+        "horizon": 2,
+        "baseline": {
+            "model": "naive",
+            "forecasts": [
+                {
+                    "id": "series-1",
+                    "freq": "D",
+                    "start_timestamp": "2025-01-04",
+                    "mean": [12.0, 13.0],
+                }
+            ],
+        },
+        "results": [
+            {
+                "scenario": "high_demand",
+                "ok": True,
+                "response": {
+                    "model": "naive",
+                    "forecasts": [
+                        {
+                            "id": "series-1",
+                            "freq": "D",
+                            "start_timestamp": "2025-01-04",
+                            "mean": [13.0, 14.0],
+                        }
+                    ],
+                },
+            }
+        ],
+        "summary": {"requested_scenarios": 1, "succeeded": 1, "failed": 0},
+    }
+    response = WhatIfResponse.model_validate(payload)
+    assert response.summary.requested_scenarios == 1
+    assert response.results[0].scenario == "high_demand"

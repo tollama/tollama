@@ -28,9 +28,11 @@ SequenceValues = list[NumericValue]
 CovariateValue = NumericValue | StrictStr
 CovariateValues = list[CovariateValue]
 CovariateMode = Literal["best_effort", "strict"]
-MetricName = Literal["mape", "mase", "mae", "rmse", "smape"]
+MetricName = Literal["mape", "mase", "mae", "rmse", "smape", "wape", "rmsse", "pinball"]
 TrendDirection = Literal["up", "down", "flat"]
 AutoForecastStrategy = Literal["auto", "fastest", "best_accuracy", "ensemble"]
+ScenarioOperation = Literal["multiply", "add", "replace"]
+ScenarioTargetField = Literal["target", "past_covariates", "future_covariates"]
 
 
 class CanonicalModel(BaseModel):
@@ -420,12 +422,38 @@ class ForecastMetrics(CanonicalModel):
     series: list[SeriesMetrics] = Field(min_length=1)
 
 
+class ForecastTiming(CanonicalModel):
+    """Timing metadata for one forecast response."""
+
+    model_load_ms: StrictFloat | None = Field(default=None, ge=0.0)
+    inference_ms: StrictFloat | None = Field(default=None, ge=0.0)
+    total_ms: StrictFloat | None = Field(default=None, ge=0.0)
+
+
+class SeriesForecastExplanation(CanonicalModel):
+    """Deterministic explainability payload for one forecasted series."""
+
+    id: NonEmptyStr
+    trend_direction: TrendDirection
+    confidence_assessment: NonEmptyStr
+    historical_comparison: NonEmptyStr
+    notable_patterns: list[NonEmptyStr] = Field(default_factory=list)
+
+
+class ForecastExplanation(CanonicalModel):
+    """Structured explainability payload for a forecast response."""
+
+    series: list[SeriesForecastExplanation] = Field(min_length=1)
+
+
 class ForecastResponse(CanonicalModel):
     """Unified forecast response payload."""
 
     model: NonEmptyStr
     forecasts: list[SeriesForecast] = Field(min_length=1)
     metrics: ForecastMetrics | None = None
+    timing: ForecastTiming | None = None
+    explanation: ForecastExplanation | None = None
     usage: dict[NonEmptyStr, JsonValue] | None = None
     warnings: list[NonEmptyStr] | None = None
 
@@ -469,6 +497,103 @@ class AutoForecastResponse(CanonicalModel):
     def validate_strategy_consistency(self) -> AutoForecastResponse:
         if self.strategy != self.selection.strategy:
             raise ValueError("strategy and selection.strategy must match")
+        return self
+
+
+class WhatIfTransform(CanonicalModel):
+    """One deterministic mutation applied to one request field."""
+
+    operation: ScenarioOperation
+    field: ScenarioTargetField
+    key: NonEmptyStr | None = None
+    value: CovariateValue
+    series_id: NonEmptyStr | None = None
+
+    @model_validator(mode="after")
+    def validate_shape(self) -> WhatIfTransform:
+        if self.field == "target":
+            if self.key is not None:
+                raise ValueError("key must be null when field is 'target'")
+        elif self.key is None:
+            raise ValueError("key is required when field is a covariates object")
+
+        if self.operation in {"multiply", "add"}:
+            if not isinstance(self.value, (int, float)) or isinstance(self.value, bool):
+                raise ValueError(f"value must be numeric for operation {self.operation!r}")
+
+        if self.field == "target" and (
+            not isinstance(self.value, (int, float)) or isinstance(self.value, bool)
+        ):
+            raise ValueError("value must be numeric when field is 'target'")
+
+        return self
+
+
+class WhatIfScenario(CanonicalModel):
+    """Named what-if scenario with one or more transforms."""
+
+    name: NonEmptyStr
+    transforms: list[WhatIfTransform] = Field(min_length=1)
+
+
+class WhatIfRequest(CanonicalModel):
+    """Scenario analysis request payload built on top of forecast inputs."""
+
+    model: NonEmptyStr
+    horizon: PositiveInt
+    quantiles: list[Quantile] = Field(default_factory=list)
+    series: list[SeriesInput] = Field(min_length=1)
+    scenarios: list[WhatIfScenario] = Field(min_length=1)
+    continue_on_error: StrictBool = True
+    options: dict[NonEmptyStr, JsonValue] = Field(
+        default_factory=dict,
+        validation_alias=AliasChoices("options"),
+    )
+    timeout: float | None = Field(default=None, gt=0.0)
+    keep_alive: StrictStr | StrictInt | StrictFloat | None = None
+    parameters: ForecastParameters = Field(
+        default_factory=ForecastParameters,
+        validation_alias=AliasChoices("parameters"),
+    )
+
+    @field_validator("quantiles")
+    @classmethod
+    def validate_quantiles(cls, value: list[Quantile]) -> list[Quantile]:
+        if value != sorted(value):
+            raise ValueError("quantiles must be sorted in ascending order")
+        if len(value) != len(set(value)):
+            raise ValueError("quantiles must be unique")
+        return value
+
+    @field_validator("scenarios")
+    @classmethod
+    def validate_scenario_names(cls, value: list[WhatIfScenario]) -> list[WhatIfScenario]:
+        names = [item.name for item in value]
+        if len(names) != len(set(names)):
+            raise ValueError("scenario names must be unique")
+        return value
+
+    @model_validator(mode="after")
+    def validate_forecast_compatibility(self) -> WhatIfRequest:
+        validation_payload = {
+            "model": self.model,
+            "horizon": self.horizon,
+            "quantiles": self.quantiles,
+            "series": [series.model_dump(mode="python") for series in self.series],
+            "options": self.options,
+            "timeout": self.timeout,
+            "parameters": self.parameters.model_dump(mode="python"),
+        }
+        ForecastRequest.model_validate(validation_payload)
+
+        series_ids = {series.id for series in self.series}
+        for scenario in self.scenarios:
+            for transform in scenario.transforms:
+                if transform.series_id is not None and transform.series_id not in series_ids:
+                    raise ValueError(
+                        "unknown transform.series_id "
+                        f"{transform.series_id!r} in scenario {scenario.name!r}",
+                    )
         return self
 
 
@@ -522,6 +647,59 @@ class CompareResponse(CanonicalModel):
     horizon: PositiveInt
     results: list[CompareResult] = Field(min_length=1)
     summary: CompareSummary
+
+
+class WhatIfError(CanonicalModel):
+    """Error payload for one failed scenario result."""
+
+    category: NonEmptyStr
+    status_code: StrictInt = Field(ge=400, le=599)
+    message: NonEmptyStr
+
+
+class WhatIfResult(CanonicalModel):
+    """One scenario result in a what-if response."""
+
+    scenario: NonEmptyStr
+    ok: StrictBool
+    response: ForecastResponse | None = None
+    error: WhatIfError | None = None
+
+    @model_validator(mode="after")
+    def validate_shape(self) -> WhatIfResult:
+        if self.ok and self.response is None:
+            raise ValueError("response is required when ok is true")
+        if self.ok and self.error is not None:
+            raise ValueError("error must be null when ok is true")
+        if not self.ok and self.error is None:
+            raise ValueError("error is required when ok is false")
+        if not self.ok and self.response is not None:
+            raise ValueError("response must be null when ok is false")
+        return self
+
+
+class WhatIfSummary(CanonicalModel):
+    """Summary for what-if endpoint outcomes."""
+
+    requested_scenarios: PositiveInt
+    succeeded: StrictInt = Field(ge=0)
+    failed: StrictInt = Field(ge=0)
+
+    @model_validator(mode="after")
+    def validate_counts(self) -> WhatIfSummary:
+        if self.succeeded + self.failed != self.requested_scenarios:
+            raise ValueError("succeeded + failed must equal requested_scenarios")
+        return self
+
+
+class WhatIfResponse(CanonicalModel):
+    """Response payload for scenario analysis requests."""
+
+    model: NonEmptyStr
+    horizon: PositiveInt
+    baseline: ForecastResponse
+    results: list[WhatIfResult] = Field(min_length=1)
+    summary: WhatIfSummary
 
 
 def _validate_covariate_values(

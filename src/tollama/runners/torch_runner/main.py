@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sys
+import time
 from collections.abc import Mapping
 from typing import Any, TextIO
 
@@ -18,6 +19,7 @@ from tollama.core.protocol import (
     validate_request,
 )
 from tollama.core.schemas import ForecastRequest
+from tollama.runners.runtime_telemetry import enrich_forecast_response
 
 from .adapter_router import TorchAdapterRouter
 from .errors import AdapterInputError, DependencyMissingError, UnsupportedModelError
@@ -179,12 +181,14 @@ def _handle_forecast(
         )
 
     try:
+        started_at = time.perf_counter()
         response = adapter_router.forecast(
             forecast_request,
             model_local_dir=model_local_dir,
             model_source=model_source,
             model_metadata=model_metadata,
         )
+        inference_ms = (time.perf_counter() - started_at) * 1000.0
     except DependencyMissingError as exc:
         return _error_response(
             request.id,
@@ -210,6 +214,11 @@ def _handle_forecast(
             message=str(exc),
         )
 
+    response = enrich_forecast_response(
+        response=response,
+        runner_name=RUNNER_NAME,
+        inference_ms=inference_ms,
+    )
     return ProtocolResponse(
         id=request.id,
         result=response.model_dump(mode="json", exclude_none=True),

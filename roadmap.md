@@ -16,6 +16,7 @@ the optional future `packages/*` split as a migration phase.
 - Unified forecasting endpoints are available at `POST /api/forecast` and `POST /v1/forecast`.
 - Zero-config auto-forecast endpoint is available at `POST /api/auto-forecast`.
 - Model-free series diagnostics endpoint is available at `POST /api/analyze`.
+- Scenario analysis endpoint is available at `POST /api/what-if`.
 - Ollama-style model lifecycle is available (`pull`, `list`, `show`, `ps`, `rm`) via HTTP and CLI.
 - Forecast routing uses model-family worker selection from installed manifests.
 - Multi-family adapters are shipped:
@@ -91,13 +92,15 @@ tollama/
 - Canonical response shape in production includes:
   - per-series `start_timestamp`, `mean[]`, optional `quantiles{q: []}`
   - optional top-level `metrics` (`aggregate` + per-series metric values)
+  - optional top-level `timing` (`model_load_ms`, `inference_ms`, `total_ms`)
+  - optional top-level `explanation` (per-series trend/confidence/pattern summary)
   - optional top-level `warnings[]`
-  - optional `usage`
+  - optional `usage` (`runner`, `device`, `peak_memory_mb`, plus adapter-specific keys)
 - Implemented request parameters include:
   - `covariates_mode = "best_effort" | "strict"` (default `best_effort`)
   - `timesfm` knobs: `xreg_mode`, `ridge`, `force_on_cpu`
   - optional `metrics`:
-    - `names` supports `mape`, `mase`, `mae`, `rmse`, `smape`
+    - `names` supports `mape`, `mase`, `mae`, `rmse`, `smape`, `wape`, `rmsse`, `pinball`
     - `mase_seasonality` default `1`
     - requires `series.actuals` with length `horizon`
 
@@ -257,6 +260,7 @@ tollama/
   - `POST /api/forecast`
   - `POST /api/auto-forecast`
   - `POST /api/analyze`
+  - `POST /api/what-if`
   - `POST /api/compare`
 - `GET /api/info` includes:
   - installed model capabilities
@@ -291,10 +295,10 @@ tollama/
 - Runner status reports include install/running state, restart count, and last error.
 - Forecast/pull paths map several failure classes to `400/404/409/502/503`.
 - Forecast endpoints support optional accuracy metrics
-  (`mape`, `mase`, `mae`, `rmse`, `smape`) in response payloads.
+  (`mape`, `mase`, `mae`, `rmse`, `smape`, `wape`, `rmsse`, `pinball`) in response payloads.
+- Forecast responses include timing + enriched usage metadata and deterministic explainability payloads.
 
 ### Planned work / TODO
-- Add runtime `/metrics` endpoint with Prometheus-friendly counters/histograms.
 - Add structured logging for routing decisions, load/unload timings, and crash recovery.
 - Add deeper telemetry for model load latency and inference latency distributions.
 
@@ -325,7 +329,8 @@ tollama/
 - Phase 4 feature set was re-validated on `2026-02-19`:
   - pass: OpenClaw skill regression (`bash scripts/e2e_skills_test.sh`)
   - pass: metrics expansion live daemon checks (`/api/forecast` non-stream):
-    `mape`, `mase`, `mae`, `rmse`, `smape` aggregate + SMAPE undefined warning path
+    `mape`, `mase`, `mae`, `rmse`, `smape`, `wape`, `rmsse`, `pinball` aggregate +
+    undefined-metric warning paths
   - pass: LangChain wrapper live invocation (`get_tollama_tools`):
     `tollama_health`, `tollama_models`, `tollama_forecast`, invalid-request mapping
   - pass: LangChain wrapper test file in LangChain-enabled venv
@@ -388,11 +393,6 @@ Phase F - Product hardening:
 
 ### Planned work / TODO
 - Standardize default quantiles to `[0.1, 0.5, 0.9]`.
-- Always include usage timing payloads:
-  - `usage.model_load_ms`
-  - `usage.inference_ms`
-  - `usage.runner`
-  - `usage.device`
 - Set product defaults for runner idle timeout and hot-model cache limits.
 
 ## 17) OpenClaw skill integration [x]
@@ -446,7 +446,8 @@ Phase F - Product hardening:
 - Shared HTTP client package added under `src/tollama/client/` and reused by CLI/MCP.
 - HTTP client contracts (`src/tollama/client/http.py`):
   - default base URL `http://localhost:11435`, default timeout `10s`
-  - endpoint coverage: health/version, tags/ps/info, show/pull/delete, forecast, analyze, validate
+  - endpoint coverage: health/version, tags/ps/info, show/pull/delete,
+    forecast/auto-forecast/analyze/what-if/compare, validate
   - HTTP/status/request failures mapped into typed exceptions with category metadata
     (`INVALID_REQUEST`, `DAEMON_UNREACHABLE`, `MODEL_MISSING`, `LICENSE_REQUIRED`,
     `PERMISSION_DENIED`, `TIMEOUT`, `INTERNAL_ERROR`)
@@ -454,7 +455,8 @@ Phase F - Product hardening:
   - `server.py`, `tools.py`, `schemas.py`, `__main__.py`
   - tool set:
     `tollama_health`, `tollama_models`, `tollama_forecast`, `tollama_auto_forecast`,
-    `tollama_analyze`, `tollama_compare`, `tollama_recommend`, `tollama_pull`, `tollama_show`
+    `tollama_analyze`, `tollama_what_if`, `tollama_compare`, `tollama_recommend`,
+    `tollama_pull`, `tollama_show`
   - each tool now includes rich MCP descriptions with required inputs, model-name examples,
     and invocation examples for agent discoverability
 - MCP tool behavior/contracts:
@@ -463,6 +465,7 @@ Phase F - Product hardening:
   - `tollama_forecast` is non-streaming and validates request via `ForecastRequest`
   - `tollama_auto_forecast` validates request via `AutoForecastRequest`
   - `tollama_analyze` validates request via `AnalyzeRequest`
+  - `tollama_what_if` validates request via `WhatIfRequest`
   - tool failures are emitted as JSON payload with `{error:{category,exit_code,message}}`
 - Optional dependency bundle added in `pyproject.toml`:
   - `.[mcp]` with `mcp>=1.0`

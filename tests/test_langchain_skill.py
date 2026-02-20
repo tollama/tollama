@@ -14,6 +14,7 @@ from tollama.core.schemas import (
     AutoForecastResponse,
     CompareResponse,
     ForecastResponse,
+    WhatIfResponse,
 )
 
 _HAS_LANGCHAIN = importlib.util.find_spec("langchain_core") is not None
@@ -82,6 +83,23 @@ def _auto_forecast_request() -> dict[str, Any]:
     }
 
 
+def _what_if_request() -> dict[str, Any]:
+    return {
+        "model": "mock",
+        "horizon": 2,
+        "series": _forecast_request()["series"],
+        "scenarios": [
+            {
+                "name": "high_demand",
+                "transforms": [
+                    {"operation": "multiply", "field": "target", "value": 1.2},
+                ],
+            }
+        ],
+        "options": {},
+    }
+
+
 def test_get_tollama_tools_returns_preconfigured_tools(langchain_tools) -> None:
     tools = langchain_tools.get_tollama_tools(base_url="http://daemon.test", timeout=7.0)
 
@@ -89,6 +107,7 @@ def test_get_tollama_tools_returns_preconfigured_tools(langchain_tools) -> None:
         "tollama_forecast",
         "tollama_auto_forecast",
         "tollama_analyze",
+        "tollama_what_if",
         "tollama_compare",
         "tollama_recommend",
         "tollama_health",
@@ -103,6 +122,7 @@ def test_tool_descriptions_include_usage_guidance(langchain_tools) -> None:
     forecast_tool = langchain_tools.TollamaForecastTool()
     auto_forecast_tool = langchain_tools.TollamaAutoForecastTool()
     analyze_tool = langchain_tools.TollamaAnalyzeTool()
+    what_if_tool = langchain_tools.TollamaWhatIfTool()
     compare_tool = langchain_tools.TollamaCompareTool()
     recommend_tool = langchain_tools.TollamaRecommendTool()
     models_tool = langchain_tools.TollamaModelsTool()
@@ -120,6 +140,10 @@ def test_tool_descriptions_include_usage_guidance(langchain_tools) -> None:
     assert "series" in analyze_tool.description
     assert "seasonality" in analyze_tool.description
     assert "Example:" in analyze_tool.description
+
+    assert "scenario" in what_if_tool.description
+    assert "transforms" in what_if_tool.description
+    assert "Example:" in what_if_tool.description
 
     assert "models" in compare_tool.description
     assert "ok=true/false" in compare_tool.description
@@ -270,6 +294,46 @@ def test_tollama_analyze_tool_invalid_request_maps_to_invalid_request(langchain_
     assert payload["error"]["exit_code"] == 2
 
 
+def test_tollama_what_if_tool_success(monkeypatch, langchain_tools) -> None:
+    forecast_payload = _forecast_response().model_dump(mode="json", exclude_none=True)
+
+    class _FakeClient:
+        def what_if(self, _request: Any) -> WhatIfResponse:
+            return WhatIfResponse.model_validate(
+                {
+                    "model": "mock",
+                    "horizon": 2,
+                    "baseline": forecast_payload,
+                    "results": [
+                        {
+                            "scenario": "high_demand",
+                            "ok": True,
+                            "response": forecast_payload,
+                        }
+                    ],
+                    "summary": {"requested_scenarios": 1, "succeeded": 1, "failed": 0},
+                },
+            )
+
+    monkeypatch.setattr("tollama.skill.langchain._make_client", lambda **_: _FakeClient())
+    tool = langchain_tools.TollamaWhatIfTool()
+
+    payload = tool._run(request=_what_if_request())
+
+    assert payload["model"] == "mock"
+    assert payload["summary"]["succeeded"] == 1
+    assert payload["results"][0]["scenario"] == "high_demand"
+
+
+def test_tollama_what_if_tool_invalid_request_maps_to_invalid_request(langchain_tools) -> None:
+    tool = langchain_tools.TollamaWhatIfTool()
+
+    payload = tool._run(request={"model": "mock"})
+
+    assert payload["error"]["category"] == "INVALID_REQUEST"
+    assert payload["error"]["exit_code"] == 2
+
+
 def test_tollama_forecast_tool_client_error_maps_to_error_payload(
     monkeypatch,
     langchain_tools,
@@ -394,6 +458,40 @@ async def test_tollama_analyze_tool_arun_uses_async_client(monkeypatch, langchai
     payload = await tool._arun(request=_analyze_request())
 
     assert payload["results"][0]["detected_frequency"] == "D"
+
+
+@pytest.mark.asyncio
+async def test_tollama_what_if_tool_arun_uses_async_client(monkeypatch, langchain_tools) -> None:
+    forecast_payload = _forecast_response().model_dump(mode="json", exclude_none=True)
+
+    class _FakeAsyncClient:
+        async def what_if(self, _request: Any) -> WhatIfResponse:
+            return WhatIfResponse.model_validate(
+                {
+                    "model": "mock",
+                    "horizon": 2,
+                    "baseline": forecast_payload,
+                    "results": [
+                        {
+                            "scenario": "high_demand",
+                            "ok": True,
+                            "response": forecast_payload,
+                        }
+                    ],
+                    "summary": {"requested_scenarios": 1, "succeeded": 1, "failed": 0},
+                },
+            )
+
+    monkeypatch.setattr(
+        "tollama.skill.langchain._make_async_client",
+        lambda **_: _FakeAsyncClient(),
+    )
+    tool = langchain_tools.TollamaWhatIfTool()
+
+    payload = await tool._arun(request=_what_if_request())
+
+    assert payload["summary"]["requested_scenarios"] == 1
+    assert payload["results"][0]["ok"] is True
 
 
 @pytest.mark.asyncio

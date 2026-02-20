@@ -9,6 +9,7 @@ _LANGCHAIN_EXPORTS = {
     "TollamaForecastTool",
     "TollamaHealthTool",
     "TollamaModelsTool",
+    "TollamaWhatIfTool",
     "TollamaRecommendTool",
     "get_tollama_tools",
 }
@@ -29,6 +30,7 @@ def __getattr__(name: str):
             TollamaHealthTool,
             TollamaModelsTool,
             TollamaRecommendTool,
+            TollamaWhatIfTool,
             get_tollama_tools,
         )
 
@@ -39,6 +41,7 @@ def __getattr__(name: str):
             "TollamaForecastTool": TollamaForecastTool,
             "TollamaHealthTool": TollamaHealthTool,
             "TollamaModelsTool": TollamaModelsTool,
+            "TollamaWhatIfTool": TollamaWhatIfTool,
             "TollamaRecommendTool": TollamaRecommendTool,
             "get_tollama_tools": get_tollama_tools,
         }

@@ -12,6 +12,8 @@ from tollama.core.schemas import (
     AutoForecastResponse,
     ForecastRequest,
     ForecastResponse,
+    WhatIfRequest,
+    WhatIfResponse,
 )
 from tollama.sdk import Tollama
 
@@ -230,6 +232,75 @@ def test_auto_forecast_accepts_series_dict_and_returns_typed_payload() -> None:
     assert request.series[0].id == "series_0"
     assert response.selection.chosen_model == "mock"
     assert response.response.model == "mock"
+
+
+def test_what_if_accepts_series_dict_and_returns_typed_payload() -> None:
+    captured: dict[str, WhatIfRequest] = {}
+
+    class _FakeClient:
+        def what_if(self, request: WhatIfRequest) -> WhatIfResponse:
+            captured["request"] = request
+            return WhatIfResponse.model_validate(
+                {
+                    "model": "mock",
+                    "horizon": 3,
+                    "baseline": {
+                        "model": "mock",
+                        "forecasts": [
+                            {
+                                "id": "series_0",
+                                "freq": "D",
+                                "start_timestamp": "2025-01-06",
+                                "mean": [15.1, 16.2, 17.3],
+                            }
+                        ],
+                    },
+                    "results": [
+                        {
+                            "scenario": "high_demand",
+                            "ok": True,
+                            "response": {
+                                "model": "mock",
+                                "forecasts": [
+                                    {
+                                        "id": "series_0",
+                                        "freq": "D",
+                                        "start_timestamp": "2025-01-06",
+                                        "mean": [18.12, 19.44, 20.76],
+                                    }
+                                ],
+                            },
+                        }
+                    ],
+                    "summary": {
+                        "requested_scenarios": 1,
+                        "succeeded": 1,
+                        "failed": 0,
+                    },
+                },
+            )
+
+    sdk = Tollama(client=_FakeClient())  # type: ignore[arg-type]
+    response = sdk.what_if(
+        model="mock",
+        series={"target": [1.0, 2.0, 3.0, 4.0], "freq": "D"},
+        horizon=3,
+        scenarios=[
+            {
+                "name": "high_demand",
+                "transforms": [
+                    {"operation": "multiply", "field": "target", "value": 1.2},
+                ],
+            }
+        ],
+    )
+
+    request = captured["request"]
+    assert request.model == "mock"
+    assert request.horizon == 3
+    assert request.series[0].id == "series_0"
+    assert request.scenarios[0].name == "high_demand"
+    assert response.summary.succeeded == 1
 
 
 def test_series_mapping_requires_target() -> None:

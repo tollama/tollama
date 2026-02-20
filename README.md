@@ -45,6 +45,16 @@ auto = t.auto_forecast(
 )
 print(auto.selection.chosen_model)
 print(auto.response.forecasts[0].mean)
+
+what_if = t.what_if(
+    model="chronos2",
+    series={"target": [10, 11, 12, 13, 14], "freq": "D"},
+    horizon=3,
+    scenarios=[
+        {"name": "high_demand", "transforms": [{"operation": "multiply", "field": "target", "value": 1.2}]}
+    ],
+)
+print(what_if.summary)
 ```
 
 ## Agent Integrations
@@ -205,6 +215,7 @@ Provided `BaseTool` wrappers:
 - `TollamaForecastTool`
 - `TollamaAutoForecastTool`
 - `TollamaAnalyzeTool`
+- `TollamaWhatIfTool`
 - `TollamaCompareTool`
 - `TollamaRecommendTool`
 - `TollamaHealthTool`
@@ -218,6 +229,7 @@ Tool input contracts:
 - `tollama_forecast`: `{"request": <ForecastRequest-compatible dict>}`
 - `tollama_auto_forecast`: `{"request": <AutoForecastRequest-compatible dict>}`
 - `tollama_analyze`: `{"request": <AnalyzeRequest-compatible dict>}`
+- `tollama_what_if`: `{"request": <WhatIfRequest-compatible dict>}`
 - `tollama_compare`: `{"request": <CompareRequest-compatible dict>}`
 - `tollama_recommend`:
   `{"horizon": int, "freq"?: str, "has_past_covariates"?: bool, ...}`
@@ -485,6 +497,7 @@ bash scripts/install_mcp.sh --base-url "http://127.0.0.1:11435"
 | `tollama_forecast` | `POST /api/forecast` (non-stream) | `request`, `base_url?`, `timeout?` | canonical `ForecastResponse` JSON |
 | `tollama_auto_forecast` | `POST /api/auto-forecast` | `request`, `base_url?`, `timeout?` | canonical `AutoForecastResponse` JSON |
 | `tollama_analyze` | `POST /api/analyze` | `request`, `base_url?`, `timeout?` | canonical `AnalyzeResponse` JSON |
+| `tollama_what_if` | `POST /api/what-if` | `request`, `base_url?`, `timeout?` | canonical `WhatIfResponse` JSON |
 | `tollama_compare` | `POST /api/compare` | `request`, `base_url?`, `timeout?` | canonical `CompareResponse` JSON |
 | `tollama_recommend` | registry metadata + capabilities | `horizon`, covariate flags, `top_k`, `allow_restricted_license` | ranked recommendation payload |
 | `tollama_pull` | `POST /api/pull` (non-stream) | `model`, `accept_license?`, `base_url?`, `timeout?` | daemon pull result JSON |
@@ -494,6 +507,7 @@ Notes:
 - `tollama_forecast` validates `request` with `ForecastRequest` before HTTP call.
 - `tollama_auto_forecast` validates `request` with `AutoForecastRequest` before HTTP call.
 - `tollama_analyze` validates `request` with `AnalyzeRequest` before HTTP call.
+- `tollama_what_if` validates `request` with `WhatIfRequest` before HTTP call.
 - MCP tool input schemas require `timeout > 0` when provided.
 - MCP integration is intentionally non-streaming for deterministic tool responses.
 
@@ -535,7 +549,7 @@ bash scripts/install_mcp.sh --dry-run --base-url "http://127.0.0.1:11435"
 
 - `tollama.daemon`: Public API layer (`/api/*`, `/v1/health`, `/v1/forecast`) and runner supervision.
 - `tollama.runners`: Runner implementations that speak newline-delimited JSON over stdio.
-- `tollama.core`: Canonical schemas (`Forecast*`, `AutoForecast*`, `Analyze*`, `Compare*`) and protocol helpers.
+- `tollama.core`: Canonical schemas (`Forecast*`, `AutoForecast*`, `Analyze*`, `WhatIf*`, `Compare*`) and protocol helpers.
 - `tollama.cli`: User CLI commands for serving and sending forecast requests.
 - `tollama.sdk`: High-level Python convenience facade (`Tollama`, `TollamaForecastResult`).
 - `tollama.client`: Shared HTTP client abstraction for CLI/MCP integrations.

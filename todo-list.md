@@ -79,12 +79,14 @@
 
 - [~] (P0) 표준 출력 규격 확정
   - 현재 Output: `mean`, `quantiles`, `warnings`, `usage`, optional
-    `metrics`(`mape`/`mase`/`mae`/`rmse`/`smape`) 구현
-  - TODO Meta 확장: `execution_time`, `model_version/digest`, `device` 표준 필드화, `median` 명시 규격 보강
+    `metrics`(`mape`/`mase`/`mae`/`rmse`/`smape`/`wape`/`rmsse`/`pinball`),
+    optional `timing`(`model_load_ms`/`inference_ms`/`total_ms`),
+    optional `explanation` 구현
+  - TODO Meta 확장: `model_version/digest`, `median` 명시 규격 보강
 - [~] (P1) 신뢰도/품질 메타 지표 설계
   - 현재: 요청 `series.actuals` + `parameters.metrics` 기반
-    `mape`/`mase`/`mae`/`rmse`/`smape` 계산 및 응답 `metrics` 제공
-  - TODO: `wape/rmsse`, quantile 기반 pinball loss, interval coverage 확장
+    `mape`/`mase`/`mae`/`rmse`/`smape`/`wape`/`rmsse`/`pinball` 계산 및 응답 `metrics` 제공
+  - TODO: interval coverage 확장
 - [ ] (P1) 포맷 지원 확대: JSON + Parquet (대용량/배치)
 
 ---
@@ -158,7 +160,8 @@
     `docs/openclaw-gateway-runbook.md`)
 - [x] (P1) Python SDK / LangChain Tool 래퍼 추가
   - 현재: `src/tollama/skill/langchain.py`에
-    `TollamaForecastTool`/`TollamaAnalyzeTool`/`TollamaCompareTool`/`TollamaRecommendTool`/
+    `TollamaForecastTool`/`TollamaAutoForecastTool`/`TollamaAnalyzeTool`/
+    `TollamaWhatIfTool`/`TollamaCompareTool`/`TollamaRecommendTool`/
     `TollamaHealthTool`/`TollamaModelsTool` 구현
   - 현재: LangChain 주요 툴 description에 schema/model/example 가이드 추가
   - 현재: 팩토리 `get_tollama_tools(base_url="http://127.0.0.1:11435", timeout=10.0)` 제공
@@ -175,7 +178,7 @@
   - 현재: `scripts/install_mcp.sh`, `CLAUDE.md` 추가
   - 현재: 실 SDK 환경 E2E smoke 완료(`tollama-mcp` stdio + live daemon tool call)
   - 현재: `README.md`/`roadmap.md`/`CLAUDE.md`에 MCP 구현 상세(툴 계약/에러 매핑/기본값) 반영
-  - 현재: MCP 9개 툴(`health/models/forecast/auto_forecast/analyze/compare/recommend/pull/show`) description에
+  - 현재: MCP 10개 툴(`health/models/forecast/auto_forecast/analyze/what_if/compare/recommend/pull/show`) description에
     입력 스키마/모델 예시/호출 예시 추가
   - TODO: Claude Desktop 운영 가이드(권한/세션/배포 정책) 보강
 - [x] (P1) Agentic 비교/추천 기능 1차
@@ -198,6 +201,19 @@
   - 현재: `TollamaClient`/`AsyncTollamaClient`/SDK `Tollama.auto_forecast()` 추가
   - 현재: `tollama_auto_forecast` MCP/LangChain/CrewAI/AutoGen/smolagents 툴 추가
   - 현재: `tests/test_auto_forecast.py` + 연관 스키마/클라이언트/에이전트 래퍼 회귀 테스트 추가
+- [x] (P1) What-If Scenarios 1차
+  - 현재: `/api/what-if` 추가(기준 예측 + 시나리오별 변환 결과 side-by-side 반환)
+  - 현재: 시나리오 변환 모듈 `src/tollama/core/scenarios.py` 추가
+    (multiply/add/replace, target/past_covariates/future_covariates)
+  - 현재: `WhatIfRequest/WhatIfResponse` 스키마 및 `continue_on_error` 부분 성공 모드 추가
+  - 현재: `TollamaClient`/`AsyncTollamaClient`/SDK `Tollama.what_if()` 추가
+  - 현재: `tollama_what_if` MCP/LangChain 툴 추가
+  - 현재: `tests/test_what_if.py` + 연관 스키마/클라이언트/에이전트 래퍼 회귀 테스트 추가
+- [x] (P1) Forecast Timing/Explainability 1차
+  - 현재: forecast 응답에 `timing`(`model_load_ms`,`inference_ms`,`total_ms`) + enriched
+    `usage`(`runner`,`device`,`peak_memory_mb`) 포함
+  - 현재: `src/tollama/core/explainability.py` 기반 `explanation` 필드 자동 생성
+  - 현재: `tests/test_explainability.py` + daemon/runner/client 회귀 테스트 추가
 - [x] (P1) Prometheus Metrics Endpoint 1차
   - 현재: `GET /metrics` 추가(옵션 의존성: `prometheus-client`)
   - 현재: `tollama_forecast_requests_total`, `tollama_forecast_latency_seconds`,

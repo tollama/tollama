@@ -16,6 +16,8 @@ from tollama.core.schemas import (
     CompareResponse,
     ForecastRequest,
     ForecastResponse,
+    WhatIfRequest,
+    WhatIfResponse,
 )
 
 from .exceptions import (
@@ -202,6 +204,26 @@ class TollamaClient:
                 detail=str(exc),
             ) from exc
 
+    def what_if(
+        self,
+        payload: dict[str, Any] | WhatIfRequest,
+    ) -> WhatIfResponse:
+        """Submit a what-if scenario request and validate response schema."""
+        request_payload = self._coerce_what_if_payload(payload)
+        response_payload = self._request_json(
+            "POST",
+            "/api/what-if",
+            json_payload=request_payload,
+            action="what-if forecast",
+        )
+        try:
+            return WhatIfResponse.model_validate(response_payload)
+        except Exception as exc:  # noqa: BLE001
+            raise InvalidRequestError(
+                action="validate what-if response",
+                detail=str(exc),
+            ) from exc
+
     def validate_request(self, payload: dict[str, Any]) -> dict[str, Any]:
         """Validate a forecast request without executing model inference."""
         return self._request_json(
@@ -329,6 +351,11 @@ class TollamaClient:
         payload: dict[str, Any] | AutoForecastRequest,
     ) -> dict[str, Any]:
         if isinstance(payload, AutoForecastRequest):
+            return payload.model_dump(mode="json", exclude_none=True)
+        return dict(payload)
+
+    def _coerce_what_if_payload(self, payload: dict[str, Any] | WhatIfRequest) -> dict[str, Any]:
+        if isinstance(payload, WhatIfRequest):
             return payload.model_dump(mode="json", exclude_none=True)
         return dict(payload)
 
@@ -579,6 +606,26 @@ class AsyncTollamaClient:
                 detail=str(exc),
             ) from exc
 
+    async def what_if(
+        self,
+        payload: dict[str, Any] | WhatIfRequest,
+    ) -> WhatIfResponse:
+        """Submit a what-if scenario request and validate response schema."""
+        request_payload = self._coerce_what_if_payload(payload)
+        response_payload = await self._request_json(
+            "POST",
+            "/api/what-if",
+            json_payload=request_payload,
+            action="what-if forecast",
+        )
+        try:
+            return WhatIfResponse.model_validate(response_payload)
+        except Exception as exc:  # noqa: BLE001
+            raise InvalidRequestError(
+                action="validate what-if response",
+                detail=str(exc),
+            ) from exc
+
     async def list_tags(self) -> dict[str, Any]:
         """Fetch installed model tags from the daemon."""
         return await self._request_json("GET", "/api/tags", action="list model tags")
@@ -607,6 +654,11 @@ class AsyncTollamaClient:
         payload: dict[str, Any] | AutoForecastRequest,
     ) -> dict[str, Any]:
         if isinstance(payload, AutoForecastRequest):
+            return payload.model_dump(mode="json", exclude_none=True)
+        return dict(payload)
+
+    def _coerce_what_if_payload(self, payload: dict[str, Any] | WhatIfRequest) -> dict[str, Any]:
+        if isinstance(payload, WhatIfRequest):
             return payload.model_dump(mode="json", exclude_none=True)
         return dict(payload)
 

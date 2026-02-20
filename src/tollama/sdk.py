@@ -16,6 +16,8 @@ from tollama.core.schemas import (
     ForecastRequest,
     ForecastResponse,
     SeriesForecast,
+    WhatIfRequest,
+    WhatIfResponse,
 )
 
 SeriesPayload = Mapping[str, Any] | Sequence[Mapping[str, Any]] | pd.Series | pd.DataFrame
@@ -219,6 +221,41 @@ class Tollama:
 
         request = AutoForecastRequest.model_validate(payload)
         return self._client.auto_forecast(request)
+
+    def what_if(
+        self,
+        *,
+        model: str,
+        series: SeriesPayload,
+        horizon: int,
+        scenarios: Sequence[Mapping[str, Any]],
+        continue_on_error: bool = True,
+        quantiles: Sequence[float] | None = None,
+        options: Mapping[str, Any] | None = None,
+        timeout: float | None = None,
+        keep_alive: str | int | float | None = None,
+        parameters: Mapping[str, Any] | None = None,
+    ) -> WhatIfResponse:
+        """Run validated what-if scenario analysis and return baseline + scenario outputs."""
+        payload: dict[str, Any] = {
+            "model": model,
+            "horizon": horizon,
+            "series": _coerce_series_payload(series),
+            "scenarios": [dict(item) for item in scenarios],
+            "continue_on_error": continue_on_error,
+            "options": dict(options or {}),
+        }
+        if quantiles is not None:
+            payload["quantiles"] = list(quantiles)
+        if timeout is not None:
+            payload["timeout"] = timeout
+        if keep_alive is not None:
+            payload["keep_alive"] = keep_alive
+        if parameters is not None:
+            payload["parameters"] = dict(parameters)
+
+        request = WhatIfRequest.model_validate(payload)
+        return self._client.what_if(request)
 
 
 def _coerce_series_payload(series: SeriesPayload) -> list[dict[str, Any]]:

@@ -19,6 +19,7 @@ from tollama.core.schemas import (
     AutoForecastRequest,
     CompareRequest,
     ForecastRequest,
+    WhatIfRequest,
 )
 
 try:
@@ -55,6 +56,10 @@ class AutoForecastToolInput(_ToolInputBase):
 
 
 class AnalyzeToolInput(_ToolInputBase):
+    request: dict[str, Any]
+
+
+class WhatIfToolInput(_ToolInputBase):
     request: dict[str, Any]
 
 
@@ -372,6 +377,65 @@ class TollamaAnalyzeTool(_TollamaBaseTool):
         return response.model_dump(mode="json", exclude_none=True)
 
 
+class TollamaWhatIfTool(_TollamaBaseTool):
+    """LangChain tool that validates and executes what-if scenario requests."""
+
+    name: str = "tollama_what_if"
+    description: str = (
+        "Run what-if scenario analysis from a base forecast request plus named transforms. "
+        "Input schema: {request:{model,horizon,series,scenarios,quantiles?,options?,parameters?,"
+        "continue_on_error?,keep_alive?}}. "
+        "Each scenario item includes name and transforms[] where transform has "
+        "operation (multiply|add|replace), field (target|past_covariates|future_covariates), "
+        "optional key for covariates, optional series_id, and value. "
+        'Example: tool.invoke({"request":{"model":"mock","horizon":2,'
+        '"series":[{"id":"s1","freq":"D","timestamps":["2025-01-01","2025-01-02"],'
+        '"target":[10,11]}],"scenarios":[{"name":"high_demand","transforms":'
+        '[{"operation":"multiply","field":"target","value":1.2}]}],"options":{}}}).'
+    )
+    args_schema: type[BaseModel] = WhatIfToolInput
+
+    def _run(
+        self,
+        request: dict[str, Any],
+        run_manager: Any | None = None,
+    ) -> dict[str, Any]:
+        del run_manager
+        try:
+            args = WhatIfToolInput(request=request)
+            what_if_request = WhatIfRequest.model_validate(args.request)
+        except ValidationError as exc:
+            return _invalid_request_payload(str(exc))
+
+        client = self._client()
+        try:
+            response = client.what_if(what_if_request)
+        except TollamaClientError as exc:
+            return _client_error_payload(exc)
+
+        return response.model_dump(mode="json", exclude_none=True)
+
+    async def _arun(
+        self,
+        request: dict[str, Any],
+        run_manager: Any | None = None,
+    ) -> dict[str, Any]:
+        del run_manager
+        try:
+            args = WhatIfToolInput(request=request)
+            what_if_request = WhatIfRequest.model_validate(args.request)
+        except ValidationError as exc:
+            return _invalid_request_payload(str(exc))
+
+        client = self._async_client()
+        try:
+            response = await client.what_if(what_if_request)
+        except TollamaClientError as exc:
+            return _client_error_payload(exc)
+
+        return response.model_dump(mode="json", exclude_none=True)
+
+
 class TollamaCompareTool(_TollamaBaseTool):
     """LangChain tool that runs a single request across multiple models."""
 
@@ -537,6 +601,7 @@ def get_tollama_tools(
         TollamaForecastTool(base_url=base_url, timeout=timeout),
         TollamaAutoForecastTool(base_url=base_url, timeout=timeout),
         TollamaAnalyzeTool(base_url=base_url, timeout=timeout),
+        TollamaWhatIfTool(base_url=base_url, timeout=timeout),
         TollamaCompareTool(base_url=base_url, timeout=timeout),
         TollamaRecommendTool(base_url=base_url, timeout=timeout),
         TollamaHealthTool(base_url=base_url, timeout=timeout),

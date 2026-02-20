@@ -998,6 +998,23 @@ def test_forecast_routes_end_to_end_to_mock_runner(monkeypatch, tmp_path) -> Non
     assert second["quantiles"] == {"0.1": [4.0, 4.0], "0.9": [4.0, 4.0]}
     assert second["start_timestamp"] == "2025-01-02"
 
+    usage = body.get("usage")
+    assert isinstance(usage, dict)
+    assert usage["runner"] == "tollama-mock"
+    assert usage["device"] == "unknown"
+    assert isinstance(usage["peak_memory_mb"], (int, float))
+
+    timing = body.get("timing")
+    assert isinstance(timing, dict)
+    assert timing["model_load_ms"] >= 0.0
+    assert timing["inference_ms"] >= 0.0
+    assert timing["total_ms"] >= timing["inference_ms"]
+
+    explanation = body.get("explanation")
+    assert isinstance(explanation, dict)
+    assert explanation["series"][0]["id"] == "s1"
+    assert explanation["series"][0]["trend_direction"] in {"up", "down", "flat"}
+
 
 def test_forecast_returns_metrics_when_requested(monkeypatch, tmp_path) -> None:
     _install_model(monkeypatch, tmp_path, "mock")

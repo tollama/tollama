@@ -35,6 +35,9 @@ from .tools import (
 from .tools import (
     tollama_show as _tollama_show,
 )
+from .tools import (
+    tollama_what_if as _tollama_what_if,
+)
 
 _MCP_IMPORT_HINT = 'MCP dependency is not installed. Install with: pip install "tollama[mcp]"'
 _MODEL_NAME_EXAMPLES = (
@@ -167,6 +170,32 @@ def create_server() -> Any:
     ) -> dict[str, Any]:
         try:
             return _tollama_analyze(request=request, base_url=base_url, timeout=timeout)
+        except MCPToolError as exc:
+            _raise_mcp_tool_error(exc)
+
+    @server.tool(
+        name="tollama_what_if",
+        description=(
+            "Run scenario analysis by applying named transforms to a base forecast request "
+            "and returning baseline + per-scenario outputs. "
+            "Required input: request.model, request.horizon, request.series[], "
+            "request.scenarios[]. "
+            "Each scenario includes name and transforms with operation "
+            "(multiply|add|replace), field (target|past_covariates|future_covariates), "
+            "optional key for covariates, optional series_id, and value. "
+            'Example: tollama_what_if({"request":{"model":"mock","horizon":2,'
+            '"series":[{"id":"s1","freq":"D","timestamps":["2025-01-01","2025-01-02"],'
+            '"target":[10,11]}],"scenarios":[{"name":"high_demand","transforms":'
+            '[{"operation":"multiply","field":"target","value":1.2}]}],"options":{}}}).'
+        ),
+    )
+    def tollama_what_if(
+        request: dict[str, Any],
+        base_url: str | None = None,
+        timeout: float | None = None,
+    ) -> dict[str, Any]:
+        try:
+            return _tollama_what_if(request=request, base_url=base_url, timeout=timeout)
         except MCPToolError as exc:
             _raise_mcp_tool_error(exc)
 

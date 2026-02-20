@@ -26,6 +26,7 @@ class _SeriesMetricContext:
     response_series: SeriesForecast
     actuals: list[float]
     predictions: list[float]
+    quantile_predictions: dict[float, list[float]]
 
 
 _MetricCalculator = Callable[
@@ -122,12 +123,42 @@ def _build_series_context(
         actuals = actuals[:overlap]
         predictions = predictions[:overlap]
 
+    quantile_predictions: dict[float, list[float]] = {}
+    if forecast.quantiles:
+        expected = len(actuals)
+        for quantile_key, quantile_values in forecast.quantiles.items():
+            try:
+                quantile = float(quantile_key)
+            except ValueError:
+                warnings.append(
+                    f"metrics.pinball skipped quantile {quantile_key!r} for series "
+                    f"{series.id!r}: quantile key is not numeric",
+                )
+                continue
+            if not 0.0 < quantile < 1.0:
+                warnings.append(
+                    f"metrics.pinball skipped quantile {quantile_key!r} for series "
+                    f"{series.id!r}: quantile must be in (0, 1)",
+                )
+                continue
+
+            quantile_vector = [float(value) for value in quantile_values]
+            if len(quantile_vector) != expected:
+                warnings.append(
+                    f"metrics.pinball skipped quantile {quantile_key!r} for series "
+                    f"{series.id!r}: quantile length ({len(quantile_vector)}) must match "
+                    f"evaluation length ({expected})",
+                )
+                continue
+            quantile_predictions[quantile] = quantile_vector
+
     return (
         _SeriesMetricContext(
             request_series=series,
             response_series=forecast,
             actuals=actuals,
             predictions=predictions,
+            quantile_predictions=quantile_predictions,
         ),
         warnings,
     )
@@ -257,10 +288,110 @@ def _compute_smape(
     return value, None
 
 
+def _compute_wape(
+    context: _SeriesMetricContext,
+    _: MetricsParameters,
+) -> tuple[float | None, str | None]:
+    absolute_errors = [
+        abs(actual - prediction)
+        for actual, prediction in zip(context.actuals, context.predictions, strict=True)
+    ]
+    denominator = sum(abs(actual) for actual in context.actuals)
+    if denominator == 0.0:
+        return (
+            None,
+            f"metrics.wape skipped for series {context.request_series.id!r}: "
+            "sum(|actual|) denominator is zero",
+        )
+    value = sum(absolute_errors) / denominator * 100.0
+    if not math.isfinite(value):
+        return (
+            None,
+            f"metrics.wape skipped for series {context.request_series.id!r}: non-finite value",
+        )
+    return value, None
+
+
+def _compute_rmsse(
+    context: _SeriesMetricContext,
+    parameters: MetricsParameters,
+) -> tuple[float | None, str | None]:
+    seasonality = parameters.mase_seasonality
+    history = [float(value) for value in context.request_series.target]
+    if len(history) <= seasonality:
+        return (
+            None,
+            f"metrics.rmsse skipped for series {context.request_series.id!r}: "
+            f"target length must be greater than mase_seasonality ({seasonality})",
+        )
+
+    naive_squared_errors = [
+        (history[index] - history[index - seasonality]) ** 2
+        for index in range(seasonality, len(history))
+    ]
+    scale = sum(naive_squared_errors) / len(naive_squared_errors)
+    if scale == 0.0:
+        return (
+            None,
+            f"metrics.rmsse skipped for series {context.request_series.id!r}: "
+            "seasonal naive denominator is zero",
+        )
+
+    squared_errors = [
+        (actual - prediction) ** 2
+        for actual, prediction in zip(context.actuals, context.predictions, strict=True)
+    ]
+    mse = sum(squared_errors) / len(squared_errors)
+    value = math.sqrt(mse / scale)
+    if not math.isfinite(value):
+        return (
+            None,
+            f"metrics.rmsse skipped for series {context.request_series.id!r}: non-finite value",
+        )
+    return value, None
+
+
+def _compute_pinball(
+    context: _SeriesMetricContext,
+    _: MetricsParameters,
+) -> tuple[float | None, str | None]:
+    quantile_predictions = context.quantile_predictions
+    if not quantile_predictions:
+        return (
+            None,
+            f"metrics.pinball skipped for series {context.request_series.id!r}: "
+            "quantile forecasts are required",
+        )
+
+    losses: list[float] = []
+    for quantile, predictions in sorted(quantile_predictions.items(), key=lambda item: item[0]):
+        for actual, prediction in zip(context.actuals, predictions, strict=True):
+            error = actual - prediction
+            losses.append(quantile * error if error >= 0.0 else (quantile - 1.0) * error)
+
+    if not losses:
+        return (
+            None,
+            f"metrics.pinball skipped for series {context.request_series.id!r}: "
+            "no quantile forecast values available",
+        )
+
+    value = sum(losses) / len(losses)
+    if not math.isfinite(value):
+        return (
+            None,
+            f"metrics.pinball skipped for series {context.request_series.id!r}: non-finite value",
+        )
+    return value, None
+
+
 _METRIC_REGISTRY: dict[MetricName, _MetricCalculator] = {
     "mape": _compute_mape,
     "mase": _compute_mase,
     "mae": _compute_mae,
     "rmse": _compute_rmse,
     "smape": _compute_smape,
+    "wape": _compute_wape,
+    "rmsse": _compute_rmsse,
+    "pinball": _compute_pinball,
 }

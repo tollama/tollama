@@ -110,6 +110,39 @@ def _auto_forecast_response_payload() -> dict[str, Any]:
     }
 
 
+def _what_if_request_payload() -> dict[str, Any]:
+    return {
+        "model": "mock",
+        "horizon": 2,
+        "series": _request_payload()["series"],
+        "scenarios": [
+            {
+                "name": "high_demand",
+                "transforms": [
+                    {"operation": "multiply", "field": "target", "value": 1.2},
+                ],
+            }
+        ],
+        "options": {},
+    }
+
+
+def _what_if_response_payload() -> dict[str, Any]:
+    return {
+        "model": "mock",
+        "horizon": 2,
+        "baseline": _response_payload(),
+        "results": [
+            {
+                "scenario": "high_demand",
+                "ok": True,
+                "response": _response_payload(),
+            }
+        ],
+        "summary": {"requested_scenarios": 1, "succeeded": 1, "failed": 0},
+    }
+
+
 def _client(handler: httpx.MockTransport) -> TollamaClient:
     return TollamaClient(base_url="http://daemon.test", timeout=3.0, transport=handler)
 
@@ -174,6 +207,19 @@ def test_auto_forecast_returns_typed_response() -> None:
     assert response.strategy == "auto"
     assert response.selection.chosen_model == "mock"
     assert response.response.model == "mock"
+
+
+def test_what_if_returns_typed_response() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/api/what-if"
+        return httpx.Response(200, json=_what_if_response_payload())
+
+    client = _client(httpx.MockTransport(handler))
+    response = client.what_if(_what_if_request_payload())
+
+    assert response.model == "mock"
+    assert response.summary.succeeded == 1
+    assert response.results[0].scenario == "high_demand"
 
 
 def test_show_404_maps_to_model_missing_error() -> None:
@@ -298,3 +344,17 @@ async def test_async_auto_forecast_returns_typed_response() -> None:
 
     assert response.selection.chosen_model == "mock"
     assert response.response.forecasts[0].id == "s1"
+
+
+@pytest.mark.asyncio
+async def test_async_what_if_returns_typed_response() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/api/what-if"
+        return httpx.Response(200, json=_what_if_response_payload())
+
+    client = _async_client(httpx.MockTransport(handler))
+    response = await client.what_if(_what_if_request_payload())
+
+    assert response.model == "mock"
+    assert response.summary.requested_scenarios == 1
+    assert response.results[0].ok is True

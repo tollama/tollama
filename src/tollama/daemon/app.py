@@ -4,7 +4,10 @@ from __future__ import annotations
 
 import json
 import os
+import resource
 import shutil
+import sys
+import time
 from collections.abc import Callable, Iterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
@@ -34,6 +37,7 @@ from pydantic import (
 from tollama.core.auto_select import AutoSelection, select_auto_models
 from tollama.core.config import ConfigFileError, TollamaConfig, load_config
 from tollama.core.env_override import set_env_temporarily
+from tollama.core.explainability import generate_explanation
 from tollama.core.forecast_metrics import compute_forecast_metrics
 from tollama.core.hf_pull import (
     OfflineModelUnavailableError,
@@ -43,6 +47,7 @@ from tollama.core.hf_pull import (
 from tollama.core.pull_defaults import resolve_effective_pull_defaults
 from tollama.core.redact import redact_config_dict, redact_env_dict, redact_proxy_url
 from tollama.core.registry import ModelCapabilities, get_model_spec, list_registry_models
+from tollama.core.scenarios import apply_scenario
 from tollama.core.schemas import (
     AnalyzeRequest,
     AnalyzeResponse,
@@ -57,7 +62,13 @@ from tollama.core.schemas import (
     CompareSummary,
     ForecastRequest,
     ForecastResponse,
+    ForecastTiming,
     SeriesForecast,
+    WhatIfError,
+    WhatIfRequest,
+    WhatIfResponse,
+    WhatIfResult,
+    WhatIfSummary,
 )
 from tollama.core.series_analysis import analyze_series_request
 from tollama.core.storage import (
@@ -611,6 +622,92 @@ def create_app(*, runner_manager: RunnerManager | None = None) -> FastAPI:
     def auto_forecast(payload: AutoForecastRequest) -> AutoForecastResponse:
         return _execute_auto_forecast(app, payload=payload)
 
+    @app.post("/api/what-if", response_model=WhatIfResponse)
+    def what_if(payload: WhatIfRequest) -> WhatIfResponse:
+        baseline_payload = _what_if_payload_to_forecast_payload(payload=payload)
+        baseline_response = _execute_forecast(app, payload=baseline_payload)
+
+        results: list[WhatIfResult] = []
+        for scenario in payload.scenarios:
+            try:
+                scenario_series = apply_scenario(
+                    series=baseline_payload.series,
+                    scenario=scenario,
+                )
+                scenario_payload = ForecastRequestWithKeepAlive.model_validate(
+                    baseline_payload.model_copy(update={"series": scenario_series}).model_dump(
+                        mode="python",
+                        exclude_none=True,
+                    ),
+                )
+                scenario_response = _execute_forecast(app, payload=scenario_payload)
+            except HTTPException as exc:
+                if not payload.continue_on_error:
+                    raise
+                results.append(
+                    WhatIfResult(
+                        scenario=scenario.name,
+                        ok=False,
+                        error=WhatIfError(
+                            category=_what_if_error_category(exc.status_code),
+                            status_code=exc.status_code,
+                            message=_compare_error_message(exc),
+                        ),
+                    ),
+                )
+                continue
+            except ValidationError as exc:
+                if not payload.continue_on_error:
+                    raise HTTPException(status_code=400, detail=str(exc)) from exc
+                results.append(
+                    WhatIfResult(
+                        scenario=scenario.name,
+                        ok=False,
+                        error=WhatIfError(
+                            category="INVALID_SCENARIO",
+                            status_code=400,
+                            message=str(exc),
+                        ),
+                    ),
+                )
+                continue
+            except ValueError as exc:
+                if not payload.continue_on_error:
+                    raise HTTPException(status_code=400, detail=str(exc)) from exc
+                results.append(
+                    WhatIfResult(
+                        scenario=scenario.name,
+                        ok=False,
+                        error=WhatIfError(
+                            category="INVALID_SCENARIO",
+                            status_code=400,
+                            message=str(exc),
+                        ),
+                    ),
+                )
+                continue
+
+            results.append(
+                WhatIfResult(
+                    scenario=scenario.name,
+                    ok=True,
+                    response=scenario_response,
+                ),
+            )
+
+        summary = WhatIfSummary(
+            requested_scenarios=len(payload.scenarios),
+            succeeded=sum(1 for item in results if item.ok),
+            failed=sum(1 for item in results if not item.ok),
+        )
+        return WhatIfResponse(
+            model=payload.model,
+            horizon=payload.horizon,
+            baseline=baseline_response,
+            results=results,
+            summary=summary,
+        )
+
     @app.post("/v1/forecast", response_model=ForecastResponse)
     def forecast(payload: ForecastRequestWithKeepAlive) -> ForecastResponse:
         return _execute_forecast(app, payload=payload)
@@ -624,6 +721,7 @@ def _execute_forecast(
     payload: ForecastRequestWithKeepAlive,
     extra_exclude: set[str] | None = None,
 ) -> ForecastResponse:
+    request_started_at = time.perf_counter()
     _unload_expired_models(app)
     forecast_timeout_seconds = _resolve_forecast_timeout_seconds(payload.timeout)
     request_now = datetime.now(UTC)
@@ -684,6 +782,7 @@ def _execute_forecast(
     if model_metadata is not None:
         params["model_metadata"] = model_metadata
 
+    runner_started_at = time.perf_counter()
     try:
         raw_result = app.state.runner_manager.call(
             family=model_family,
@@ -700,6 +799,7 @@ def _execute_forecast(
         raise HTTPException(status_code=status_code, detail=_runner_error_detail(exc)) from exc
     except RunnerProtocolError as exc:
         raise HTTPException(status_code=502, detail=_runner_error_detail(exc)) from exc
+    runner_roundtrip_ms = _elapsed_ms(runner_started_at)
 
     try:
         response = ForecastResponse.model_validate(raw_result)
@@ -716,9 +816,20 @@ def _execute_forecast(
     if metrics_payload is not None:
         response = response.model_copy(update={"metrics": metrics_payload})
 
+    explanation = generate_explanation(request=forecast_payload, response=response)
+    if explanation is not None:
+        response = response.model_copy(update={"explanation": explanation})
+
     merged_warnings = _merge_warnings(response.warnings, [*request_warnings, *metrics_warnings])
     if merged_warnings:
         response = response.model_copy(update={"warnings": merged_warnings})
+
+    response = _enrich_forecast_observability(
+        response=response,
+        model_family=model_family,
+        runner_roundtrip_ms=runner_roundtrip_ms,
+        total_ms=_elapsed_ms(request_started_at),
+    )
 
     tracker: LoadedModelTracker = app.state.loaded_model_tracker
     if keep_alive_policy.unload_immediately:
@@ -739,9 +850,74 @@ def _execute_forecast(
         family=model_family,
         runner=model_family,
         expires_at=keep_alive_policy.expires_at,
-        device=None,
+        device=_extract_usage_device(response.usage),
     )
     return response
+
+
+def _elapsed_ms(started_at: float) -> float:
+    return max((time.perf_counter() - started_at) * 1000.0, 0.0)
+
+
+def _enrich_forecast_observability(
+    *,
+    response: ForecastResponse,
+    model_family: str,
+    runner_roundtrip_ms: float,
+    total_ms: float,
+) -> ForecastResponse:
+    usage: dict[str, Any] = dict(response.usage or {})
+    usage.setdefault("runner", f"tollama-{model_family}")
+    usage.setdefault("device", "unknown")
+    usage.setdefault("peak_memory_mb", _process_peak_memory_mb() or 0.0)
+
+    existing_timing = response.timing or ForecastTiming()
+    model_load_ms = _resolve_non_negative_ms(existing_timing.model_load_ms, default=0.0)
+    inference_ms = _resolve_non_negative_ms(
+        existing_timing.inference_ms,
+        default=runner_roundtrip_ms,
+    )
+
+    return response.model_copy(
+        update={
+            "usage": usage,
+            "timing": ForecastTiming(
+                model_load_ms=model_load_ms,
+                inference_ms=inference_ms,
+                total_ms=max(total_ms, 0.0),
+            ),
+        },
+    )
+
+
+def _resolve_non_negative_ms(value: Any, *, default: float) -> float:
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        resolved = float(value)
+        if resolved >= 0.0:
+            return resolved
+    return max(default, 0.0)
+
+
+def _process_peak_memory_mb() -> float | None:
+    try:
+        peak = float(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss)
+    except (AttributeError, ValueError, OSError):
+        return None
+
+    if peak <= 0.0:
+        return None
+
+    divisor = 1024.0 * 1024.0 if sys.platform == "darwin" else 1024.0
+    return round(peak / divisor, 3)
+
+
+def _extract_usage_device(usage: dict[str, Any] | None) -> str | None:
+    if usage is None:
+        return None
+    device = usage.get("device")
+    if isinstance(device, str) and device:
+        return device
+    return None
 
 
 def _execute_auto_forecast(
@@ -1064,6 +1240,22 @@ def _auto_payload_to_forecast_payload(
     )
 
 
+def _what_if_payload_to_forecast_payload(
+    *,
+    payload: WhatIfRequest,
+) -> ForecastRequestWithKeepAlive:
+    return ForecastRequestWithKeepAlive(
+        model=payload.model,
+        horizon=payload.horizon,
+        quantiles=payload.quantiles,
+        series=payload.series,
+        options=payload.options,
+        timeout=payload.timeout,
+        keep_alive=payload.keep_alive,
+        parameters=payload.parameters,
+    )
+
+
 def _manual_auto_selection_info(
     *,
     payload: AutoForecastRequest,
@@ -1137,6 +1329,18 @@ def _selection_info_from_auto_selection(
 
 
 def _compare_error_category(status_code: int) -> str:
+    if status_code == 400:
+        return "INVALID_REQUEST"
+    if status_code == 404:
+        return "MODEL_MISSING"
+    if status_code == 503:
+        return "RUNNER_UNAVAILABLE"
+    if status_code == 502:
+        return "RUNNER_ERROR"
+    return "DAEMON_ERROR"
+
+
+def _what_if_error_category(status_code: int) -> str:
     if status_code == 400:
         return "INVALID_REQUEST"
     if status_code == 404:

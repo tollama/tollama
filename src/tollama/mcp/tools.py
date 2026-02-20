@@ -20,6 +20,7 @@ from tollama.core.schemas import (
     AutoForecastRequest,
     CompareRequest,
     ForecastRequest,
+    WhatIfRequest,
 )
 
 from .schemas import (
@@ -32,6 +33,7 @@ from .schemas import (
     PullToolInput,
     RecommendToolInput,
     ShowToolInput,
+    WhatIfToolInput,
 )
 
 
@@ -182,6 +184,32 @@ def tollama_analyze(
     client = _make_client(base_url=args.base_url, timeout=args.timeout)
     try:
         response = client.analyze(analyze_request)
+    except TollamaClientError as exc:
+        _raise_from_client_error(exc)
+
+    return response.model_dump(mode="json", exclude_none=True)
+
+
+def tollama_what_if(
+    *,
+    request: dict[str, Any],
+    base_url: str | None = None,
+    timeout: float | None = None,
+) -> dict[str, Any]:
+    """Run what-if scenario analysis and return canonical response payload."""
+    try:
+        args = WhatIfToolInput(request=request, base_url=base_url, timeout=timeout)
+    except ValidationError as exc:
+        _raise_invalid_request(str(exc))
+
+    try:
+        what_if_request = WhatIfRequest.model_validate(args.request)
+    except ValidationError as exc:
+        _raise_invalid_request(str(exc))
+
+    client = _make_client(base_url=args.base_url, timeout=args.timeout)
+    try:
+        response = client.what_if(what_if_request)
     except TollamaClientError as exc:
         _raise_from_client_error(exc)
 

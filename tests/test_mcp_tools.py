@@ -7,7 +7,12 @@ from typing import Any
 import pytest
 
 from tollama.client import ModelMissingError
-from tollama.core.schemas import AnalyzeResponse, AutoForecastResponse, ForecastResponse
+from tollama.core.schemas import (
+    AnalyzeResponse,
+    AutoForecastResponse,
+    ForecastResponse,
+    WhatIfResponse,
+)
 from tollama.mcp.tools import (
     MCPToolError,
     tollama_analyze,
@@ -16,6 +21,7 @@ from tollama.mcp.tools import (
     tollama_health,
     tollama_models,
     tollama_show,
+    tollama_what_if,
 )
 
 
@@ -69,6 +75,23 @@ def _auto_forecast_request() -> dict[str, Any]:
         "horizon": 2,
         "strategy": "auto",
         "series": _forecast_request()["series"],
+        "options": {},
+    }
+
+
+def _what_if_request() -> dict[str, Any]:
+    return {
+        "model": "mock",
+        "horizon": 2,
+        "series": _forecast_request()["series"],
+        "scenarios": [
+            {
+                "name": "high_demand",
+                "transforms": [
+                    {"operation": "multiply", "field": "target", "value": 1.2},
+                ],
+            }
+        ],
         "options": {},
     }
 
@@ -202,6 +225,66 @@ def test_tollama_auto_forecast_success(monkeypatch) -> None:
 def test_tollama_auto_forecast_invalid_request_maps_to_invalid_request() -> None:
     with pytest.raises(MCPToolError) as exc_info:
         tollama_auto_forecast(request={"horizon": 2})
+
+    assert exc_info.value.exit_code == 2
+    assert exc_info.value.category == "INVALID_REQUEST"
+
+
+def test_tollama_what_if_success(monkeypatch) -> None:
+    class _FakeClient:
+        def what_if(self, _request: Any) -> WhatIfResponse:
+            return WhatIfResponse.model_validate(
+                {
+                    "model": "mock",
+                    "horizon": 2,
+                    "baseline": {
+                        "model": "mock",
+                        "forecasts": [
+                            {
+                                "id": "s1",
+                                "freq": "D",
+                                "start_timestamp": "2025-01-03",
+                                "mean": [3.0, 4.0],
+                            }
+                        ],
+                    },
+                    "results": [
+                        {
+                            "scenario": "high_demand",
+                            "ok": True,
+                            "response": {
+                                "model": "mock",
+                                "forecasts": [
+                                    {
+                                        "id": "s1",
+                                        "freq": "D",
+                                        "start_timestamp": "2025-01-03",
+                                        "mean": [3.6, 4.8],
+                                    }
+                                ],
+                            },
+                        }
+                    ],
+                    "summary": {
+                        "requested_scenarios": 1,
+                        "succeeded": 1,
+                        "failed": 0,
+                    },
+                },
+            )
+
+    monkeypatch.setattr("tollama.mcp.tools._make_client", lambda **_: _FakeClient())
+
+    payload = tollama_what_if(request=_what_if_request())
+
+    assert payload["model"] == "mock"
+    assert payload["summary"]["succeeded"] == 1
+    assert payload["results"][0]["scenario"] == "high_demand"
+
+
+def test_tollama_what_if_invalid_request_maps_to_invalid_request() -> None:
+    with pytest.raises(MCPToolError) as exc_info:
+        tollama_what_if(request={"model": "mock"})
 
     assert exc_info.value.exit_code == 2
     assert exc_info.value.category == "INVALID_REQUEST"
