@@ -25,6 +25,8 @@ from tollama.core.schemas import (
     AnalyzeResponse,
     AutoForecastRequest,
     AutoForecastResponse,
+    CompareRequest,
+    CompareResponse,
     CounterfactualRequest,
     CounterfactualResponse,
     ForecastReport,
@@ -48,8 +50,16 @@ SeriesPayload = Mapping[str, Any] | Sequence[Mapping[str, Any]] | pd.Series | pd
 class TollamaForecastResult:
     """Forecast result wrapper with convenience accessors for notebooks/scripts."""
 
-    def __init__(self, response: ForecastResponse) -> None:
+    def __init__(
+        self,
+        response: ForecastResponse,
+        *,
+        sdk: Tollama | None = None,
+        request: ForecastRequest | None = None,
+    ) -> None:
         self._response = response
+        self._sdk = sdk
+        self._request = request
 
     @property
     def response(self) -> ForecastResponse:
@@ -120,6 +130,75 @@ class TollamaForecastResult:
             return frame
         return frame.sort_values(["id", "step"], kind="stable").reset_index(drop=True)
 
+    def then_compare(
+        self,
+        *,
+        models: Sequence[str],
+        timeout: float | None = None,
+        parameters: Mapping[str, Any] | None = None,
+    ) -> CompareResponse:
+        """Compare the same request payload against additional models."""
+        sdk = self._require_sdk_context(method_name="then_compare")
+        request = self._require_request_context(method_name="then_compare")
+
+        ordered_models: list[str] = [request.model]
+        for model in models:
+            candidate = model.strip()
+            if candidate and candidate not in ordered_models:
+                ordered_models.append(candidate)
+
+        request_parameters = (
+            dict(parameters)
+            if parameters is not None
+            else request.parameters.model_dump(mode="python", exclude_none=True)
+        )
+
+        return sdk.compare(
+            models=ordered_models,
+            series=[
+                series.model_dump(mode="python", exclude_none=True) for series in request.series
+            ],
+            horizon=request.horizon,
+            quantiles=list(request.quantiles),
+            options=dict(request.options),
+            timeout=request.timeout if timeout is None else timeout,
+            parameters=request_parameters,
+        )
+
+    def then_what_if(
+        self,
+        *,
+        scenarios: Sequence[Mapping[str, Any]],
+        continue_on_error: bool = True,
+        timeout: float | None = None,
+        keep_alive: str | int | float | None = None,
+        parameters: Mapping[str, Any] | None = None,
+    ) -> WhatIfResponse:
+        """Run what-if scenarios against the same series/model baseline request."""
+        sdk = self._require_sdk_context(method_name="then_what_if")
+        request = self._require_request_context(method_name="then_what_if")
+
+        request_parameters = (
+            dict(parameters)
+            if parameters is not None
+            else request.parameters.model_dump(mode="python", exclude_none=True)
+        )
+
+        return sdk.what_if(
+            model=request.model,
+            series=[
+                series.model_dump(mode="python", exclude_none=True) for series in request.series
+            ],
+            horizon=request.horizon,
+            scenarios=scenarios,
+            continue_on_error=continue_on_error,
+            quantiles=list(request.quantiles),
+            options=dict(request.options),
+            timeout=request.timeout if timeout is None else timeout,
+            keep_alive=keep_alive,
+            parameters=request_parameters,
+        )
+
     def _single_series_forecast(self) -> SeriesForecast:
         forecasts = self._response.forecasts
         if len(forecasts) != 1:
@@ -128,6 +207,121 @@ class TollamaForecastResult:
                 "use forecasts or to_df() instead",
             )
         return forecasts[0]
+
+    def _require_sdk_context(self, *, method_name: str) -> Tollama:
+        if self._sdk is None:
+            raise ValueError(
+                f"{method_name} requires SDK request context; "
+                "create results via Tollama.forecast()",
+            )
+        return self._sdk
+
+    def _require_request_context(self, *, method_name: str) -> ForecastRequest:
+        if self._request is None:
+            raise ValueError(
+                f"{method_name} requires original request payload; "
+                "create results via Tollama.forecast()",
+            )
+        return self._request
+
+
+class TollamaSeriesWorkflow:
+    """Additive chainable workflow wrapper that preserves existing SDK method contracts."""
+
+    def __init__(self, *, sdk: Tollama, series: SeriesPayload) -> None:
+        self._sdk = sdk
+        self._series = series
+        self.analysis: AnalyzeResponse | None = None
+        self.forecast_result: TollamaForecastResult | None = None
+        self.auto_forecast_result: AutoForecastResponse | None = None
+        self.what_if_result: WhatIfResponse | None = None
+
+    def analyze(
+        self,
+        *,
+        parameters: Mapping[str, Any] | None = None,
+    ) -> TollamaSeriesWorkflow:
+        self.analysis = self._sdk.analyze(series=self._series, parameters=parameters)
+        return self
+
+    def forecast(
+        self,
+        *,
+        model: str,
+        horizon: int,
+        quantiles: Sequence[float] | None = None,
+        options: Mapping[str, Any] | None = None,
+        timeout: float | None = None,
+        parameters: Mapping[str, Any] | None = None,
+    ) -> TollamaSeriesWorkflow:
+        self.forecast_result = self._sdk.forecast(
+            model=model,
+            series=self._series,
+            horizon=horizon,
+            quantiles=quantiles,
+            options=options,
+            timeout=timeout,
+            parameters=parameters,
+        )
+        return self
+
+    def auto_forecast(
+        self,
+        *,
+        horizon: int,
+        strategy: str = "auto",
+        model: str | None = None,
+        allow_fallback: bool = False,
+        ensemble_top_k: int = 3,
+        ensemble_method: str = "mean",
+        quantiles: Sequence[float] | None = None,
+        options: Mapping[str, Any] | None = None,
+        timeout: float | None = None,
+        keep_alive: str | int | float | None = None,
+        parameters: Mapping[str, Any] | None = None,
+    ) -> TollamaSeriesWorkflow:
+        self.auto_forecast_result = self._sdk.auto_forecast(
+            series=self._series,
+            horizon=horizon,
+            strategy=strategy,
+            model=model,
+            allow_fallback=allow_fallback,
+            ensemble_top_k=ensemble_top_k,
+            ensemble_method=ensemble_method,
+            quantiles=quantiles,
+            options=options,
+            timeout=timeout,
+            keep_alive=keep_alive,
+            parameters=parameters,
+        )
+        return self
+
+    def what_if(
+        self,
+        *,
+        model: str,
+        horizon: int,
+        scenarios: Sequence[Mapping[str, Any]],
+        continue_on_error: bool = True,
+        quantiles: Sequence[float] | None = None,
+        options: Mapping[str, Any] | None = None,
+        timeout: float | None = None,
+        keep_alive: str | int | float | None = None,
+        parameters: Mapping[str, Any] | None = None,
+    ) -> TollamaSeriesWorkflow:
+        self.what_if_result = self._sdk.what_if(
+            model=model,
+            series=self._series,
+            horizon=horizon,
+            scenarios=scenarios,
+            continue_on_error=continue_on_error,
+            quantiles=quantiles,
+            options=options,
+            timeout=timeout,
+            keep_alive=keep_alive,
+            parameters=parameters,
+        )
+        return self
 
 
 class Tollama:
@@ -142,6 +336,19 @@ class Tollama:
         client: TollamaClient | None = None,
     ) -> None:
         self._client = client or TollamaClient(base_url=base_url, timeout=timeout, api_key=api_key)
+
+    def __enter__(self) -> Tollama:
+        """Allow ``with Tollama() as sdk`` usage for ergonomic notebook scripts."""
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> bool:  # noqa: ANN001
+        del exc_type, exc, tb
+        # TollamaClient uses per-request clients, so there is no persistent handle to close.
+        return False
+
+    def workflow(self, *, series: SeriesPayload) -> TollamaSeriesWorkflow:
+        """Create a chainable workflow object without changing existing method return types."""
+        return TollamaSeriesWorkflow(sdk=self, series=series)
 
     def health(self) -> dict[str, Any]:
         """Return daemon health and version payload."""
@@ -295,7 +502,38 @@ class Tollama:
 
         request = ForecastRequest.model_validate(payload)
         response = self._client.forecast_response(request)
-        return TollamaForecastResult(response=response)
+        return TollamaForecastResult(response=response, sdk=self, request=request)
+
+    def compare(
+        self,
+        *,
+        models: Sequence[str],
+        series: SeriesPayload,
+        horizon: int,
+        quantiles: Sequence[float] | None = None,
+        options: Mapping[str, Any] | None = None,
+        timeout: float | None = None,
+        keep_alive: str | int | float | None = None,
+        parameters: Mapping[str, Any] | None = None,
+    ) -> CompareResponse:
+        """Run one request payload against multiple models."""
+        payload: dict[str, Any] = {
+            "models": [str(model) for model in models],
+            "horizon": horizon,
+            "series": _coerce_series_payload(series),
+            "options": dict(options or {}),
+        }
+        if quantiles is not None:
+            payload["quantiles"] = list(quantiles)
+        if timeout is not None:
+            payload["timeout"] = timeout
+        if keep_alive is not None:
+            payload["keep_alive"] = keep_alive
+        if parameters is not None:
+            payload["parameters"] = dict(parameters)
+
+        request = CompareRequest.model_validate(payload)
+        return self._client.compare(request)
 
     def forecast_from_file(
         self,
@@ -337,7 +575,7 @@ class Tollama:
 
         request = ForecastRequest.model_validate(payload)
         response = self._client.forecast_response(request)
-        return TollamaForecastResult(response=response)
+        return TollamaForecastResult(response=response, sdk=self, request=request)
 
     def auto_forecast(
         self,

@@ -28,6 +28,19 @@ Human-friendly progress is enabled automatically on interactive terminals.
 You can override with `--progress on` or `--progress off` on `pull`, `run`,
 `quickstart`, and `runtime install`.
 
+Useful CLI additions:
+
+```bash
+# explain model limits/capabilities/license from registry + local manifest
+tollama explain chronos2
+
+# scaffold a new runner family skeleton (files only)
+tollama dev scaffold acme_family
+
+# scaffold + register script/module-map/registry template entry
+tollama dev scaffold acme_family --register
+```
+
 ## Shell Completion
 
 Typer completion is available out of the box:
@@ -96,6 +109,24 @@ synthetic = t.generate(
     seed=42,
 )
 print(synthetic.generated[0].id)
+
+# additive chainable workflow (keeps existing SDK method contracts unchanged)
+with Tollama() as sdk:
+    flow = (
+        sdk.workflow(series={"target": [10, 11, 12, 13, 14], "freq": "D"})
+        .analyze()
+        .auto_forecast(horizon=3)
+    )
+print(flow.auto_forecast_result.selection.chosen_model)
+
+# reuse one forecast request for compare/what-if
+baseline = t.forecast(
+    model="chronos2",
+    series={"target": [10, 11, 12, 13, 14], "freq": "D"},
+    horizon=3,
+)
+comparison = baseline.then_compare(models=["timesfm-2.5-200m"])
+print(comparison.summary)
 ```
 
 ## Data Ingest (CSV/Parquet)

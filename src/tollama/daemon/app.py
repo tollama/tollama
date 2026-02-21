@@ -79,7 +79,7 @@ from tollama.core.progressive import ProgressiveStage, build_progressive_stages
 from tollama.core.pull_defaults import resolve_effective_pull_defaults
 from tollama.core.recommend import recommend_models
 from tollama.core.redact import redact_config_dict, redact_env_dict, redact_proxy_url
-from tollama.core.registry import ModelCapabilities, get_model_spec, list_registry_models
+from tollama.core.registry import ModelCapabilities, ModelSpec, get_model_spec, list_registry_models
 from tollama.core.report import build_forecast_report, build_report_narrative, run_report_analysis
 from tollama.core.scenario_tree import build_scenario_tree
 from tollama.core.scenarios import apply_scenario
@@ -128,7 +128,7 @@ from tollama.core.storage import (
 from tollama.core.synthetic import generate_synthetic_series
 
 from .auth import current_key_id, require_api_key
-from .covariates import apply_covariate_capabilities, normalize_covariates
+from .covariates import apply_covariate_capabilities, build_covariate_profile, normalize_covariates
 from .loaded_models import LoadedModelTracker, parse_keep_alive, to_utc_iso
 from .metering import UsageMeter, create_usage_meter, usage_unavailable_hint
 from .metrics import (
@@ -371,6 +371,10 @@ class ValidateResponse(BaseModel):
     warnings: list[StrictStr] = Field(
         default_factory=list,
         description="Non-fatal compatibility warnings emitted during request normalization.",
+    )
+    suggestions: list[StrictStr] = Field(
+        default_factory=list,
+        description="Actionable next-step suggestions based on request and model compatibility.",
     )
 
 
@@ -1055,6 +1059,7 @@ def create_app(*, runner_manager: RunnerManager | None = None) -> FastAPI:
                 errors=[
                     f"field '<root>': payload must be a JSON object (got: {payload!r})",
                 ],
+                suggestions=[],
             )
 
         try:
@@ -1063,6 +1068,7 @@ def create_app(*, runner_manager: RunnerManager | None = None) -> FastAPI:
             return ValidateResponse(
                 valid=False,
                 errors=_format_validation_errors(exc.errors()),
+                suggestions=[],
             )
 
         try:
@@ -1072,18 +1078,22 @@ def create_app(*, runner_manager: RunnerManager | None = None) -> FastAPI:
                 )
             )
         except FileNotFoundError as exc:
-            return ValidateResponse(valid=False, errors=[str(exc)])
+            return ValidateResponse(valid=False, errors=[str(exc)], suggestions=[])
         except IngestDependencyError as exc:
-            return ValidateResponse(valid=False, errors=[str(exc)])
+            return ValidateResponse(valid=False, errors=[str(exc)], suggestions=[])
         except (IngestError, ValidationError, ValueError) as exc:
-            return ValidateResponse(valid=False, errors=[str(exc)])
+            return ValidateResponse(valid=False, errors=[str(exc)], suggestions=[])
 
         warnings: list[str] = []
+        suggestions: list[str] = []
         model_manifest = _find_installed_manifest(resolved_request.model)
         if model_manifest is None:
             model_family = "unknown"
             model_capabilities = ModelCapabilities()
             warnings.append("model not installed; covariate capability check used defaults")
+            suggestions.append(
+                f"Install the model first: tollama pull {resolved_request.model}",
+            )
         else:
             family = model_manifest.get("family")
             if not isinstance(family, str) or not family:
@@ -1091,6 +1101,7 @@ def create_app(*, runner_manager: RunnerManager | None = None) -> FastAPI:
                     valid=False,
                     errors=[f"model {resolved_request.model!r} has invalid family metadata"],
                     warnings=warnings,
+                    suggestions=suggestions,
                 )
             model_family = family
             model_capabilities = _resolve_model_capabilities(resolved_request.model, model_manifest)
@@ -1105,6 +1116,11 @@ def create_app(*, runner_manager: RunnerManager | None = None) -> FastAPI:
                 valid=False,
                 errors=[str(exc)],
                 warnings=warnings,
+                suggestions=_validation_error_suggestions(
+                    error_message=str(exc),
+                    request=resolved_request,
+                    model_capabilities=model_capabilities,
+                ),
             )
         warnings.extend(normalize_warnings)
 
@@ -1121,11 +1137,26 @@ def create_app(*, runner_manager: RunnerManager | None = None) -> FastAPI:
                 valid=False,
                 errors=[str(exc)],
                 warnings=warnings,
+                suggestions=_validation_error_suggestions(
+                    error_message=str(exc),
+                    request=resolved_request,
+                    model_capabilities=model_capabilities,
+                ),
             )
         warnings.extend(capability_warnings)
 
+        suggestions.extend(
+            _validation_suggestions(
+                request=resolved_request,
+                model_manifest=model_manifest,
+                model_capabilities=model_capabilities,
+                normalized_series=normalized_series,
+                warnings=warnings,
+            )
+        )
+        suggestions = _dedupe_preserve_order(suggestions)
         merged_warnings = _merge_warnings(None, warnings) or []
-        return ValidateResponse(valid=True, warnings=merged_warnings)
+        return ValidateResponse(valid=True, warnings=merged_warnings, suggestions=suggestions)
 
     @app.post(
         "/v1/models/pull",
@@ -3441,6 +3472,238 @@ def _resolve_model_capabilities(
     except KeyError:
         return None
     return spec.capabilities
+
+
+def _dedupe_preserve_order(values: list[str]) -> list[str]:
+    deduped: list[str] = []
+    seen: set[str] = set()
+    for value in values:
+        if value in seen:
+            continue
+        seen.add(value)
+        deduped.append(value)
+    return deduped
+
+
+def _metadata_positive_int(metadata: dict[str, Any] | None, keys: tuple[str, ...]) -> int | None:
+    if not isinstance(metadata, dict):
+        return None
+    for key in keys:
+        value = metadata.get(key)
+        if isinstance(value, bool):
+            continue
+        if isinstance(value, int) and value > 0:
+            return value
+        if isinstance(value, float) and value > 0 and value.is_integer():
+            return int(value)
+    return None
+
+
+def _optional_model_spec(model_name: str) -> ModelSpec | None:
+    try:
+        return get_model_spec(model_name)
+    except KeyError:
+        return None
+
+
+def _horizon_limit_from_metadata(metadata: dict[str, Any] | None) -> int | None:
+    return _metadata_positive_int(metadata, ("max_horizon", "prediction_length"))
+
+
+def _context_limit_from_metadata(metadata: dict[str, Any] | None) -> int | None:
+    return _metadata_positive_int(
+        metadata,
+        ("max_context", "context_length", "default_context_length"),
+    )
+
+
+def _series_history_length(series_list: list[Any]) -> int:
+    if not series_list:
+        return 0
+    return max(len(series.target) for series in series_list)
+
+
+def _required_future_covariates(series_list: list[Any]) -> tuple[bool, bool]:
+    requires_numeric = False
+    requires_categorical = False
+    for series in series_list:
+        profile = build_covariate_profile(series)
+        if profile.known_future_numeric:
+            requires_numeric = True
+        if profile.known_future_categorical:
+            requires_categorical = True
+    return requires_numeric, requires_categorical
+
+
+def _suggest_model_candidate(
+    *,
+    exclude_model: str,
+    min_horizon: int | None = None,
+    min_context: int | None = None,
+    require_future_numeric: bool = False,
+    require_future_categorical: bool = False,
+) -> ModelSpec | None:
+    installed_names: set[str] = set()
+    try:
+        for manifest in list_installed():
+            if not isinstance(manifest, dict):
+                continue
+            name = manifest.get("name")
+            if isinstance(name, str) and name:
+                installed_names.add(name)
+    except Exception:  # noqa: BLE001
+        pass
+
+    candidates = [spec for spec in list_registry_models() if spec.name != exclude_model]
+    candidates.sort(key=lambda spec: (0 if spec.name in installed_names else 1, spec.name))
+
+    for spec in candidates:
+        capabilities = spec.capabilities or ModelCapabilities()
+        if require_future_numeric and not capabilities.future_covariates_numeric:
+            continue
+        if require_future_categorical and not capabilities.future_covariates_categorical:
+            continue
+
+        metadata = spec.metadata if isinstance(spec.metadata, dict) else {}
+        if min_horizon is not None:
+            limit = _horizon_limit_from_metadata(metadata)
+            if limit is not None and limit < min_horizon:
+                continue
+        if min_context is not None:
+            limit = _context_limit_from_metadata(metadata)
+            if limit is not None and limit < min_context:
+                continue
+        return spec
+    return None
+
+
+def _validation_error_suggestions(
+    *,
+    error_message: str,
+    request: ForecastRequestWithKeepAlive,
+    model_capabilities: ModelCapabilities | None,
+) -> list[str]:
+    suggestions: list[str] = []
+    normalized = error_message.lower()
+
+    requires_future_numeric, requires_future_categorical = _required_future_covariates(
+        request.series,
+    )
+    capabilities = model_capabilities or ModelCapabilities()
+    missing_future_support = (
+        (requires_future_numeric and not capabilities.future_covariates_numeric)
+        or (requires_future_categorical and not capabilities.future_covariates_categorical)
+    )
+
+    if "does not support" in normalized or missing_future_support:
+        if request.parameters.covariates_mode == "strict":
+            suggestions.append(
+                "Switch to parameters.covariates_mode='best_effort' to drop unsupported covariates "
+                "automatically.",
+            )
+        alternative = _suggest_model_candidate(
+            exclude_model=request.model,
+            require_future_numeric=requires_future_numeric,
+            require_future_categorical=requires_future_categorical,
+        )
+        if alternative is not None:
+            suggestions.append(
+                f"Consider switching to {alternative.name!r}, which supports the requested "
+                "future covariate shape.",
+            )
+
+    if "horizon" in normalized:
+        alternative = _suggest_model_candidate(
+            exclude_model=request.model,
+            min_horizon=request.horizon,
+            require_future_numeric=requires_future_numeric,
+            require_future_categorical=requires_future_categorical,
+        )
+        if alternative is not None:
+            suggestions.append(
+                f"Consider model {alternative.name!r} for horizon {request.horizon}.",
+            )
+
+    return _dedupe_preserve_order(suggestions)
+
+
+def _validation_suggestions(
+    *,
+    request: ForecastRequestWithKeepAlive,
+    model_manifest: dict[str, Any] | None,
+    model_capabilities: ModelCapabilities | None,
+    normalized_series: list[Any],
+    warnings: list[str],
+) -> list[str]:
+    del warnings
+    suggestions: list[str] = []
+    suggest_alternative = False
+    capabilities = model_capabilities or ModelCapabilities()
+
+    spec = _optional_model_spec(request.model)
+    metadata: dict[str, Any] | None = None
+    if model_manifest is not None:
+        metadata = _manifest_metadata(model_manifest)
+    if metadata is None and spec is not None and isinstance(spec.metadata, dict):
+        metadata = spec.metadata
+
+    horizon_limit = _horizon_limit_from_metadata(metadata)
+    if horizon_limit is not None and request.horizon > horizon_limit:
+        suggestions.append(
+            f"Requested horizon {request.horizon} exceeds {request.model!r} declared limit "
+            f"({horizon_limit}).",
+        )
+        suggest_alternative = True
+
+    history_length = _series_history_length(normalized_series)
+    context_limit = _context_limit_from_metadata(metadata)
+    if context_limit is not None and history_length > context_limit:
+        suggestions.append(
+            f"Series history length {history_length} exceeds {request.model!r} declared context "
+            f"limit ({context_limit}).",
+        )
+        suggest_alternative = True
+
+    requires_future_numeric, requires_future_categorical = _required_future_covariates(
+        normalized_series,
+    )
+    missing_future_support = (
+        (requires_future_numeric and not capabilities.future_covariates_numeric)
+        or (requires_future_categorical and not capabilities.future_covariates_categorical)
+    )
+    if missing_future_support:
+        suggestions.append(
+            f"Model {request.model!r} does not support the provided future_covariates shape.",
+        )
+        if request.parameters.covariates_mode == "strict":
+            suggestions.append(
+                "Use parameters.covariates_mode='best_effort' to keep running while dropping "
+                "unsupported covariates.",
+            )
+        suggest_alternative = True
+
+    if suggest_alternative:
+        alternative = _suggest_model_candidate(
+            exclude_model=request.model,
+            min_horizon=(
+                request.horizon
+                if horizon_limit is not None and request.horizon > horizon_limit
+                else None
+            ),
+            min_context=(
+                history_length
+                if context_limit is not None and history_length > context_limit
+                else None
+            ),
+            require_future_numeric=requires_future_numeric,
+            require_future_categorical=requires_future_categorical,
+        )
+        if alternative is not None:
+            suggestions.append(
+                f"Alternative model candidate: {alternative.name!r}.",
+            )
+
+    return _dedupe_preserve_order(suggestions)
 
 
 def _manifest_size_bytes(manifest: dict[str, Any]) -> int:

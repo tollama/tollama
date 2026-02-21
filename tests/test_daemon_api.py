@@ -1191,7 +1191,7 @@ def test_api_validate_returns_valid_true_for_valid_payload(monkeypatch, tmp_path
         response = client.post("/api/validate", json=payload)
 
     assert response.status_code == 200
-    assert response.json() == {"valid": True, "errors": [], "warnings": []}
+    assert response.json() == {"valid": True, "errors": [], "warnings": [], "suggestions": []}
 
 
 def test_api_validate_returns_errors_for_schema_invalid_payload(monkeypatch, tmp_path) -> None:
@@ -1238,6 +1238,47 @@ def test_api_validate_warns_when_model_is_not_installed(monkeypatch, tmp_path) -
     assert body["valid"] is True
     assert body["errors"] == []
     assert body["warnings"] == ["model not installed; covariate capability check used defaults"]
+    assert body["suggestions"] == ["Install the model first: tollama pull mock"]
+
+
+def test_api_validate_adds_horizon_suggestions_from_model_metadata(monkeypatch, tmp_path) -> None:
+    _install_model(monkeypatch, tmp_path, "granite-ttm-r2")
+    payload = _sample_forecast_payload()
+    payload["model"] = "granite-ttm-r2"
+    payload["horizon"] = 120
+
+    with TestClient(create_app()) as client:
+        response = client.post("/api/validate", json=payload)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["valid"] is True
+    assert body["errors"] == []
+    assert body["warnings"] == []
+    assert body["suggestions"]
+    assert "declared limit" in body["suggestions"][0]
+
+
+def test_api_validate_strict_covariates_error_returns_best_effort_suggestion(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    _install_model(monkeypatch, tmp_path, "sundial-base-128m")
+    payload = _sample_forecast_payload()
+    payload["model"] = "sundial-base-128m"
+    payload["series"][0]["past_covariates"] = {"promo": [1.0, 2.0]}
+    payload["series"][0]["future_covariates"] = {"promo": [4.0, 5.0]}
+    payload["parameters"] = {"covariates_mode": "strict"}
+
+    with TestClient(create_app()) as client:
+        response = client.post("/api/validate", json=payload)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["valid"] is False
+    assert body["errors"]
+    assert body["suggestions"]
+    assert "best_effort" in " ".join(body["suggestions"])
 
 
 def test_forecast_invalid_payload_returns_400(monkeypatch, tmp_path) -> None:

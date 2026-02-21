@@ -125,6 +125,11 @@
   - 현재: daemon/client/CLI/MCP/LangChain 공통 에러 `hint` 전달(기존 `detail` 호환 유지)
   - 현재: long-running CLI에 `--progress auto|on|off` 도입(`pull`/`run`/`quickstart`/`runtime install`), stdout 계약 유지(stder-only progress)
   - 현재: `tollama run`에서 MODEL 생략 시 설치된 모델 선택 프롬프트 + `--interactive` 예제 payload 선택 지원
+  - 현재: `tollama explain <model>` 추가(레지스트리+로컬 manifest 기반 capability/limit/license/use-case 요약)
+  - 현재: `tollama dev scaffold <family> [--register]` 추가(런너 스켈레톤 생성 + 선택적 등록 자동화)
+  - 현재: `/api/validate` 응답에 `suggestions[]` 추가(경고/오류에 대한 실행 가능한 후속 조치 제안)
+  - 현재: SDK `with Tollama() as ...` + additive chain workflow(`workflow(...)`) 및
+    `TollamaForecastResult.then_compare()/then_what_if()` 추가
   - 현재: canonical 트러블슈팅 문서(`docs/troubleshooting.md`) + CLI 치트시트(`docs/cli-cheatsheet.md`) 분리
   - 현재: API 레퍼런스 문서(`docs/api-reference.md`) 추가 + OpenAPI 문서(`/docs`, `/redoc`, `/openapi.json`) 메타데이터 강화
   - 현재: API key 설정 시 docs/openapi 엔드포인트도 기본 인증 적용(`TOLLAMA_DOCS_PUBLIC=1`로 로컬 공개 가능)

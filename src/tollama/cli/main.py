@@ -23,7 +23,7 @@ from tollama.core.config import (
     save_config,
     update_config,
 )
-from tollama.core.registry import get_model_spec, list_registry_models
+from tollama.core.registry import ModelCapabilities, ModelSpec, get_model_spec, list_registry_models
 from tollama.core.runtime_bootstrap import (
     FAMILY_EXTRAS,
     FAMILY_PYTHON_CONSTRAINTS,
@@ -41,6 +41,7 @@ from .client import (
     DaemonHTTPError,
     TollamaClient,
 )
+from .dev import dev_app
 from .info import collect_info
 
 app = typer.Typer(help="Ollama-style command-line interface for tollama.")
@@ -50,6 +51,7 @@ modelfile_app = typer.Typer(help="Manage TSModelfile forecast profiles.")
 app.add_typer(config_app, name="config")
 app.add_typer(runtime_app, name="runtime")
 app.add_typer(modelfile_app, name="modelfile")
+app.add_typer(dev_app, name="dev")
 
 _CONFIG_KEY_PATHS: dict[str, tuple[str, str]] = {
     key: cast(tuple[str, str], tuple(key.split(".", maxsplit=1)))
@@ -575,6 +577,36 @@ def show(
     except RuntimeError as exc:
         _exit_with_runtime_error(exc)
     typer.echo(json.dumps(response, indent=2, sort_keys=True))
+
+
+@app.command("explain")
+def explain(
+    model: str = typer.Argument(
+        ...,
+        help="Model name to explain.",
+        autocompletion=_complete_model_names,
+    ),
+    json_output: bool = typer.Option(
+        False,
+        "--json",
+        help="Print JSON capability summary.",
+    ),
+) -> None:
+    """Explain model capabilities, limits, license, and practical use cases."""
+    try:
+        spec = get_model_spec(model)
+    except KeyError:
+        _exit_with_message(
+            f"model {model!r} is not defined in model-registry/registry.yaml",
+            code=1,
+        )
+
+    manifest = _find_installed_manifest_by_name(model)
+    payload = _build_explain_payload(spec=spec, manifest=manifest)
+    if json_output:
+        typer.echo(json.dumps(payload, indent=2, sort_keys=True))
+        return
+    typer.echo(_render_explain_payload(payload))
 
 
 @app.command("rm")
@@ -1179,6 +1211,167 @@ def _render_running_table(models: list[dict[str, Any]]) -> str:
     return _render_table(("NAME", "FAMILY", "EXPIRES"), rows)
 
 
+def _find_installed_manifest_by_name(model: str) -> dict[str, Any] | None:
+    try:
+        installed = list_installed()
+    except Exception:  # noqa: BLE001
+        return None
+    for item in installed:
+        if not isinstance(item, dict):
+            continue
+        name = item.get("name")
+        if isinstance(name, str) and name == model:
+            return item
+    return None
+
+
+def _build_explain_payload(
+    *,
+    spec: ModelSpec,
+    manifest: dict[str, Any] | None,
+) -> dict[str, Any]:
+    capabilities = spec.capabilities or ModelCapabilities()
+    metadata = spec.metadata if isinstance(spec.metadata, dict) else {}
+    manifest_license = manifest.get("license") if isinstance(manifest, dict) else {}
+    accepted = None
+    if isinstance(manifest_license, dict) and "accepted" in manifest_license:
+        accepted = bool(manifest_license.get("accepted"))
+
+    max_horizon = _resolve_numeric_metadata(metadata, ("max_horizon", "prediction_length"))
+    max_context = _resolve_numeric_metadata(
+        metadata,
+        ("max_context", "context_length", "default_context_length"),
+    )
+
+    return {
+        "model": spec.name,
+        "family": spec.family,
+        "installed": manifest is not None,
+        "source": spec.source.model_dump(mode="json"),
+        "license": {
+            "type": spec.license.type,
+            "needs_acceptance": spec.license.needs_acceptance,
+            "accepted": accepted,
+            "notice": spec.license.notice,
+        },
+        "limits": {
+            "max_horizon": max_horizon,
+            "max_context": max_context,
+        },
+        "capabilities": {
+            "past_covariates_numeric": capabilities.past_covariates_numeric,
+            "past_covariates_categorical": capabilities.past_covariates_categorical,
+            "future_covariates_numeric": capabilities.future_covariates_numeric,
+            "future_covariates_categorical": capabilities.future_covariates_categorical,
+            "static_covariates": capabilities.static_covariates,
+        },
+        "recommended_use_cases": _recommended_use_cases(spec=spec, capabilities=capabilities),
+    }
+
+
+def _resolve_numeric_metadata(metadata: dict[str, Any], keys: tuple[str, ...]) -> int | None:
+    for key in keys:
+        value = metadata.get(key)
+        if isinstance(value, bool):
+            continue
+        if isinstance(value, int) and value > 0:
+            return value
+        if isinstance(value, float) and value > 0 and value.is_integer():
+            return int(value)
+    return None
+
+
+def _recommended_use_cases(*, spec: ModelSpec, capabilities: ModelCapabilities) -> list[str]:
+    use_cases: list[str] = []
+    family = spec.family
+    if family == "mock":
+        use_cases.append("Fast local smoke tests and integration checks.")
+    if family in {"torch", "timesfm", "uni2ts"}:
+        use_cases.append("General purpose forecasting with covariate-aware workflows.")
+    if family == "timesfm":
+        use_cases.append("High-throughput batch forecasting for many related series.")
+    if family == "sundial":
+        use_cases.append("Long-horizon forecasting where covariates are unavailable.")
+    if family == "toto":
+        use_cases.append("Large-context production workloads with numeric history features.")
+
+    if capabilities.future_covariates_numeric or capabilities.future_covariates_categorical:
+        use_cases.append("Known-future covariate forecasting scenarios.")
+    elif capabilities.past_covariates_numeric or capabilities.past_covariates_categorical:
+        use_cases.append("Historical covariate enrichment without future covariates.")
+    else:
+        use_cases.append("Target-only forecasting from clean univariate history.")
+
+    # Stable order, deduplicated.
+    deduped: list[str] = []
+    for item in use_cases:
+        if item not in deduped:
+            deduped.append(item)
+    return deduped
+
+
+def _render_explain_payload(payload: dict[str, Any]) -> str:
+    lines: list[str] = []
+    lines.append(_style_text(str(payload.get("model") or "-"), bold=True))
+    lines.append(f"family: {_string_or_dash(payload.get('family'))}")
+    lines.append(f"installed: {'yes' if payload.get('installed') else 'no'}")
+
+    source = payload.get("source")
+    if isinstance(source, dict):
+        repo_id = _string_or_dash(source.get("repo_id"))
+        revision = _string_or_dash(source.get("revision"))
+        lines.append(f"source: {repo_id} @ {revision}")
+
+    license_payload = payload.get("license")
+    if isinstance(license_payload, dict):
+        lines.append("")
+        lines.append(_style_text("license", bold=True))
+        lines.append(f"  type: {_string_or_dash(license_payload.get('type'))}")
+        needs = bool(license_payload.get("needs_acceptance"))
+        lines.append(f"  acceptance required: {'yes' if needs else 'no'}")
+        accepted = license_payload.get("accepted")
+        if isinstance(accepted, bool):
+            lines.append(f"  accepted locally: {'yes' if accepted else 'no'}")
+        notice = license_payload.get("notice")
+        if isinstance(notice, str) and notice.strip():
+            lines.append(f"  notice: {notice.strip()}")
+
+    limits = payload.get("limits")
+    if isinstance(limits, dict):
+        lines.append("")
+        lines.append(_style_text("limits", bold=True))
+        lines.append(f"  max_horizon: {_string_or_dash(limits.get('max_horizon'))}")
+        lines.append(f"  max_context: {_string_or_dash(limits.get('max_context'))}")
+
+    capabilities = payload.get("capabilities")
+    if isinstance(capabilities, dict):
+        lines.append("")
+        lines.append(_style_text("capabilities", bold=True))
+        for key in (
+            "past_covariates_numeric",
+            "past_covariates_categorical",
+            "future_covariates_numeric",
+            "future_covariates_categorical",
+            "static_covariates",
+        ):
+            value = capabilities.get(key)
+            if isinstance(value, bool):
+                rendered = "yes" if value else "no"
+            else:
+                rendered = _string_or_dash(value)
+            lines.append(f"  {key}: {rendered}")
+
+    use_cases = payload.get("recommended_use_cases")
+    if isinstance(use_cases, list) and use_cases:
+        lines.append("")
+        lines.append(_style_text("recommended use cases", bold=True))
+        for item in use_cases:
+            if isinstance(item, str) and item:
+                lines.append(f"  - {item}")
+
+    return "\n".join(lines)
+
+
 def _render_table(
     headers: tuple[str, ...],
     rows: list[tuple[str, ...]],
@@ -1255,6 +1448,10 @@ def _format_bytes(size: int) -> str:
 def _string_or_dash(value: Any) -> str:
     if isinstance(value, str) and value:
         return value
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, (int, float)):
+        return str(value)
     return "-"
 
 

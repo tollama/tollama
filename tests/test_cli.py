@@ -23,6 +23,7 @@ from tollama.cli.main import (
     _truncate_cell,
     app,
 )
+from tollama.core.registry import ModelSpec
 
 
 def _sample_request_payload() -> dict[str, object]:
@@ -362,6 +363,74 @@ def test_list_ps_show_and_rm_commands_call_api_client(monkeypatch) -> None:
     removed = runner.invoke(app, ["rm", "mock"])
     assert removed.exit_code == 0
     assert json.loads(_result_stdout(removed)) == {"deleted": True, "model": "mock"}
+
+
+def test_explain_command_renders_human_summary(monkeypatch) -> None:
+    spec = ModelSpec.model_validate(
+        {
+            "name": "chronos2",
+            "family": "torch",
+            "source": {"type": "huggingface", "repo_id": "amazon/chronos-2", "revision": "main"},
+            "license": {"type": "apache-2.0", "needs_acceptance": False},
+            "metadata": {"max_horizon": 128, "max_context": 512},
+            "capabilities": {
+                "past_covariates_numeric": True,
+                "past_covariates_categorical": True,
+                "future_covariates_numeric": True,
+                "future_covariates_categorical": True,
+                "static_covariates": False,
+            },
+        },
+    )
+    monkeypatch.setattr("tollama.cli.main.get_model_spec", lambda _model: spec)
+    monkeypatch.setattr(
+        "tollama.cli.main.list_installed",
+        lambda: [{"name": "chronos2", "license": {"accepted": True}}],
+    )
+
+    runner = _new_runner()
+    result = runner.invoke(app, ["explain", "chronos2"])
+
+    assert result.exit_code == 0
+    output = _result_stdout(result)
+    assert "chronos2" in output
+    assert "family: torch" in output
+    assert "max_horizon: 128" in output
+    assert "accepted locally: yes" in output
+
+
+def test_explain_command_json_output(monkeypatch) -> None:
+    spec = ModelSpec.model_validate(
+        {
+            "name": "sundial-base-128m",
+            "family": "sundial",
+            "source": {
+                "type": "huggingface",
+                "repo_id": "thuml/sundial-base-128m",
+                "revision": "main",
+            },
+            "license": {"type": "apache-2.0", "needs_acceptance": False},
+            "metadata": {"max_horizon": 720, "max_context": 2880},
+            "capabilities": {
+                "past_covariates_numeric": False,
+                "past_covariates_categorical": False,
+                "future_covariates_numeric": False,
+                "future_covariates_categorical": False,
+                "static_covariates": False,
+            },
+        },
+    )
+    monkeypatch.setattr("tollama.cli.main.get_model_spec", lambda _model: spec)
+    monkeypatch.setattr("tollama.cli.main.list_installed", lambda: [])
+
+    runner = _new_runner()
+    result = runner.invoke(app, ["explain", "sundial-base-128m", "--json"])
+
+    assert result.exit_code == 0
+    payload = json.loads(_result_stdout(result))
+    assert payload["model"] == "sundial-base-128m"
+    assert payload["limits"]["max_context"] == 2880
+    assert payload["installed"] is False
 
 
 def test_modelfile_commands_call_api_client(monkeypatch, tmp_path: Path) -> None:

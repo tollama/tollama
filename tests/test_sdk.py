@@ -10,6 +10,8 @@ from tollama.core.schemas import (
     AnalyzeResponse,
     AutoForecastRequest,
     AutoForecastResponse,
+    CompareRequest,
+    CompareResponse,
     CounterfactualRequest,
     CounterfactualResponse,
     ForecastReport,
@@ -25,7 +27,7 @@ from tollama.core.schemas import (
     WhatIfRequest,
     WhatIfResponse,
 )
-from tollama.sdk import Tollama
+from tollama.sdk import Tollama, TollamaForecastResult
 
 
 def _single_series_response(*, series_id: str = "series_0") -> ForecastResponse:
@@ -681,3 +683,184 @@ def test_pipeline_accepts_series_dict_and_returns_typed_payload() -> None:
     assert request.ensemble_method == "mean"
     assert response.analysis.results[0].id == "series_0"
     assert response.auto_forecast.selection.chosen_model == "mock"
+
+
+def test_sdk_context_manager_returns_self() -> None:
+    sdk = Tollama(client=object())  # type: ignore[arg-type]
+
+    with sdk as managed:
+        assert managed is sdk
+
+
+def test_workflow_chaining_preserves_typed_results() -> None:
+    class _FakeClient:
+        def analyze(self, request: AnalyzeRequest) -> AnalyzeResponse:
+            assert request.series[0].id == "series_0"
+            return AnalyzeResponse.model_validate(
+                {
+                    "results": [
+                        {
+                            "id": "series_0",
+                            "detected_frequency": "D",
+                            "seasonality_periods": [2],
+                            "trend": {"direction": "up", "slope": 0.1, "r2": 0.5},
+                            "anomaly_indices": [],
+                            "stationarity_flag": True,
+                            "data_quality_score": 0.95,
+                        }
+                    ],
+                },
+            )
+
+        def auto_forecast(self, request: AutoForecastRequest) -> AutoForecastResponse:
+            assert request.horizon == 2
+            return AutoForecastResponse.model_validate(
+                {
+                    "strategy": "auto",
+                    "selection": {
+                        "strategy": "auto",
+                        "chosen_model": "mock",
+                        "selected_models": ["mock"],
+                        "candidates": [
+                            {
+                                "model": "mock",
+                                "family": "mock",
+                                "rank": 1,
+                                "score": 100.0,
+                                "reasons": ["selected"],
+                            }
+                        ],
+                        "rationale": ["selected"],
+                        "fallback_used": False,
+                    },
+                    "response": {
+                        "model": "mock",
+                        "forecasts": [
+                            {
+                                "id": "series_0",
+                                "freq": "D",
+                                "start_timestamp": "2025-01-06",
+                                "mean": [10.0, 11.0],
+                            }
+                        ],
+                    },
+                },
+            )
+
+    with Tollama(client=_FakeClient()) as sdk:  # type: ignore[arg-type]
+        workflow = (
+            sdk.workflow(series={"target": [1.0, 2.0, 3.0], "freq": "D"})
+            .analyze(parameters={"max_lag": 2})
+            .auto_forecast(horizon=2)
+        )
+
+    assert workflow.analysis is not None
+    assert workflow.analysis.results[0].id == "series_0"
+    assert workflow.auto_forecast_result is not None
+    assert workflow.auto_forecast_result.selection.chosen_model == "mock"
+
+
+def test_forecast_result_then_compare_uses_request_context() -> None:
+    captured: dict[str, CompareRequest] = {}
+
+    class _FakeClient:
+        def forecast_response(self, request: ForecastRequest) -> ForecastResponse:
+            assert request.model == "chronos2"
+            return _single_series_response()
+
+        def compare(self, request: CompareRequest) -> CompareResponse:
+            captured["request"] = request
+            return CompareResponse.model_validate(
+                {
+                    "models": list(request.models),
+                    "horizon": request.horizon,
+                    "results": [
+                        {
+                            "model": model,
+                            "ok": True,
+                            "response": _single_series_response().model_dump(mode="python"),
+                        }
+                        for model in request.models
+                    ],
+                    "summary": {
+                        "requested_models": len(request.models),
+                        "succeeded": len(request.models),
+                        "failed": 0,
+                    },
+                },
+            )
+
+    sdk = Tollama(client=_FakeClient())  # type: ignore[arg-type]
+    result = sdk.forecast(
+        model="chronos2",
+        series={"target": [1.0, 2.0, 3.0], "freq": "D"},
+        horizon=2,
+        quantiles=[0.1, 0.9],
+    )
+
+    compare = result.then_compare(models=["timesfm-2.5-200m"])
+    assert compare.summary.requested_models == 2
+
+    request = captured["request"]
+    assert list(request.models) == ["chronos2", "timesfm-2.5-200m"]
+    assert request.quantiles == [0.1, 0.9]
+    assert request.horizon == 2
+
+
+def test_forecast_result_then_what_if_uses_request_context() -> None:
+    captured: dict[str, WhatIfRequest] = {}
+
+    class _FakeClient:
+        def forecast_response(self, request: ForecastRequest) -> ForecastResponse:
+            assert request.model == "chronos2"
+            return _single_series_response()
+
+        def what_if(self, request: WhatIfRequest) -> WhatIfResponse:
+            captured["request"] = request
+            return WhatIfResponse.model_validate(
+                {
+                    "model": request.model,
+                    "horizon": request.horizon,
+                    "baseline": _single_series_response().model_dump(mode="python"),
+                    "results": [
+                        {
+                            "scenario": request.scenarios[0].name,
+                            "ok": True,
+                            "response": _single_series_response().model_dump(mode="python"),
+                        }
+                    ],
+                    "summary": {
+                        "requested_scenarios": len(request.scenarios),
+                        "succeeded": len(request.scenarios),
+                        "failed": 0,
+                    },
+                },
+            )
+
+    sdk = Tollama(client=_FakeClient())  # type: ignore[arg-type]
+    result = sdk.forecast(
+        model="chronos2",
+        series={"target": [1.0, 2.0, 3.0], "freq": "D"},
+        horizon=2,
+    )
+    what_if = result.then_what_if(
+        scenarios=[
+            {
+                "name": "upside",
+                "transforms": [{"operation": "multiply", "field": "target", "value": 1.1}],
+            }
+        ],
+    )
+    assert what_if.summary.succeeded == 1
+
+    request = captured["request"]
+    assert request.model == "chronos2"
+    assert request.horizon == 2
+    assert request.scenarios[0].name == "upside"
+
+
+def test_then_helpers_require_forecast_request_context() -> None:
+    result = TollamaForecastResult(_single_series_response())
+
+    with pytest.raises(ValueError, match="requires SDK request context"):
+        result.then_compare(models=["timesfm-2.5-200m"])

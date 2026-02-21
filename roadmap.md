@@ -48,6 +48,11 @@ the optional future `packages/*` split as a migration phase.
 - `tollama run` can prompt for installed model selection when `MODEL` is omitted in TTY,
   and `--interactive` can prompt for discovered example request payloads when `--input`
   is omitted.
+- CLI now includes `tollama explain <model>` for human-readable capability/limit/license summaries.
+- CLI now includes `tollama dev scaffold <family>` with optional `--register` for runner skeleton onboarding.
+- `/api/validate` now returns additive `suggestions[]` alongside `warnings[]` for actionable next steps.
+- SDK now supports context-manager usage plus additive chainable workflows via `Tollama.workflow(...)`,
+  and `TollamaForecastResult.then_compare()/then_what_if()` helpers.
 - Canonical troubleshooting guide and CLI cheat sheet are now separated under
   `docs/troubleshooting.md` and `docs/cli-cheatsheet.md`.
 - OpenAPI endpoint docs are available at `/docs`, `/redoc`, `/openapi.json`, and when
