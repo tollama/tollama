@@ -37,6 +37,12 @@ the optional future `packages/*` split as a migration phase.
 - Optional API-key auth is available through `config.auth.api_keys`.
 - Per-key usage metering endpoint is available at `GET /api/usage`.
 - Per-key daemon SSE event stream is available at `GET /api/events`.
+- Bundled web dashboard is available at `/dashboard` with packaged static assets and
+  partial templates (`/dashboard/static/*`, `/dashboard/partials/{name}`).
+- Aggregated dashboard bootstrap endpoint is available at `GET /api/dashboard/state`
+  with partial-failure `warnings[]` behavior.
+- Dashboard auth/cors controls are available via `TOLLAMA_DASHBOARD`,
+  `TOLLAMA_DASHBOARD_REQUIRE_AUTH`, and `TOLLAMA_CORS_ORIGINS`.
 - HTTP error responses now preserve `detail` and may include actionable `hint`.
 - Shared client/CLI/MCP/LangChain error surfaces propagate optional `hint` values.
 - CLI config discoverability now includes `tollama config keys` and `tollama config init`.
@@ -49,6 +55,8 @@ the optional future `packages/*` split as a migration phase.
   and `--interactive` can prompt for discovered example request payloads when `--input`
   is omitted.
 - CLI now includes `tollama explain <model>` for human-readable capability/limit/license summaries.
+- CLI now includes `tollama open` (launch web dashboard) and `tollama dashboard`
+  (launch optional Textual TUI dashboard).
 - CLI now includes `tollama dev scaffold <family>` with optional `--register` for runner skeleton onboarding.
 - `/api/validate` now returns additive `suggestions[]` alongside `warnings[]` for actionable next steps.
 - SDK now supports context-manager usage plus additive chainable workflows via `Tollama.workflow(...)`,

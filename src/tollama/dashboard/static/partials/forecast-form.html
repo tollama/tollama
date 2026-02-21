@@ -1,0 +1,13 @@
+<h2>Forecast Playground</h2>
+<form id="forecast-form" class="stack" autocomplete="off">
+  <label for="forecast-model">Model</label>
+  <input id="forecast-model" type="text" placeholder="mock" value="mock" required />
+
+  <label for="forecast-horizon">Horizon</label>
+  <input id="forecast-horizon" type="number" min="1" value="3" required />
+
+  <label for="forecast-series">Series JSON</label>
+  <textarea id="forecast-series" rows="8" required>[{"id":"s1","freq":"D","timestamps":["2025-01-01","2025-01-02"],"target":[10,11]}]</textarea>
+
+  <button class="btn" type="submit">Run Forecast</button>
+</form>

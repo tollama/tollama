@@ -1,0 +1,20 @@
+{
+  "name": "Tollama Dashboard",
+  "short_name": "Tollama",
+  "start_url": "/dashboard",
+  "display": "standalone",
+  "background_color": "#0c121b",
+  "theme_color": "#10151f",
+  "icons": [
+    {
+      "src": "/dashboard/static/img/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/dashboard/static/img/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

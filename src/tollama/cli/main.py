@@ -6,6 +6,7 @@ import json
 import os
 import shutil
 import sys
+import webbrowser
 from difflib import get_close_matches
 from pathlib import Path
 from typing import Any, Literal, NoReturn, cast
@@ -191,6 +192,45 @@ def serve(
             os.environ.pop("TOLLAMA_EFFECTIVE_HOST_BINDING", None)
         else:
             os.environ["TOLLAMA_EFFECTIVE_HOST_BINDING"] = previous_binding
+
+
+@app.command("open")
+def open_dashboard(
+    base_url: str = typer.Option(
+        DEFAULT_BASE_URL,
+        help="Daemon base URL. Defaults to http://localhost:11435.",
+    ),
+) -> None:
+    """Open the bundled web dashboard in the default browser."""
+    dashboard_url = _dashboard_url(base_url)
+    opened = webbrowser.open(dashboard_url)
+    if not opened:
+        _exit_with_message(
+            f"Unable to open browser automatically. Open this URL manually: {dashboard_url}",
+            code=1,
+        )
+    typer.echo(dashboard_url)
+
+
+@app.command("dashboard")
+def dashboard(
+    base_url: str = typer.Option(
+        DEFAULT_BASE_URL,
+        help="Daemon base URL. Defaults to http://localhost:11435.",
+    ),
+    timeout: float = typer.Option(10.0, min=0.1, help="HTTP timeout in seconds."),
+) -> None:
+    """Launch the Textual terminal dashboard."""
+    try:
+        from tollama.tui.app import run_dashboard_app
+    except Exception as exc:  # noqa: BLE001
+        _exit_with_runtime_error(RuntimeError(str(exc)))
+
+    api_key = os.environ.get(_API_KEY_ENV_NAME)
+    try:
+        run_dashboard_app(base_url=base_url, timeout=timeout, api_key=api_key)
+    except RuntimeError as exc:
+        _exit_with_runtime_error(exc)
 
 
 @app.command("pull")
@@ -2271,6 +2311,13 @@ def _resolve_runtime_families(family: str | None, *, all_families: bool) -> list
         )
         raise typer.Exit(code=1)
     return [family]
+
+
+def _dashboard_url(base_url: str) -> str:
+    normalized = base_url.rstrip("/")
+    if not normalized:
+        normalized = DEFAULT_BASE_URL
+    return f"{normalized}/dashboard"
 
 
 def main() -> None:

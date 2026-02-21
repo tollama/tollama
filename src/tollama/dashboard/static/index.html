@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Tollama Dashboard</title>
+    <meta name="theme-color" content="#10151f" />
+    <link rel="manifest" href="/dashboard/static/manifest.json" />
+    <link rel="icon" href="/dashboard/static/img/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/dashboard/static/css/dashboard.css" />
+  </head>
+  <body>
+    <div class="background-shape background-shape-a"></div>
+    <div class="background-shape background-shape-b"></div>
+
+    <header class="topbar">
+      <div class="brand-wrap">
+        <div class="brand-badge">TL</div>
+        <div>
+          <h1>Tollama Dashboard</h1>
+          <p id="daemon-meta">Loading daemon state...</p>
+        </div>
+      </div>
+      <div class="topbar-actions">
+        <span id="connection-dot" class="status-dot status-disconnected" aria-live="polite"></span>
+        <button id="theme-toggle" class="btn ghost" type="button">Toggle theme</button>
+        <button id="api-docs-link" class="btn" type="button">API Docs</button>
+      </div>
+    </header>
+
+    <nav class="tabs" aria-label="Dashboard tabs">
+      <button class="tab active" data-tab="overview">Overview <span id="badge-events" class="badge">0</span></button>
+      <button class="tab" data-tab="forecast">Forecast <span id="badge-forecasts" class="badge">0</span></button>
+      <button class="tab" data-tab="models">Models <span id="badge-models" class="badge">0</span></button>
+      <button class="tab" data-tab="compare">Compare</button>
+      <button class="tab" data-tab="help">Help</button>
+    </nav>
+
+    <main class="tab-panels">
+      <section class="panel active" id="tab-overview" data-panel="overview">
+        <div class="grid-2x2">
+          <article id="models-table-panel" class="card"></article>
+          <article id="loaded-models-panel" class="card"></article>
+          <article id="event-log-panel" class="card"></article>
+          <article id="usage-stats-panel" class="card"></article>
+        </div>
+      </section>
+
+      <section class="panel" id="tab-forecast" data-panel="forecast">
+        <article id="forecast-form-panel" class="card"></article>
+        <article id="forecast-result-panel" class="card"></article>
+      </section>
+
+      <section class="panel" id="tab-models" data-panel="models">
+        <article id="model-detail-panel" class="card"></article>
+        <article id="model-actions-panel" class="card"></article>
+      </section>
+
+      <section class="panel" id="tab-compare" data-panel="compare">
+        <article class="card">
+          <h2>Model Comparison</h2>
+          <p>Overlay forecasts from <code>/api/compare</code> and inspect metrics side-by-side.</p>
+          <form id="compare-form" class="stack" autocomplete="off">
+            <label for="compare-models">Models (comma-separated)</label>
+            <input id="compare-models" name="models" type="text" placeholder="mock,timesfm-2.5-200m" required />
+            <label for="compare-series">Series JSON</label>
+            <textarea id="compare-series" name="series" rows="6" required>[{"id":"s1","freq":"D","timestamps":["2025-01-01","2025-01-02"],"target":[10,11]}]</textarea>
+            <label for="compare-horizon">Horizon</label>
+            <input id="compare-horizon" name="horizon" type="number" min="1" value="3" required />
+            <button class="btn" type="submit">Run Compare</button>
+          </form>
+          <canvas id="compare-chart" height="240"></canvas>
+          <pre id="compare-output" class="output"></pre>
+        </article>
+      </section>
+
+      <section class="panel" id="tab-help" data-panel="help">
+        <article class="card">
+          <h2>Keyboard Shortcuts</h2>
+          <ul>
+            <li><code>f</code>: Forecast tab</li>
+            <li><code>m</code>: Models tab</li>
+            <li><code>?</code>: Help tab</li>
+          </ul>
+          <p><a href="/docs" target="_blank" rel="noreferrer">Open API docs</a></p>
+        </article>
+      </section>
+    </main>
+
+    <dialog id="auth-dialog">
+      <form method="dialog" id="auth-form" class="stack">
+        <h2>API Key Required</h2>
+        <p>Enter your Tollama API key. It is stored in <code>sessionStorage</code> only.</p>
+        <label for="api-key-input">API key</label>
+        <input id="api-key-input" type="password" autocomplete="off" required />
+        <menu>
+          <button value="cancel" class="btn ghost" type="submit">Cancel</button>
+          <button value="submit" class="btn" type="submit">Save</button>
+        </menu>
+      </form>
+    </dialog>
+
+    <div id="install-banner" class="install-banner hidden" role="status" aria-live="polite">
+      <span>Install Tollama Dashboard as an app for desktop use.</span>
+      <button id="install-action" class="btn" type="button">Install</button>
+      <button id="install-dismiss" class="btn ghost" type="button">Dismiss</button>
+    </div>
+
+    <script src="/dashboard/static/js/htmx.min.js"></script>
+    <script src="/dashboard/static/js/alpine.min.js"></script>
+    <script src="/dashboard/static/js/chart.min.js"></script>
+    <script src="/dashboard/static/js/forecast.js"></script>
+    <script src="/dashboard/static/js/comparison.js"></script>
+    <script src="/dashboard/static/js/app.js"></script>
+  </body>
+</html>

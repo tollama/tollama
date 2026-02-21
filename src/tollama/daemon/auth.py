@@ -19,6 +19,7 @@ _AUTH_HEADER = "Authorization"
 _AUTH_SCHEME = "Bearer"
 _WWW_AUTHENTICATE = "Bearer"
 _DOCS_PUBLIC_ENV_NAME = "TOLLAMA_DOCS_PUBLIC"
+_DASHBOARD_REQUIRE_AUTH_ENV_NAME = "TOLLAMA_DASHBOARD_REQUIRE_AUTH"
 _DOCS_PUBLIC_PATHS = {"/docs", "/docs/oauth2-redirect", "/redoc", "/openapi.json"}
 
 
@@ -31,7 +32,7 @@ class AuthPrincipal:
 
 def require_api_key(request: Request) -> AuthPrincipal | None:
     """Authenticate request if API keys are configured."""
-    if _is_public_docs_request(request):
+    if _is_public_docs_request(request) or _is_public_dashboard_request(request):
         request.state.auth_principal = None
         return None
 
@@ -166,7 +167,19 @@ def _load_json_object(path: Path) -> dict[str, Any] | None:
 
 
 def _is_public_docs_request(request: Request) -> bool:
-    value = os.environ.get(_DOCS_PUBLIC_ENV_NAME, "").strip().lower()
-    if value not in {"1", "true", "yes", "on"}:
+    if not _env_flag(_DOCS_PUBLIC_ENV_NAME, default=False):
         return False
     return request.url.path in _DOCS_PUBLIC_PATHS
+
+
+def _is_public_dashboard_request(request: Request) -> bool:
+    if not request.url.path.startswith("/dashboard"):
+        return False
+    return not _env_flag(_DASHBOARD_REQUIRE_AUTH_ENV_NAME, default=False)
+
+
+def _env_flag(name: str, *, default: bool) -> bool:
+    value = os.environ.get(name, "").strip().lower()
+    if not value:
+        return default
+    return value in {"1", "true", "yes", "on"}

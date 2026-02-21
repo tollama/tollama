@@ -10,10 +10,10 @@ import sys
 import time
 from collections.abc import Callable, Iterator
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from contextlib import asynccontextmanager
+from contextlib import ExitStack, asynccontextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from importlib import metadata
+from importlib import metadata, resources
 from pathlib import Path
 from queue import Queue
 from threading import Lock, Thread
@@ -28,7 +28,8 @@ from fastapi.openapi.docs import (
     get_swagger_ui_html,
     get_swagger_ui_oauth2_redirect_html,
 )
-from fastapi.responses import JSONResponse, Response, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import (
     BaseModel,
     ConfigDict,
@@ -39,6 +40,7 @@ from pydantic import (
     StrictStr,
     ValidationError,
 )
+from starlette.middleware.cors import CORSMiddleware
 
 from tollama.a2a import A2AOperationHandlers, A2AServer
 from tollama.core.auto_select import AutoSelection, select_auto_models
@@ -126,9 +128,11 @@ from tollama.core.storage import (
     write_manifest,
 )
 from tollama.core.synthetic import generate_synthetic_series
+from tollama.dashboard import create_dashboard_html_router
 
 from .auth import current_key_id, require_api_key
 from .covariates import apply_covariate_capabilities, build_covariate_profile, normalize_covariates
+from .dashboard_api import create_dashboard_router
 from .loaded_models import LoadedModelTracker, parse_keep_alive, to_utc_iso
 from .metering import UsageMeter, create_usage_meter, usage_unavailable_hint
 from .metrics import (
@@ -173,6 +177,9 @@ TOKEN_ENV_KEYS = (
     "HF_HUB_TOKEN",
 )
 DOCS_PUBLIC_ENV_NAME = "TOLLAMA_DOCS_PUBLIC"
+CORS_ORIGINS_ENV_NAME = "TOLLAMA_CORS_ORIGINS"
+DASHBOARD_ENABLED_ENV_NAME = "TOLLAMA_DASHBOARD"
+DASHBOARD_REQUIRE_AUTH_ENV_NAME = "TOLLAMA_DASHBOARD_REQUIRE_AUTH"
 
 _OPENAPI_TAGS = [
     {
@@ -415,9 +422,14 @@ class V1ModelDeleteResponse(BaseModel):
 @asynccontextmanager
 async def _lifespan(app: FastAPI):
     app.state.started_at = datetime.now(UTC)
-    yield
-    app.state.runner_manager.stop()
-    app.state.loaded_model_tracker.clear()
+    try:
+        yield
+    finally:
+        app.state.runner_manager.stop()
+        app.state.loaded_model_tracker.clear()
+        dashboard_resource_stack = getattr(app.state, "dashboard_resource_stack", None)
+        if isinstance(dashboard_resource_stack, ExitStack):
+            dashboard_resource_stack.close()
 
 
 def create_app(*, runner_manager: RunnerManager | None = None) -> FastAPI:
@@ -444,6 +456,63 @@ def create_app(*, runner_manager: RunnerManager | None = None) -> FastAPI:
     app.state.usage_meter = _build_usage_meter()
     app.state.rate_limiter = _build_rate_limiter()
     app.state.event_stream = EventStream()
+    app.state.dashboard_resource_stack = ExitStack()
+    app.state.dashboard_index_path = None
+
+    cors_origins = _resolve_cors_origins_from_env()
+    if cors_origins:
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=list(cors_origins),
+            allow_methods=["*"],
+            allow_headers=["*"],
+        )
+
+    dashboard_enabled = _dashboard_enabled()
+    dashboard_require_auth = _dashboard_require_auth_enabled()
+    app.state.dashboard_enabled = dashboard_enabled
+    app.state.dashboard_require_auth = dashboard_require_auth
+    if dashboard_require_auth:
+
+        @app.middleware("http")
+        async def _dashboard_static_auth_middleware(
+            request: Request,
+            call_next: Callable[..., Any],
+        ) -> Response:
+            if request.url.path.startswith("/dashboard/static"):
+                try:
+                    require_api_key(request)
+                except HTTPException as exc:
+                    content = jsonable_encoder(
+                        _http_error_body(status_code=exc.status_code, detail=exc.detail),
+                        custom_encoder={ValueError: str},
+                    )
+                    return JSONResponse(
+                        status_code=exc.status_code,
+                        content=content,
+                        headers=exc.headers,
+                    )
+            return await call_next(request)
+
+    if dashboard_enabled:
+        dashboard_static_dir = _resolve_dashboard_static_dir(app)
+        app.mount(
+            "/dashboard/static",
+            StaticFiles(directory=str(dashboard_static_dir)),
+            name="dashboard-static",
+        )
+        app.state.dashboard_index_path = dashboard_static_dir / "index.html"
+        app.include_router(
+            create_dashboard_html_router(partials_dir=dashboard_static_dir / "partials"),
+        )
+
+        @app.get("/dashboard", include_in_schema=False)
+        @app.get("/dashboard/{path:path}", include_in_schema=False)
+        def dashboard(_path: str = "") -> Response:
+            del _path
+            index_path = _dashboard_index_path(app)
+            return FileResponse(index_path)
+
     if app.state.prometheus_metrics is not None:
         app.add_middleware(
             ForecastMetricsMiddleware,
@@ -980,6 +1049,14 @@ def create_app(*, runner_manager: RunnerManager | None = None) -> FastAPI:
                 },
             )
         return {"models": models}
+
+    app.include_router(
+        create_dashboard_router(
+            info_provider=info,
+            ps_provider=ps,
+            usage_provider=usage,
+        )
+    )
 
     @app.get(
         "/v1/health",
@@ -3918,10 +3995,53 @@ def _uptime_seconds(*, started_at: datetime | None, now: datetime) -> int:
 
 
 def _docs_public_enabled() -> bool:
-    raw = _env_or_none(DOCS_PUBLIC_ENV_NAME)
+    return _env_flag(DOCS_PUBLIC_ENV_NAME, default=False)
+
+
+def _resolve_cors_origins_from_env() -> tuple[str, ...]:
+    raw = _env_or_none(CORS_ORIGINS_ENV_NAME)
     if raw is None:
-        return False
-    return raw.lower() in {"1", "true", "yes", "on"}
+        return ()
+
+    origins: list[str] = []
+    seen: set[str] = set()
+    for item in raw.split(","):
+        origin = item.strip()
+        if not origin or origin in seen:
+            continue
+        seen.add(origin)
+        origins.append(origin)
+    return tuple(origins)
+
+
+def _dashboard_enabled() -> bool:
+    return _env_flag(DASHBOARD_ENABLED_ENV_NAME, default=True)
+
+
+def _dashboard_require_auth_enabled() -> bool:
+    return _env_flag(DASHBOARD_REQUIRE_AUTH_ENV_NAME, default=False)
+
+
+def _resolve_dashboard_static_dir(app: FastAPI) -> Path:
+    resource_stack = getattr(app.state, "dashboard_resource_stack", None)
+    if not isinstance(resource_stack, ExitStack):
+        raise RuntimeError("dashboard resources are unavailable")
+
+    try:
+        static_resource = resources.files("tollama.dashboard").joinpath("static")
+    except ModuleNotFoundError as exc:
+        raise RuntimeError("dashboard package is unavailable") from exc
+    static_dir = Path(resource_stack.enter_context(resources.as_file(static_resource)))
+    if not static_dir.exists():
+        raise RuntimeError("dashboard static assets are unavailable")
+    return static_dir
+
+
+def _dashboard_index_path(app: FastAPI) -> Path:
+    index_path = getattr(app.state, "dashboard_index_path", None)
+    if isinstance(index_path, Path) and index_path.exists():
+        return index_path
+    raise HTTPException(status_code=503, detail="dashboard assets are unavailable")
 
 
 def _resolve_host_binding_from_env() -> str | None:
@@ -3941,6 +4061,16 @@ def _resolve_host_binding_from_env() -> str | None:
 
 def _env_or_none(name: str) -> str | None:
     return _optional_nonempty_str(os.environ.get(name))
+
+
+def _env_flag(name: str, *, default: bool) -> bool:
+    raw = _env_or_none(name)
+    if raw is None:
+        return default
+    resolved = _optional_bool_str(raw)
+    if resolved is None:
+        return default
+    return resolved
 
 
 def _utc_now_iso() -> str:

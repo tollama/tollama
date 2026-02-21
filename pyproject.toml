@@ -51,6 +51,7 @@ tollama-runner-uni2ts = "tollama.runners.uni2ts_runner.main:main"
 tollama-runner-sundial = "tollama.runners.sundial_runner.main:main"
 tollama-runner-toto = "tollama.runners.toto_runner.main:main"
 tollama-mcp = "tollama.mcp.__main__:main"
+tollama-dashboard = "tollama.tui.app:main"
 
 [project.optional-dependencies]
 dev = [
@@ -110,12 +111,19 @@ runner_toto = [
   "numpy>=1.26,<3.0",
   "pandas>=2.0,<3.0",
 ]
+tui = [
+  "textual>=0.47,<1.0",
+]
 
 [tool.setuptools]
 package-dir = { "" = "src" }
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+"tollama.dashboard" = ["static/**/*"]
+"tollama.tui" = ["styles/*.tcss"]
 
 [tool.ruff]
 target-version = "py311"

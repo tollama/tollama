@@ -145,6 +145,25 @@ print(comparison.summary)
   - `forecast.progress`
   - `forecast.complete`
 
+## Dashboards (Web + TUI)
+
+- Web dashboard ships with the Python package and is served by daemon routes:
+  - `GET /dashboard`
+  - `GET /dashboard/{path:path}` (SPA-style deep-link fallback)
+  - `GET /dashboard/static/*` (bundled assets)
+  - `GET /dashboard/partials/{name}` (HTML partial templates)
+- Aggregated bootstrap endpoint: `GET /api/dashboard/state`
+  - combines `/api/info`, `/api/ps`, and `/api/usage`
+  - follows existing API-key auth policy (same as other `/api/*` routes)
+  - returns partial data plus `warnings[]` when one source is unavailable
+- Dashboard environment flags:
+  - `TOLLAMA_DASHBOARD` (`1/0`, default enabled)
+  - `TOLLAMA_DASHBOARD_REQUIRE_AUTH` (`1/0`, default disabled)
+  - `TOLLAMA_CORS_ORIGINS` (comma-separated explicit allowlist; no wildcard default)
+- CLI helpers:
+  - `tollama open` opens the web dashboard in a browser
+  - `tollama dashboard` launches the Textual TUI (install with `python -m pip install -e \".[tui]\"`)
+
 ## Structured Intelligence + Generative Planning
 
 - `POST /api/report` returns composite structured intelligence in one call:

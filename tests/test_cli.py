@@ -15,6 +15,7 @@ from tollama.cli.client import DaemonHTTPError
 from tollama.cli.main import (
     _RUN_TIMEOUT_SECONDS,
     _complete_model_names,
+    _dashboard_url,
     _prompt_example_request_path,
     _render_table,
     _resolve_default_request_path,
@@ -89,6 +90,62 @@ def test_serve_runs_uvicorn_with_expected_defaults(monkeypatch) -> None:
         "port": 11435,
         "log_level": "info",
     }
+
+
+def test_open_command_launches_browser(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    def _fake_open(url: str) -> bool:
+        captured["url"] = url
+        return True
+
+    monkeypatch.setattr("tollama.cli.main.webbrowser.open", _fake_open)
+    runner = _new_runner()
+    result = runner.invoke(app, ["open", "--base-url", "http://127.0.0.1:11435"])
+
+    assert result.exit_code == 0
+    assert captured["url"] == "http://127.0.0.1:11435/dashboard"
+    assert "http://127.0.0.1:11435/dashboard" in _result_stdout(result)
+
+
+def test_open_command_fails_when_browser_cannot_open(monkeypatch) -> None:
+    monkeypatch.setattr("tollama.cli.main.webbrowser.open", lambda *_args, **_kwargs: False)
+    runner = _new_runner()
+
+    result = runner.invoke(app, ["open"])
+
+    assert result.exit_code == 1
+    assert "Unable to open browser automatically." in _result_stdout(result)
+
+
+def test_dashboard_command_invokes_tui_runner(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    def _fake_run_dashboard_app(*, base_url: str, timeout: float, api_key: str | None) -> None:
+        captured["base_url"] = base_url
+        captured["timeout"] = timeout
+        captured["api_key"] = api_key
+
+    monkeypatch.setattr("tollama.tui.app.run_dashboard_app", _fake_run_dashboard_app)
+    monkeypatch.setenv("TOLLAMA_API_KEY", "secret-key")
+    runner = _new_runner()
+
+    result = runner.invoke(
+        app,
+        ["dashboard", "--base-url", "http://localhost:11999", "--timeout", "3.5"],
+    )
+
+    assert result.exit_code == 0
+    assert captured == {
+        "base_url": "http://localhost:11999",
+        "timeout": 3.5,
+        "api_key": "secret-key",
+    }
+
+
+def test_dashboard_url_helper_normalizes_trailing_slash() -> None:
+    assert _dashboard_url("http://localhost:11435/") == "http://localhost:11435/dashboard"
+    assert _dashboard_url("") == "http://localhost:11435/dashboard"
 
 
 def test_pull_supports_streaming_and_non_stream(monkeypatch) -> None:

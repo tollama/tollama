@@ -1,0 +1,44 @@
+Screen {
+  background: #0d131c;
+  color: #e8edf3;
+}
+
+Header {
+  background: #12233a;
+  color: #f5fbff;
+}
+
+Footer {
+  background: #101a28;
+  color: #9fb5cb;
+}
+
+#dashboard-grid {
+  layout: grid;
+  grid-size: 2 2;
+  grid-gutter: 1 2;
+  padding: 1 2;
+  height: 1fr;
+}
+
+#installed-models,
+#loaded-models,
+#quick-stats,
+#forecast-output,
+#model-output,
+#events,
+#model-events {
+  border: round #34506c;
+  padding: 1 2;
+  margin: 1 0;
+  background: #111a28;
+}
+
+#forecast-layout,
+#model-detail-layout {
+  padding: 1 2;
+}
+
+Button {
+  margin-right: 1;
+}

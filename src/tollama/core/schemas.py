@@ -1306,6 +1306,23 @@ class ForecastReport(CanonicalModel):
     narrative: ReportNarrative | None = None
 
 
+class DashboardStateWarning(CanonicalModel):
+    """Warning entry for partial dashboard-state aggregation failures."""
+
+    source: Literal["info", "ps", "usage"]
+    status_code: StrictInt = Field(ge=400, le=599)
+    detail: NonEmptyStr
+
+
+class DashboardStateResponse(CanonicalModel):
+    """Aggregated payload for dashboard bootstrap state."""
+
+    info: dict[NonEmptyStr, JsonValue] | None = None
+    ps: dict[NonEmptyStr, JsonValue] | None = None
+    usage: dict[NonEmptyStr, JsonValue] | None = None
+    warnings: list[DashboardStateWarning] = Field(default_factory=list)
+
+
 def _validate_covariate_values(
     *,
     name: str,

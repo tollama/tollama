@@ -134,6 +134,10 @@
   - 현재: API 레퍼런스 문서(`docs/api-reference.md`) 추가 + OpenAPI 문서(`/docs`, `/redoc`, `/openapi.json`) 메타데이터 강화
   - 현재: API key 설정 시 docs/openapi 엔드포인트도 기본 인증 적용(`TOLLAMA_DOCS_PUBLIC=1`로 로컬 공개 가능)
   - 현재: tutorial notebook 4종 추가(covariates/comparison/what-if/auto-forecast, matplotlib+plotly) 및 CI 실행 단계 추가
+  - 현재: 번들 Web Dashboard 1차 추가(`/dashboard`, `/dashboard/static/*`, `/dashboard/partials/{name}`)
+  - 현재: 집계 endpoint `GET /api/dashboard/state` 추가(부분 실패 시 `warnings[]` 반환)
+  - 현재: Dashboard 보안/노출 제어 env 추가(`TOLLAMA_DASHBOARD`, `TOLLAMA_DASHBOARD_REQUIRE_AUTH`, `TOLLAMA_CORS_ORIGINS`)
+  - 현재: CLI `tollama open`, `tollama dashboard` 및 optional `[tui]` extra + `tollama-dashboard` 스크립트 추가
 - [ ] (P1) "pull이 런타임까지 설치"되는 installer(런타임 venv 자동 구성) 확립
 
 ### Stage 2 (P1): "공통 전처리/공변량 표준화"
