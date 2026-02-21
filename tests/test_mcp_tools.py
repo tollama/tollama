@@ -651,7 +651,12 @@ def test_tollama_pipeline_invalid_request_maps_to_invalid_request() -> None:
 def test_tollama_show_model_missing_maps_to_mcp_error(monkeypatch) -> None:
     class _FakeClient:
         def show(self, _model: str) -> dict[str, Any]:
-            raise ModelMissingError(action="show model", status_code=404, detail="missing")
+            raise ModelMissingError(
+                action="show model",
+                status_code=404,
+                detail="missing",
+                hint="Run `tollama pull missing`.",
+            )
 
     monkeypatch.setattr("tollama.mcp.tools._make_client", lambda **_: _FakeClient())
 
@@ -660,3 +665,4 @@ def test_tollama_show_model_missing_maps_to_mcp_error(monkeypatch) -> None:
 
     assert exc_info.value.exit_code == 4
     assert exc_info.value.category == "MODEL_MISSING"
+    assert exc_info.value.hint == "Run `tollama pull missing`."

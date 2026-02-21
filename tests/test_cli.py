@@ -12,7 +12,12 @@ import pytest
 from typer.testing import CliRunner
 
 from tollama.cli.client import DaemonHTTPError
-from tollama.cli.main import _RUN_TIMEOUT_SECONDS, _resolve_default_request_path, app
+from tollama.cli.main import (
+    _RUN_TIMEOUT_SECONDS,
+    _complete_model_names,
+    _resolve_default_request_path,
+    app,
+)
 
 
 def _sample_request_payload() -> dict[str, object]:
@@ -195,6 +200,76 @@ def test_pull_supports_streaming_and_non_stream(monkeypatch) -> None:
         "token": "flag-token",
         "include_null_fields": set(),
     }
+
+
+def test_pull_prints_hint_when_client_error_exposes_hint(monkeypatch) -> None:
+    class _HintedError(RuntimeError):
+        def __init__(self, message: str, hint: str) -> None:
+            super().__init__(message)
+            self.hint = hint
+
+    class _FakeClient:
+        def __init__(self, base_url: str, timeout: float) -> None:
+            del base_url, timeout
+
+        def pull_model(
+            self,
+            name: str,
+            *,
+            stream: bool,
+            accept_license: bool = False,
+            insecure: bool | None = None,
+            offline: bool | None = None,
+            local_files_only: bool | None = None,
+            http_proxy: str | None = None,
+            https_proxy: str | None = None,
+            no_proxy: str | None = None,
+            hf_home: str | None = None,
+            max_workers: int | None = None,
+            token: str | None = None,
+            include_null_fields: set[str] | None = None,
+        ) -> dict[str, object]:
+            del (
+                name,
+                stream,
+                accept_license,
+                insecure,
+                offline,
+                local_files_only,
+                http_proxy,
+                https_proxy,
+                no_proxy,
+                hf_home,
+                max_workers,
+                token,
+                include_null_fields,
+            )
+            raise _HintedError("model missing", "Run `tollama pull <model>`.")
+
+    monkeypatch.setattr("tollama.cli.main.TollamaClient", _FakeClient)
+    runner = _new_runner()
+
+    result = runner.invoke(app, ["pull", "missing", "--no-stream"])
+
+    assert result.exit_code == 1
+    stderr = _result_stderr(result)
+    assert "Error: model missing" in stderr
+    assert "Hint: Run `tollama pull <model>`." in stderr
+
+
+def test_complete_model_names_uses_registry_and_installed_entries(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "tollama.cli.main.list_registry_models",
+        lambda: [SimpleNamespace(name="chronos2"), SimpleNamespace(name="timesfm-2.5-200m")],
+    )
+    monkeypatch.setattr(
+        "tollama.cli.main.list_installed",
+        lambda: [{"name": "local-model"}, {"name": 123}],
+    )
+
+    assert _complete_model_names("ch") == ["chronos2"]
+    all_names = _complete_model_names("")
+    assert all_names == ["chronos2", "local-model", "timesfm-2.5-200m"]
 
 
 def test_list_ps_show_and_rm_commands_call_api_client(monkeypatch) -> None:

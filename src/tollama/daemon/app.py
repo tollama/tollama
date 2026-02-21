@@ -338,7 +338,25 @@ def create_app(*, runner_manager: RunnerManager | None = None) -> FastAPI:
             exc.errors(),
             custom_encoder={ValueError: str},
         )
-        return JSONResponse(status_code=400, content={"detail": detail})
+        return JSONResponse(
+            status_code=400,
+            content=_http_error_body(status_code=400, detail=detail),
+        )
+
+    @app.exception_handler(HTTPException)
+    async def _http_exception_handler(
+        _request: Request,
+        exc: HTTPException,
+    ) -> JSONResponse:
+        content = jsonable_encoder(
+            _http_error_body(status_code=exc.status_code, detail=exc.detail),
+            custom_encoder={ValueError: str},
+        )
+        return JSONResponse(
+            status_code=exc.status_code,
+            content=content,
+            headers=exc.headers,
+        )
 
     @app.get("/api/version")
     def version() -> dict[str, str]:
@@ -2698,6 +2716,75 @@ def _runner_error_detail(exc: RunnerCallError | RunnerProtocolError) -> dict[str
             detail["data"] = exc.data
         return detail
     return str(exc)
+
+
+def _http_error_body(*, status_code: int, detail: Any) -> dict[str, Any]:
+    payload: dict[str, Any] = {"detail": detail}
+    hint = _http_error_hint(status_code=status_code, detail=detail)
+    if hint is not None:
+        payload["hint"] = hint
+    return payload
+
+
+def _http_error_hint(*, status_code: int, detail: Any) -> str | None:
+    detail_text = _http_error_detail_text(detail).lower()
+
+    if status_code == 400:
+        return "Fix request payload or parameters and retry."
+
+    if status_code == 404:
+        if "model" in detail_text and "not installed" in detail_text:
+            return (
+                "Run `tollama pull <model>` to install. "
+                "Use `tollama info --json` to inspect available models."
+            )
+        return None
+
+    if status_code in {401, 403, 409}:
+        if (
+            "license" in detail_text
+            or "accept_license" in detail_text
+            or "accept-license" in detail_text
+        ):
+            return (
+                "Re-run with `--accept-license`, or call "
+                "`tollama pull <model> --accept-license`."
+            )
+        return None
+
+    if status_code in {408, 504}:
+        return "Try a smaller series or increase timeout."
+
+    if status_code == 503:
+        if "runner unavailable" in detail_text:
+            return "Install and start the required runner family, then retry."
+        return "Retry after daemon dependencies are available."
+
+    return None
+
+
+def _http_error_detail_text(detail: Any) -> str:
+    if isinstance(detail, str):
+        return detail
+    if isinstance(detail, dict):
+        message = detail.get("message")
+        if isinstance(message, str) and message:
+            return message
+        try:
+            return json.dumps(detail, separators=(",", ":"), sort_keys=True)
+        except TypeError:
+            return str(detail)
+    if isinstance(detail, list):
+        parts: list[str] = []
+        for item in detail:
+            if isinstance(item, dict):
+                msg = item.get("msg")
+                if isinstance(msg, str) and msg:
+                    parts.append(msg)
+                    continue
+            parts.append(str(item))
+        return "; ".join(parts)
+    return str(detail)
 
 
 def _format_validation_errors(errors: list[dict[str, Any]]) -> list[str]:

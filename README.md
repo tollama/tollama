@@ -24,6 +24,18 @@ tollama serve
 tollama quickstart
 ```
 
+## Shell Completion
+
+Typer completion is available out of the box:
+
+```bash
+# install completion for your current shell
+tollama --install-completion
+
+# print completion script for custom setup
+tollama --show-completion
+```
+
 ## Python SDK
 
 ```python
@@ -257,8 +269,12 @@ docker compose --profile gpu up --build tollama-gpu
 These defaults are applied by the daemon on `/api/pull`, so any API client benefits.
 
 ```bash
+# write a default config file
+tollama config init
+
 # inspect current defaults
 tollama config list
+tollama config keys
 
 # set persistent defaults
 tollama config set pull.https_proxy http://proxy:3128
@@ -270,6 +286,7 @@ tollama pull chronos2
 ```
 
 Tokens are intentionally not persisted in config. Use `TOLLAMA_HF_TOKEN` or `--token`.
+Unknown config keys return suggestions (for example `offline` -> `pull.offline`).
 
 ## Diagnostics Endpoint: `/api/info`
 
@@ -684,7 +701,7 @@ MCP tools map client/daemon failures to a stable category + exit-code-aligned pa
 MCP server emits tool failures as:
 
 ```json
-{"error":{"category":"...","exit_code":3,"message":"..."}}
+{"error":{"category":"...","exit_code":3,"message":"...","hint":"..."}}
 ```
 
 ### Defaults and overrides

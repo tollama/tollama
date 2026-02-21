@@ -97,7 +97,8 @@ def test_forecast_accepts_pandas_series_input() -> None:
         name="sales",
     )
     sdk = Tollama(client=_FakeClient())  # type: ignore[arg-type]
-    result = sdk.forecast(model="chronos2", series=history, horizon=3)
+    with pytest.warns(UserWarning, match="Inferred frequency 'D'"):
+        result = sdk.forecast(model="chronos2", series=history, horizon=3)
 
     request = captured["request"]
     assert request.series[0].id == "sales"
@@ -137,7 +138,8 @@ def test_forecast_accepts_wide_pandas_dataframe_for_multi_series() -> None:
         index=pd.date_range("2025-01-01", periods=3, freq="D"),
     )
     sdk = Tollama(client=_FakeClient())  # type: ignore[arg-type]
-    result = sdk.forecast(model="timesfm-2.5-200m", series=frame, horizon=1)
+    with pytest.warns(UserWarning, match="Inferred frequency 'D'"):
+        result = sdk.forecast(model="timesfm-2.5-200m", series=frame, horizon=1)
 
     request = captured["request"]
     assert [series.id for series in request.series] == ["north", "south"]
@@ -572,6 +574,33 @@ def test_series_mapping_requires_target() -> None:
 
     with pytest.raises(ValueError, match="target"):
         sdk.forecast(model="chronos2", series={"freq": "D"}, horizon=2)
+    with pytest.raises(ValueError, match="Found keys: freq"):
+        sdk.forecast(model="chronos2", series={"freq": "D"}, horizon=2)
+
+
+def test_wide_dataframe_validation_includes_found_columns() -> None:
+    sdk = Tollama(client=object())  # type: ignore[arg-type]
+    frame = pd.DataFrame({"label": ["a", "b", "c"]})
+
+    with pytest.raises(ValueError, match="Found columns: label"):
+        sdk.forecast(model="chronos2", series=frame, horizon=2)
+
+
+def test_series_freq_inference_emits_warning() -> None:
+    class _FakeClient:
+        def forecast_response(self, request: ForecastRequest) -> ForecastResponse:
+            assert request.series[0].freq == "D"
+            return _single_series_response(series_id=request.series[0].id)
+
+    sdk = Tollama(client=_FakeClient())  # type: ignore[arg-type]
+    series = pd.Series(
+        [10.0, 11.0, 12.0],
+        index=pd.date_range("2025-01-01", periods=3, freq="D"),
+        name="demand",
+    )
+
+    with pytest.warns(UserWarning, match="Inferred frequency 'D'"):
+        sdk.forecast(model="chronos2", series=series, horizon=2)
 
 
 def test_pipeline_accepts_series_dict_and_returns_typed_payload() -> None:

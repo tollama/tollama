@@ -24,6 +24,7 @@ class TollamaClientError(RuntimeError):
         action: str,
         detail: str,
         status_code: int | None = None,
+        hint: str | None = None,
     ) -> None:
         message = f"{action} failed"
         if status_code is not None:
@@ -34,6 +35,7 @@ class TollamaClientError(RuntimeError):
         self.action = action
         self.detail = detail
         self.status_code = status_code
+        self.hint = hint
 
     @property
     def exit_code(self) -> int:

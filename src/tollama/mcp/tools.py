@@ -54,6 +54,7 @@ class MCPToolError(RuntimeError):
     category: str
     exit_code: int
     message: str
+    hint: str | None = None
 
     def __str__(self) -> str:  # pragma: no cover - trivial
         return self.message
@@ -71,6 +72,7 @@ def _raise_from_client_error(exc: TollamaClientError) -> None:
         category=exc.category,
         exit_code=exc.exit_code,
         message=str(exc),
+        hint=exc.hint,
     ) from exc
 
 

@@ -6,15 +6,23 @@ import json
 import os
 import shutil
 import sys
+from difflib import get_close_matches
 from pathlib import Path
-from typing import Any, NoReturn
+from typing import Any, NoReturn, cast
 
 import httpx
 import typer
 import uvicorn
 
-from tollama.core.config import ConfigFileError, load_config, update_config
-from tollama.core.registry import get_model_spec
+from tollama.core.config import (
+    CONFIG_KEY_DESCRIPTIONS,
+    ConfigFileError,
+    TollamaConfig,
+    load_config,
+    save_config,
+    update_config,
+)
+from tollama.core.registry import get_model_spec, list_registry_models
 from tollama.core.runtime_bootstrap import (
     FAMILY_EXTRAS,
     FAMILY_PYTHON_CONSTRAINTS,
@@ -23,7 +31,7 @@ from tollama.core.runtime_bootstrap import (
     list_runtime_statuses,
     remove_family_runtime,
 )
-from tollama.core.storage import TollamaPaths
+from tollama.core.storage import TollamaPaths, list_installed
 
 from .client import (
     DEFAULT_BASE_URL,
@@ -43,14 +51,8 @@ app.add_typer(runtime_app, name="runtime")
 app.add_typer(modelfile_app, name="modelfile")
 
 _CONFIG_KEY_PATHS: dict[str, tuple[str, str]] = {
-    "pull.offline": ("pull", "offline"),
-    "pull.hf_home": ("pull", "hf_home"),
-    "pull.http_proxy": ("pull", "http_proxy"),
-    "pull.https_proxy": ("pull", "https_proxy"),
-    "pull.no_proxy": ("pull", "no_proxy"),
-    "pull.local_files_only": ("pull", "local_files_only"),
-    "pull.insecure": ("pull", "insecure"),
-    "pull.max_workers": ("pull", "max_workers"),
+    key: cast(tuple[str, str], tuple(key.split(".", maxsplit=1)))
+    for key in CONFIG_KEY_DESCRIPTIONS
 }
 _BOOL_CONFIG_KEYS = {
     "pull.offline",
@@ -78,6 +80,63 @@ def _exit_with_message(message: str, *, code: int = 2) -> NoReturn:
     raise typer.Exit(code=code)
 
 
+def _error_hint(exc: BaseException) -> str | None:
+    value = getattr(exc, "hint", None)
+    if isinstance(value, str):
+        normalized = value.strip()
+        if normalized:
+            return normalized
+    return None
+
+
+def _exit_with_runtime_error(exc: RuntimeError, *, code: int = 1) -> NoReturn:
+    typer.echo(f"Error: {exc}", err=True)
+    hint = _error_hint(exc)
+    if hint is not None:
+        typer.echo(f"Hint: {hint}", err=True)
+    raise typer.Exit(code=code) from exc
+
+
+def _extract_completion_incomplete(*args: Any) -> str:
+    if not args:
+        return ""
+    candidate = args[-1]
+    if isinstance(candidate, str):
+        return candidate
+    return ""
+
+
+def _complete_model_names(*args: Any) -> list[str]:
+    incomplete = _extract_completion_incomplete(*args).lower()
+    names: set[str] = set()
+
+    try:
+        for spec in list_registry_models():
+            names.add(spec.name)
+    except Exception:  # noqa: BLE001
+        pass
+
+    try:
+        for manifest in list_installed():
+            name = manifest.get("name")
+            if isinstance(name, str) and name:
+                names.add(name)
+    except Exception:  # noqa: BLE001
+        pass
+
+    if not incomplete:
+        return sorted(names)
+    return sorted(name for name in names if name.lower().startswith(incomplete))
+
+
+def _complete_config_keys(*args: Any) -> list[str]:
+    incomplete = _extract_completion_incomplete(*args)
+    if not incomplete:
+        return sorted(_CONFIG_KEY_PATHS)
+    lowered = incomplete.lower()
+    return sorted(key for key in _CONFIG_KEY_PATHS if key.lower().startswith(lowered))
+
+
 @app.command("serve")
 def serve(
     host: str = typer.Option(DEFAULT_DAEMON_HOST, help="Host to bind for the daemon."),
@@ -98,7 +157,11 @@ def serve(
 
 @app.command("pull")
 def pull(
-    model: str = typer.Argument(..., help="Model name to pull."),
+    model: str = typer.Argument(
+        ...,
+        help="Model name to pull.",
+        autocompletion=_complete_model_names,
+    ),
     no_stream: bool = typer.Option(False, "--no-stream", help="Disable streaming pull output."),
     accept_license: bool = typer.Option(
         False,
@@ -179,8 +242,7 @@ def pull(
             include_null_fields=include_null_fields,
         )
     except RuntimeError as exc:
-        typer.echo(f"Error: {exc}", err=True)
-        raise typer.Exit(code=1) from exc
+        _exit_with_runtime_error(exc)
     _emit_result(result, stream_kind="pull")
 
 
@@ -192,8 +254,7 @@ def config_list(
     try:
         config = load_config(TollamaPaths.default())
     except ConfigFileError as exc:
-        typer.echo(f"Error: {exc}", err=True)
-        raise typer.Exit(code=1) from exc
+        _exit_with_runtime_error(exc)
 
     payload = config.model_dump(mode="json")
     if json_output:
@@ -204,15 +265,18 @@ def config_list(
 
 @config_app.command("get")
 def config_get(
-    key: str = typer.Argument(..., help="Config key path (example: pull.offline)."),
+    key: str = typer.Argument(
+        ...,
+        help="Config key path (example: pull.offline).",
+        autocompletion=_complete_config_keys,
+    ),
 ) -> None:
     """Get one config value."""
     key_path = _resolve_config_key_path(key)
     try:
         config = load_config(TollamaPaths.default())
     except ConfigFileError as exc:
-        typer.echo(f"Error: {exc}", err=True)
-        raise typer.Exit(code=1) from exc
+        _exit_with_runtime_error(exc)
 
     payload = config.model_dump(mode="json")
     value = payload[key_path[0]][key_path[1]]
@@ -221,7 +285,11 @@ def config_get(
 
 @config_app.command("set")
 def config_set(
-    key: str = typer.Argument(..., help="Config key path (example: pull.offline)."),
+    key: str = typer.Argument(
+        ...,
+        help="Config key path (example: pull.offline).",
+        autocompletion=_complete_config_keys,
+    ),
     value: str = typer.Argument(..., help="New value."),
 ) -> None:
     """Set one config value."""
@@ -231,13 +299,16 @@ def config_set(
     try:
         update_config(TollamaPaths.default(), updates)
     except ConfigFileError as exc:
-        typer.echo(f"Error: {exc}", err=True)
-        raise typer.Exit(code=1) from exc
+        _exit_with_runtime_error(exc)
 
 
 @config_app.command("unset")
 def config_unset(
-    key: str = typer.Argument(..., help="Config key path (example: pull.offline)."),
+    key: str = typer.Argument(
+        ...,
+        help="Config key path (example: pull.offline).",
+        autocompletion=_complete_config_keys,
+    ),
 ) -> None:
     """Unset one config value by writing null."""
     key_path = _resolve_config_key_path(key)
@@ -245,8 +316,54 @@ def config_unset(
     try:
         update_config(TollamaPaths.default(), updates)
     except ConfigFileError as exc:
-        typer.echo(f"Error: {exc}", err=True)
-        raise typer.Exit(code=1) from exc
+        _exit_with_runtime_error(exc)
+
+
+@config_app.command("keys")
+def config_keys(
+    json_output: bool = typer.Option(False, "--json", help="Print compact JSON."),
+) -> None:
+    """List writable config keys with descriptions and current values."""
+    try:
+        config = load_config(TollamaPaths.default())
+    except ConfigFileError as exc:
+        _exit_with_runtime_error(exc)
+
+    entries = _config_key_entries(config)
+    if json_output:
+        typer.echo(json.dumps(entries, separators=(",", ":"), sort_keys=True))
+        return
+
+    rows = [
+        (entry["key"], _format_config_scalar(entry["value"]), entry["description"])
+        for entry in entries
+    ]
+    typer.echo(_render_table(("KEY", "VALUE", "DESCRIPTION"), rows))
+
+
+@config_app.command("init")
+def config_init(
+    force: bool = typer.Option(
+        False,
+        "--force",
+        help="Overwrite an existing config.json.",
+    ),
+) -> None:
+    """Write a default config.json template with valid JSON values."""
+    paths = TollamaPaths.default()
+    config_path = paths.config_path
+
+    if config_path.exists() and not force:
+        _exit_with_message(
+            f"config already exists at {config_path} (use --force to overwrite)",
+            code=1,
+        )
+
+    try:
+        save_config(paths, TollamaConfig())
+    except OSError as exc:
+        _exit_with_message(f"Error: unable to write {config_path}: {exc}", code=1)
+    typer.echo(f"Wrote default config to {config_path}")
 
 
 @app.command("info")
@@ -288,7 +405,7 @@ def info(
             api_key=_env_api_key(),
         )
     except RuntimeError as exc:
-        _exit_with_message(f"Error: {exc}", code=1)
+        _exit_with_runtime_error(exc)
 
     if json_output:
         typer.echo(json.dumps(snapshot, indent=2, sort_keys=True))
@@ -350,8 +467,7 @@ def list_models(
     try:
         response = client.list_tags()
     except RuntimeError as exc:
-        typer.echo(f"Error: {exc}", err=True)
-        raise typer.Exit(code=1) from exc
+        _exit_with_runtime_error(exc)
     if json_output:
         typer.echo(json.dumps(response, indent=2, sort_keys=True))
         return
@@ -376,8 +492,7 @@ def ps(
     try:
         response = client.list_running()
     except RuntimeError as exc:
-        typer.echo(f"Error: {exc}", err=True)
-        raise typer.Exit(code=1) from exc
+        _exit_with_runtime_error(exc)
     if json_output:
         typer.echo(json.dumps(response, indent=2, sort_keys=True))
         return
@@ -390,7 +505,11 @@ def ps(
 
 @app.command("show")
 def show(
-    model: str = typer.Argument(..., help="Model name to inspect."),
+    model: str = typer.Argument(
+        ...,
+        help="Model name to inspect.",
+        autocompletion=_complete_model_names,
+    ),
     base_url: str = typer.Option(
         DEFAULT_BASE_URL,
         help="Daemon base URL. Defaults to http://localhost:11435.",
@@ -402,14 +521,17 @@ def show(
     try:
         response = client.show_model(model)
     except RuntimeError as exc:
-        typer.echo(f"Error: {exc}", err=True)
-        raise typer.Exit(code=1) from exc
+        _exit_with_runtime_error(exc)
     typer.echo(json.dumps(response, indent=2, sort_keys=True))
 
 
 @app.command("rm")
 def rm(
-    model: str = typer.Argument(..., help="Installed model name to remove."),
+    model: str = typer.Argument(
+        ...,
+        help="Installed model name to remove.",
+        autocompletion=_complete_model_names,
+    ),
     base_url: str = typer.Option(
         DEFAULT_BASE_URL,
         help="Daemon base URL. Defaults to http://localhost:11435.",
@@ -421,8 +543,7 @@ def rm(
     try:
         response = client.remove_model(model)
     except RuntimeError as exc:
-        typer.echo(f"Error: {exc}", err=True)
-        raise typer.Exit(code=1) from exc
+        _exit_with_runtime_error(exc)
     typer.echo(json.dumps(response, indent=2, sort_keys=True))
 
 
@@ -440,8 +561,7 @@ def modelfile_list(
     try:
         response = client.list_modelfiles()
     except RuntimeError as exc:
-        typer.echo(f"Error: {exc}", err=True)
-        raise typer.Exit(code=1) from exc
+        _exit_with_runtime_error(exc)
 
     if json_output:
         typer.echo(json.dumps(response, indent=2, sort_keys=True))
@@ -483,8 +603,7 @@ def modelfile_show(
     try:
         response = client.show_modelfile(name)
     except RuntimeError as exc:
-        typer.echo(f"Error: {exc}", err=True)
-        raise typer.Exit(code=1) from exc
+        _exit_with_runtime_error(exc)
     typer.echo(json.dumps(response, indent=2, sort_keys=True))
 
 
@@ -545,8 +664,7 @@ def modelfile_create(
             content=payload.get("content") if isinstance(payload.get("content"), str) else None,
         )
     except RuntimeError as exc:
-        typer.echo(f"Error: {exc}", err=True)
-        raise typer.Exit(code=1) from exc
+        _exit_with_runtime_error(exc)
     typer.echo(json.dumps(response, indent=2, sort_keys=True))
 
 
@@ -564,14 +682,17 @@ def modelfile_rm(
     try:
         response = client.remove_modelfile(name)
     except RuntimeError as exc:
-        typer.echo(f"Error: {exc}", err=True)
-        raise typer.Exit(code=1) from exc
+        _exit_with_runtime_error(exc)
     typer.echo(json.dumps(response, indent=2, sort_keys=True))
 
 
 @app.command("run")
 def run(
-    model: str = typer.Argument(..., help="Model name to run."),
+    model: str = typer.Argument(
+        ...,
+        help="Model name to run.",
+        autocompletion=_complete_model_names,
+    ),
     input_path: Path | None = typer.Option(
         None,
         "--input",
@@ -621,8 +742,7 @@ def run(
         try:
             validation_result = client.validate_request(payload)
         except RuntimeError as exc:
-            typer.echo(f"Error: {exc}", err=True)
-            raise typer.Exit(code=1) from exc
+            _exit_with_runtime_error(exc)
 
         typer.echo(json.dumps(validation_result, indent=2, sort_keys=True))
         is_valid = bool(validation_result.get("valid"))
@@ -632,8 +752,7 @@ def run(
         client.show_model(model)
     except DaemonHTTPError as exc:
         if exc.status_code != 404:
-            typer.echo(f"Error: {exc}", err=True)
-            raise typer.Exit(code=1) from exc
+            _exit_with_runtime_error(exc)
         try:
             pull_result = client.pull_model(
                 name=model,
@@ -641,18 +760,15 @@ def run(
                 accept_license=accept_license,
             )
         except RuntimeError as pull_exc:
-            typer.echo(f"Error: {pull_exc}", err=True)
-            raise typer.Exit(code=1) from pull_exc
+            _exit_with_runtime_error(pull_exc)
         _emit_result(pull_result, stream_kind="pull")
     except RuntimeError as exc:
-        typer.echo(f"Error: {exc}", err=True)
-        raise typer.Exit(code=1) from exc
+        _exit_with_runtime_error(exc)
 
     try:
         forecast_result = client.forecast(payload, stream=stream)
     except RuntimeError as exc:
-        typer.echo(f"Error: {exc}", err=True)
-        raise typer.Exit(code=1) from exc
+        _exit_with_runtime_error(exc)
     _emit_result(forecast_result, stream_kind="forecast")
 
 
@@ -661,6 +777,7 @@ def quickstart(
     model: str = typer.Option(
         _QUICKSTART_MODEL,
         "--model",
+        autocompletion=_complete_model_names,
         help="Model name to use for quickstart.",
     ),
     horizon: int = typer.Option(
@@ -687,7 +804,11 @@ def quickstart(
         client.health()
     except RuntimeError as exc:
         typer.echo(f"Error: unable to reach tollama daemon at {base_url}: {exc}", err=True)
-        typer.echo("Start it with: tollama serve", err=True)
+        hint = _error_hint(exc)
+        if hint is not None:
+            typer.echo(f"Hint: {hint}", err=True)
+        else:
+            typer.echo("Hint: Start it with `tollama serve`.", err=True)
         raise typer.Exit(code=1) from exc
 
     try:
@@ -697,15 +818,13 @@ def quickstart(
             accept_license=accept_license,
         )
     except RuntimeError as exc:
-        typer.echo(f"Error: {exc}", err=True)
-        raise typer.Exit(code=1) from exc
+        _exit_with_runtime_error(exc)
 
     request_payload = _quickstart_request_payload(model=model, horizon=horizon)
     try:
         forecast_result = client.forecast(request_payload, stream=False)
     except RuntimeError as exc:
-        typer.echo(f"Error: {exc}", err=True)
-        raise typer.Exit(code=1) from exc
+        _exit_with_runtime_error(exc)
 
     typer.echo("tollama quickstart complete")
     typer.echo("")
@@ -1303,9 +1422,31 @@ def _render_info_report(snapshot: dict[str, Any], *, verbose: bool) -> str:
 def _resolve_config_key_path(key: str) -> tuple[str, str]:
     key_path = _CONFIG_KEY_PATHS.get(key)
     if key_path is None:
+        suggestion = get_close_matches(key, sorted(_CONFIG_KEY_PATHS), n=1, cutoff=0.6)
+        if suggestion:
+            _exit_with_message(f"unknown key {key!r}. Did you mean {suggestion[0]!r}?")
         supported = ", ".join(sorted(_CONFIG_KEY_PATHS))
-        _exit_with_message(f"unsupported key {key!r}. Supported keys: {supported}")
+        _exit_with_message(f"unknown key {key!r}. Supported keys: {supported}")
     return key_path
+
+
+def _config_key_entries(config: TollamaConfig) -> list[dict[str, Any]]:
+    payload = config.model_dump(mode="json")
+    entries: list[dict[str, Any]] = []
+    for key in sorted(_CONFIG_KEY_PATHS):
+        section, field = _CONFIG_KEY_PATHS[key]
+        section_payload = payload.get(section)
+        value: Any = None
+        if isinstance(section_payload, dict):
+            value = section_payload.get(field)
+        entries.append(
+            {
+                "key": key,
+                "value": value,
+                "description": CONFIG_KEY_DESCRIPTIONS[key],
+            }
+        )
+    return entries
 
 
 def _parse_config_value(key: str, value: str) -> bool | int | str | None:

@@ -225,6 +225,7 @@ def test_analyze_endpoint_rejects_invalid_payload() -> None:
         response = client.post("/api/analyze", json=payload)
 
     assert response.status_code == 400
+    assert response.json()["hint"] == "Fix request payload or parameters and retry."
 
 
 def test_forecast_accepts_data_url_csv(monkeypatch, tmp_path) -> None:
@@ -509,7 +510,9 @@ def test_ollama_show_returns_404_for_missing_model(monkeypatch, tmp_path) -> Non
         response = client.post("/api/show", json={"model": "not-installed"})
 
     assert response.status_code == 404
-    assert "is not installed" in response.json()["detail"]
+    payload = response.json()
+    assert "is not installed" in payload["detail"]
+    assert "tollama pull <model>" in payload["hint"]
 
 
 def test_ollama_pull_non_stream_and_delete_flow(monkeypatch, tmp_path) -> None:

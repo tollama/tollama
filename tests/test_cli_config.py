@@ -53,7 +53,65 @@ def test_config_set_rejects_unknown_key(monkeypatch, tmp_path: Path) -> None:
     result = runner.invoke(app, ["config", "set", "pull.unknown", "true"])
 
     assert result.exit_code != 0
-    assert "unsupported key" in result.stdout
+    assert "unknown key" in result.stdout
+
+
+def test_config_set_unknown_key_suggests_closest_match(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("TOLLAMA_HOME", str(tmp_path / "state-home"))
+    runner = CliRunner()
+
+    result = runner.invoke(app, ["config", "set", "offline", "true"])
+
+    assert result.exit_code != 0
+    assert "Did you mean 'pull.offline'" in result.stdout
+
+
+def test_config_keys_lists_descriptions_and_values(monkeypatch, tmp_path: Path) -> None:
+    home = tmp_path / "state-home"
+    monkeypatch.setenv("TOLLAMA_HOME", str(home))
+    runner = CliRunner()
+
+    set_result = runner.invoke(app, ["config", "set", "pull.offline", "true"])
+    assert set_result.exit_code == 0
+
+    keys_result = runner.invoke(app, ["config", "keys"])
+    assert keys_result.exit_code == 0
+    assert "pull.offline" in keys_result.stdout
+    assert "Force pulls to run in offline mode by default." in keys_result.stdout
+    assert "true" in keys_result.stdout
+
+    keys_json = runner.invoke(app, ["config", "keys", "--json"])
+    assert keys_json.exit_code == 0
+    payload = json.loads(keys_json.stdout)
+    offline_entry = next(item for item in payload if item["key"] == "pull.offline")
+    assert offline_entry["value"] is True
+    assert offline_entry["description"] == "Force pulls to run in offline mode by default."
+
+
+def test_config_init_writes_default_json_and_respects_force(monkeypatch, tmp_path: Path) -> None:
+    home = tmp_path / "state-home"
+    monkeypatch.setenv("TOLLAMA_HOME", str(home))
+    runner = CliRunner()
+
+    init_result = runner.invoke(app, ["config", "init"])
+    assert init_result.exit_code == 0
+    config_path = home / "config.json"
+    assert config_path.exists()
+    payload = json.loads(config_path.read_text(encoding="utf-8"))
+    assert payload["version"] == 1
+
+    blocked = runner.invoke(app, ["config", "init"])
+    assert blocked.exit_code != 0
+    assert "use --force to overwrite" in blocked.stdout
+
+    config_path.write_text(
+        '{"version":1,"pull":{"offline":true},"daemon":{"auto_bootstrap":true},"auth":{"api_keys":[]}}',
+        encoding="utf-8",
+    )
+    forced = runner.invoke(app, ["config", "init", "--force"])
+    assert forced.exit_code == 0
+    forced_payload = json.loads(config_path.read_text(encoding="utf-8"))
+    assert forced_payload["pull"]["offline"] is None
 
 
 def test_pull_no_config_sends_neutral_defaults(monkeypatch) -> None:

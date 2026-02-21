@@ -55,6 +55,18 @@ class TollamaConfig(BaseModel):
     auth: AuthConfig = Field(default_factory=AuthConfig)
 
 
+CONFIG_KEY_DESCRIPTIONS: dict[str, str] = {
+    "pull.hf_home": "Default HF_HOME path used during model pulls.",
+    "pull.http_proxy": "Default HTTP proxy URL used during model pulls.",
+    "pull.https_proxy": "Default HTTPS proxy URL used during model pulls.",
+    "pull.no_proxy": "Default comma-separated no-proxy host patterns.",
+    "pull.offline": "Force pulls to run in offline mode by default.",
+    "pull.local_files_only": "Use cached artifacts only without forcing full offline mode.",
+    "pull.insecure": "Disable TLS verification during pulls (debugging only).",
+    "pull.max_workers": "Maximum download worker threads for model pulls.",
+}
+
+
 class ConfigFileError(RuntimeError):
     """Raised when the persisted config cannot be parsed or validated."""
 

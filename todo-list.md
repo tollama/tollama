@@ -1,6 +1,6 @@
 # tollama Todo List (Ollama for TSFM)
 
-기준 시점: 2026-02-20 (repo 현재 구현 반영)
+기준 시점: 2026-02-21 (repo 현재 구현 반영)
 
 우선순위:
 - `P0` = 필수(MVP)
@@ -121,6 +121,8 @@
   - 현재: `doctor` 구현(`pass/warn/fail`, `--json`, exit code `0/1/2`)
   - 현재: `tollama run --dry-run` + `/api/validate` 구현(무추론 요청 검증)
   - 현재: `tollama list`/`tollama ps` 테이블 기본 출력 + `--json` 호환 모드 지원
+  - 현재: `tollama config keys`/`tollama config init` 및 unknown key 추천(`Did you mean`) 지원
+  - 현재: daemon/client/CLI/MCP/LangChain 공통 에러 `hint` 전달(기존 `detail` 호환 유지)
 - [ ] (P1) "pull이 런타임까지 설치"되는 installer(런타임 venv 자동 구성) 확립
 
 ### Stage 2 (P1): "공통 전처리/공변량 표준화"

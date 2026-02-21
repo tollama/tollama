@@ -1,6 +1,6 @@
 # tollama roadmap (worker-per-model-family)
 
-Last updated: 2026-02-20
+Last updated: 2026-02-21
 
 Status legend:
 - `[x]` implemented
@@ -37,6 +37,12 @@ the optional future `packages/*` split as a migration phase.
 - Optional API-key auth is available through `config.auth.api_keys`.
 - Per-key usage metering endpoint is available at `GET /api/usage`.
 - Per-key daemon SSE event stream is available at `GET /api/events`.
+- HTTP error responses now preserve `detail` and may include actionable `hint`.
+- Shared client/CLI/MCP/LangChain error surfaces propagate optional `hint` values.
+- CLI config discoverability now includes `tollama config keys` and `tollama config init`.
+- CLI model arguments provide shell-completion candidates from registry + installed models.
+- SDK now emits warnings when inferring frequency from pandas indexes and provides clearer
+  DataFrame/mapping validation errors.
 - v1 non-goals are still respected: no training/fine-tuning and no distributed scheduler.
 
 ### Planned work / TODO

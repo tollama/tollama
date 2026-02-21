@@ -394,6 +394,15 @@ tollama run sundial-base-128m --input examples/sundial_request.json --no-stream
 tollama run toto-open-base-1.0 --input examples/toto_request.json --no-stream
 ```
 
+## Shell Completion
+
+Install or inspect completion scripts:
+
+```bash
+tollama --install-completion
+tollama --show-completion
+```
+
 ## Useful Pull Controls
 
 Common options for `tollama pull`:
@@ -409,11 +418,16 @@ Common options for `tollama pull`:
 Persistent defaults:
 
 ```bash
+tollama config init
+tollama config keys
 tollama config set pull.https_proxy http://proxy:3128
 tollama config set pull.hf_home /mnt/fastcache/hf
 tollama config set pull.offline true
 tollama config list
 ```
+
+If you pass an unknown config key, `tollama config set/get/unset` suggests the closest
+supported key (for example `offline` -> `pull.offline`).
 
 ## Troubleshooting
 

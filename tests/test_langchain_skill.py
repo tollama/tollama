@@ -722,7 +722,12 @@ def test_tollama_forecast_tool_client_error_maps_to_error_payload(
 ) -> None:
     class _FakeClient:
         def forecast_response(self, _request: Any) -> ForecastResponse:
-            raise ModelMissingError(action="forecast model", status_code=404, detail="missing")
+            raise ModelMissingError(
+                action="forecast model",
+                status_code=404,
+                detail="missing",
+                hint="Run `tollama pull missing`.",
+            )
 
     monkeypatch.setattr("tollama.skill.langchain._make_client", lambda **_: _FakeClient())
     tool = langchain_tools.TollamaForecastTool()
@@ -731,6 +736,7 @@ def test_tollama_forecast_tool_client_error_maps_to_error_payload(
 
     assert payload["error"]["category"] == "MODEL_MISSING"
     assert payload["error"]["exit_code"] == 4
+    assert payload["error"]["hint"] == "Run `tollama pull missing`."
 
 
 @pytest.mark.asyncio

@@ -70,11 +70,16 @@ def _load_fastmcp() -> type[Any]:
 
 
 def _raise_mcp_tool_error(exc: MCPToolError) -> None:
+    error_payload: dict[str, Any] = {
+        "category": exc.category,
+        "exit_code": exc.exit_code,
+        "message": exc.message,
+    }
+    if exc.hint is not None:
+        error_payload["hint"] = exc.hint
     payload = {
         "error": {
-            "category": exc.category,
-            "exit_code": exc.exit_code,
-            "message": exc.message,
+            **error_payload,
         }
     }
     raise RuntimeError(json.dumps(payload, separators=(",", ":"), sort_keys=True)) from exc

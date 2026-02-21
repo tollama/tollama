@@ -539,6 +539,26 @@ def test_show_404_maps_to_model_missing_error() -> None:
         client.show_model("missing")
 
     assert exc_info.value.exit_code == 4
+    assert exc_info.value.hint is not None
+
+
+def test_show_404_preserves_server_hint() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/api/show"
+        return httpx.Response(
+            404,
+            json={
+                "detail": "model missing",
+                "hint": "Run `tollama pull mock` to install it.",
+            },
+        )
+
+    client = _client(httpx.MockTransport(handler))
+
+    with pytest.raises(ModelMissingError) as exc_info:
+        client.show_model("missing")
+
+    assert exc_info.value.hint == "Run `tollama pull mock` to install it."
 
 
 def test_pull_409_license_maps_to_license_required_error() -> None:
@@ -565,6 +585,32 @@ def test_validate_400_maps_to_invalid_request_error() -> None:
         client.validate_request({})
 
     assert exc_info.value.exit_code == 2
+    assert exc_info.value.hint == "Fix request payload or parameters and retry."
+
+
+def test_validate_400_formats_pydantic_validation_errors() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/api/validate"
+        return httpx.Response(
+            400,
+            json={
+                "detail": [
+                    {"loc": ["body", "horizon"], "msg": "Field required"},
+                    {
+                        "loc": ["body", "series", 0, "target"],
+                        "msg": "List should have at least 1 item",
+                    },
+                ]
+            },
+        )
+
+    client = _client(httpx.MockTransport(handler))
+
+    with pytest.raises(InvalidRequestError) as exc_info:
+        client.validate_request({})
+
+    assert "Field 'horizon' is required" in str(exc_info.value)
+    assert "Field 'series[0].target' must have at least 1 item" in str(exc_info.value)
 
 
 def test_connect_error_maps_to_daemon_unreachable() -> None:
@@ -577,6 +623,7 @@ def test_connect_error_maps_to_daemon_unreachable() -> None:
         client.list_tags()
 
     assert exc_info.value.exit_code == 3
+    assert exc_info.value.hint is not None
 
 
 def test_timeout_error_maps_to_forecast_timeout() -> None:
@@ -589,6 +636,7 @@ def test_timeout_error_maps_to_forecast_timeout() -> None:
         client.forecast(_request_payload(), stream=False)
 
     assert exc_info.value.exit_code == 6
+    assert exc_info.value.hint is not None
 
 
 @pytest.mark.asyncio

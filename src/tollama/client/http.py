@@ -619,17 +619,43 @@ class TollamaClient:
                     headers=self._request_headers(),
                 )
         except httpx.TimeoutException as exc:
-            raise ForecastTimeoutError(action=action, detail=str(exc)) from exc
+            raise ForecastTimeoutError(
+                action=action,
+                detail=str(exc),
+                hint=(
+                    "Try a smaller series or increase timeout. CLI users can pass "
+                    "--timeout 600."
+                ),
+            ) from exc
         except httpx.ConnectError as exc:
-            raise DaemonUnreachableError(action=action, detail=str(exc)) from exc
+            raise DaemonUnreachableError(
+                action=action,
+                detail=str(exc),
+                hint=(
+                    "Start the daemon with `tollama serve` and confirm the base URL "
+                    "is reachable."
+                ),
+            ) from exc
         except httpx.RequestError as exc:
-            raise DaemonUnreachableError(action=action, detail=str(exc)) from exc
+            raise DaemonUnreachableError(
+                action=action,
+                detail=str(exc),
+                hint=(
+                    "Check daemon connectivity and base URL, then retry. Start the "
+                    "daemon with `tollama serve` if needed."
+                ),
+            ) from exc
         except httpx.HTTPError as exc:
             raise TollamaClientError(action=action, detail=str(exc)) from exc
 
         if response.is_error:
-            detail = _extract_error_detail(response)
-            raise _map_http_error(action=action, status_code=response.status_code, detail=detail)
+            detail, hint = _extract_error_payload(response)
+            raise _map_http_error(
+                action=action,
+                status_code=response.status_code,
+                detail=detail,
+                hint=hint,
+            )
         return response
 
     def _request_headers(self) -> dict[str, str] | None:
@@ -1121,17 +1147,43 @@ class AsyncTollamaClient:
                     headers=self._request_headers(),
                 )
         except httpx.TimeoutException as exc:
-            raise ForecastTimeoutError(action=action, detail=str(exc)) from exc
+            raise ForecastTimeoutError(
+                action=action,
+                detail=str(exc),
+                hint=(
+                    "Try a smaller series or increase timeout. CLI users can pass "
+                    "--timeout 600."
+                ),
+            ) from exc
         except httpx.ConnectError as exc:
-            raise DaemonUnreachableError(action=action, detail=str(exc)) from exc
+            raise DaemonUnreachableError(
+                action=action,
+                detail=str(exc),
+                hint=(
+                    "Start the daemon with `tollama serve` and confirm the base URL "
+                    "is reachable."
+                ),
+            ) from exc
         except httpx.RequestError as exc:
-            raise DaemonUnreachableError(action=action, detail=str(exc)) from exc
+            raise DaemonUnreachableError(
+                action=action,
+                detail=str(exc),
+                hint=(
+                    "Check daemon connectivity and base URL, then retry. Start the "
+                    "daemon with `tollama serve` if needed."
+                ),
+            ) from exc
         except httpx.HTTPError as exc:
             raise TollamaClientError(action=action, detail=str(exc)) from exc
 
         if response.is_error:
-            detail = _extract_error_detail(response)
-            raise _map_http_error(action=action, status_code=response.status_code, detail=detail)
+            detail, hint = _extract_error_payload(response)
+            raise _map_http_error(
+                action=action,
+                status_code=response.status_code,
+                detail=detail,
+                hint=hint,
+            )
         return response
 
     def _request_headers(self) -> dict[str, str] | None:
@@ -1143,34 +1195,49 @@ class AsyncTollamaClient:
         return {"Authorization": f"Bearer {token}"}
 
 
-def _extract_error_detail(response: httpx.Response) -> str:
+def _extract_error_payload(response: httpx.Response) -> tuple[str, str | None]:
     text = response.text.strip()
     if not text:
-        return f"HTTP {response.status_code}"
+        detail = f"HTTP {response.status_code}"
+        return detail, _default_hint_for_http_error(status_code=response.status_code, detail=detail)
 
     try:
         payload = response.json()
     except ValueError:
-        return text
+        return text, _default_hint_for_http_error(status_code=response.status_code, detail=text)
 
     if isinstance(payload, dict):
-        detail = payload.get("detail")
-        if isinstance(detail, str) and detail:
-            return detail
-    return text
+        detail = _coerce_error_detail(payload.get("detail"), fallback=text)
+        raw_hint = payload.get("hint")
+        hint = raw_hint.strip() if isinstance(raw_hint, str) and raw_hint.strip() else None
+        if hint is None:
+            hint = _default_hint_for_http_error(status_code=response.status_code, detail=detail)
+        return detail, hint
+    return text, _default_hint_for_http_error(status_code=response.status_code, detail=text)
 
 
-def _map_http_error(*, action: str, status_code: int, detail: str) -> DaemonHTTPError:
+def _map_http_error(
+    *,
+    action: str,
+    status_code: int,
+    detail: str,
+    hint: str | None = None,
+) -> DaemonHTTPError:
     lower_detail = detail.lower()
 
     if status_code == 400:
-        return InvalidRequestError(action=action, status_code=status_code, detail=detail)
+        return InvalidRequestError(action=action, status_code=status_code, detail=detail, hint=hint)
 
     if status_code in {408, 504}:
-        return ForecastTimeoutError(action=action, status_code=status_code, detail=detail)
+        return ForecastTimeoutError(
+            action=action,
+            status_code=status_code,
+            detail=detail,
+            hint=hint,
+        )
 
     if status_code == 404:
-        return ModelMissingError(action=action, status_code=status_code, detail=detail)
+        return ModelMissingError(action=action, status_code=status_code, detail=detail, hint=hint)
 
     if status_code in {401, 403}:
         if (
@@ -1178,8 +1245,18 @@ def _map_http_error(*, action: str, status_code: int, detail: str) -> DaemonHTTP
             or "accept_license" in lower_detail
             or "accept-license" in lower_detail
         ):
-            return LicenseRequiredError(action=action, status_code=status_code, detail=detail)
-        return PermissionDeniedError(action=action, status_code=status_code, detail=detail)
+            return LicenseRequiredError(
+                action=action,
+                status_code=status_code,
+                detail=detail,
+                hint=hint,
+            )
+        return PermissionDeniedError(
+            action=action,
+            status_code=status_code,
+            detail=detail,
+            hint=hint,
+        )
 
     if status_code == 409:
         if (
@@ -1187,10 +1264,132 @@ def _map_http_error(*, action: str, status_code: int, detail: str) -> DaemonHTTP
             or "accept_license" in lower_detail
             or "accept-license" in lower_detail
         ):
-            return LicenseRequiredError(action=action, status_code=status_code, detail=detail)
-        return PermissionDeniedError(action=action, status_code=status_code, detail=detail)
+            return LicenseRequiredError(
+                action=action,
+                status_code=status_code,
+                detail=detail,
+                hint=hint,
+            )
+        return PermissionDeniedError(
+            action=action,
+            status_code=status_code,
+            detail=detail,
+            hint=hint,
+        )
 
-    return DaemonHTTPError(action=action, status_code=status_code, detail=detail)
+    return DaemonHTTPError(action=action, status_code=status_code, detail=detail, hint=hint)
+
+
+def _coerce_error_detail(value: Any, *, fallback: str) -> str:
+    if isinstance(value, str):
+        stripped = value.strip()
+        if stripped:
+            return stripped
+        return fallback
+    if isinstance(value, list):
+        formatted = _format_validation_error_list(value)
+        if formatted:
+            return ". ".join(formatted)
+        return fallback
+    if isinstance(value, dict):
+        message = value.get("message")
+        if isinstance(message, str) and message.strip():
+            code = value.get("code")
+            if isinstance(code, str) and code.strip():
+                return f"{message.strip()} (code={code.strip()})"
+            return message.strip()
+        try:
+            return json.dumps(value, separators=(",", ":"), sort_keys=True)
+        except TypeError:
+            return fallback
+    if value is None:
+        return fallback
+    return str(value)
+
+
+def _format_validation_error_list(errors: list[Any]) -> list[str]:
+    formatted: list[str] = []
+    for error in errors:
+        if not isinstance(error, dict):
+            continue
+        location = _format_error_location(error.get("loc"))
+        message = str(error.get("msg") or "invalid value")
+        normalized_message = _normalize_validation_message(message)
+        formatted.append(f"Field '{location}' {normalized_message}")
+    return formatted
+
+
+def _normalize_validation_message(message: str) -> str:
+    lowered = message.strip().lower()
+    if lowered == "field required":
+        return "is required"
+    if lowered.startswith("input should be "):
+        return f"must be {message.strip()[len('Input should be '):]}"
+    if lowered.startswith("input should have "):
+        return f"must have {message.strip()[len('Input should have '):]}"
+    if lowered.startswith("list should have "):
+        return f"must have {message.strip()[len('List should have '):]}"
+    if lowered.startswith("value error, "):
+        return f"is invalid: {message.strip()[len('Value error, '):]}"
+    return f"is invalid: {message.strip()}"
+
+
+def _format_error_location(location: Any) -> str:
+    if not isinstance(location, (list, tuple)):
+        return "<root>"
+
+    parts: list[str] = []
+    for item in location:
+        if item == "body":
+            continue
+        if isinstance(item, int):
+            if parts:
+                parts[-1] = f"{parts[-1]}[{item}]"
+            else:
+                parts.append(f"[{item}]")
+            continue
+        parts.append(str(item))
+    if not parts:
+        return "<root>"
+    return ".".join(parts)
+
+
+def _default_hint_for_http_error(*, status_code: int, detail: str) -> str | None:
+    lowered = detail.lower()
+    if status_code == 400:
+        return "Fix request payload or parameters and retry."
+    if status_code in {401, 403}:
+        if (
+            "license" in lowered
+            or "accept_license" in lowered
+            or "accept-license" in lowered
+        ):
+            return (
+                "Re-run with `--accept-license`, or call "
+                "`tollama pull <model> --accept-license`."
+            )
+        return "Provide a valid API key and retry."
+    if status_code == 404:
+        return (
+            "Run `tollama pull <model>` to install the model. "
+            "Use `tollama info --json` to inspect available models."
+        )
+    if status_code == 409:
+        if (
+            "license" in lowered
+            or "accept_license" in lowered
+            or "accept-license" in lowered
+        ):
+            return (
+                "Re-run with `--accept-license`, or call "
+                "`tollama pull <model> --accept-license`."
+            )
+        return "Resolve the conflicting model or request state, then retry."
+    if status_code in {408, 504}:
+        return "Try a smaller series or increase timeout."
+    if status_code == 503:
+        return "Start the daemon with `tollama serve` and retry."
+    return None
 
 
 def _coerce_dict_list(value: Any) -> list[dict[str, Any]]:

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import warnings
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any, cast
@@ -543,14 +544,21 @@ def _coerce_series_payload(series: SeriesPayload) -> list[dict[str, Any]]:
 
 def _series_from_mapping(payload: Mapping[str, Any], *, default_id: str) -> dict[str, Any]:
     if "target" not in payload:
-        raise ValueError("series mapping must include target")
+        available = ", ".join(sorted(str(key) for key in payload)) or "<none>"
+        raise ValueError(
+            "series mapping must include 'target'. "
+            f"Found keys: {available}",
+        )
 
     target_values = payload["target"]
     if isinstance(target_values, (str, bytes, bytearray)) or not isinstance(
         target_values,
         Sequence,
     ):
-        raise TypeError("series target must be a non-string sequence")
+        raise TypeError(
+            "series 'target' must be a non-string sequence. "
+            f"Found type: {type(target_values).__name__}",
+        )
     target = list(target_values)
 
     timestamps_value = payload.get("timestamps")
@@ -561,7 +569,10 @@ def _series_from_mapping(payload: Mapping[str, Any], *, default_id: str) -> dict
             timestamps_value,
             Sequence,
         ):
-            raise TypeError("series timestamps must be a non-string sequence")
+            raise TypeError(
+                "series 'timestamps' must be a non-string sequence when provided. "
+                f"Found type: {type(timestamps_value).__name__}",
+            )
         timestamps = [_stringify_timestamp(value) for value in timestamps_value]
 
     normalized = dict(payload)
@@ -575,9 +586,10 @@ def _series_from_mapping(payload: Mapping[str, Any], *, default_id: str) -> dict
 def _series_from_pandas_series(series: pd.Series) -> dict[str, Any]:
     target = series.tolist()
     timestamps = [_stringify_timestamp(value) for value in series.index.tolist()]
+    series_id = _stringify_series_id(series.name, default_id="series_0")
     return {
-        "id": _stringify_series_id(series.name, default_id="series_0"),
-        "freq": _infer_freq(series.index.tolist()),
+        "id": series_id,
+        "freq": _infer_freq_with_warning(series.index.tolist(), context=f"series '{series_id}'"),
         "timestamps": timestamps,
         "target": target,
     }
@@ -585,7 +597,11 @@ def _series_from_pandas_series(series: pd.Series) -> dict[str, Any]:
 
 def _series_from_pandas_dataframe(frame: pd.DataFrame) -> list[dict[str, Any]]:
     if frame.empty:
-        raise ValueError("series DataFrame must not be empty")
+        columns = ", ".join(str(column) for column in frame.columns) or "<none>"
+        raise ValueError(
+            "series DataFrame must not be empty. "
+            f"Found columns: {columns}",
+        )
     if "target" in frame.columns:
         return _series_from_target_dataframe(frame)
     return _series_from_wide_dataframe(frame)
@@ -629,7 +645,7 @@ def _single_series_from_target_frame(
         timestamp_values = frame[timestamp_column].tolist()
     return {
         "id": series_id,
-        "freq": _infer_freq(timestamp_values),
+        "freq": _infer_freq_with_warning(timestamp_values, context=f"series '{series_id}'"),
         "timestamps": [_stringify_timestamp(value) for value in timestamp_values],
         "target": target_values,
     }
@@ -640,13 +656,15 @@ def _series_from_wide_dataframe(frame: pd.DataFrame) -> list[dict[str, Any]]:
         column for column in frame.columns if pd.api.types.is_numeric_dtype(frame[column])
     ]
     if not numeric_columns:
+        columns = ", ".join(str(column) for column in frame.columns) or "<none>"
         raise ValueError(
-            "series DataFrame must include target column or at least one numeric column",
+            "DataFrame must contain a 'target' column or at least one numeric column. "
+            f"Found columns: {columns}",
         )
 
     timestamp_values = frame.index.tolist()
     timestamps = [_stringify_timestamp(value) for value in timestamp_values]
-    freq = _infer_freq(timestamp_values)
+    freq = _infer_freq_with_warning(timestamp_values, context="wide DataFrame index")
     payloads: list[dict[str, Any]] = []
     for column in numeric_columns:
         payloads.append(
@@ -692,6 +710,20 @@ def _infer_freq(timestamps: Sequence[Any]) -> str:
     if inferred is None:
         return "auto"
     return str(inferred)
+
+
+def _infer_freq_with_warning(timestamps: Sequence[Any], *, context: str) -> str:
+    inferred = _infer_freq(timestamps)
+    if inferred != "auto":
+        warnings.warn(
+            (
+                f"Inferred frequency '{inferred}' from {context}. "
+                "Pass freq explicitly to avoid inference."
+            ),
+            UserWarning,
+            stacklevel=3,
+        )
+    return inferred
 
 
 def _stringify_timestamp(value: Any) -> str:

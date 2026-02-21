@@ -111,18 +111,30 @@ def _make_async_client(*, base_url: str, timeout: float) -> AsyncTollamaClient:
     return AsyncTollamaClient(base_url=base_url, timeout=timeout)
 
 
-def _error_payload(*, category: str, exit_code: int, message: str) -> dict[str, Any]:
-    return {
-        "error": {
-            "category": category,
-            "exit_code": exit_code,
-            "message": message,
-        }
+def _error_payload(
+    *,
+    category: str,
+    exit_code: int,
+    message: str,
+    hint: str | None = None,
+) -> dict[str, Any]:
+    error_payload: dict[str, Any] = {
+        "category": category,
+        "exit_code": exit_code,
+        "message": message,
     }
+    if hint is not None:
+        error_payload["hint"] = hint
+    return {"error": error_payload}
 
 
 def _client_error_payload(exc: TollamaClientError) -> dict[str, Any]:
-    return _error_payload(category=exc.category, exit_code=exc.exit_code, message=str(exc))
+    return _error_payload(
+        category=exc.category,
+        exit_code=exc.exit_code,
+        message=str(exc),
+        hint=exc.hint,
+    )
 
 
 def _invalid_request_payload(detail: str) -> dict[str, Any]:
