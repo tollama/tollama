@@ -67,6 +67,12 @@ langchain = [
 metrics = [
   "prometheus-client>=0.20,<1.0",
 ]
+notebooks = [
+  "jupyter>=1.1,<2.0",
+  "nbconvert>=7.16,<8.0",
+  "matplotlib>=3.8,<4.0",
+  "plotly>=5.22,<6.0",
+]
 ingest = [
   "pyarrow>=15.0,<20.0",
 ]

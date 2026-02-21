@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -17,6 +18,8 @@ from tollama.core.storage import TollamaPaths
 _AUTH_HEADER = "Authorization"
 _AUTH_SCHEME = "Bearer"
 _WWW_AUTHENTICATE = "Bearer"
+_DOCS_PUBLIC_ENV_NAME = "TOLLAMA_DOCS_PUBLIC"
+_DOCS_PUBLIC_PATHS = {"/docs", "/docs/oauth2-redirect", "/redoc", "/openapi.json"}
 
 
 @dataclass(frozen=True)
@@ -28,6 +31,10 @@ class AuthPrincipal:
 
 def require_api_key(request: Request) -> AuthPrincipal | None:
     """Authenticate request if API keys are configured."""
+    if _is_public_docs_request(request):
+        request.state.auth_principal = None
+        return None
+
     config = _load_config(request)
     configured_keys = _configured_api_keys(config)
     if not configured_keys:
@@ -156,3 +163,10 @@ def _load_json_object(path: Path) -> dict[str, Any] | None:
     if not isinstance(payload, dict):
         return None
     return payload
+
+
+def _is_public_docs_request(request: Request) -> bool:
+    value = os.environ.get(_DOCS_PUBLIC_ENV_NAME, "").strip().lower()
+    if value not in {"1", "true", "yes", "on"}:
+        return False
+    return request.url.path in _DOCS_PUBLIC_PATHS

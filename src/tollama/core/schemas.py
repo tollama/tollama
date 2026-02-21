@@ -1338,3 +1338,28 @@ def _covariate_kind(values: CovariateValues) -> str:
     if has_string:
         return "categorical"
     return "numeric"
+
+
+def _default_field_description(field_name: str) -> str:
+    readable = field_name.replace("_", " ").strip()
+    if not readable:
+        return "Field value."
+    return f"{readable[0].upper()}{readable[1:]}."
+
+
+def _populate_missing_field_descriptions() -> None:
+    """Populate missing model field descriptions for OpenAPI schema generation."""
+    for candidate in globals().values():
+        if not isinstance(candidate, type) or not issubclass(candidate, BaseModel):
+            continue
+        updated = False
+        for field_name, field in candidate.model_fields.items():
+            if field.description is not None:
+                continue
+            field.description = _default_field_description(field_name)
+            updated = True
+        if updated:
+            candidate.model_rebuild(force=True)
+
+
+_populate_missing_field_descriptions()

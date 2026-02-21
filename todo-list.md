@@ -125,6 +125,10 @@
   - 현재: daemon/client/CLI/MCP/LangChain 공통 에러 `hint` 전달(기존 `detail` 호환 유지)
   - 현재: long-running CLI에 `--progress auto|on|off` 도입(`pull`/`run`/`quickstart`/`runtime install`), stdout 계약 유지(stder-only progress)
   - 현재: `tollama run`에서 MODEL 생략 시 설치된 모델 선택 프롬프트 + `--interactive` 예제 payload 선택 지원
+  - 현재: canonical 트러블슈팅 문서(`docs/troubleshooting.md`) + CLI 치트시트(`docs/cli-cheatsheet.md`) 분리
+  - 현재: API 레퍼런스 문서(`docs/api-reference.md`) 추가 + OpenAPI 문서(`/docs`, `/redoc`, `/openapi.json`) 메타데이터 강화
+  - 현재: API key 설정 시 docs/openapi 엔드포인트도 기본 인증 적용(`TOLLAMA_DOCS_PUBLIC=1`로 로컬 공개 가능)
+  - 현재: tutorial notebook 4종 추가(covariates/comparison/what-if/auto-forecast, matplotlib+plotly) 및 CI 실행 단계 추가
 - [ ] (P1) "pull이 런타임까지 설치"되는 installer(런타임 venv 자동 구성) 확립
 
 ### Stage 2 (P1): "공통 전처리/공변량 표준화"

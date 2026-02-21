@@ -23,6 +23,11 @@ import httpx
 from fastapi import Body, Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
+from fastapi.openapi.docs import (
+    get_redoc_html,
+    get_swagger_ui_html,
+    get_swagger_ui_oauth2_redirect_html,
+)
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 from pydantic import (
     BaseModel,
@@ -167,6 +172,36 @@ TOKEN_ENV_KEYS = (
     "HUGGING_FACE_HUB_TOKEN",
     "HF_HUB_TOKEN",
 )
+DOCS_PUBLIC_ENV_NAME = "TOLLAMA_DOCS_PUBLIC"
+
+_OPENAPI_TAGS = [
+    {
+        "name": "system",
+        "description": "Version, health, diagnostics, and service metadata.",
+    },
+    {
+        "name": "models",
+        "description": "Model registry, install, remove, and lifecycle operations.",
+    },
+    {
+        "name": "forecast",
+        "description": "Forecast request execution APIs, including streaming modes.",
+    },
+    {
+        "name": "ingest",
+        "description": "CSV/parquet upload endpoints for normalized series ingestion.",
+    },
+    {
+        "name": "analysis",
+        "description": "Analyze, compare, report, and scenario-style intelligence APIs.",
+    },
+    {
+        "name": "runtime",
+        "description": "Event streaming and usage/metrics observability endpoints.",
+    },
+    {"name": "modelfiles", "description": "TSModelfile profile CRUD endpoints."},
+    {"name": "a2a", "description": "A2A discovery and JSON-RPC message handling endpoints."},
+]
 
 
 @dataclass(frozen=True)
@@ -192,8 +227,10 @@ class ModelPullRequest(BaseModel):
 
     model_config = ConfigDict(extra="forbid", strict=True)
 
-    name: StrictStr = Field(min_length=1)
-    accept_license: StrictBool
+    name: StrictStr = Field(min_length=1, description="Model name to pull from the registry.")
+    accept_license: StrictBool = Field(
+        description="Set true to accept model license terms during pull."
+    )
 
 
 class ModelShowRequest(BaseModel):
@@ -201,7 +238,7 @@ class ModelShowRequest(BaseModel):
 
     model_config = ConfigDict(extra="forbid", strict=True)
 
-    model: StrictStr = Field(min_length=1)
+    model: StrictStr = Field(min_length=1, description="Installed model name to inspect.")
 
 
 class ModelDeleteRequest(BaseModel):
@@ -209,7 +246,7 @@ class ModelDeleteRequest(BaseModel):
 
     model_config = ConfigDict(extra="forbid", strict=True)
 
-    model: StrictStr = Field(min_length=1)
+    model: StrictStr = Field(min_length=1, description="Installed model name to remove.")
 
 
 class ApiPullRequest(BaseModel):
@@ -217,18 +254,46 @@ class ApiPullRequest(BaseModel):
 
     model_config = ConfigDict(extra="allow", strict=True)
 
-    model: StrictStr = Field(min_length=1)
-    stream: StrictBool = True
-    accept_license: StrictBool = False
-    insecure: StrictBool | None = None
-    offline: StrictBool | None = None
-    local_files_only: StrictBool | None = None
-    http_proxy: StrictStr | None = None
-    https_proxy: StrictStr | None = None
-    no_proxy: StrictStr | None = None
-    hf_home: StrictStr | None = None
-    max_workers: StrictInt | None = Field(default=None, gt=0)
-    token: StrictStr | None = None
+    model: StrictStr = Field(min_length=1, description="Model name to pull from upstream registry.")
+    stream: StrictBool = Field(
+        default=True,
+        description="When true, stream NDJSON progress events instead of one final payload.",
+    )
+    accept_license: StrictBool = Field(
+        default=False,
+        description="Set true to accept model license terms during pull.",
+    )
+    insecure: StrictBool | None = Field(
+        default=None,
+        description="Override SSL verification behavior for pull requests.",
+    )
+    offline: StrictBool | None = Field(
+        default=None,
+        description="Force offline mode, disallowing remote downloads.",
+    )
+    local_files_only: StrictBool | None = Field(
+        default=None,
+        description="Read from local Hugging Face cache only when available.",
+    )
+    http_proxy: StrictStr | None = Field(default=None, description="HTTP proxy URL override.")
+    https_proxy: StrictStr | None = Field(default=None, description="HTTPS proxy URL override.")
+    no_proxy: StrictStr | None = Field(
+        default=None,
+        description="Comma-separated no-proxy patterns.",
+    )
+    hf_home: StrictStr | None = Field(
+        default=None,
+        description="Optional HF_HOME directory override used for cache lookup.",
+    )
+    max_workers: StrictInt | None = Field(
+        default=None,
+        gt=0,
+        description="Maximum pull worker count for parallel transfer stages.",
+    )
+    token: StrictStr | None = Field(
+        default=None,
+        description="Hugging Face token override for private or gated model pulls.",
+    )
 
 
 class ConfigProvider:
@@ -278,13 +343,19 @@ class ConfigProvider:
 class ForecastRequestWithKeepAlive(ForecastRequest):
     """Forecast request payload with optional Ollama-compatible keep_alive semantics."""
 
-    keep_alive: StrictStr | StrictInt | StrictFloat | None = None
+    keep_alive: StrictStr | StrictInt | StrictFloat | None = Field(
+        default=None,
+        description="Optional keep-alive policy for loaded model sessions.",
+    )
 
 
 class ApiForecastRequest(ForecastRequestWithKeepAlive):
     """Ollama-compatible forecast request payload."""
 
-    stream: StrictBool = True
+    stream: StrictBool = Field(
+        default=True,
+        description="When true, return NDJSON stream output for forecast events.",
+    )
 
 
 class ValidateResponse(BaseModel):
@@ -292,9 +363,49 @@ class ValidateResponse(BaseModel):
 
     model_config = ConfigDict(extra="forbid", strict=True)
 
-    valid: StrictBool
-    errors: list[StrictStr] = Field(default_factory=list)
-    warnings: list[StrictStr] = Field(default_factory=list)
+    valid: StrictBool = Field(description="Whether the request payload passed validation checks.")
+    errors: list[StrictStr] = Field(
+        default_factory=list,
+        description="Validation errors that prevent running the request.",
+    )
+    warnings: list[StrictStr] = Field(
+        default_factory=list,
+        description="Non-fatal compatibility warnings emitted during request normalization.",
+    )
+
+
+class VersionResponse(BaseModel):
+    """Minimal daemon version response payload."""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    version: StrictStr = Field(description="Installed tollama package version.")
+
+
+class HealthResponse(BaseModel):
+    """Daemon health probe response payload."""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    status: StrictStr = Field(description="Service health status value.")
+
+
+class ModelDeleteResponse(BaseModel):
+    """Ollama-compatible delete model response payload."""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    deleted: StrictBool = Field(description="True when requested model metadata was removed.")
+    model: StrictStr = Field(description="Name of the removed model.")
+
+
+class V1ModelDeleteResponse(BaseModel):
+    """v1 API delete model response payload."""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    removed: StrictBool = Field(description="True when requested model metadata was removed.")
+    name: StrictStr = Field(description="Name of the removed model.")
 
 
 @asynccontextmanager
@@ -308,11 +419,17 @@ async def _lifespan(app: FastAPI):
 def create_app(*, runner_manager: RunnerManager | None = None) -> FastAPI:
     """Create a configured FastAPI daemon app."""
     package_version = _resolve_package_version()
+    docs_public = _docs_public_enabled()
+    docs_dependencies = [] if docs_public else [Depends(require_api_key)]
     app = FastAPI(
         title="tollama daemon",
         version=package_version,
         lifespan=_lifespan,
         dependencies=[Depends(require_api_key)],
+        docs_url=None,
+        redoc_url=None,
+        openapi_url=None,
+        openapi_tags=_OPENAPI_TAGS,
     )
     app.state.runner_manager = runner_manager or _build_default_runner_manager()
     app.state.loaded_model_tracker = LoadedModelTracker()
@@ -358,9 +475,53 @@ def create_app(*, runner_manager: RunnerManager | None = None) -> FastAPI:
             headers=exc.headers,
         )
 
-    @app.get("/api/version")
-    def version() -> dict[str, str]:
-        return {"version": package_version}
+    @app.get(
+        "/openapi.json",
+        include_in_schema=False,
+        dependencies=docs_dependencies,
+    )
+    def openapi_schema() -> JSONResponse:
+        return JSONResponse(app.openapi())
+
+    @app.get(
+        "/docs",
+        include_in_schema=False,
+        dependencies=docs_dependencies,
+    )
+    def swagger_ui() -> Response:
+        return get_swagger_ui_html(
+            openapi_url="/openapi.json",
+            title=f"{app.title} - Swagger UI",
+        )
+
+    @app.get(
+        "/docs/oauth2-redirect",
+        include_in_schema=False,
+        dependencies=docs_dependencies,
+    )
+    def swagger_ui_redirect() -> Response:
+        return get_swagger_ui_oauth2_redirect_html()
+
+    @app.get(
+        "/redoc",
+        include_in_schema=False,
+        dependencies=docs_dependencies,
+    )
+    def redoc_ui() -> Response:
+        return get_redoc_html(
+            openapi_url="/openapi.json",
+            title=f"{app.title} - ReDoc",
+        )
+
+    @app.get(
+        "/api/version",
+        response_model=VersionResponse,
+        tags=["system"],
+        summary="Daemon version",
+        description="Return the currently running tollama daemon package version.",
+    )
+    def version() -> VersionResponse:
+        return VersionResponse(version=package_version)
 
     @app.get("/metrics", include_in_schema=False)
     def metrics() -> Response:
@@ -372,14 +533,34 @@ def create_app(*, runner_manager: RunnerManager | None = None) -> FastAPI:
         payload = collector.render_latest()
         return Response(content=payload, media_type=metrics_content_type())
 
-    @app.get("/api/usage")
+    @app.get(
+        "/api/usage",
+        response_model=dict[str, object],
+        tags=["runtime"],
+        summary="Usage snapshot",
+        description="Return aggregated per-key usage counters when usage metering is enabled.",
+    )
     def usage(request: Request) -> dict[str, object]:
         usage_meter = _optional_usage_meter(app)
         if usage_meter is None:
             raise HTTPException(status_code=503, detail=usage_unavailable_hint())
         return usage_meter.snapshot(key_id=current_key_id(request))
 
-    @app.get("/api/events")
+    @app.get(
+        "/api/events",
+        tags=["runtime"],
+        summary="Event stream",
+        description=(
+            "Subscribe to daemon event streams over SSE with optional filters "
+            "and heartbeats."
+        ),
+        responses={
+            200: {
+                "description": "SSE stream of daemon events.",
+                "content": {"text/event-stream": {}},
+            }
+        },
+    )
     def events(request: Request) -> StreamingResponse:
         event_stream = _optional_event_stream(app)
         if event_stream is None:
@@ -416,11 +597,23 @@ def create_app(*, runner_manager: RunnerManager | None = None) -> FastAPI:
             },
         )
 
-    @app.get("/api/modelfiles", response_model=ModelfileListResponse)
+    @app.get(
+        "/api/modelfiles",
+        response_model=ModelfileListResponse,
+        tags=["modelfiles"],
+        summary="List TSModelfile profiles",
+        description="Return all stored TSModelfile profile names and metadata.",
+    )
     def modelfiles() -> ModelfileListResponse:
         return ModelfileListResponse(modelfiles=list_modelfiles())
 
-    @app.get("/api/modelfiles/{name}")
+    @app.get(
+        "/api/modelfiles/{name}",
+        response_model=dict[str, Any],
+        tags=["modelfiles"],
+        summary="Get TSModelfile profile",
+        description="Return one stored TSModelfile profile by name.",
+    )
     def modelfile_show(name: str) -> dict[str, Any]:
         try:
             stored = load_modelfile(name)
@@ -430,7 +623,13 @@ def create_app(*, runner_manager: RunnerManager | None = None) -> FastAPI:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         return stored.model_dump(mode="json", exclude_none=True)
 
-    @app.post("/api/modelfiles")
+    @app.post(
+        "/api/modelfiles",
+        response_model=dict[str, Any],
+        tags=["modelfiles"],
+        summary="Create or update TSModelfile profile",
+        description="Upsert one TSModelfile profile and return the stored payload.",
+    )
     def modelfile_upsert(payload: ModelfileUpsertRequest) -> dict[str, Any]:
         try:
             profile = payload.resolved_profile()
@@ -439,7 +638,13 @@ def create_app(*, runner_manager: RunnerManager | None = None) -> FastAPI:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         return stored.model_dump(mode="json", exclude_none=True)
 
-    @app.delete("/api/modelfiles/{name}")
+    @app.delete(
+        "/api/modelfiles/{name}",
+        response_model=dict[str, Any],
+        tags=["modelfiles"],
+        summary="Delete TSModelfile profile",
+        description="Delete one TSModelfile profile by name.",
+    )
     def modelfile_delete(name: str) -> dict[str, Any]:
         try:
             removed = remove_modelfile(name)
@@ -449,14 +654,35 @@ def create_app(*, runner_manager: RunnerManager | None = None) -> FastAPI:
             raise HTTPException(status_code=404, detail=f"modelfile {name!r} not found")
         return {"deleted": True, "name": name}
 
-    @app.post("/api/ingest/upload")
+    @app.post(
+        "/api/ingest/upload",
+        response_model=dict[str, Any],
+        tags=["ingest"],
+        summary="Upload and ingest series data",
+        description="Upload CSV/parquet content and return normalized series payload objects.",
+    )
     async def ingest_upload(
-        file: UploadFile = File(...),
-        format_hint: str | None = Form(default=None),
-        timestamp_column: str | None = Form(default=None),
-        series_id_column: str | None = Form(default=None),
-        target_column: str | None = Form(default=None),
-        freq_column: str | None = Form(default=None),
+        file: UploadFile = File(..., description="CSV/parquet file payload to ingest."),
+        format_hint: str | None = Form(
+            default=None,
+            description="Optional format override such as 'csv' or 'parquet'.",
+        ),
+        timestamp_column: str | None = Form(
+            default=None,
+            description="Optional timestamp column name override.",
+        ),
+        series_id_column: str | None = Form(
+            default=None,
+            description="Optional series identifier column name override.",
+        ),
+        target_column: str | None = Form(
+            default=None,
+            description="Optional target column name override.",
+        ),
+        freq_column: str | None = Form(
+            default=None,
+            description="Optional frequency column name override.",
+        ),
     ) -> dict[str, Any]:
         file_payload = await file.read()
         filename = file.filename or "upload.csv"
@@ -489,16 +715,46 @@ def create_app(*, runner_manager: RunnerManager | None = None) -> FastAPI:
             "series": [item.model_dump(mode="json", exclude_none=True) for item in series],
         }
 
-    @app.post("/api/forecast/upload", response_model=ForecastResponse)
+    @app.post(
+        "/api/forecast/upload",
+        response_model=ForecastResponse,
+        tags=["forecast", "ingest"],
+        summary="Forecast from uploaded file",
+        description=(
+            "Upload file data plus request JSON to run one forecast without "
+            "manual preprocessing."
+        ),
+    )
     async def forecast_upload(
         request: Request,
-        payload: str = Form(...),
-        file: UploadFile = File(...),
-        format_hint: str | None = Form(default=None),
-        timestamp_column: str | None = Form(default=None),
-        series_id_column: str | None = Form(default=None),
-        target_column: str | None = Form(default=None),
-        freq_column: str | None = Form(default=None),
+        payload: str = Form(
+            ...,
+            description="Forecast request JSON string without `series` or `data_url`.",
+        ),
+        file: UploadFile = File(
+            ...,
+            description="CSV/parquet file payload to ingest and forecast.",
+        ),
+        format_hint: str | None = Form(
+            default=None,
+            description="Optional format override such as 'csv' or 'parquet'.",
+        ),
+        timestamp_column: str | None = Form(
+            default=None,
+            description="Optional timestamp column name override.",
+        ),
+        series_id_column: str | None = Form(
+            default=None,
+            description="Optional series identifier column name override.",
+        ),
+        target_column: str | None = Form(
+            default=None,
+            description="Optional target column name override.",
+        ),
+        freq_column: str | None = Form(
+            default=None,
+            description="Optional frequency column name override.",
+        ),
     ) -> ForecastResponse:
         try:
             parsed_payload = _load_json_object(payload)
@@ -541,7 +797,16 @@ def create_app(*, runner_manager: RunnerManager | None = None) -> FastAPI:
 
         return _execute_forecast(app, payload=forecast_payload, request=request)
 
-    @app.get("/api/info")
+    @app.get(
+        "/api/info",
+        response_model=dict[str, Any],
+        tags=["system"],
+        summary="Daemon diagnostics",
+        description=(
+            "Return one comprehensive diagnostics payload with daemon, config, "
+            "model, and runtime state."
+        ),
+    )
     def info() -> dict[str, Any]:
         _unload_expired_models(app)
         started_at = _optional_datetime(getattr(app.state, "started_at", None))
@@ -574,13 +839,25 @@ def create_app(*, runner_manager: RunnerManager | None = None) -> FastAPI:
             "runners": app.state.runner_manager.get_all_statuses(),
         }
 
-    @app.get("/api/tags")
+    @app.get(
+        "/api/tags",
+        response_model=dict[str, list[dict[str, Any]]],
+        tags=["models"],
+        summary="List installed model tags",
+        description="Return installed models in Ollama-compatible tag list format.",
+    )
     def tags() -> dict[str, list[dict[str, Any]]]:
         manifests = list_installed()
         models = [_to_ollama_tag_model(manifest) for manifest in manifests]
         return {"models": models}
 
-    @app.post("/api/show")
+    @app.post(
+        "/api/show",
+        response_model=dict[str, Any],
+        tags=["models"],
+        summary="Show model metadata",
+        description="Return detailed metadata for one installed model.",
+    )
     def show(payload: ModelShowRequest) -> dict[str, Any]:
         manifest = _find_installed_manifest(payload.model)
         if manifest is None:
@@ -608,7 +885,25 @@ def create_app(*, runner_manager: RunnerManager | None = None) -> FastAPI:
             "parameters": "",
         }
 
-    @app.post("/api/pull", response_model=None)
+    @app.post(
+        "/api/pull",
+        response_model=None,
+        tags=["models"],
+        summary="Pull model snapshot",
+        description=(
+            "Pull one model into local storage. Returns one JSON payload when stream=false, "
+            "or NDJSON progress events when stream=true."
+        ),
+        responses={
+            200: {
+                "description": "Pull result payload or NDJSON progress stream.",
+                "content": {
+                    "application/json": {},
+                    "application/x-ndjson": {},
+                },
+            }
+        },
+    )
     def pull(payload: ApiPullRequest) -> Any:
         try:
             config: TollamaConfig = app.state.config_provider.get()
@@ -641,12 +936,27 @@ def create_app(*, runner_manager: RunnerManager | None = None) -> FastAPI:
             media_type="application/x-ndjson",
         )
 
-    @app.delete("/api/delete")
-    def delete(payload: ModelDeleteRequest) -> dict[str, Any]:
+    @app.delete(
+        "/api/delete",
+        response_model=ModelDeleteResponse,
+        tags=["models"],
+        summary="Delete installed model",
+        description="Delete one installed model from local storage.",
+    )
+    def delete(payload: ModelDeleteRequest) -> ModelDeleteResponse:
         _remove_model_or_404(payload.model)
-        return {"deleted": True, "model": payload.model}
+        return ModelDeleteResponse(deleted=True, model=payload.model)
 
-    @app.get("/api/ps")
+    @app.get(
+        "/api/ps",
+        response_model=dict[str, list[dict[str, Any]]],
+        tags=["models"],
+        summary="List loaded models",
+        description=(
+            "Return currently loaded in-memory model sessions with keep-alive "
+            "expiry metadata."
+        ),
+    )
     def ps() -> dict[str, list[dict[str, Any]]]:
         _unload_expired_models(app)
         tracker: LoadedModelTracker = app.state.loaded_model_tracker
@@ -667,11 +977,23 @@ def create_app(*, runner_manager: RunnerManager | None = None) -> FastAPI:
             )
         return {"models": models}
 
-    @app.get("/v1/health")
-    def health() -> dict[str, str]:
-        return {"status": "ok"}
+    @app.get(
+        "/v1/health",
+        response_model=HealthResponse,
+        tags=["system"],
+        summary="Health probe",
+        description="Return simple liveness status for external health checks.",
+    )
+    def health() -> HealthResponse:
+        return HealthResponse(status="ok")
 
-    @app.get("/v1/models")
+    @app.get(
+        "/v1/models",
+        response_model=dict[str, list[dict[str, Any]]],
+        tags=["models"],
+        summary="List available and installed models",
+        description="Return registry model inventory and currently installed local models.",
+    )
     def models() -> dict[str, list[dict[str, Any]]]:
         installed_manifests = list_installed()
         installed_by_name = {
@@ -716,7 +1038,16 @@ def create_app(*, runner_manager: RunnerManager | None = None) -> FastAPI:
             )
         return {"available": available, "installed": installed}
 
-    @app.post("/api/validate", response_model=ValidateResponse)
+    @app.post(
+        "/api/validate",
+        response_model=ValidateResponse,
+        tags=["forecast"],
+        summary="Validate forecast request",
+        description=(
+            "Validate forecast payloads including ingest normalization and "
+            "covariate compatibility checks."
+        ),
+    )
     def validate(payload: Any = Body(...)) -> ValidateResponse:
         if not isinstance(payload, dict):
             return ValidateResponse(
@@ -796,16 +1127,46 @@ def create_app(*, runner_manager: RunnerManager | None = None) -> FastAPI:
         merged_warnings = _merge_warnings(None, warnings) or []
         return ValidateResponse(valid=True, warnings=merged_warnings)
 
-    @app.post("/v1/models/pull")
+    @app.post(
+        "/v1/models/pull",
+        response_model=dict[str, Any],
+        tags=["models"],
+        summary="Pull model (v1)",
+        description="Pull one model into local storage through the stable v1 route.",
+    )
     def pull_model(payload: ModelPullRequest) -> dict[str, Any]:
         return _install_model(name=payload.name, accept_license=payload.accept_license)
 
-    @app.delete("/v1/models/{name}")
-    def delete_model(name: str) -> dict[str, Any]:
+    @app.delete(
+        "/v1/models/{name}",
+        response_model=V1ModelDeleteResponse,
+        tags=["models"],
+        summary="Delete model (v1)",
+        description="Delete one installed model through the stable v1 route.",
+    )
+    def delete_model(name: str) -> V1ModelDeleteResponse:
         _remove_model_or_404(name)
-        return {"removed": True, "name": name}
+        return V1ModelDeleteResponse(removed=True, name=name)
 
-    @app.post("/api/forecast", response_model=None)
+    @app.post(
+        "/api/forecast",
+        response_model=None,
+        tags=["forecast"],
+        summary="Forecast",
+        description=(
+            "Run one forecast request. Returns one JSON payload when stream=false, "
+            "or NDJSON event lines when stream=true."
+        ),
+        responses={
+            200: {
+                "description": "Forecast result payload or NDJSON stream payload.",
+                "content": {
+                    "application/json": {},
+                    "application/x-ndjson": {},
+                },
+            }
+        },
+    )
     def api_forecast(payload: ApiForecastRequest, request: Request) -> Any:
         response = _execute_forecast(
             app,
@@ -820,7 +1181,19 @@ def create_app(*, runner_manager: RunnerManager | None = None) -> FastAPI:
             media_type="application/x-ndjson",
         )
 
-    @app.post("/api/forecast/progressive", response_model=None)
+    @app.post(
+        "/api/forecast/progressive",
+        response_model=None,
+        tags=["forecast"],
+        summary="Progressive forecast stream",
+        description="Stream staged model-selection and forecast refinement events over SSE.",
+        responses={
+            200: {
+                "description": "SSE stream of progressive forecast events.",
+                "content": {"text/event-stream": {}},
+            }
+        },
+    )
     def api_forecast_progressive(
         payload: AutoForecastRequest,
         request: Request,
@@ -842,7 +1215,16 @@ def create_app(*, runner_manager: RunnerManager | None = None) -> FastAPI:
             },
         )
 
-    @app.post("/api/compare", response_model=CompareResponse)
+    @app.post(
+        "/api/compare",
+        response_model=CompareResponse,
+        tags=["analysis"],
+        summary="Compare models",
+        description=(
+            "Run one forecast request across multiple models and aggregate "
+            "per-model outcomes."
+        ),
+    )
     def compare(payload: CompareRequest, request: Request) -> CompareResponse:
         results: list[CompareResult] = []
         for model in payload.models:
@@ -905,7 +1287,16 @@ def create_app(*, runner_manager: RunnerManager | None = None) -> FastAPI:
             )
         return compare_response
 
-    @app.post("/api/analyze", response_model=AnalyzeResponse)
+    @app.post(
+        "/api/analyze",
+        response_model=AnalyzeResponse,
+        tags=["analysis"],
+        summary="Analyze series",
+        description=(
+            "Compute descriptive analysis metrics, anomalies, and optional "
+            "narrative summaries."
+        ),
+    )
     def analyze(payload: AnalyzeRequest, request: Request) -> AnalyzeResponse:
         response = analyze_series_request(payload)
         if payload.response_options.narrative:
@@ -938,14 +1329,29 @@ def create_app(*, runner_manager: RunnerManager | None = None) -> FastAPI:
             )
         return response
 
-    @app.post("/api/generate", response_model=GenerateResponse)
+    @app.post(
+        "/api/generate",
+        response_model=GenerateResponse,
+        tags=["analysis"],
+        summary="Generate synthetic series",
+        description="Generate synthetic series variations for forecasting experiments and demos.",
+    )
     def generate(payload: GenerateRequest) -> GenerateResponse:
         try:
             return generate_synthetic_series(payload)
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    @app.post("/api/counterfactual", response_model=CounterfactualResponse)
+    @app.post(
+        "/api/counterfactual",
+        response_model=CounterfactualResponse,
+        tags=["analysis"],
+        summary="Counterfactual forecast",
+        description=(
+            "Estimate counterfactual trajectories and effect deltas after an "
+            "intervention index."
+        ),
+    )
     def counterfactual(payload: CounterfactualRequest, request: Request) -> CounterfactualResponse:
         def _forecast_executor(
             counterfactual_forecast_request: ForecastRequest,
@@ -966,7 +1372,13 @@ def create_app(*, runner_manager: RunnerManager | None = None) -> FastAPI:
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    @app.post("/api/scenario-tree", response_model=ScenarioTreeResponse)
+    @app.post(
+        "/api/scenario-tree",
+        response_model=ScenarioTreeResponse,
+        tags=["analysis"],
+        summary="Scenario tree",
+        description="Build branching probabilistic scenario trees from recursive forecast calls.",
+    )
     def scenario_tree(payload: ScenarioTreeRequest, request: Request) -> ScenarioTreeResponse:
         def _forecast_executor(tree_forecast_request: ForecastRequest) -> ForecastResponse:
             request_payload = ForecastRequestWithKeepAlive.model_validate(
@@ -985,15 +1397,39 @@ def create_app(*, runner_manager: RunnerManager | None = None) -> FastAPI:
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    @app.post("/api/report", response_model=ForecastReport)
+    @app.post(
+        "/api/report",
+        response_model=ForecastReport,
+        tags=["analysis"],
+        summary="Composite forecast report",
+        description=(
+            "Run analysis, recommendation, and auto-forecast to produce one "
+            "composite report payload."
+        ),
+    )
     def report(payload: ReportRequest, request: Request) -> ForecastReport:
         return _execute_report(app, payload=payload, request=request)
 
-    @app.post("/api/auto-forecast", response_model=AutoForecastResponse)
+    @app.post(
+        "/api/auto-forecast",
+        response_model=AutoForecastResponse,
+        tags=["forecast"],
+        summary="Auto forecast",
+        description="Automatically select model(s) and run zero-config forecast orchestration.",
+    )
     def auto_forecast(payload: AutoForecastRequest, request: Request) -> AutoForecastResponse:
         return _execute_auto_forecast(app, payload=payload, request=request)
 
-    @app.post("/api/what-if", response_model=WhatIfResponse)
+    @app.post(
+        "/api/what-if",
+        response_model=WhatIfResponse,
+        tags=["analysis"],
+        summary="What-if scenarios",
+        description=(
+            "Run baseline plus transformed scenario forecasts and aggregate "
+            "scenario outcomes."
+        ),
+    )
     def what_if(payload: WhatIfRequest, request: Request) -> WhatIfResponse:
         baseline_payload = _what_if_payload_to_forecast_payload(payload=payload)
         baseline_response = _execute_forecast(app, payload=baseline_payload, request=request)
@@ -1083,11 +1519,23 @@ def create_app(*, runner_manager: RunnerManager | None = None) -> FastAPI:
             summary=summary,
         )
 
-    @app.post("/api/pipeline", response_model=PipelineResponse)
+    @app.post(
+        "/api/pipeline",
+        response_model=PipelineResponse,
+        tags=["analysis"],
+        summary="Autonomous pipeline",
+        description="Run one autonomous end-to-end analysis/recommendation/forecast pipeline.",
+    )
     def pipeline(payload: PipelineRequest, request: Request) -> PipelineResponse:
         return _execute_pipeline(app, payload=payload, request=request)
 
-    @app.post("/v1/forecast", response_model=ForecastResponse)
+    @app.post(
+        "/v1/forecast",
+        response_model=ForecastResponse,
+        tags=["forecast"],
+        summary="Forecast (v1)",
+        description="Run one forecast request through the stable v1 JSON endpoint.",
+    )
     def forecast(payload: ForecastRequestWithKeepAlive, request: Request) -> ForecastResponse:
         return _execute_forecast(app, payload=payload, request=request)
 
@@ -1148,7 +1596,13 @@ def create_app(*, runner_manager: RunnerManager | None = None) -> FastAPI:
     )
     app.state.a2a_server = a2a_server
 
-    @app.get("/.well-known/agent-card.json")
+    @app.get(
+        "/.well-known/agent-card.json",
+        response_model=dict[str, object],
+        tags=["a2a"],
+        summary="A2A agent card",
+        description="Return A2A discovery metadata for the tollama agent endpoint.",
+    )
     def a2a_agent_card(request: Request) -> dict[str, object]:
         return a2a_server.agent_card(request=request)
 
@@ -1156,7 +1610,13 @@ def create_app(*, runner_manager: RunnerManager | None = None) -> FastAPI:
     def a2a_agent_card_legacy(request: Request) -> dict[str, object]:
         return a2a_server.agent_card(request=request)
 
-    @app.post("/a2a")
+    @app.post(
+        "/a2a",
+        response_model=None,
+        tags=["a2a"],
+        summary="A2A JSON-RPC",
+        description="Handle A2A JSON-RPC requests for forecasting and intelligence tools.",
+    )
     def a2a_jsonrpc(request: Request, payload: Any = Body(...)) -> Response:
         return a2a_server.handle_jsonrpc(payload=payload, request=request)
 
@@ -3192,6 +3652,13 @@ def _uptime_seconds(*, started_at: datetime | None, now: datetime) -> int:
         return 0
     seconds = (now - started_at).total_seconds()
     return max(0, int(seconds))
+
+
+def _docs_public_enabled() -> bool:
+    raw = _env_or_none(DOCS_PUBLIC_ENV_NAME)
+    if raw is None:
+        return False
+    return raw.lower() in {"1", "true", "yes", "on"}
 
 
 def _resolve_host_binding_from_env() -> str | None:

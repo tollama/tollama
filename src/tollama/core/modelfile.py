@@ -31,14 +31,36 @@ class TSModelfile(BaseModel):
 
     model_config = ConfigDict(extra="forbid", strict=True)
 
-    model: NonEmptyStr = Field(min_length=1)
-    horizon: PositiveInt | None = Field(default=None, gt=0)
-    quantiles: list[Quantile] = Field(default_factory=list)
-    options: dict[NonEmptyStr, Any] = Field(default_factory=dict)
-    parameters: ForecastParameters = Field(default_factory=ForecastParameters)
-    covariate_mappings: dict[NonEmptyStr, NonEmptyStr] | None = None
-    preprocessing: dict[NonEmptyStr, Any] | None = None
-    enabled: StrictBool = True
+    model: NonEmptyStr = Field(min_length=1, description="Default model name for this profile.")
+    horizon: PositiveInt | None = Field(
+        default=None,
+        gt=0,
+        description="Default forecast horizon override.",
+    )
+    quantiles: list[Quantile] = Field(
+        default_factory=list,
+        description="Default quantiles to request from forecast responses.",
+    )
+    options: dict[NonEmptyStr, Any] = Field(
+        default_factory=dict,
+        description="Opaque forecast options merged into request payloads.",
+    )
+    parameters: ForecastParameters = Field(
+        default_factory=ForecastParameters,
+        description="Default typed forecast parameters merged into requests.",
+    )
+    covariate_mappings: dict[NonEmptyStr, NonEmptyStr] | None = Field(
+        default=None,
+        description="Optional covariate alias mappings for external schema adaptation.",
+    )
+    preprocessing: dict[NonEmptyStr, Any] | None = Field(
+        default=None,
+        description="Optional preprocessing metadata for external tooling.",
+    )
+    enabled: StrictBool = Field(
+        default=True,
+        description="Whether the profile is active and should be considered by tooling.",
+    )
 
     @field_validator("quantiles")
     @classmethod
@@ -70,9 +92,12 @@ class StoredModelfile(BaseModel):
 
     model_config = ConfigDict(extra="forbid", strict=True)
 
-    name: NonEmptyStr = Field(min_length=1)
-    path: NonEmptyStr = Field(min_length=1)
-    profile: TSModelfile
+    name: NonEmptyStr = Field(min_length=1, description="Stored modelfile profile name.")
+    path: NonEmptyStr = Field(
+        min_length=1,
+        description="Absolute filesystem path of stored YAML file.",
+    )
+    profile: TSModelfile = Field(description="Resolved and validated TSModelfile profile payload.")
 
 
 class ModelfileUpsertRequest(BaseModel):
@@ -80,9 +105,15 @@ class ModelfileUpsertRequest(BaseModel):
 
     model_config = ConfigDict(extra="forbid", strict=True)
 
-    name: NonEmptyStr = Field(min_length=1)
-    profile: TSModelfile | None = None
-    content: NonEmptyStr | None = None
+    name: NonEmptyStr = Field(min_length=1, description="Profile name to create or update.")
+    profile: TSModelfile | None = Field(
+        default=None,
+        description="Structured TSModelfile payload. Mutually exclusive with `content`.",
+    )
+    content: NonEmptyStr | None = Field(
+        default=None,
+        description="Raw YAML TSModelfile content. Mutually exclusive with `profile`.",
+    )
 
     def resolved_profile(self) -> TSModelfile:
         """Return parsed profile from either typed profile or raw YAML content."""
@@ -100,7 +131,10 @@ class ModelfileListResponse(BaseModel):
 
     model_config = ConfigDict(extra="forbid", strict=True)
 
-    modelfiles: list[StoredModelfile] = Field(default_factory=list)
+    modelfiles: list[StoredModelfile] = Field(
+        default_factory=list,
+        description="List of stored modelfile entries.",
+    )
 
 
 def list_modelfiles(*, paths: TollamaPaths | None = None) -> list[StoredModelfile]:
@@ -243,3 +277,28 @@ def _shallow_merge_maps(base: dict[str, Any], override: dict[str, Any]) -> dict[
 def _load_profile_from_path(path: Path) -> TSModelfile:
     raw = path.read_text(encoding="utf-8")
     return TSModelfile.from_yaml(raw)
+
+
+def _default_field_description(field_name: str) -> str:
+    readable = field_name.replace("_", " ").strip()
+    if not readable:
+        return "Field value."
+    return f"{readable[0].upper()}{readable[1:]}."
+
+
+def _populate_missing_field_descriptions() -> None:
+    """Populate missing model field descriptions for OpenAPI schema generation."""
+    for candidate in globals().values():
+        if not isinstance(candidate, type) or not issubclass(candidate, BaseModel):
+            continue
+        updated = False
+        for field_name, field in candidate.model_fields.items():
+            if field.description is not None:
+                continue
+            field.description = _default_field_description(field_name)
+            updated = True
+        if updated:
+            candidate.model_rebuild(force=True)
+
+
+_populate_missing_field_descriptions()

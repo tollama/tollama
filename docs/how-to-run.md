@@ -10,6 +10,17 @@ This guide targets the current TSFM-capable registry entries in `model-registry/
 
 - SDK quickstart notebook: `examples/quickstart.ipynb`
 - Agent-oriented notebook: `examples/agent_demo.ipynb`
+- Tutorial notebooks:
+  - `examples/tutorial_covariates.ipynb`
+  - `examples/tutorial_comparison.ipynb`
+  - `examples/tutorial_what_if.ipynb`
+  - `examples/tutorial_auto_forecast.ipynb`
+
+Additional docs:
+
+- Troubleshooting (canonical): `docs/troubleshooting.md`
+- CLI cheat sheet: `docs/cli-cheatsheet.md`
+- API reference: `docs/api-reference.md`
 
 ## TSFM Model Matrix
 
@@ -438,66 +449,19 @@ supported key (for example `offline` -> `pull.offline`).
 
 ## Troubleshooting
 
-License acceptance error (`409`):
+The canonical troubleshooting guide is now:
 
-- If pull output says license acceptance is required, re-run with `--accept-license`.
+- `docs/troubleshooting.md`
 
-Missing runner dependency errors:
+Quick triage commands:
 
-- If `daemon.auto_bootstrap=true` (default), try preinstalling runtimes first:
-  - `tollama runtime list`
-  - `tollama runtime install --all`
-- Install the matching extras:
-  - `python -m pip install -e ".[runner_torch]"`
-  - `python -m pip install -e ".[runner_timesfm]"`
-  - `python -m pip install -e ".[runner_uni2ts]"`
-  - `python -m pip install -e ".[runner_sundial]"`
-  - `python -m pip install -e ".[runner_toto]"`
-- If `runner_uni2ts` install fails on Python 3.12+ (build backend/dependency issues),
-  recreate the venv with Python 3.11 and reinstall.
-
-Dependency resolver says `gluonts` has no matching distribution / install conflict:
-
-- This usually means the environment is Python `3.12+`.
-- Recreate the virtual environment with Python `3.11` and reinstall extras.
-
-
-Offline/local-files-only pull failures:
-
-- Pull at least once without `--offline`/`--local-files-only` to seed cache.
-
-Authentication errors from Hugging Face:
-
-- Export a valid token: `export TOLLAMA_HF_TOKEN=hf_xxx`
-- Confirm your account has access to the model repository.
-
-Daemon unreachable:
-
-- Ensure `tollama serve` is running.
-- Confirm host/port (`http://localhost:11435` by default).
-- Use `tollama info --remote` to force daemon diagnostics.
-
-Runner unavailable after restart:
-
-- Most commonly caused by mixed environments (for example daemon in one Python, runner scripts in another).
-- Default mode: check per-family runtime status and reinstall as needed:
-  - `tollama runtime list`
-  - `tollama runtime install --all`
-- Single-venv mode: recreate one `.venv` with Python 3.11, reinstall all runner extras, and launch with `./.venv/bin/tollama`.
-- Also restart the daemon after dependency upgrades so stale runner subprocesses are not reused.
-
-Sundial `shape '[-1, 2]' is invalid for input of size 1`:
-
-- Use latest `tollama` code and restart `tollama serve` (this was caused by legacy generation-path compatibility).
-- Verify the running daemon is from the same `.venv` as your CLI: `which python`, `which tollama`.
-
-Forecast timeout (`failed: timed out` / runner timeout):
-
-- Increase CLI timeout for slower first-run inference:
-  - `tollama run moirai-2.0-R-small --input examples/moirai_2p0_request.json --no-stream --timeout 600`
-- The `--timeout` flag now propagates to the daemon, overriding the default.
-- You can also set a higher default for the daemon:
-  - `export TOLLAMA_FORECAST_TIMEOUT_SECONDS=600`
+```bash
+tollama info
+tollama doctor
+tollama runtime list
+tollama list
+tollama ps
+```
 
 ## Integration Matrix Snapshot (2026-02-17)
 

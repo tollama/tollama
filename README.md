@@ -198,7 +198,10 @@ print(card["name"])
 - Model-family setup and per-model examples: `docs/models.md`
 - Covariates contract and compatibility matrix: `docs/covariates.md`
 - Full setup and dependency guide: `docs/how-to-run.md`
-- Notebooks: `examples/quickstart.ipynb`, `examples/agent_demo.ipynb`
+- Troubleshooting (canonical): `docs/troubleshooting.md`
+- CLI command reference: `docs/cli-cheatsheet.md`
+- API reference: `docs/api-reference.md`
+- Notebooks: `examples/quickstart.ipynb`, `examples/agent_demo.ipynb`, `examples/tutorial_covariates.ipynb`, `examples/tutorial_comparison.ipynb`, `examples/tutorial_what_if.ipynb`, `examples/tutorial_auto_forecast.ipynb`
 
 ## Local Checks
 
@@ -233,6 +236,9 @@ Optional API-key auth is configured in `~/.tollama/config.json`:
   }
 }
 ```
+
+When API keys are configured, interactive docs endpoints (`/docs`, `/redoc`, `/openapi.json`)
+also require bearer auth by default. For local-only public docs, set `TOLLAMA_DOCS_PUBLIC=1`.
 
 When keys are set, daemon endpoints require `Authorization: Bearer <key>`.
 CLI and SDK clients can use `TOLLAMA_API_KEY` / `api_key=...`.
@@ -556,32 +562,9 @@ When `TOLLAMA_JSON_STDERR=1`, stderr is emitted as structured JSON:
 
 ### Troubleshooting
 
-1. `tollama: command not found`
-   - Ensure `tollama` is on system PATH, or prepend venv bin path in OpenClaw:
-
-```json5
-{
-  "tools": {
-    "exec": {
-      "pathPrepend": [
-        "/ABSOLUTE/PATH/TO/tollama/.venv/bin"
-      ]
-    }
-  }
-}
-```
-
-2. Daemon connect failure in OpenClaw but not in local terminal
-   - This is usually an exec host mismatch (`sandbox` vs `gateway`) with
-     `127.0.0.1`.
-   - Set `--base-url` to a daemon address reachable from the current exec host.
-
-3. First-run timeout
-   - Increase `--timeout`, or set `TOLLAMA_FORECAST_TIMEOUT_SECONDS`.
-
-4. License-gated models
-   - Pull with license acceptance:
-     `tollama pull moirai-2.0-R-small --accept-license`
+- Canonical troubleshooting guide: `docs/troubleshooting.md`
+- OpenClaw-specific path issue: ensure `tollama` is on PATH in the OpenClaw exec environment.
+- OpenClaw-specific connectivity issue: verify `--base-url` is reachable from the OpenClaw exec host.
 
 ### Skill smoke checks
 

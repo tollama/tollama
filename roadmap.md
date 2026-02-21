@@ -48,6 +48,14 @@ the optional future `packages/*` split as a migration phase.
 - `tollama run` can prompt for installed model selection when `MODEL` is omitted in TTY,
   and `--interactive` can prompt for discovered example request payloads when `--input`
   is omitted.
+- Canonical troubleshooting guide and CLI cheat sheet are now separated under
+  `docs/troubleshooting.md` and `docs/cli-cheatsheet.md`.
+- OpenAPI endpoint docs are available at `/docs`, `/redoc`, `/openapi.json`, and when
+  API keys are configured those docs endpoints require bearer auth by default
+  (`TOLLAMA_DOCS_PUBLIC=1` can be used for local public-doc overrides).
+- API endpoint inventory documentation is now maintained in `docs/api-reference.md`.
+- Tutorial notebooks now include covariates, comparison, what-if, and auto-forecast
+  walkthroughs with both matplotlib and plotly outputs.
 - v1 non-goals are still respected: no training/fine-tuning and no distributed scheduler.
 
 ### Planned work / TODO

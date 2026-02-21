@@ -95,3 +95,48 @@ def test_auth_ignores_blank_configured_keys(monkeypatch, tmp_path: Path) -> None
         response = client.get("/v1/health")
 
     assert response.status_code == 200
+
+
+def test_docs_require_auth_when_api_keys_are_configured(monkeypatch, tmp_path: Path) -> None:
+    paths = _paths(monkeypatch, tmp_path)
+    _save_auth_config(paths, ["secret-key"])
+
+    with TestClient(create_app()) as client:
+        docs = client.get("/docs")
+        redoc = client.get("/redoc")
+        openapi = client.get("/openapi.json")
+
+    assert docs.status_code == 401
+    assert redoc.status_code == 401
+    assert openapi.status_code == 401
+
+
+def test_docs_allow_bearer_auth_when_api_keys_are_configured(monkeypatch, tmp_path: Path) -> None:
+    paths = _paths(monkeypatch, tmp_path)
+    _save_auth_config(paths, ["secret-key"])
+    headers = {"Authorization": "Bearer secret-key"}
+
+    with TestClient(create_app()) as client:
+        docs = client.get("/docs", headers=headers)
+        redoc = client.get("/redoc", headers=headers)
+        openapi = client.get("/openapi.json", headers=headers)
+
+    assert docs.status_code == 200
+    assert redoc.status_code == 200
+    assert openapi.status_code == 200
+    assert "openapi" in openapi.json()
+
+
+def test_docs_can_be_public_with_env_override(monkeypatch, tmp_path: Path) -> None:
+    paths = _paths(monkeypatch, tmp_path)
+    _save_auth_config(paths, ["secret-key"])
+    monkeypatch.setenv("TOLLAMA_DOCS_PUBLIC", "1")
+
+    with TestClient(create_app()) as client:
+        docs = client.get("/docs")
+        openapi = client.get("/openapi.json")
+        health = client.get("/v1/health")
+
+    assert docs.status_code == 200
+    assert openapi.status_code == 200
+    assert health.status_code == 401
