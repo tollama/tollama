@@ -123,6 +123,8 @@
   - 현재: `tollama list`/`tollama ps` 테이블 기본 출력 + `--json` 호환 모드 지원
   - 현재: `tollama config keys`/`tollama config init` 및 unknown key 추천(`Did you mean`) 지원
   - 현재: daemon/client/CLI/MCP/LangChain 공통 에러 `hint` 전달(기존 `detail` 호환 유지)
+  - 현재: long-running CLI에 `--progress auto|on|off` 도입(`pull`/`run`/`quickstart`/`runtime install`), stdout 계약 유지(stder-only progress)
+  - 현재: `tollama run`에서 MODEL 생략 시 설치된 모델 선택 프롬프트 + `--interactive` 예제 payload 선택 지원
 - [ ] (P1) "pull이 런타임까지 설치"되는 installer(런타임 venv 자동 구성) 확립
 
 ### Stage 2 (P1): "공통 전처리/공변량 표준화"

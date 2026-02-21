@@ -8,11 +8,12 @@ import shutil
 import sys
 from difflib import get_close_matches
 from pathlib import Path
-from typing import Any, NoReturn, cast
+from typing import Any, Literal, NoReturn, cast
 
 import httpx
 import typer
 import uvicorn
+from tqdm import tqdm
 
 from tollama.core.config import (
     CONFIG_KEY_DESCRIPTIONS,
@@ -73,11 +74,46 @@ _DOCTOR_TOKEN_ENV_KEYS = (
     "HF_HUB_TOKEN",
 )
 _API_KEY_ENV_NAME = "TOLLAMA_API_KEY"
+_TABLE_MAX_COL_WIDTH = 48
+_TABLE_DEFAULT_GAP = 2
+
+ProgressMode = Literal["auto", "on", "off"]
+
+_COLOR_SUCCESS = typer.colors.GREEN
+_COLOR_WARNING = typer.colors.YELLOW
+_COLOR_ERROR = typer.colors.RED
+_COLOR_DIM = typer.colors.BRIGHT_BLACK
 
 
 def _exit_with_message(message: str, *, code: int = 2) -> NoReturn:
     typer.echo(message)
     raise typer.Exit(code=code)
+
+
+def _style_text(
+    text: str,
+    *,
+    fg: int | None = None,
+    bold: bool = False,
+    dim: bool = False,
+    err: bool = False,
+) -> str:
+    del err
+    return typer.style(text, fg=fg, bold=bold, dim=dim)
+
+
+def _resolve_progress_enabled(mode: ProgressMode) -> bool:
+    if mode == "on":
+        return True
+    if mode == "off":
+        return False
+    return bool(getattr(sys.stderr, "isatty", lambda: False)())
+
+
+def _progress_note(enabled: bool, message: str) -> None:
+    if not enabled:
+        return
+    typer.echo(_style_text(message, fg=_COLOR_DIM, err=True), err=True)
 
 
 def _error_hint(exc: BaseException) -> str | None:
@@ -90,10 +126,10 @@ def _error_hint(exc: BaseException) -> str | None:
 
 
 def _exit_with_runtime_error(exc: RuntimeError, *, code: int = 1) -> NoReturn:
-    typer.echo(f"Error: {exc}", err=True)
+    typer.echo(_style_text(f"Error: {exc}", fg=_COLOR_ERROR, err=True), err=True)
     hint = _error_hint(exc)
     if hint is not None:
-        typer.echo(f"Hint: {hint}", err=True)
+        typer.echo(_style_text(f"Hint: {hint}", fg=_COLOR_WARNING, err=True), err=True)
     raise typer.Exit(code=code) from exc
 
 
@@ -202,6 +238,11 @@ def pull(
         help="Daemon base URL. Defaults to http://localhost:11435.",
     ),
     timeout: float = typer.Option(10.0, min=0.1, help="HTTP timeout in seconds."),
+    progress: ProgressMode = typer.Option(
+        "auto",
+        "--progress",
+        help="Progress display mode: auto, on, or off.",
+    ),
 ) -> None:
     """Pull a model from the registry into local storage."""
     client = _make_client(base_url=base_url, timeout=timeout)
@@ -243,7 +284,11 @@ def pull(
         )
     except RuntimeError as exc:
         _exit_with_runtime_error(exc)
-    _emit_result(result, stream_kind="pull")
+    _emit_result(
+        result,
+        stream_kind="pull",
+        show_progress=_resolve_progress_enabled(progress),
+    )
 
 
 @config_app.command("list")
@@ -437,10 +482,17 @@ def doctor(
     if json_output:
         typer.echo(json.dumps({"checks": checks, "summary": summary}, indent=2, sort_keys=True))
     else:
-        typer.echo("tollama doctor")
+        typer.echo(_style_text("tollama doctor", bold=True))
         for check in checks:
             label = check["status"].upper()
-            typer.echo(f"  {label:<5} {check['message']}")
+            fg = None
+            if check["status"] == "pass":
+                fg = _COLOR_SUCCESS
+            elif check["status"] == "warn":
+                fg = _COLOR_WARNING
+            elif check["status"] == "fail":
+                fg = _COLOR_ERROR
+            typer.echo(f"  {_style_text(f'{label:<5}', fg=fg)} {check['message']}")
         typer.echo(
             "Summary: "
             f"{summary['pass']} passed, {summary['warn']} warning, {summary['fail']} failed",
@@ -688,9 +740,9 @@ def modelfile_rm(
 
 @app.command("run")
 def run(
-    model: str = typer.Argument(
-        ...,
-        help="Model name to run.",
+    model: str | None = typer.Argument(
+        None,
+        help="Model name to run. Omit to select from installed models in an interactive terminal.",
         autocompletion=_complete_model_names,
     ),
     input_path: Path | None = typer.Option(
@@ -712,6 +764,11 @@ def run(
         "--dry-run",
         help="Validate request only without running inference.",
     ),
+    interactive: bool = typer.Option(
+        False,
+        "--interactive",
+        help="Prompt to choose an example request file when --input is omitted.",
+    ),
     accept_license: bool = typer.Option(
         False,
         "--accept-license",
@@ -726,19 +783,26 @@ def run(
         min=0.1,
         help="HTTP timeout in seconds. Increase for first-run model load/inference.",
     ),
+    progress: ProgressMode = typer.Option(
+        "auto",
+        "--progress",
+        help="Progress display mode: auto, on, or off.",
+    ),
 ) -> None:
     """Run a forecast through POST /api/forecast, auto-pulling if needed."""
-    _emit_uni2ts_python_runtime_warning(model)
-    payload = _load_request_payload(path=input_path, model=model)
-    payload["model"] = model
+    show_progress = _resolve_progress_enabled(progress)
+    client = _make_client(base_url=base_url, timeout=timeout)
+    resolved_model = _resolve_run_model_name(model, client=client)
+    _emit_uni2ts_python_runtime_warning(resolved_model)
+    payload = _load_request_payload(path=input_path, model=resolved_model, interactive=interactive)
+    payload["model"] = resolved_model
     if horizon is not None:
         payload["horizon"] = horizon
     if timeout is not None:
         payload["timeout"] = timeout
 
-    client = _make_client(base_url=base_url, timeout=timeout)
-
     if dry_run:
+        _progress_note(show_progress, "Validating request payload ...")
         try:
             validation_result = client.validate_request(payload)
         except RuntimeError as exc:
@@ -748,28 +812,85 @@ def run(
         is_valid = bool(validation_result.get("valid"))
         raise typer.Exit(code=0 if is_valid else 2)
 
+    _progress_note(show_progress, f"Checking model availability for {resolved_model!r} ...")
     try:
-        client.show_model(model)
+        client.show_model(resolved_model)
     except DaemonHTTPError as exc:
         if exc.status_code != 404:
             _exit_with_runtime_error(exc)
+        _progress_note(show_progress, f"Model {resolved_model!r} is missing, pulling ...")
         try:
             pull_result = client.pull_model(
-                name=model,
+                name=resolved_model,
                 stream=stream,
                 accept_license=accept_license,
             )
         except RuntimeError as pull_exc:
             _exit_with_runtime_error(pull_exc)
-        _emit_result(pull_result, stream_kind="pull")
+        _emit_result(
+            pull_result,
+            stream_kind="pull",
+            show_progress=show_progress,
+        )
     except RuntimeError as exc:
         _exit_with_runtime_error(exc)
 
+    _progress_note(show_progress, f"Running forecast with {resolved_model!r} ...")
     try:
         forecast_result = client.forecast(payload, stream=stream)
     except RuntimeError as exc:
         _exit_with_runtime_error(exc)
-    _emit_result(forecast_result, stream_kind="forecast")
+    _emit_result(
+        forecast_result,
+        stream_kind="forecast",
+        show_progress=show_progress,
+    )
+    _progress_note(show_progress, "Forecast complete.")
+
+
+def _resolve_run_model_name(model: str | None, *, client: TollamaClient) -> str:
+    if model is not None:
+        return model
+    if not sys.stdin.isatty():
+        _exit_with_message(
+            "missing model name. Provide MODEL argument or run in an interactive terminal.",
+            code=2,
+        )
+
+    try:
+        response = client.list_tags()
+    except RuntimeError as exc:
+        _exit_with_runtime_error(exc)
+
+    names: list[str] = []
+    models = response.get("models")
+    if isinstance(models, list):
+        for item in models:
+            if not isinstance(item, dict):
+                continue
+            candidate = item.get("name") or item.get("model")
+            if isinstance(candidate, str) and candidate and candidate not in names:
+                names.append(candidate)
+
+    if not names:
+        _exit_with_message(
+            "no installed models found. Pull one with `tollama pull <model>`.",
+            code=1,
+        )
+
+    typer.echo(_style_text("Select a model:", bold=True))
+    for index, name in enumerate(names, start=1):
+        typer.echo(f"  {index}. {name}")
+
+    response_text = typer.prompt("Enter a number", default="1").strip()
+    try:
+        selected_index = int(response_text)
+    except ValueError:
+        _exit_with_message(f"invalid selection {response_text!r}; expected a number", code=1)
+
+    if selected_index < 1 or selected_index > len(names):
+        _exit_with_message(f"selection must be between 1 and {len(names)}", code=1)
+    return names[selected_index - 1]
 
 
 @app.command("quickstart")
@@ -796,21 +917,39 @@ def quickstart(
         help="Daemon base URL. Defaults to http://localhost:11435.",
     ),
     timeout: float = typer.Option(30.0, min=0.1, help="HTTP timeout in seconds."),
+    progress: ProgressMode = typer.Option(
+        "auto",
+        "--progress",
+        help="Progress display mode: auto, on, or off.",
+    ),
 ) -> None:
     """Pull a model, run demo forecast, and print next-step commands."""
+    show_progress = _resolve_progress_enabled(progress)
     client = _make_client(base_url=base_url, timeout=timeout)
 
+    _progress_note(show_progress, "Checking daemon health ...")
     try:
         client.health()
     except RuntimeError as exc:
-        typer.echo(f"Error: unable to reach tollama daemon at {base_url}: {exc}", err=True)
+        typer.echo(
+            _style_text(
+                f"Error: unable to reach tollama daemon at {base_url}: {exc}",
+                fg=_COLOR_ERROR,
+                err=True,
+            ),
+            err=True,
+        )
         hint = _error_hint(exc)
         if hint is not None:
-            typer.echo(f"Hint: {hint}", err=True)
+            typer.echo(_style_text(f"Hint: {hint}", fg=_COLOR_WARNING, err=True), err=True)
         else:
-            typer.echo("Hint: Start it with `tollama serve`.", err=True)
+            typer.echo(
+                _style_text("Hint: Start it with `tollama serve`.", fg=_COLOR_WARNING, err=True),
+                err=True,
+            )
         raise typer.Exit(code=1) from exc
 
+    _progress_note(show_progress, f"Pulling {model!r} ...")
     try:
         pull_result = client.pull_model(
             name=model,
@@ -821,20 +960,21 @@ def quickstart(
         _exit_with_runtime_error(exc)
 
     request_payload = _quickstart_request_payload(model=model, horizon=horizon)
+    _progress_note(show_progress, f"Forecasting with {model!r} ...")
     try:
         forecast_result = client.forecast(request_payload, stream=False)
     except RuntimeError as exc:
         _exit_with_runtime_error(exc)
 
-    typer.echo("tollama quickstart complete")
+    typer.echo(_style_text("tollama quickstart complete", fg=_COLOR_SUCCESS, bold=True))
     typer.echo("")
-    typer.echo("Pull result:")
-    _emit_result(pull_result, stream_kind="pull")
+    typer.echo(_style_text("Pull result:", bold=True))
+    _emit_result(pull_result, stream_kind="pull", show_progress=show_progress)
     typer.echo("")
-    typer.echo("Forecast result:")
-    _emit_result(forecast_result, stream_kind="forecast")
+    typer.echo(_style_text("Forecast result:", bold=True))
+    _emit_result(forecast_result, stream_kind="forecast", show_progress=show_progress)
     typer.echo("")
-    typer.echo("Next steps:")
+    typer.echo(_style_text("Next steps:", bold=True))
     typer.echo("  1. tollama list")
     typer.echo("  2. tollama run mock --input examples/request.json --no-stream")
     typer.echo(
@@ -874,7 +1014,10 @@ def _emit_uni2ts_python_runtime_warning(model: str) -> None:
 
     model_name = model.lower()
     if "moirai" in model_name or "uni2ts" in model_name:
-        typer.echo(f"warning: {_UNI2TS_PYTHON_WARNING}")
+        typer.echo(
+            _style_text(f"warning: {_UNI2TS_PYTHON_WARNING}", fg=_COLOR_WARNING, err=True),
+            err=True,
+        )
         return
 
     try:
@@ -882,7 +1025,10 @@ def _emit_uni2ts_python_runtime_warning(model: str) -> None:
     except KeyError:
         return
     if spec.family == "uni2ts":
-        typer.echo(f"warning: {_UNI2TS_PYTHON_WARNING}")
+        typer.echo(
+            _style_text(f"warning: {_UNI2TS_PYTHON_WARNING}", fg=_COLOR_WARNING, err=True),
+            err=True,
+        )
 
 
 def _is_python_312_or_newer() -> bool:
@@ -893,16 +1039,23 @@ def _emit_result(
     result: dict[str, Any] | list[dict[str, Any]],
     *,
     stream_kind: str = "generic",
+    show_progress: bool = False,
 ) -> None:
     if isinstance(result, list):
+        pull_progress: tqdm[Any] | None = None
         for item in result:
             _emit_warnings(item)
             if stream_kind == "pull" and _is_pull_progress_event(item):
-                status = item.get("status")
-                if isinstance(status, str) and status:
-                    typer.echo(f" {status}", err=True)
+                if show_progress:
+                    pull_progress = _update_pull_progress_bar(pull_progress, item)
+                else:
+                    status = item.get("status")
+                    if isinstance(status, str) and status:
+                        typer.echo(f" {status}", err=True)
                 continue
             typer.echo(json.dumps(item, sort_keys=True))
+        if pull_progress is not None:
+            pull_progress.close()
         return
     _emit_warnings(result)
     typer.echo(json.dumps(result, indent=2, sort_keys=True))
@@ -914,7 +1067,7 @@ def _emit_warnings(payload: dict[str, Any]) -> None:
         for warning in warnings:
             if isinstance(warning, str) and warning:
                 typer.echo(
-                    typer.style(f"warning: {warning}", fg=typer.colors.YELLOW),
+                    _style_text(f"warning: {warning}", fg=_COLOR_WARNING, err=True),
                     err=True,
                 )
 
@@ -925,7 +1078,7 @@ def _emit_warnings(payload: dict[str, Any]) -> None:
             for warning in nested:
                 if isinstance(warning, str) and warning:
                     typer.echo(
-                        typer.style(f"warning: {warning}", fg=typer.colors.YELLOW),
+                        _style_text(f"warning: {warning}", fg=_COLOR_WARNING, err=True),
                         err=True,
                     )
 
@@ -935,6 +1088,48 @@ def _is_pull_progress_event(item: dict[str, Any]) -> bool:
     if not isinstance(status, str):
         return False
     return status not in {"success"}
+
+
+def _update_pull_progress_bar(
+    progress_bar: tqdm[Any] | None,
+    event: dict[str, Any],
+) -> tqdm[Any] | None:
+    status = event.get("status")
+    completed = event.get("completed_bytes")
+    total = event.get("total_bytes")
+    has_bytes = isinstance(completed, int) and not isinstance(completed, bool)
+    has_total = isinstance(total, int) and not isinstance(total, bool) and total > 0
+
+    if not has_bytes and not has_total:
+        if isinstance(status, str) and status:
+            typer.echo(_style_text(f" {status}", fg=_COLOR_DIM, err=True), err=True)
+        return progress_bar
+
+    if progress_bar is None:
+        initial_total = total if has_total else None
+        progress_bar = tqdm(
+            total=initial_total,
+            unit="B",
+            unit_scale=True,
+            desc="pull",
+            file=sys.stderr,
+            leave=False,
+            dynamic_ncols=True,
+        )
+
+    if has_total and progress_bar.total != total:
+        progress_bar.total = total
+
+    if has_bytes:
+        if completed >= progress_bar.n:
+            progress_bar.update(completed - progress_bar.n)
+        else:
+            progress_bar.n = completed
+            progress_bar.refresh()
+
+    if isinstance(status, str) and status:
+        progress_bar.set_description_str(status)
+    return progress_bar
 
 
 def _render_model_table(models: list[dict[str, Any]]) -> str:
@@ -961,7 +1156,7 @@ def _render_model_table(models: list[dict[str, Any]]) -> str:
 
     if not rows:
         return "No models installed."
-    return _render_table(("NAME", "FAMILY", "SIZE", "MODIFIED"), rows)
+    return _render_table(("NAME", "FAMILY", "SIZE", "MODIFIED"), rows, right_align={2})
 
 
 def _render_running_table(models: list[dict[str, Any]]) -> str:
@@ -984,19 +1179,59 @@ def _render_running_table(models: list[dict[str, Any]]) -> str:
     return _render_table(("NAME", "FAMILY", "EXPIRES"), rows)
 
 
-def _render_table(headers: tuple[str, ...], rows: list[tuple[str, ...]]) -> str:
-    widths = [len(header) for header in headers]
-    for row in rows:
+def _render_table(
+    headers: tuple[str, ...],
+    rows: list[tuple[str, ...]],
+    *,
+    right_align: set[int] | None = None,
+) -> str:
+    return _render_table_with_layout(headers, rows, right_align=right_align)
+
+
+def _render_table_with_layout(
+    headers: tuple[str, ...],
+    rows: list[tuple[str, ...]],
+    *,
+    right_align: set[int] | None = None,
+) -> str:
+    normalized_rows = [
+        tuple(_truncate_cell(str(value), max_width=_TABLE_MAX_COL_WIDTH) for value in row)
+        for row in rows
+    ]
+    widths = [len(_truncate_cell(header, max_width=_TABLE_MAX_COL_WIDTH)) for header in headers]
+    for row in normalized_rows:
         for index, value in enumerate(row):
             widths[index] = max(widths[index], len(value))
 
-    header_line = "  ".join(header.ljust(widths[idx]) for idx, header in enumerate(headers))
-    separator_line = "  ".join("-" * widths[idx] for idx in range(len(headers)))
+    aligned_headers = []
+    for idx, header in enumerate(headers):
+        truncated = _truncate_cell(header, max_width=_TABLE_MAX_COL_WIDTH)
+        aligned_headers.append(_align_cell(truncated, widths[idx], idx, right_align))
+    header_line = (" " * _TABLE_DEFAULT_GAP).join(aligned_headers)
+    separator_parts = ["-" * widths[idx] for idx in range(len(headers))]
+    separator_line = (" " * _TABLE_DEFAULT_GAP).join(separator_parts)
     row_lines = [
-        "  ".join(value.ljust(widths[idx]) for idx, value in enumerate(row))
-        for row in rows
+        (" " * _TABLE_DEFAULT_GAP).join(
+            _align_cell(value, widths[idx], idx, right_align)
+            for idx, value in enumerate(row)
+        )
+        for row in normalized_rows
     ]
     return "\n".join([header_line, separator_line, *row_lines])
+
+
+def _truncate_cell(value: str, *, max_width: int) -> str:
+    if max_width < 4:
+        return value[:max_width]
+    if len(value) <= max_width:
+        return value
+    return f"{value[: max_width - 3]}..."
+
+
+def _align_cell(value: str, width: int, index: int, right_align: set[int] | None) -> str:
+    if right_align is not None and index in right_align:
+        return value.rjust(width)
+    return value.ljust(width)
 
 
 def _format_bytes(size: int) -> str:
@@ -1527,13 +1762,23 @@ def _covariates_summary(capabilities: Any) -> str | None:
     return ", ".join(parts)
 
 
-def _load_request_payload(path: Path | None, *, model: str) -> dict[str, Any]:
+def _load_request_payload(
+    path: Path | None,
+    *,
+    model: str,
+    interactive: bool = False,
+) -> dict[str, Any]:
     if path is not None:
         return _load_request_payload_from_path(path)
 
     stdin_payload = _load_request_payload_from_stdin()
     if stdin_payload is not None:
         return stdin_payload
+
+    if interactive:
+        selected = _prompt_example_request_path(model)
+        if selected is not None:
+            return _load_request_payload_from_path(selected)
 
     default_path = _resolve_default_request_path(model)
     if default_path is not None:
@@ -1556,8 +1801,16 @@ def _load_request_payload_from_stdin() -> dict[str, Any] | None:
 
 
 def _resolve_default_request_path(model: str) -> Path | None:
+    candidates = _candidate_request_paths(model)
+    if not candidates:
+        return None
+    return candidates[0]
+
+
+def _candidate_request_paths(model: str) -> list[Path]:
     candidate_names = [f"{alias}_request.json" for alias in _request_payload_aliases(model)]
     candidate_names.append("request.json")
+    candidates: list[Path] = []
 
     roots: list[Path] = [Path.cwd()]
     package_root = _project_root_from_module()
@@ -1569,9 +1822,43 @@ def _resolve_default_request_path(model: str) -> Path | None:
         for name in candidate_names:
             candidate = example_dir / name
             if candidate.is_file():
-                return candidate
+                if candidate not in candidates:
+                    candidates.append(candidate)
+    return candidates
 
-    return None
+
+def _prompt_example_request_path(model: str) -> Path | None:
+    if not sys.stdin.isatty():
+        return None
+
+    candidates = _candidate_request_paths(model)
+    if not candidates:
+        return None
+
+    typer.echo(_style_text("Select an example request payload:", bold=True))
+    for index, candidate in enumerate(candidates, start=1):
+        typer.echo(f"  {index}. {candidate}")
+
+    response = typer.prompt(
+        "Enter a number (blank to skip)",
+        default="",
+        show_default=False,
+    ).strip()
+    if not response:
+        return None
+
+    try:
+        selected_index = int(response)
+    except ValueError:
+        _exit_with_message(f"invalid selection {response!r}; expected a number", code=1)
+
+    if selected_index < 1 or selected_index > len(candidates):
+        _exit_with_message(
+            f"selection must be between 1 and {len(candidates)}",
+            code=1,
+        )
+
+    return candidates[selected_index - 1]
 
 
 def _request_payload_aliases(model: str) -> tuple[str, ...]:
@@ -1678,8 +1965,9 @@ def runtime_list(
         py_ver = entry.get("python_version") or "—"
         constraint = entry.get("python_constraint")
         constraint_tag = f"  (requires python{constraint})" if constraint else ""
+        mark_fg = _COLOR_SUCCESS if entry["installed"] else _COLOR_ERROR
         typer.echo(
-            f"  {mark}  {entry['family']:<12}  tollama={version}"
+            f"  {_style_text(mark, fg=mark_fg)}  {entry['family']:<12}  tollama={version}"
             f"  python={py_ver}{constraint_tag}"
         )
 
@@ -1694,18 +1982,28 @@ def runtime_install(
     reinstall: bool = typer.Option(
         False, "--reinstall", help="Force reinstall even if up-to-date.",
     ),
+    progress: ProgressMode = typer.Option(
+        "auto",
+        "--progress",
+        help="Progress display mode: auto, on, or off.",
+    ),
 ) -> None:
     """Create or update an isolated venv for a runner family."""
     families = _resolve_runtime_families(family, all_families=all_families)
     paths = TollamaPaths.default()
+    show_progress = _resolve_progress_enabled(progress)
 
     for fam in families:
-        typer.echo(f"Installing runtime for {fam!r} …")
+        typer.echo(f"Installing runtime for {fam!r} ...")
+        _progress_note(
+            show_progress,
+            f"Bootstrapping virtualenv and installing dependencies for {fam!r} ...",
+        )
         try:
             python_path = ensure_family_runtime(fam, paths=paths, reinstall=reinstall)
-            typer.echo(f"  ✓ {fam}: {python_path}")
+            typer.echo(_style_text(f"  ✓ {fam}: {python_path}", fg=_COLOR_SUCCESS))
         except BootstrapError as exc:
-            typer.echo(f"  ✗ {fam}: {exc}", err=True)
+            typer.echo(_style_text(f"  ✗ {fam}: {exc}", fg=_COLOR_ERROR, err=True), err=True)
             raise typer.Exit(code=1) from exc
 
 

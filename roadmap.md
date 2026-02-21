@@ -43,6 +43,11 @@ the optional future `packages/*` split as a migration phase.
 - CLI model arguments provide shell-completion candidates from registry + installed models.
 - SDK now emits warnings when inferring frequency from pandas indexes and provides clearer
   DataFrame/mapping validation errors.
+- CLI progress UX now supports `--progress auto|on|off` on key long-running commands with
+  stderr-only progress output to preserve machine-readable stdout.
+- `tollama run` can prompt for installed model selection when `MODEL` is omitted in TTY,
+  and `--interactive` can prompt for discovered example request payloads when `--input`
+  is omitted.
 - v1 non-goals are still respected: no training/fine-tuning and no distributed scheduler.
 
 ### Planned work / TODO

@@ -15,7 +15,12 @@ from tollama.cli.client import DaemonHTTPError
 from tollama.cli.main import (
     _RUN_TIMEOUT_SECONDS,
     _complete_model_names,
+    _prompt_example_request_path,
+    _render_table,
     _resolve_default_request_path,
+    _resolve_progress_enabled,
+    _resolve_run_model_name,
+    _truncate_cell,
     app,
 )
 
@@ -270,6 +275,45 @@ def test_complete_model_names_uses_registry_and_installed_entries(monkeypatch) -
     assert _complete_model_names("ch") == ["chronos2"]
     all_names = _complete_model_names("")
     assert all_names == ["chronos2", "local-model", "timesfm-2.5-200m"]
+
+
+def test_resolve_progress_enabled_modes(monkeypatch) -> None:
+    monkeypatch.setattr("tollama.cli.main.sys.stderr", SimpleNamespace(isatty=lambda: True))
+    assert _resolve_progress_enabled("auto") is True
+    assert _resolve_progress_enabled("on") is True
+    assert _resolve_progress_enabled("off") is False
+
+    monkeypatch.setattr("tollama.cli.main.sys.stderr", SimpleNamespace(isatty=lambda: False))
+    assert _resolve_progress_enabled("auto") is False
+
+
+def test_table_truncation_adds_ellipsis() -> None:
+    text = _truncate_cell("x" * 60, max_width=20)
+    assert text.endswith("...")
+    rendered = _render_table(("VALUE",), [("x" * 80,)])
+    assert "..." in rendered
+
+
+def test_prompt_example_request_path_returns_selected_candidate(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    candidate_one = tmp_path / "examples" / "request1.json"
+    candidate_two = tmp_path / "examples" / "request2.json"
+    candidate_one.parent.mkdir(parents=True, exist_ok=True)
+    candidate_one.write_text("{}", encoding="utf-8")
+    candidate_two.write_text("{}", encoding="utf-8")
+
+    monkeypatch.setattr(
+        "tollama.cli.main._candidate_request_paths",
+        lambda _model: [candidate_one, candidate_two],
+    )
+    monkeypatch.setattr("tollama.cli.main.sys.stdin", SimpleNamespace(isatty=lambda: True))
+    monkeypatch.setattr("tollama.cli.main.typer.prompt", lambda *args, **kwargs: "2")
+
+    selected = _prompt_example_request_path("mock")
+
+    assert selected == candidate_two
 
 
 def test_list_ps_show_and_rm_commands_call_api_client(monkeypatch) -> None:
@@ -695,6 +739,36 @@ def test_run_errors_when_payload_sources_are_missing(monkeypatch) -> None:
 
     assert result.exit_code != 0
     assert "missing forecast request payload" in _result_stdout(result)
+
+
+def test_resolve_run_model_name_prompts_when_not_provided(monkeypatch) -> None:
+    class _FakeClient:
+        def list_tags(self) -> dict[str, object]:
+            return {"models": [{"name": "mock"}, {"name": "chronos2"}]}
+
+    monkeypatch.setattr("tollama.cli.main.sys.stdin", SimpleNamespace(isatty=lambda: True))
+    monkeypatch.setattr("tollama.cli.main.typer.prompt", lambda *args, **kwargs: "2")
+
+    selected = _resolve_run_model_name(None, client=_FakeClient())  # type: ignore[arg-type]
+    assert selected == "chronos2"
+
+
+def test_run_errors_when_model_is_missing_in_non_interactive_mode(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    request_path = tmp_path / "request.json"
+    request_path.write_text(json.dumps(_sample_request_payload()), encoding="utf-8")
+    monkeypatch.setattr(
+        "tollama.cli.main.sys.stdin",
+        SimpleNamespace(isatty=lambda: False, read=lambda: ""),
+    )
+
+    runner = _new_runner()
+    result = runner.invoke(app, ["run", "--input", str(request_path), "--no-stream"])
+
+    assert result.exit_code == 2
+    assert "missing model name" in _result_stdout(result)
 
 
 def test_run_rejects_non_json_input(tmp_path: Path) -> None:

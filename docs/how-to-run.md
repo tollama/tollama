@@ -414,6 +414,7 @@ Common options for `tollama pull`:
 - `--token`
 - `--insecure` (debug only; disables SSL verification)
 - `--no-config` (ignore daemon pull defaults for this request)
+- `--progress auto|on|off` (auto uses terminal detection)
 
 Persistent defaults:
 
@@ -428,6 +429,12 @@ tollama config list
 
 If you pass an unknown config key, `tollama config set/get/unset` suggests the closest
 supported key (for example `offline` -> `pull.offline`).
+
+`tollama run` also supports:
+
+- `--progress auto|on|off`
+- omitting `MODEL` in an interactive terminal to choose from installed models
+- `--interactive` to select an example request file when `--input` is omitted
 
 ## Troubleshooting
 

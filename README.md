@@ -24,6 +24,10 @@ tollama serve
 tollama quickstart
 ```
 
+Human-friendly progress is enabled automatically on interactive terminals.
+You can override with `--progress on` or `--progress off` on `pull`, `run`,
+`quickstart`, and `runtime install`.
+
 ## Shell Completion
 
 Typer completion is available out of the box:
@@ -287,6 +291,10 @@ tollama pull chronos2
 
 Tokens are intentionally not persisted in config. Use `TOLLAMA_HF_TOKEN` or `--token`.
 Unknown config keys return suggestions (for example `offline` -> `pull.offline`).
+
+For `tollama run`, omitting `MODEL` in an interactive terminal prompts you to pick
+from installed models. You can also add `--interactive` to choose from discovered
+`examples/*_request.json` files when `--input` is omitted.
 
 ## Diagnostics Endpoint: `/api/info`
 
