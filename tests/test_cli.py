@@ -890,7 +890,7 @@ def test_run_warns_for_uni2ts_models_on_python_312_plus(monkeypatch, tmp_path: P
         lambda _: SimpleNamespace(family="uni2ts"),
     )
 
-    runner = CliRunner()
+    runner = _new_runner()
     result = runner.invoke(
         app,
         ["run", "moirai-2.0-R-small", "--input", str(request_path), "--no-stream"],
@@ -899,7 +899,7 @@ def test_run_warns_for_uni2ts_models_on_python_312_plus(monkeypatch, tmp_path: P
     assert result.exit_code == 0
     assert (
         "warning: Uni2TS/Moirai dependencies may fail to install on Python 3.12+"
-        in _result_stdout(result)
+        in _result_stderr(result)
     )
 
 

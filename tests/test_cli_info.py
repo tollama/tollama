@@ -16,6 +16,24 @@ from tollama.core.config import TollamaConfig, save_config
 from tollama.core.storage import TollamaPaths
 
 
+def _new_runner() -> CliRunner:
+    try:
+        return CliRunner(mix_stderr=False)
+    except TypeError:
+        # Click<8 does not support `mix_stderr`.
+        return CliRunner()
+
+
+def _result_stderr(result: object) -> str:
+    stderr = getattr(result, "stderr", None)
+    if isinstance(stderr, str):
+        return stderr
+    output = getattr(result, "output", None)
+    if isinstance(output, str):
+        return output
+    return ""
+
+
 def _write_manifest(paths: TollamaPaths, *, name: str) -> None:
     manifest = {
         "name": name,
@@ -243,11 +261,11 @@ def test_info_command_remote_flag_errors_when_daemon_unreachable(monkeypatch) ->
 
     monkeypatch.setattr("tollama.cli.main.collect_info", _raise_error)
 
-    runner = CliRunner()
+    runner = _new_runner()
     result = runner.invoke(app, ["info", "--remote"])
 
     assert result.exit_code == 1
-    assert "connection refused" in result.stdout
+    assert "connection refused" in _result_stderr(result)
 
 
 def test_info_command_local_flag_forces_local_mode(monkeypatch) -> None:

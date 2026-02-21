@@ -55,6 +55,7 @@ tollama-mcp = "tollama.mcp.__main__:main"
 [project.optional-dependencies]
 dev = [
   "pytest>=8.0",
+  "pytest-asyncio>=0.23",
   "ruff>=0.6.0",
 ]
 mcp = [
@@ -126,6 +127,7 @@ select = ["E", "F", "I", "UP"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
+asyncio_default_fixture_loop_scope = "function"
 markers = [
   "integration: marks tests requiring optional integration dependencies and network downloads",
 ]
