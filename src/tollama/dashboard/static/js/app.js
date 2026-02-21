@@ -5,6 +5,7 @@
     apiKey: sessionStorage.getItem(KEY_STORAGE) || "",
     eventAbort: null,
     eventCount: 0,
+    installedModelNames: [],
     installPromptEvent: null,
   };
 
@@ -110,6 +111,116 @@
     });
   }
 
+  function normalizeModelNames(models) {
+    const names = [];
+    const seen = new Set();
+    models.forEach((item) => {
+      const name = String(item?.name || item?.model || "").trim();
+      if (!name || seen.has(name)) {
+        return;
+      }
+      seen.add(name);
+      names.push(name);
+    });
+    names.sort((left, right) => left.localeCompare(right));
+    return names;
+  }
+
+  function ensureModelSelectorWiring(selectId, customInputId) {
+    const select = document.getElementById(selectId);
+    const customInput = document.getElementById(customInputId);
+    if (!(select instanceof HTMLSelectElement) || !(customInput instanceof HTMLInputElement)) {
+      return;
+    }
+    if (select.dataset.modelWired === "1") {
+      return;
+    }
+    const syncVisibility = () => {
+      const isCustom = select.value === "__custom__";
+      customInput.classList.toggle("hidden", !isCustom);
+      if (isCustom) {
+        customInput.focus();
+      }
+    };
+    select.addEventListener("change", syncVisibility);
+    syncVisibility();
+    select.dataset.modelWired = "1";
+  }
+
+  function populateModelSelectorOptions(selectId, customInputId, modelNames, preferredName = "") {
+    const select = document.getElementById(selectId);
+    const customInput = document.getElementById(customInputId);
+    if (!(select instanceof HTMLSelectElement)) {
+      return;
+    }
+
+    const previous = select.value;
+    const customValue = customInput instanceof HTMLInputElement ? customInput.value.trim() : "";
+    const preferCustom = previous === "__custom__" || customValue.length > 0;
+
+    select.replaceChildren();
+    const appendOption = (value, label, selected = false) => {
+      const option = document.createElement("option");
+      option.value = value;
+      option.textContent = label;
+      option.selected = selected;
+      select.append(option);
+    };
+
+    if (modelNames.length === 0) {
+      appendOption("", "No installed models", true);
+    } else {
+      modelNames.forEach((name) => {
+        appendOption(name, name);
+      });
+    }
+    appendOption("__custom__", "Custom...");
+
+    if (preferCustom) {
+      select.value = "__custom__";
+    } else if (modelNames.includes(previous)) {
+      select.value = previous;
+    } else if (preferredName && modelNames.includes(preferredName)) {
+      select.value = preferredName;
+    } else if (modelNames.length > 0) {
+      select.value = modelNames[0];
+    } else {
+      select.value = "";
+    }
+
+    ensureModelSelectorWiring(selectId, customInputId);
+    if (select.value === "__custom__" && customInput instanceof HTMLInputElement) {
+      customInput.classList.remove("hidden");
+    }
+  }
+
+  function syncModelSelectors(models) {
+    const modelNames = normalizeModelNames(models);
+    state.installedModelNames = modelNames;
+    const selectors = [
+      ["forecast-model-select", "forecast-model-custom", "mock"],
+      ["model-detail-name-select", "model-detail-name-custom", "mock"],
+      ["model-action-name-select", "model-action-name-custom", "mock"],
+    ];
+    selectors.forEach(([selectId, customInputId, preferredName]) => {
+      populateModelSelectorOptions(selectId, customInputId, modelNames, preferredName);
+    });
+  }
+
+  function resolveSelectedModel(selectId, customInputId) {
+    const select = document.getElementById(selectId);
+    const customInput = document.getElementById(customInputId);
+    if (select instanceof HTMLSelectElement) {
+      if (select.value && select.value !== "__custom__") {
+        return select.value.trim();
+      }
+    }
+    if (customInput instanceof HTMLInputElement) {
+      return customInput.value.trim();
+    }
+    return "";
+  }
+
   async function refreshState() {
     try {
       const payload = await fetchJson("/api/dashboard/state");
@@ -123,9 +234,16 @@
       }
 
       const modelsTable = document.getElementById("models-table-body");
-      if (modelsTable) {
+      let tagsModels = [];
+      try {
         const tags = await fetchJson("/api/tags");
-        modelsTable.innerHTML = (tags.models || [])
+        tagsModels = Array.isArray(tags.models) ? tags.models : [];
+      } catch {
+        tagsModels = [];
+      }
+      syncModelSelectors(tagsModels);
+      if (modelsTable) {
+        modelsTable.innerHTML = tagsModels
           .map((item) => `<tr><td>${item.name || ""}</td><td>${item.details?.family || ""}</td><td>${item.size || 0}</td></tr>`)
           .join("");
       }
@@ -279,7 +397,7 @@
 
   function initShortcuts() {
     document.addEventListener("keydown", (event) => {
-      if (event.target && ["INPUT", "TEXTAREA"].includes(event.target.tagName)) {
+      if (event.target && ["INPUT", "TEXTAREA", "SELECT"].includes(event.target.tagName)) {
         return;
       }
       const key = event.key.toLowerCase();
@@ -306,17 +424,17 @@
   }
 
   function initModelActions(fetchJson) {
-    const modelInput = document.getElementById("model-detail-name");
+    const modelSelect = document.getElementById("model-detail-name-select");
     const loadButton = document.getElementById("model-detail-load");
     const modelOutput = document.getElementById("model-detail-output");
-    const actionInput = document.getElementById("model-action-name");
+    const actionSelect = document.getElementById("model-action-name-select");
     const pullButton = document.getElementById("model-action-pull");
     const deleteButton = document.getElementById("model-action-delete");
     const actionOutput = document.getElementById("model-actions-output");
 
-    if (loadButton && modelOutput && modelInput) {
+    if (loadButton && modelOutput && modelSelect) {
       loadButton.addEventListener("click", async () => {
-        const model = modelInput.value.trim();
+        const model = resolveSelectedModel("model-detail-name-select", "model-detail-name-custom");
         if (!model) {
           modelOutput.textContent = "Provide a model name.";
           return;
@@ -371,9 +489,9 @@
       }
     }
 
-    if (pullButton && actionInput && actionOutput) {
+    if (pullButton && actionSelect && actionOutput) {
       pullButton.addEventListener("click", async () => {
-        const model = actionInput.value.trim();
+        const model = resolveSelectedModel("model-action-name-select", "model-action-name-custom");
         if (!model) {
           actionOutput.textContent = "Provide a model name.";
           return;
@@ -386,9 +504,9 @@
       });
     }
 
-    if (deleteButton && actionInput && actionOutput) {
+    if (deleteButton && actionSelect && actionOutput) {
       deleteButton.addEventListener("click", async () => {
-        const model = actionInput.value.trim();
+        const model = resolveSelectedModel("model-action-name-select", "model-action-name-custom");
         if (!model) {
           actionOutput.textContent = "Provide a model name.";
           return;
@@ -414,6 +532,7 @@
     initTopbarActions();
     initInstallBanner();
     await loadPartials();
+    syncModelSelectors(state.installedModelNames);
     if (window.TollamaForecastPlayground && typeof window.TollamaForecastPlayground.init === "function") {
       window.TollamaForecastPlayground.init({ fetchJson, authHeaders });
     }

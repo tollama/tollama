@@ -163,6 +163,7 @@ print(comparison.summary)
 - CLI helpers:
   - `tollama open` opens the web dashboard in a browser
   - `tollama dashboard` launches the Textual TUI (install with `python -m pip install -e \".[tui]\"`)
+- Detailed user guide: `docs/dashboard-user-guide.md`
 
 ## Structured Intelligence + Generative Planning
 

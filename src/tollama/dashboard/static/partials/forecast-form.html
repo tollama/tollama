@@ -1,7 +1,15 @@
 <h2>Forecast Playground</h2>
 <form id="forecast-form" class="stack" autocomplete="off">
-  <label for="forecast-model">Model</label>
-  <input id="forecast-model" type="text" placeholder="mock" value="mock" required />
+  <label for="forecast-model-select">Model</label>
+  <select id="forecast-model-select" required>
+    <option value="">Loading models...</option>
+  </select>
+  <input
+    id="forecast-model-custom"
+    class="hidden"
+    type="text"
+    placeholder="Enter model name (custom)"
+  />
 
   <label for="forecast-horizon">Horizon</label>
   <input id="forecast-horizon" type="number" min="1" value="3" required />

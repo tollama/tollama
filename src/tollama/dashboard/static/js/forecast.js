@@ -13,6 +13,20 @@
     target.textContent = values.join(", ");
   }
 
+  function resolveSelectedModel() {
+    const select = document.getElementById("forecast-model-select");
+    const customInput = document.getElementById("forecast-model-custom");
+    if (select instanceof HTMLSelectElement) {
+      if (select.value && select.value !== "__custom__") {
+        return select.value.trim();
+      }
+    }
+    if (customInput instanceof HTMLInputElement) {
+      return customInput.value.trim();
+    }
+    return "";
+  }
+
   function downloadBlob(filename, mimeType, content) {
     const blob = new Blob([content], { type: mimeType });
     const url = URL.createObjectURL(blob);
@@ -80,7 +94,7 @@
   }
 
   async function submitForecast(fetchJson) {
-    const model = document.getElementById("forecast-model")?.value.trim();
+    const model = resolveSelectedModel();
     const horizon = Number(document.getElementById("forecast-horizon")?.value || "0");
     const raw = document.getElementById("forecast-series")?.value || "[]";
     const output = document.getElementById("forecast-result-json");
@@ -142,7 +156,16 @@
         }
       }
     } catch (error) {
-      output.textContent = `Forecast failed: ${error.message || error}`;
+      const raw = String(error?.message || error || "unknown error");
+      let friendly = `Forecast failed: ${raw}`;
+      if (
+        raw.includes("input series length is shorter than model context_length") ||
+        raw.includes("context_length")
+      ) {
+        friendly = `${friendly}\n\nTip: the selected model needs more history points. ` +
+          `Use model 'mock' for quick demos, or provide a longer target series (>= required context length).`;
+      }
+      output.textContent = friendly;
     }
   }
 

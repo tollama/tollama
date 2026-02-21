@@ -1,8 +1,16 @@
 <h2>Model Detail</h2>
 <p>Use the API to inspect one model via <code>/api/show</code>.</p>
 <form id="model-detail-form" class="stack">
-  <label for="model-detail-name">Model</label>
-  <input id="model-detail-name" type="text" placeholder="mock" />
+  <label for="model-detail-name-select">Model</label>
+  <select id="model-detail-name-select">
+    <option value="">Loading models...</option>
+  </select>
+  <input
+    id="model-detail-name-custom"
+    class="hidden"
+    type="text"
+    placeholder="Enter model name (custom)"
+  />
   <button class="btn" type="button" id="model-detail-load">Load Detail</button>
 </form>
 <pre id="model-detail-output" class="output"></pre>

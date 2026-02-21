@@ -69,6 +69,8 @@ def test_dashboard_routes_are_public_by_default(monkeypatch, tmp_path: Path) -> 
         deep_link = client.get("/dashboard/models")
         static_index = client.get("/dashboard/static/index.html")
         partial = client.get("/dashboard/partials/models-table")
+        detail_partial = client.get("/dashboard/partials/model-detail")
+        forecast_partial = client.get("/dashboard/partials/forecast-form")
 
     assert root.status_code == 200
     assert "Tollama Dashboard" in root.text
@@ -77,6 +79,10 @@ def test_dashboard_routes_are_public_by_default(monkeypatch, tmp_path: Path) -> 
     assert static_index.status_code == 200
     assert partial.status_code == 200
     assert "Installed Models" in partial.text
+    assert detail_partial.status_code == 200
+    assert "model-detail-name-select" in detail_partial.text
+    assert forecast_partial.status_code == 200
+    assert "forecast-model-select" in forecast_partial.text
 
 
 def test_dashboard_can_be_disabled_via_env(monkeypatch, tmp_path: Path) -> None:

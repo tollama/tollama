@@ -64,3 +64,66 @@ async def test_dashboard_api_client_fetches_snapshot() -> None:
 
     assert snapshot.state["info"]["daemon"]["version"] == "0.1.0"
     assert snapshot.tags["models"][0]["name"] == "mock"
+
+
+@pytest.mark.asyncio
+async def test_stream_events_uses_unbounded_read_timeout(monkeypatch) -> None:
+    captured_timeouts: list[object] = []
+
+    class _FakeResponse:
+        def raise_for_status(self) -> None:
+            return None
+
+        async def aiter_lines(self):
+            yield "event: status"
+            yield "data: ok"
+            yield ""
+
+    class _FakeStreamContext:
+        def __init__(self) -> None:
+            self._response = _FakeResponse()
+
+        async def __aenter__(self) -> _FakeResponse:
+            return self._response
+
+        async def __aexit__(self, *_args: object) -> None:
+            return None
+
+    class _FakeAsyncClient:
+        def __init__(self, *, base_url: str, timeout: object, transport: object) -> None:
+            del base_url, transport
+            captured_timeouts.append(timeout)
+
+        async def __aenter__(self) -> _FakeAsyncClient:
+            return self
+
+        async def __aexit__(self, *_args: object) -> None:
+            return None
+
+        def stream(
+            self,
+            method: str,
+            path: str,
+            headers: dict[str, str] | None = None,
+        ) -> _FakeStreamContext:
+            assert method == "GET"
+            assert path == "/api/events?heartbeat=15"
+            assert headers == {"Accept": "text/event-stream"}
+            return _FakeStreamContext()
+
+    monkeypatch.setattr("tollama.tui.client.httpx.AsyncClient", _FakeAsyncClient)
+
+    client = DashboardAPIClient(
+        base_url="http://localhost:11435",
+        timeout=10.0,
+        api_key=None,
+        transport=None,
+    )
+
+    events = [event async for event in client.stream_events()]
+    assert events == [{"event": "status", "data": "ok"}]
+    assert len(captured_timeouts) == 1
+    timeout = captured_timeouts[0]
+    assert isinstance(timeout, httpx.Timeout)
+    assert timeout.read is None
+    assert timeout.connect == pytest.approx(10.0)

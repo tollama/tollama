@@ -1,8 +1,16 @@
 <h2>Model Actions</h2>
 <p>Pull, delete, and unload actions call existing daemon APIs.</p>
 <form id="model-actions-form" class="stack">
-  <label for="model-action-name">Model</label>
-  <input id="model-action-name" type="text" placeholder="mock" />
+  <label for="model-action-name-select">Model</label>
+  <select id="model-action-name-select">
+    <option value="">Loading models...</option>
+  </select>
+  <input
+    id="model-action-name-custom"
+    class="hidden"
+    type="text"
+    placeholder="Enter model name (custom)"
+  />
   <div class="topbar-actions">
     <button class="btn" type="button" id="model-action-pull">Pull</button>
     <button class="btn ghost" type="button" id="model-action-delete">Delete</button>

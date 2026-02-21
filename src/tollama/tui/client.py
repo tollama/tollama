@@ -93,7 +93,7 @@ class DashboardAPIClient:
         headers = self._headers(accept="text/event-stream")
         async with httpx.AsyncClient(
             base_url=self._base_url,
-            timeout=self._timeout,
+            timeout=self._stream_timeout(),
             transport=self._transport,
         ) as client:
             async with client.stream(
@@ -120,6 +120,10 @@ class DashboardAPIClient:
                         event = line.partition(":")[2].strip() or "message"
                     elif line.startswith("data:"):
                         data_lines.append(line.partition(":")[2].strip())
+
+    def _stream_timeout(self) -> httpx.Timeout:
+        # SSE responses can remain idle between heartbeats.
+        return httpx.Timeout(self._timeout, read=None)
 
     async def _request_json(
         self,

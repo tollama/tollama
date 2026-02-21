@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 from dataclasses import dataclass
 
@@ -70,17 +71,27 @@ class DashboardScreen(Screen):
             self.run_worker(self._consume_events(), exclusive=True, thread=False)
 
     async def refresh_snapshot(self) -> None:
-        snapshot = await self._client.dashboard_snapshot()
+        installed_target = self.query_one("#installed-models", Static)
+        loaded_target = self.query_one("#loaded-models", Static)
+        quick_stats_target = self.query_one("#quick-stats", Static)
+        try:
+            snapshot = await self._client.dashboard_snapshot()
+        except Exception as exc:  # noqa: BLE001
+            quick_stats_target.update(
+                json.dumps(
+                    {"error": str(exc)},
+                    indent=2,
+                    sort_keys=True,
+                ),
+            )
+            return
+
         info = snapshot.state.get("info", {})
         ps = snapshot.state.get("ps", {})
         usage = snapshot.state.get("usage", {})
         tags = snapshot.tags.get("models", []) if isinstance(snapshot.tags, dict) else []
         models = ps.get("models") if isinstance(ps, dict) else []
         warnings = snapshot.state.get("warnings", [])
-
-        installed_target = self.query_one("#installed-models", Static)
-        loaded_target = self.query_one("#loaded-models", Static)
-        quick_stats_target = self.query_one("#quick-stats", Static)
 
         installed_target.update(
             json.dumps(
@@ -110,10 +121,21 @@ class DashboardScreen(Screen):
 
     async def _consume_events(self) -> None:
         log = self.query_one("#events", RichLog)
-        async for event in self._client.stream_events():
-            name = event.get("event", "message")
-            data = event.get("data", "")
-            log.write(f"{name}: {data}")
+        retry_delay_seconds = 1.0
+        while True:
+            try:
+                async for event in self._client.stream_events():
+                    name = event.get("event", "message")
+                    data = event.get("data", "")
+                    log.write(f"{name}: {data}")
+                retry_delay_seconds = 1.0
+                await asyncio.sleep(0.5)
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:  # noqa: BLE001
+                log.write(f"stream_error: {exc}")
+                await asyncio.sleep(retry_delay_seconds)
+                retry_delay_seconds = min(retry_delay_seconds * 2, 10.0)
 
     def action_open_forecast(self) -> None:
         from .forecast import ForecastScreen

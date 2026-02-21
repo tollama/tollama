@@ -21,6 +21,7 @@ Additional docs:
 - Troubleshooting (canonical): `docs/troubleshooting.md`
 - CLI cheat sheet: `docs/cli-cheatsheet.md`
 - API reference: `docs/api-reference.md`
+- Dashboard user guide (Web GUI + TUI): `docs/dashboard-user-guide.md`
 
 ## TSFM Model Matrix
 
