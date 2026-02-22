@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from ..client import DashboardAPIClient
+from ..client import DashboardAPIClient, DashboardAPIError
 from .dashboard import DashboardConfig
 
 try:
@@ -56,6 +56,7 @@ class ModelDetailScreen(Screen):
             with Horizontal():
                 yield Button("Show", id="model-show")
                 yield Button("Pull", id="model-pull")
+                yield Button("Pull + Accept License", id="model-pull-accept")
                 yield Button("Delete", id="model-delete")
             yield Static("", id="model-output")
             yield RichLog(id="model-events")
@@ -65,6 +66,9 @@ class ModelDetailScreen(Screen):
         model = self.query_one("#model-name", Input).value.strip()
         output = self.query_one("#model-output", Static)
         events = self.query_one("#model-events", RichLog)
+        if not model:
+            output.update("Action failed: model name is required.")
+            return
 
         try:
             if button_id == "model-show":
@@ -75,11 +79,24 @@ class ModelDetailScreen(Screen):
                 payload = await self._client.delete_model(model)
                 output.update(json.dumps(payload, indent=2, sort_keys=True))
                 return
-            if button_id == "model-pull":
-                pull_events = await self._client.pull_model_events(model)
+            if button_id in {"model-pull", "model-pull-accept"}:
+                accept_license = button_id == "model-pull-accept"
+                pull_events = await self._client.pull_model_events(
+                    model,
+                    accept_license=accept_license,
+                )
                 for entry in pull_events:
                     events.write(json.dumps(entry, sort_keys=True))
                 output.update(f"Pull events: {len(pull_events)}")
                 return
+        except DashboardAPIError as exc:
+            if exc.status_code == 409 and button_id == "model-pull":
+                output.update(
+                    "Action failed: license acceptance is required. "
+                    "Use 'Pull + Accept License' to continue.",
+                )
+                return
+            output.update(f"Action failed: {exc}")
+            return
         except Exception as exc:  # noqa: BLE001
             output.update(f"Action failed: {exc}")

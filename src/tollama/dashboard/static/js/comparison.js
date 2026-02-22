@@ -1,5 +1,5 @@
 (() => {
-  async function handleCompare(fetchJson) {
+  async function handleCompare(fetchJson, formatApiError) {
     const form = document.getElementById("compare-form");
     const output = document.getElementById("compare-output");
     const canvas = document.getElementById("compare-chart");
@@ -36,10 +36,13 @@
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-      output.textContent = JSON.stringify(response, null, 2);
+      const successful = (response.results || []).filter((item) => item.ok && item.response);
+      const failed = (response.results || []).filter((item) => !item.ok);
+      output.textContent = `Summary: ${successful.length} succeeded, ${failed.length} failed\n\n${
+        JSON.stringify(response, null, 2)
+      }`;
 
       if (window.Chart && canvas instanceof HTMLCanvasElement) {
-        const successful = (response.results || []).filter((item) => item.ok && item.response);
         const labels = successful[0]?.response?.forecasts?.[0]?.mean?.map((_, index) => String(index + 1)) || [];
         const datasets = successful.map((item, idx) => ({
           label: item.model,
@@ -58,18 +61,21 @@
         });
       }
     } catch (error) {
-      output.textContent = `Comparison failed: ${error.message || error}`;
+      output.textContent = formatApiError(error, "Comparison failed");
     }
   }
 
-  function init({ fetchJson }) {
+  function init({ fetchJson, formatApiError }) {
     const form = document.getElementById("compare-form");
     if (!form) {
       return;
     }
+    const formatError = typeof formatApiError === "function"
+      ? formatApiError
+      : (error, prefix) => `${prefix}: ${error?.message || error || "unknown error"}`;
     form.addEventListener("submit", (event) => {
       event.preventDefault();
-      handleCompare(fetchJson);
+      handleCompare(fetchJson, formatError);
     });
   }
 

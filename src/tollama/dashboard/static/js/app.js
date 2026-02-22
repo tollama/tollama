@@ -9,6 +9,66 @@
     installPromptEvent: null,
   };
 
+  function detailToText(detail) {
+    if (typeof detail === "string") {
+      return detail.trim();
+    }
+    if (typeof detail === "number" || typeof detail === "boolean") {
+      return String(detail);
+    }
+    if (detail == null) {
+      return "";
+    }
+    try {
+      return JSON.stringify(detail);
+    } catch {
+      return String(detail);
+    }
+  }
+
+  async function buildApiError(response) {
+    let detail = "";
+    let hint = "";
+    const body = await response.text();
+    if (body) {
+      try {
+        const payload = JSON.parse(body);
+        if (payload && typeof payload === "object") {
+          detail = detailToText(payload.detail);
+          hint = detailToText(payload.hint);
+        } else {
+          detail = detailToText(payload);
+        }
+      } catch {
+        detail = body.trim();
+      }
+    }
+    if (!detail) {
+      detail = `HTTP ${response.status}`;
+    }
+    const error = new Error(detail);
+    error.status = response.status;
+    error.detail = detail;
+    if (hint) {
+      error.hint = hint;
+    }
+    return error;
+  }
+
+  function formatApiError(error, prefix) {
+    const detail = error?.detail || error?.message || String(error || "unknown error");
+    const hint = error?.hint ? ` Hint: ${error.hint}` : "";
+    return `${prefix}: ${detail}${hint}`;
+  }
+
+  function isLicenseRequiredError(error) {
+    if (!error || error.status !== 409) {
+      return false;
+    }
+    const text = `${error.detail || ""} ${error.hint || ""} ${error.message || ""}`.toLowerCase();
+    return text.includes("license") || text.includes("accept_license") || text.includes("accept-license");
+  }
+
   function authHeaders(extra = {}) {
     const headers = { ...extra };
     if (state.apiKey) {
@@ -26,18 +86,15 @@
       }),
     });
     if (!response.ok) {
-      const detail = await response.text();
-      const error = new Error(detail || `HTTP ${response.status}`);
-      error.status = response.status;
-      throw error;
+      throw await buildApiError(response);
     }
     return response.json();
   }
 
   async function fetchText(url) {
-    const response = await fetch(url, { headers: authHeaders() });
+    const response = await fetch(url, { headers: authHeaders({ Accept: "text/html" }) });
     if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
+      throw await buildApiError(response);
     }
     return response.text();
   }
@@ -238,8 +295,12 @@
       try {
         const tags = await fetchJson("/api/tags");
         tagsModels = Array.isArray(tags.models) ? tags.models : [];
-      } catch {
+      } catch (error) {
         tagsModels = [];
+        const warningNode = document.getElementById("dashboard-warnings");
+        if (warningNode) {
+          warningNode.textContent = formatApiError(error, "Model list refresh failed");
+        }
       }
       syncModelSelectors(tagsModels);
       if (modelsTable) {
@@ -270,7 +331,9 @@
       setConnection(false);
       if (error && error.status === 401) {
         promptForApiKey();
+        return;
       }
+      setDaemonMeta(formatApiError(error, "Dashboard refresh failed"));
     }
   }
 
@@ -291,7 +354,7 @@
         signal: state.eventAbort.signal,
       });
       if (!response.ok || !response.body) {
-        throw new Error(`event stream failed: ${response.status}`);
+        throw await buildApiError(response);
       }
       const decoder = new TextDecoder();
       const reader = response.body.getReader();
@@ -332,8 +395,15 @@
           }
         }
       }
-    } catch {
+    } catch (error) {
       setConnection(false);
+      if (error && error.status === 401) {
+        promptForApiKey();
+      } else if (log) {
+        const row = document.createElement("div");
+        row.textContent = formatApiError(error, "event stream failed");
+        log.prepend(row);
+      }
       window.setTimeout(streamEvents, 3000);
     }
   }
@@ -430,6 +500,7 @@
     const actionSelect = document.getElementById("model-action-name-select");
     const pullButton = document.getElementById("model-action-pull");
     const deleteButton = document.getElementById("model-action-delete");
+    const acceptLicense = document.getElementById("model-action-accept-license");
     const actionOutput = document.getElementById("model-actions-output");
 
     if (loadButton && modelOutput && modelSelect) {
@@ -447,12 +518,12 @@
           });
           modelOutput.textContent = JSON.stringify(payload, null, 2);
         } catch (error) {
-          modelOutput.textContent = `Show failed: ${error.message || error}`;
+          modelOutput.textContent = formatApiError(error, "Show failed");
         }
       });
     }
 
-    async function streamPull(model) {
+    async function streamPull(model, acceptLicenseForPull) {
       if (!actionOutput) {
         return;
       }
@@ -463,10 +534,14 @@
           "Content-Type": "application/json",
           Accept: "application/x-ndjson",
         }),
-        body: JSON.stringify({ model, stream: true, accept_license: false }),
+        body: JSON.stringify({
+          model,
+          stream: true,
+          accept_license: Boolean(acceptLicenseForPull),
+        }),
       });
       if (!response.ok || !response.body) {
-        throw new Error(`pull failed (${response.status})`);
+        throw await buildApiError(response);
       }
       const decoder = new TextDecoder();
       const reader = response.body.getReader();
@@ -497,9 +572,28 @@
           return;
         }
         try {
-          await streamPull(model);
+          const acceptSelected = Boolean(acceptLicense instanceof HTMLInputElement && acceptLicense.checked);
+          await streamPull(model, acceptSelected);
         } catch (error) {
-          actionOutput.textContent = `Pull failed: ${error.message || error}`;
+          const acceptSelected = Boolean(acceptLicense instanceof HTMLInputElement && acceptLicense.checked);
+          if (!acceptSelected && isLicenseRequiredError(error)) {
+            const confirmed = window.confirm(
+              "This model requires license acceptance. Retry with license acceptance enabled?",
+            );
+            if (confirmed) {
+              if (acceptLicense instanceof HTMLInputElement) {
+                acceptLicense.checked = true;
+              }
+              try {
+                await streamPull(model, true);
+                return;
+              } catch (retryError) {
+                actionOutput.textContent = formatApiError(retryError, "Pull failed");
+                return;
+              }
+            }
+          }
+          actionOutput.textContent = formatApiError(error, "Pull failed");
         }
       });
     }
@@ -511,6 +605,9 @@
           actionOutput.textContent = "Provide a model name.";
           return;
         }
+        if (!window.confirm(`Delete installed model '${model}'?`)) {
+          return;
+        }
         try {
           const payload = await fetchJson("/api/delete", {
             method: "DELETE",
@@ -519,7 +616,7 @@
           });
           actionOutput.textContent = JSON.stringify(payload, null, 2);
         } catch (error) {
-          actionOutput.textContent = `Delete failed: ${error.message || error}`;
+          actionOutput.textContent = formatApiError(error, "Delete failed");
         }
       });
     }
@@ -534,10 +631,10 @@
     await loadPartials();
     syncModelSelectors(state.installedModelNames);
     if (window.TollamaForecastPlayground && typeof window.TollamaForecastPlayground.init === "function") {
-      window.TollamaForecastPlayground.init({ fetchJson, authHeaders });
+      window.TollamaForecastPlayground.init({ fetchJson, formatApiError });
     }
     if (window.TollamaComparison && typeof window.TollamaComparison.init === "function") {
-      window.TollamaComparison.init({ fetchJson });
+      window.TollamaComparison.init({ fetchJson, formatApiError });
     }
     initModelActions(fetchJson);
     await refreshState();

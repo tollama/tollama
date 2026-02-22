@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from ..client import DashboardAPIClient
+from ..client import DashboardAPIClient, DashboardAPIError
 from ..widgets.forecast_chart import ForecastChartWidget
 from .dashboard import DashboardConfig
 
@@ -100,6 +100,11 @@ class ForecastScreen(Screen):
             if isinstance(mean, list):
                 chart.render_series([float(item) for item in mean])
             output.update(json.dumps(response, indent=2, sort_keys=True))
+        except DashboardAPIError as exc:
+            if exc.status_code == 401:
+                output.update("Forecast failed: unauthorized. Verify TOLLAMA_API_KEY.")
+                return
+            output.update(f"Forecast failed: {exc}")
         except Exception as exc:  # noqa: BLE001
             output.update(f"Forecast failed: {exc}")
 

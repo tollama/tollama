@@ -191,6 +191,19 @@ body {
   gap: 0.5rem;
 }
 
+.inline-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+.inline-checkbox input {
+  width: auto;
+  margin: 0;
+}
+
 input,
 textarea,
 select {

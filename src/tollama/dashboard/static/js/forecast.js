@@ -93,7 +93,7 @@
     });
   }
 
-  async function submitForecast(fetchJson) {
+  async function submitForecast(fetchJson, formatApiError) {
     const model = resolveSelectedModel();
     const horizon = Number(document.getElementById("forecast-horizon")?.value || "0");
     const raw = document.getElementById("forecast-series")?.value || "[]";
@@ -156,8 +156,8 @@
         }
       }
     } catch (error) {
-      const raw = String(error?.message || error || "unknown error");
-      let friendly = `Forecast failed: ${raw}`;
+      let friendly = formatApiError(error, "Forecast failed");
+      const raw = String(error?.detail || error?.message || error || "unknown error");
       if (
         raw.includes("input series length is shorter than model context_length") ||
         raw.includes("context_length")
@@ -169,16 +169,19 @@
     }
   }
 
-  function init({ fetchJson }) {
+  function init({ fetchJson, formatApiError }) {
     const form = document.getElementById("forecast-form");
     if (!form) {
       return;
     }
     bindExportButtons();
     setForecastBadge();
+    const formatError = typeof formatApiError === "function"
+      ? formatApiError
+      : (error, prefix) => `${prefix}: ${error?.message || error || "unknown error"}`;
     form.addEventListener("submit", (event) => {
       event.preventDefault();
-      submitForecast(fetchJson);
+      submitForecast(fetchJson, formatError);
     });
   }
 

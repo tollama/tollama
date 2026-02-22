@@ -48,10 +48,12 @@ or open directly:
 - `Models`
   - Model detail lookup (`/api/show`)
   - Pull model (`/api/pull`, streaming output)
+  - License acceptance checkbox for restricted-license pulls
   - Delete model (`/api/delete`)
 - `Compare`
   - Multi-model compare form (`/api/compare`)
   - Overlay chart + response output
+  - Partial-success summary (`N succeeded, M failed`)
 - `Help`
   - Keyboard shortcut summary
   - API docs link
@@ -103,8 +105,8 @@ export TOLLAMA_API_KEY="your-key"
 ### 3.3 TUI Screens and Actions
 
 - `Dashboard` (default screen)
-  - Installed models (snapshot polling)
-  - Loaded models (snapshot polling)
+  - Installed models DataTable (snapshot polling)
+  - Loaded models DataTable (snapshot polling)
   - Quick stats (`info` + usage summary + warnings)
   - Live event log (SSE stream with retry)
 - `Forecast` screen
@@ -115,6 +117,7 @@ export TOLLAMA_API_KEY="your-key"
 - `Model detail` screen
   - Show model metadata
   - Pull model events
+  - Pull + accept-license action for restricted models
   - Delete model
 
 ### 3.4 Keyboard Shortcuts (TUI)
@@ -158,4 +161,3 @@ then:
 - Model actions failing:
   - verify model name
   - check daemon logs for detailed backend errors
-

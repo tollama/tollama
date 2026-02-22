@@ -13,6 +13,21 @@ from tollama.client import AsyncTollamaClient
 
 
 @dataclass(frozen=True)
+class DashboardAPIError(RuntimeError):
+    """Structured API error used by TUI dashboard workflows."""
+
+    status_code: int
+    detail: str
+    hint: str | None = None
+    path: str | None = None
+
+    def __str__(self) -> str:
+        location = f" ({self.path})" if self.path else ""
+        hint = f" Hint: {self.hint}" if self.hint else ""
+        return f"HTTP {self.status_code}{location}: {self.detail}{hint}"
+
+
+@dataclass(frozen=True)
 class DashboardSnapshot:
     """Aggregate dashboard payload consumed by TUI screens."""
 
@@ -69,11 +84,20 @@ class DashboardAPIClient:
             json_payload={"model": model},
         )
 
-    async def pull_model_events(self, model: str) -> list[dict[str, Any]]:
+    async def pull_model_events(
+        self,
+        model: str,
+        *,
+        accept_license: bool = False,
+    ) -> list[dict[str, Any]]:
         response = await self._request(
             "POST",
             "/api/pull",
-            json_payload={"model": model, "stream": True, "accept_license": False},
+            json_payload={
+                "model": model,
+                "stream": True,
+                "accept_license": accept_license,
+            },
             accept="application/x-ndjson",
         )
         events: list[dict[str, Any]] = []
@@ -101,7 +125,8 @@ class DashboardAPIClient:
                 "/api/events?heartbeat=15",
                 headers=headers,
             ) as response:
-                response.raise_for_status()
+                if bool(getattr(response, "is_error", False)):
+                    raise self._build_api_error(path="/api/events", response=response)
                 event = "message"
                 data_lines: list[str] = []
                 async for raw_line in response.aiter_lines():
@@ -157,7 +182,8 @@ class DashboardAPIClient:
                 json=json_payload,
                 headers=self._headers(accept=accept),
             )
-        response.raise_for_status()
+        if response.is_error:
+            raise self._build_api_error(path=path, response=response)
         return response
 
     def _headers(self, *, accept: str) -> dict[str, str] | None:
@@ -166,3 +192,48 @@ class DashboardAPIClient:
         if token:
             headers["Authorization"] = f"Bearer {token}"
         return headers
+
+    def _build_api_error(self, *, path: str, response: httpx.Response) -> DashboardAPIError:
+        detail: str | None = None
+        hint: str | None = None
+        try:
+            payload = response.json()
+        except ValueError:
+            payload = None
+
+        if isinstance(payload, dict):
+            detail = _detail_to_text(payload.get("detail"))
+            hint = _optional_nonempty(payload.get("hint"))
+        elif payload is not None:
+            detail = _detail_to_text(payload)
+
+        if detail is None:
+            detail = _optional_nonempty(response.text) or response.reason_phrase or "request failed"
+
+        return DashboardAPIError(
+            status_code=response.status_code,
+            detail=detail,
+            hint=hint,
+            path=path,
+        )
+
+
+def _optional_nonempty(value: Any) -> str | None:
+    if not isinstance(value, str):
+        return None
+    normalized = value.strip()
+    return normalized or None
+
+
+def _detail_to_text(detail: Any) -> str | None:
+    if isinstance(detail, str):
+        normalized = detail.strip()
+        return normalized or None
+    if isinstance(detail, (int, float, bool)):
+        return str(detail)
+    if detail is None:
+        return None
+    try:
+        return json.dumps(detail, separators=(",", ":"), sort_keys=True)
+    except TypeError:
+        return str(detail)
