@@ -30,3 +30,7 @@ htmlcov/
 .DS_Store
 .idea/
 .vscode/
+
+# Development scratch scripts
+reproduce_*.py
+check_*.py

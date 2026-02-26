@@ -101,9 +101,10 @@ pytest -q tests/test_toto_runner.py tests/test_toto_adapter.py
 - When behavior, APIs/contracts, runner capabilities, or defaults change, update the
   relevant docs in the same PR:
   - `README.md`
+  - `CHANGELOG.md`
   - `docs/covariates.md`
-  - `roadmap.md`
-  - `todo-list.md`
+  - `docs/internal/roadmap.md`
+  - `docs/internal/todo-list.md`
 - Minimum expectation:
   - status markers stay consistent with implementation (`[x]`, `[~]`, `[ ]`)
   - capability matrices and endpoint/command inventories match current behavior

@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Documentation
+    url: https://github.com/yongchoelchoi/tollama/blob/main/README.md
+    about: Check the README and docs/ for setup and usage guidance.
+  - name: Security vulnerabilities
+    url: https://github.com/yongchoelchoi/tollama/security/advisories/new
+    about: Report security issues privately via GitHub Security Advisories.

@@ -44,7 +44,11 @@ def load_series_inputs_from_data_url(
 
     if scheme in {"", "file"}:
         raw_path = unquote(parsed.path) if scheme == "file" else data_url
-        path = Path(raw_path).expanduser()
+        path = Path(raw_path).expanduser().resolve()
+        if ".." in Path(raw_path).parts:
+            raise IngestError(
+                "data_url path must not contain '..' components",
+            )
         return load_series_inputs_from_path(
             path,
             format_hint=format_hint,
@@ -84,7 +88,7 @@ def load_series_inputs_from_path(
     freq_column: str | None = None,
 ) -> list[SeriesInput]:
     """Load canonical series inputs from a local CSV or Parquet file."""
-    resolved_path = Path(path).expanduser()
+    resolved_path = Path(path).expanduser().resolve()
     if not resolved_path.exists():
         raise IngestError(f"input file does not exist: {resolved_path}")
     if not resolved_path.is_file():

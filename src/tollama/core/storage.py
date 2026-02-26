@@ -42,9 +42,11 @@ class TollamaPaths:
         return self.base_dir / "modelfiles"
 
     def model_dir(self, name: str) -> Path:
+        _validate_name(name)
         return self.models_dir / name
 
     def manifest_path(self, name: str) -> Path:
+        _validate_name(name)
         return self.model_dir(name) / "manifest.json"
 
     def modelfile_path(self, name: str) -> Path:
