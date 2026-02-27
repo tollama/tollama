@@ -8,8 +8,7 @@
 
 ## Reporting a Vulnerability
 
-If you discover a security vulnerability in tollama, please report it through
-[GitHub Security Advisories](https://github.com/yongchoelchoi/tollama/security/advisories/new)
+If you discover a security vulnerability in tollama, please report it through security@ollama.com
 rather than opening a public issue.
 
 ### What to include
