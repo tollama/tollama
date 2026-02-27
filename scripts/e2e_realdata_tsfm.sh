@@ -11,6 +11,8 @@ MODE="${1:-pr}"
 MODEL="${2:-all}"
 BASE_URL="${3:-http://127.0.0.1:11435}"
 OUTPUT_DIR="${4:-$ROOT_DIR/artifacts/e2e_realdata}"
+ALLOW_KAGGLE_FALLBACK="${5:-false}"
+EXTRA_ARGS=()
 
 if ! command -v python >/dev/null 2>&1; then
   echo -e "${RED}Error: python not found in PATH.${NC}"
@@ -20,12 +22,18 @@ fi
 echo -e "${YELLOW}Running real-data TSFM E2E suite...${NC}"
 echo "mode=$MODE model=$MODEL base_url=$BASE_URL"
 echo "output_dir=$OUTPUT_DIR"
+echo "allow_kaggle_fallback=$ALLOW_KAGGLE_FALLBACK"
+
+if [[ "$ALLOW_KAGGLE_FALLBACK" == "true" ]]; then
+  EXTRA_ARGS+=(--allow-kaggle-fallback)
+fi
 
 python "$ROOT_DIR/scripts/e2e_realdata/run_tsfm_realdata.py" \
   --mode "$MODE" \
   --model "$MODEL" \
   --base-url "$BASE_URL" \
-  --output-dir "$OUTPUT_DIR"
+  --output-dir "$OUTPUT_DIR" \
+  "${EXTRA_ARGS[@]}"
 
 status=$?
 if [[ $status -eq 0 ]]; then

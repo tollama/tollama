@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sys
+import zipfile
 from importlib.util import module_from_spec, spec_from_file_location
 from pathlib import Path
 
@@ -16,6 +17,7 @@ _MODULE_SPEC.loader.exec_module(_MODULE)
 parse_kaggle_hourly_directory = _MODULE.parse_kaggle_hourly_directory
 parse_m4_daily_files = _MODULE.parse_m4_daily_files
 sample_size_for_mode = _MODULE.sample_size_for_mode
+ensure_kaggle_dataset = _MODULE._ensure_kaggle_dataset
 
 
 def test_sample_size_for_mode_is_deterministic() -> None:
@@ -101,7 +103,59 @@ def test_parse_kaggle_hourly_directory_parses_csv_files(tmp_path: Path) -> None:
 
     assert len(series) == 1
     row = series[0]
+    assert set(row.keys()) == {"id", "freq", "timestamps", "target", "actuals"}
     assert row["freq"] == "H"
+    assert row["timestamps"] == sorted(row["timestamps"])
     assert len(row["target"]) == 3
     assert len(row["actuals"]) == 2
     assert len(row["timestamps"]) == len(row["target"])
+    assert all(isinstance(value, float) for value in row["target"])
+    assert all(isinstance(value, float) for value in row["actuals"])
+
+
+def test_ensure_kaggle_dataset_uses_cached_extraction(tmp_path: Path, monkeypatch) -> None:
+    dataset_cache = tmp_path / "cache"
+    extract_dir = dataset_cache / "extracted"
+    extract_dir.mkdir(parents=True)
+    (extract_dir / "cached.csv").write_text(
+        "Datetime,value\n2024-01-01 00:00:00,1\n",
+        encoding="utf-8",
+    )
+
+    def _fail_download(**_: object) -> None:
+        raise AssertionError("download should not be called when extracted cache exists")
+
+    monkeypatch.setattr(_MODULE, "_download_kaggle_archive", _fail_download)
+
+    resolved = ensure_kaggle_dataset(
+        dataset_ref="robikscube/hourly-energy-consumption",
+        dataset_cache=dataset_cache,
+        timeout_seconds=30,
+    )
+
+    assert resolved == extract_dir
+    assert (resolved / "cached.csv").exists()
+
+
+def test_ensure_kaggle_dataset_downloads_and_extracts(tmp_path: Path, monkeypatch) -> None:
+    dataset_cache = tmp_path / "cache"
+
+    def _fake_download(*, dataset_ref: str, archive_path: Path, timeout_seconds: int) -> None:
+        assert dataset_ref == "robikscube/hourly-energy-consumption"
+        assert timeout_seconds == 30
+        archive_path.parent.mkdir(parents=True, exist_ok=True)
+        with zipfile.ZipFile(archive_path, "w") as archive:
+            archive.writestr(
+                "AEP_hourly.csv",
+                "Datetime,AEP_MW\n2024-01-01 00:00:00,100\n2024-01-01 01:00:00,101\n",
+            )
+
+    monkeypatch.setattr(_MODULE, "_download_kaggle_archive", _fake_download)
+
+    resolved = ensure_kaggle_dataset(
+        dataset_ref="robikscube/hourly-energy-consumption",
+        dataset_cache=dataset_cache,
+        timeout_seconds=30,
+    )
+
+    assert (resolved / "AEP_hourly.csv").exists()

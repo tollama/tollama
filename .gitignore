@@ -34,3 +34,7 @@ htmlcov/
 # Development scratch scripts
 reproduce_*.py
 check_*.py
+
+# Test Data and Artifacts
+artifacts/realdata/
+data/raw/

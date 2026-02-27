@@ -41,3 +41,21 @@ def test_nightly_mode_includes_kaggle_when_credentials_present() -> None:
     assert policy.include_kaggle is True
     assert policy.hard_fail_on_missing is False
     assert policy.message is None
+
+
+def test_local_mode_requires_credentials_by_default() -> None:
+    policy = kaggle_policy_for_mode("local", credentials_present=False)
+    assert policy.include_kaggle is False
+    assert policy.hard_fail_on_missing is True
+    assert policy.message is not None
+
+
+def test_local_mode_allows_explicit_fallback() -> None:
+    policy = kaggle_policy_for_mode(
+        "local",
+        credentials_present=False,
+        allow_local_fallback=True,
+    )
+    assert policy.include_kaggle is False
+    assert policy.hard_fail_on_missing is False
+    assert policy.message is not None

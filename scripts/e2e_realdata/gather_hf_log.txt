@@ -1,0 +1,582 @@
+`trust_remote_code` is not supported anymore.
+Please check that the Hugging Face dataset 'Real-TSF/TIME' isn't based on a loading script and remove `trust_remote_code`.
+If the dataset is based on a loading script, please ask the dataset author to remove it and convert it to a standard format like Parquet.
+`trust_remote_code` is not supported anymore.
+Please check that the Hugging Face dataset 'Ehsanrs2/Forex_Factory_Calendar' isn't based on a loading script and remove `trust_remote_code`.
+If the dataset is based on a loading script, please ask the dataset author to remove it and convert it to a standard format like Parquet.
+`trust_remote_code` is not supported anymore.
+Please check that the Hugging Face dataset 'Dingdong-Inc/FreshRetailNet-50K' isn't based on a loading script and remove `trust_remote_code`.
+If the dataset is based on a loading script, please ask the dataset author to remove it and convert it to a standard format like Parquet.
+`trust_remote_code` is not supported anymore.
+Please check that the Hugging Face dataset 'ronantakizawa/trending-stocks-yahoo-finance' isn't based on a loading script and remove `trust_remote_code`.
+If the dataset is based on a loading script, please ask the dataset author to remove it and convert it to a standard format like Parquet.
+`trust_remote_code` is not supported anymore.
+Please check that the Hugging Face dataset 'bbasavar/PolymarketDataset' isn't based on a loading script and remove `trust_remote_code`.
+If the dataset is based on a loading script, please ask the dataset author to remove it and convert it to a standard format like Parquet.
+`trust_remote_code` is not supported anymore.
+Please check that the Hugging Face dataset 'Mhdvav2323/bipolar-mixed-states-synthetic' isn't based on a loading script and remove `trust_remote_code`.
+If the dataset is based on a loading script, please ask the dataset author to remove it and convert it to a standard format like Parquet.
+`trust_remote_code` is not supported anymore.
+Please check that the Hugging Face dataset 'Dingdong-Inc/FreshRetailNet-LT' isn't based on a loading script and remove `trust_remote_code`.
+If the dataset is based on a loading script, please ask the dataset author to remove it and convert it to a standard format like Parquet.
+`trust_remote_code` is not supported anymore.
+Please check that the Hugging Face dataset 'tulipa762/electricity_load_diagrams' isn't based on a loading script and remove `trust_remote_code`.
+If the dataset is based on a loading script, please ask the dataset author to remove it and convert it to a standard format like Parquet.
+`trust_remote_code` is not supported anymore.
+Please check that the Hugging Face dataset 'openclimatefix/uk_pv' isn't based on a loading script and remove `trust_remote_code`.
+If the dataset is based on a loading script, please ask the dataset author to remove it and convert it to a standard format like Parquet.
+`trust_remote_code` is not supported anymore.
+Please check that the Hugging Face dataset 'Monash-University/monash_tsf' isn't based on a loading script and remove `trust_remote_code`.
+If the dataset is based on a loading script, please ask the dataset author to remove it and convert it to a standard format like Parquet.
+`trust_remote_code` is not supported anymore.
+Please check that the Hugging Face dataset 'ETDataset/ett' isn't based on a loading script and remove `trust_remote_code`.
+If the dataset is based on a loading script, please ask the dataset author to remove it and convert it to a standard format like Parquet.
+`trust_remote_code` is not supported anymore.
+Please check that the Hugging Face dataset 'mschi/blogspot_raw' isn't based on a loading script and remove `trust_remote_code`.
+If the dataset is based on a loading script, please ask the dataset author to remove it and convert it to a standard format like Parquet.
+`trust_remote_code` is not supported anymore.
+Please check that the Hugging Face dataset 'rajistics/electricity_demand' isn't based on a loading script and remove `trust_remote_code`.
+If the dataset is based on a loading script, please ask the dataset author to remove it and convert it to a standard format like Parquet.
+`trust_remote_code` is not supported anymore.
+Please check that the Hugging Face dataset 'Numerati/numerai-datasets' isn't based on a loading script and remove `trust_remote_code`.
+If the dataset is based on a loading script, please ask the dataset author to remove it and convert it to a standard format like Parquet.
+`trust_remote_code` is not supported anymore.
+Please check that the Hugging Face dataset 'cemachelen/LIFD_Magnetic_Field_Data' isn't based on a loading script and remove `trust_remote_code`.
+If the dataset is based on a loading script, please ask the dataset author to remove it and convert it to a standard format like Parquet.
+`trust_remote_code` is not supported anymore.
+Please check that the Hugging Face dataset 'cemachelen/LIFD_Seismic_Data' isn't based on a loading script and remove `trust_remote_code`.
+If the dataset is based on a loading script, please ask the dataset author to remove it and convert it to a standard format like Parquet.
+`trust_remote_code` is not supported anymore.
+Please check that the Hugging Face dataset 'davidwisdom/fake_railroad_company' isn't based on a loading script and remove `trust_remote_code`.
+If the dataset is based on a loading script, please ask the dataset author to remove it and convert it to a standard format like Parquet.
+`trust_remote_code` is not supported anymore.
+Please check that the Hugging Face dataset 'Thi-Thu-Huong/energy_induction_motor_simulation' isn't based on a loading script and remove `trust_remote_code`.
+If the dataset is based on a loading script, please ask the dataset author to remove it and convert it to a standard format like Parquet.
+`trust_remote_code` is not supported anymore.
+Please check that the Hugging Face dataset 'kashif/App_Flow' isn't based on a loading script and remove `trust_remote_code`.
+If the dataset is based on a loading script, please ask the dataset author to remove it and convert it to a standard format like Parquet.
+`trust_remote_code` is not supported anymore.
+Please check that the Hugging Face dataset 'WasuratS/ECMWF_Thailand_Land_Air_Temperatures' isn't based on a loading script and remove `trust_remote_code`.
+If the dataset is based on a loading script, please ask the dataset author to remove it and convert it to a standard format like Parquet.
+`trust_remote_code` is not supported anymore.
+Please check that the Hugging Face dataset 'ccmusic-database/song_structure' isn't based on a loading script and remove `trust_remote_code`.
+If the dataset is based on a loading script, please ask the dataset author to remove it and convert it to a standard format like Parquet.
+`trust_remote_code` is not supported anymore.
+Please check that the Hugging Face dataset 'ym0v0my/Time_series_dataset' isn't based on a loading script and remove `trust_remote_code`.
+If the dataset is based on a loading script, please ask the dataset author to remove it and convert it to a standard format like Parquet.
+`trust_remote_code` is not supported anymore.
+Please check that the Hugging Face dataset 'foxy-steve/monash_uea_ucr_tser' isn't based on a loading script and remove `trust_remote_code`.
+If the dataset is based on a loading script, please ask the dataset author to remove it and convert it to a standard format like Parquet.
+`trust_remote_code` is not supported anymore.
+Please check that the Hugging Face dataset 'gian-michele/meltBR' isn't based on a loading script and remove `trust_remote_code`.
+If the dataset is based on a loading script, please ask the dataset author to remove it and convert it to a standard format like Parquet.
+`trust_remote_code` is not supported anymore.
+Please check that the Hugging Face dataset 'pengxiang01/test' isn't based on a loading script and remove `trust_remote_code`.
+If the dataset is based on a loading script, please ask the dataset author to remove it and convert it to a standard format like Parquet.
+`trust_remote_code` is not supported anymore.
+Please check that the Hugging Face dataset 'mohammadtaghizadeh/Dollar_Rial_Price_Dataset' isn't based on a loading script and remove `trust_remote_code`.
+If the dataset is based on a loading script, please ask the dataset author to remove it and convert it to a standard format like Parquet.
+`trust_remote_code` is not supported anymore.
+Please check that the Hugging Face dataset 'Shashkovich/Telecommunication_SMS_time_series' isn't based on a loading script and remove `trust_remote_code`.
+If the dataset is based on a loading script, please ask the dataset author to remove it and convert it to a standard format like Parquet.
+`trust_remote_code` is not supported anymore.
+Please check that the Hugging Face dataset 'alexgrigoras/next-purchase-day' isn't based on a loading script and remove `trust_remote_code`.
+If the dataset is based on a loading script, please ask the dataset author to remove it and convert it to a standard format like Parquet.
+`trust_remote_code` is not supported anymore.
+Please check that the Hugging Face dataset 'PetraAI/PetraAI' isn't based on a loading script and remove `trust_remote_code`.
+If the dataset is based on a loading script, please ask the dataset author to remove it and convert it to a standard format like Parquet.
+`trust_remote_code` is not supported anymore.
+Please check that the Hugging Face dataset 'Ammok/apple_stock_price_from_1980-2021' isn't based on a loading script and remove `trust_remote_code`.
+If the dataset is based on a loading script, please ask the dataset author to remove it and convert it to a standard format like Parquet.
+`trust_remote_code` is not supported anymore.
+Please check that the Hugging Face dataset 'patrickfleith/controlled-anomalies-time-series-dataset' isn't based on a loading script and remove `trust_remote_code`.
+If the dataset is based on a loading script, please ask the dataset author to remove it and convert it to a standard format like Parquet.
+`trust_remote_code` is not supported anymore.
+Please check that the Hugging Face dataset 'jonasmaltebecker/synthetic_drilling_dataset' isn't based on a loading script and remove `trust_remote_code`.
+If the dataset is based on a loading script, please ask the dataset author to remove it and convert it to a standard format like Parquet.
+`trust_remote_code` is not supported anymore.
+Please check that the Hugging Face dataset 'MLNTeam-Unical/NFT-70M_transactions' isn't based on a loading script and remove `trust_remote_code`.
+If the dataset is based on a loading script, please ask the dataset author to remove it and convert it to a standard format like Parquet.
+`trust_remote_code` is not supported anymore.
+Please check that the Hugging Face dataset 'MLNTeam-Unical/NFT-70M_text' isn't based on a loading script and remove `trust_remote_code`.
+If the dataset is based on a loading script, please ask the dataset author to remove it and convert it to a standard format like Parquet.
+`trust_remote_code` is not supported anymore.
+Please check that the Hugging Face dataset 'MLNTeam-Unical/NFT-70M_image' isn't based on a loading script and remove `trust_remote_code`.
+If the dataset is based on a loading script, please ask the dataset author to remove it and convert it to a standard format like Parquet.
+`trust_remote_code` is not supported anymore.
+Please check that the Hugging Face dataset 'andrewlee1807/Gyeonggi' isn't based on a loading script and remove `trust_remote_code`.
+If the dataset is based on a loading script, please ask the dataset author to remove it and convert it to a standard format like Parquet.
+`trust_remote_code` is not supported anymore.
+Please check that the Hugging Face dataset 'tipani/Shanghai-License-Plate-Auction' isn't based on a loading script and remove `trust_remote_code`.
+If the dataset is based on a loading script, please ask the dataset author to remove it and convert it to a standard format like Parquet.
+`trust_remote_code` is not supported anymore.
+Please check that the Hugging Face dataset 'Qdrant/NOAA-Buoy' isn't based on a loading script and remove `trust_remote_code`.
+If the dataset is based on a loading script, please ask the dataset author to remove it and convert it to a standard format like Parquet.
+`trust_remote_code` is not supported anymore.
+Please check that the Hugging Face dataset 'Salesforce/cloudops_tsf' isn't based on a loading script and remove `trust_remote_code`.
+If the dataset is based on a loading script, please ask the dataset author to remove it and convert it to a standard format like Parquet.
+`trust_remote_code` is not supported anymore.
+Please check that the Hugging Face dataset 'RaulSalinasHerr/chilean_touristic_data' isn't based on a loading script and remove `trust_remote_code`.
+If the dataset is based on a loading script, please ask the dataset author to remove it and convert it to a standard format like Parquet.
+`trust_remote_code` is not supported anymore.
+Please check that the Hugging Face dataset 'EDS-lab/electricity-demand' isn't based on a loading script and remove `trust_remote_code`.
+If the dataset is based on a loading script, please ask the dataset author to remove it and convert it to a standard format like Parquet.
+`trust_remote_code` is not supported anymore.
+Please check that the Hugging Face dataset 'Oumar199/Nalohou_climatic_time_series' isn't based on a loading script and remove `trust_remote_code`.
+If the dataset is based on a loading script, please ask the dataset author to remove it and convert it to a standard format like Parquet.
+`trust_remote_code` is not supported anymore.
+Please check that the Hugging Face dataset 'LeoTungAnh/electricity_hourly' isn't based on a loading script and remove `trust_remote_code`.
+If the dataset is based on a loading script, please ask the dataset author to remove it and convert it to a standard format like Parquet.
+`trust_remote_code` is not supported anymore.
+Please check that the Hugging Face dataset 'CanariaView/GlobalCopperDemandForecastingDataset' isn't based on a loading script and remove `trust_remote_code`.
+If the dataset is based on a loading script, please ask the dataset author to remove it and convert it to a standard format like Parquet.
+`trust_remote_code` is not supported anymore.
+Please check that the Hugging Face dataset 'CanariaView/GlobalCopperSupplyForecastingDataset' isn't based on a loading script and remove `trust_remote_code`.
+If the dataset is based on a loading script, please ask the dataset author to remove it and convert it to a standard format like Parquet.
+`trust_remote_code` is not supported anymore.
+Please check that the Hugging Face dataset 'raeidsaqur/NIFTY' isn't based on a loading script and remove `trust_remote_code`.
+If the dataset is based on a loading script, please ask the dataset author to remove it and convert it to a standard format like Parquet.
+`trust_remote_code` is not supported anymore.
+Please check that the Hugging Face dataset 'AlgoveraAI/autocast' isn't based on a loading script and remove `trust_remote_code`.
+If the dataset is based on a loading script, please ask the dataset author to remove it and convert it to a standard format like Parquet.
+Failed to convert pandas DataFrame to Arrow Table from file 'hf://datasets/AlgoveraAI/autocast@844aa403486950f583e399578cb11f89fa05f87f/autocast_competition_test_set.json' with error <class 'pyarrow.lib.ArrowInvalid'>: ('cannot mix list and non-list, non-null values', 'Conversion failed for column choices with type object')
+`trust_remote_code` is not supported anymore.
+Please check that the Hugging Face dataset 'FaalSa/fastest' isn't based on a loading script and remove `trust_remote_code`.
+If the dataset is based on a loading script, please ask the dataset author to remove it and convert it to a standard format like Parquet.
+`trust_remote_code` is not supported anymore.
+Please check that the Hugging Face dataset 'sebdg/trading_data' isn't based on a loading script and remove `trust_remote_code`.
+If the dataset is based on a loading script, please ask the dataset author to remove it and convert it to a standard format like Parquet.
+`trust_remote_code` is not supported anymore.
+Please check that the Hugging Face dataset 'sebdg/crypto_data' isn't based on a loading script and remove `trust_remote_code`.
+If the dataset is based on a loading script, please ask the dataset author to remove it and convert it to a standard format like Parquet.
+`trust_remote_code` is not supported anymore.
+Please check that the Hugging Face dataset 'misikoff/zillow' isn't based on a loading script and remove `trust_remote_code`.
+If the dataset is based on a loading script, please ask the dataset author to remove it and convert it to a standard format like Parquet.
+`trust_remote_code` is not supported anymore.
+Please check that the Hugging Face dataset 'aai530-group6/sleep-score-fitbit' isn't based on a loading script and remove `trust_remote_code`.
+If the dataset is based on a loading script, please ask the dataset author to remove it and convert it to a standard format like Parquet.
+`trust_remote_code` is not supported anymore.
+Please check that the Hugging Face dataset 'AUA-Informatics-Lab/eo4wildfires' isn't based on a loading script and remove `trust_remote_code`.
+If the dataset is based on a loading script, please ask the dataset author to remove it and convert it to a standard format like Parquet.
+`trust_remote_code` is not supported anymore.
+Please check that the Hugging Face dataset 'misikoff/zillow-viewer' isn't based on a loading script and remove `trust_remote_code`.
+If the dataset is based on a loading script, please ask the dataset author to remove it and convert it to a standard format like Parquet.
+`trust_remote_code` is not supported anymore.
+Please check that the Hugging Face dataset 'misikoff/SPX' isn't based on a loading script and remove `trust_remote_code`.
+If the dataset is based on a loading script, please ask the dataset author to remove it and convert it to a standard format like Parquet.
+`trust_remote_code` is not supported anymore.
+Please check that the Hugging Face dataset 'AutonLab/Timeseries-PILE' isn't based on a loading script and remove `trust_remote_code`.
+If the dataset is based on a loading script, please ask the dataset author to remove it and convert it to a standard format like Parquet.
+`trust_remote_code` is not supported anymore.
+Please check that the Hugging Face dataset 'EDS-lab/pv-generation' isn't based on a loading script and remove `trust_remote_code`.
+If the dataset is based on a loading script, please ask the dataset author to remove it and convert it to a standard format like Parquet.
+`trust_remote_code` is not supported anymore.
+Please check that the Hugging Face dataset 'zaai-ai/time_series_datasets' isn't based on a loading script and remove `trust_remote_code`.
+If the dataset is based on a loading script, please ask the dataset author to remove it and convert it to a standard format like Parquet.
+`trust_remote_code` is not supported anymore.
+Please check that the Hugging Face dataset 'raeidsaqur/nifty-rl' isn't based on a loading script and remove `trust_remote_code`.
+If the dataset is based on a loading script, please ask the dataset author to remove it and convert it to a standard format like Parquet.
+`trust_remote_code` is not supported anymore.
+Please check that the Hugging Face dataset 'saluslab/HM-SYNC' isn't based on a loading script and remove `trust_remote_code`.
+If the dataset is based on a loading script, please ask the dataset author to remove it and convert it to a standard format like Parquet.
+`trust_remote_code` is not supported anymore.
+Please check that the Hugging Face dataset 'thuml/UTSD' isn't based on a loading script and remove `trust_remote_code`.
+If the dataset is based on a loading script, please ask the dataset author to remove it and convert it to a standard format like Parquet.
+`trust_remote_code` is not supported anymore.
+Please check that the Hugging Face dataset 'mirai-ml/wids2023_competition_weather_forecasting' isn't based on a loading script and remove `trust_remote_code`.
+If the dataset is based on a loading script, please ask the dataset author to remove it and convert it to a standard format like Parquet.
+`trust_remote_code` is not supported anymore.
+Please check that the Hugging Face dataset 'Lemma-RCA-NEC/Product_Review_Preprocessed' isn't based on a loading script and remove `trust_remote_code`.
+If the dataset is based on a loading script, please ask the dataset author to remove it and convert it to a standard format like Parquet.
+`trust_remote_code` is not supported anymore.
+Please check that the Hugging Face dataset 'Lemma-RCA-NEC/Product_Review_Original' isn't based on a loading script and remove `trust_remote_code`.
+If the dataset is based on a loading script, please ask the dataset author to remove it and convert it to a standard format like Parquet.
+`trust_remote_code` is not supported anymore.
+Please check that the Hugging Face dataset 'Lemma-RCA-NEC/Cloud_Computing_Preprocessed' isn't based on a loading script and remove `trust_remote_code`.
+If the dataset is based on a loading script, please ask the dataset author to remove it and convert it to a standard format like Parquet.
+`trust_remote_code` is not supported anymore.
+Please check that the Hugging Face dataset 'Lemma-RCA-NEC/Cloud_Computing_Original' isn't based on a loading script and remove `trust_remote_code`.
+If the dataset is based on a loading script, please ask the dataset author to remove it and convert it to a standard format like Parquet.
+`trust_remote_code` is not supported anymore.
+Please check that the Hugging Face dataset 'EDS-lab/gas-demand' isn't based on a loading script and remove `trust_remote_code`.
+If the dataset is based on a loading script, please ask the dataset author to remove it and convert it to a standard format like Parquet.
+Fetching up to 200 time-series-forecasting datasets from Hugging Face (target: 50, max rows: 1,000,000)...
+[1/200] Processing Real-TSF/TIME...
+  -> Row count unknown, will probe schema via streaming (will abort if too large)
+  -> Could not infer schema from columns: ['_data_files', '_fingerprint', '_format_columns', '_format_kwargs', '_format_type', '_output_all_columns', '_split']
+[2/200] Processing Ehsanrs2/Forex_Factory_Calendar...
+  -> Row count unknown, will probe schema via streaming (will abort if too large)
+  -> Inferred schema: timestamp='DateTime', target='Actual'
+[3/200] Processing Dingdong-Inc/FreshRetailNet-50K...
+  -> Row count unknown, will probe schema via streaming (will abort if too large)
+  -> Inferred schema: timestamp='dt', target='sale_amount'
+[4/200] Processing ronantakizawa/trending-stocks-yahoo-finance...
+  -> Row count unknown, will probe schema via streaming (will abort if too large)
+  -> Inferred schema: timestamp='year', target='rank'
+[5/200] Processing bbasavar/PolymarketDataset...
+  -> Row count unknown, will probe schema via streaming (will abort if too large)
+  -> Inferred schema: timestamp='instruction', target='input'
+[6/200] Processing Mhdvav2323/bipolar-mixed-states-synthetic...
+  -> Row count unknown, will probe schema via streaming (will abort if too large)
+  -> Failed to load or parse: Couldn't cast
+patient_id: int64
+age: int64
+sex: string
+diagnosis: string
+visit_number: int64
+ymrs: double
+hamd: double
+cgi_bp: double
+madrs: double
+bprs: double
+gaf: double
+phq9: double
+visit_date: string
+age_bucket: string
+ymrs_discrete: int64
+medication_1: string
+medication_1_dose: double
+medication_2: string
+medication_2_dose: double
+adverse_events: string
+identity_crisis: bool
+identity_crisis_severity: double
+narrative_disruption_type: string
+sleep_aversion: bool
+sleep_aversion_severity: double
+perceived_sleep_waste: bool
+average_sleep_hours: double
+stimulant_misuse: bool
+stimulant_type: string
+stimulant_dose: double
+dose_exceeds_therapeutic: bool
+polypharmacy_conflict: bool
+sedative_type: string
+sedative_dose: double
+contradiction_severity: double
+ymrs_score: null
+hamd_score: null
+madrs_score: null
+cgi_bp_score: null
+bprs_score: null
+gaf_score: null
+phq9_score: null
+-- schema metadata --
+pandas: '{"index_columns": [{"kind": "range", "name": null, "start": 0, "' + 4653
+to
+{'patient_id': Value('string'), 'visit_number': Value('int64'), 'ymrs_score': Value('float64'), 'hamd_score': Value('float64'), 'madrs_score': Value('float64'), 'cgi_bp_score': Value('float64'), 'bprs_score': Value('float64'), 'gaf_score': Value('float64'), 'phq9_score': Value('float64')}
+because column names don't match
+[7/200] Processing Dingdong-Inc/FreshRetailNet-LT...
+  -> Row count unknown, will probe schema via streaming (will abort if too large)
+  -> Inferred schema: timestamp='dt', target='sale_amount'
+[8/200] Processing tulipa762/electricity_load_diagrams...
+  -> Row count unknown, will probe schema via streaming (will abort if too large)
+  -> Failed to load or parse: Dataset scripts are no longer supported, but found electricity_load_diagrams.py
+[9/200] Processing openclimatefix/uk_pv...
+  -> Row count unknown, will probe schema via streaming (will abort if too large)
+  -> Failed to load or parse: Dataset 'openclimatefix/uk_pv' is a gated dataset on the Hub. Visit the dataset page at https://huggingface.co/datasets/openclimatefix/uk_pv to ask for access.
+[10/200] Processing Monash-University/monash_tsf...
+  -> Row count unknown, will probe schema via streaming (will abort if too large)
+  -> Failed to load or parse: Dataset scripts are no longer supported, but found monash_tsf.py
+[11/200] Processing ETDataset/ett...
+  -> Row count unknown, will probe schema via streaming (will abort if too large)
+  -> Failed to load or parse: Dataset scripts are no longer supported, but found ett.py
+[12/200] Processing mschi/blogspot_raw...
+  -> Row count unknown, will probe schema via streaming (will abort if too large)
+  -> Failed to load or parse: Couldn't cast
+text: string
+url: string
+date: string
+comment: int64
+image: null
+-- schema metadata --
+pandas: '{"index_columns": [{"kind": "range", "name": null, "start": 0, "' + 714
+to
+{'image': Image(mode=None, decode=True)}
+because column names don't match
+[13/200] Processing rajistics/electricity_demand...
+  -> Row count unknown, will probe schema via streaming (will abort if too large)
+  -> Inferred schema: timestamp='Demand', target='Demand'
+[14/200] Processing Numerati/numerai-datasets...
+  -> Row count unknown, will probe schema via streaming (will abort if too large)
+  -> Inferred schema: timestamp='era', target='target'
+[15/200] Processing cemachelen/LIFD_Magnetic_Field_Data...
+  -> Row count unknown, will probe schema via streaming (will abort if too large)
+  -> Failed to load or parse: No (supported) data files found in cemachelen/LIFD_Magnetic_Field_Data
+[16/200] Processing cemachelen/LIFD_Seismic_Data...
+  -> Row count unknown, will probe schema via streaming (will abort if too large)
+  -> Failed to load or parse: The TAR archives of the dataset should be in WebDataset format, but the files in the archive don't share the same prefix or the same types.
+[17/200] Processing davidwisdom/fake_railroad_company...
+  -> Row count unknown, will probe schema via streaming (will abort if too large)
+  -> Inferred schema: timestamp='name', target='birthday'
+[18/200] Processing Thi-Thu-Huong/energy_induction_motor_simulation...
+  -> Row count unknown, will probe schema via streaming (will abort if too large)
+  -> Inferred schema: timestamp='current', target='label'
+[19/200] Processing kashif/App_Flow...
+  -> Row count unknown, will probe schema via streaming (will abort if too large)
+  -> Inferred schema: timestamp='time', target='value'
+[20/200] Processing WasuratS/ECMWF_Thailand_Land_Air_Temperatures...
+  -> Row count unknown, will probe schema via streaming (will abort if too large)
+  -> Inferred schema: timestamp='date', target='latitude'
+[21/200] Processing ccmusic-database/song_structure...
+  -> Row count unknown, will probe schema via streaming (will abort if too large)
+  -> Failed to load or parse: Dataset 'ccmusic-database/song_structure' is a gated dataset on the Hub. Visit the dataset page at https://huggingface.co/datasets/ccmusic-database/song_structure to ask for access.
+[22/200] Processing ym0v0my/Time_series_dataset...
+  -> Row count unknown, will probe schema via streaming (will abort if too large)
+  -> Inferred schema: timestamp='date', target='HUFL'
+[23/200] Processing foxy-steve/monash_uea_ucr_tser...
+  -> Row count unknown, will probe schema via streaming (will abort if too large)
+  -> Inferred schema: timestamp='start', target='feat_static_cat'
+[24/200] Processing gian-michele/meltBR...
+  -> Row count unknown, will probe schema via streaming (will abort if too large)
+  -> Failed to load or parse: Dataset 'gian-michele/meltBR' is a gated dataset on the Hub. Visit the dataset page at https://huggingface.co/datasets/gian-michele/meltBR to ask for access.
+[25/200] Processing pengxiang01/test...
+  -> Row count unknown, will probe schema via streaming (will abort if too large)
+  -> Could not infer schema from columns: ['image']
+[26/200] Processing mohammadtaghizadeh/Dollar_Rial_Price_Dataset...
+  -> Row count unknown, will probe schema via streaming (will abort if too large)
+  -> Inferred schema: timestamp='Date', target='Close'
+[27/200] Processing Shashkovich/Telecommunication_SMS_time_series...
+  -> Row count unknown, will probe schema via streaming (will abort if too large)
+  -> Inferred schema: timestamp='Event time', target='label'
+[28/200] Processing alexgrigoras/next-purchase-day...
+  -> Row count unknown, will probe schema via streaming (will abort if too large)
+  -> Inferred schema: timestamp='start', target='target'
+[29/200] Processing PetraAI/PetraAI...
+  -> Row count unknown, will probe schema via streaming (will abort if too large)
+  -> Failed to load or parse: Couldn't infer the same data file format for all splits. Got {NamedSplit('train'): ('parquet', {}), NamedSplit('validation'): (None, {})}
+[30/200] Processing Ammok/apple_stock_price_from_1980-2021...
+  -> Row count unknown, will probe schema via streaming (will abort if too large)`trust_remote_code` is not supported anymore.
+Please check that the Hugging Face dataset 'brandonhxrr/mexico_city_weather' isn't based on a loading script and remove `trust_remote_code`.
+If the dataset is based on a loading script, please ask the dataset author to remove it and convert it to a standard format like Parquet.
+Failed to read file 'hf://datasets/brandonhxrr/mexico_city_weather@ebfc8dbf0dafab1e25d6cc77769c876e5d9f71dc/raw_data/AJSDF.csv' with error <class 'pandas.errors.ParserError'>: Error tokenizing data. C error: Expected 1 fields in line 8, saw 6
+
+`trust_remote_code` is not supported anymore.
+Please check that the Hugging Face dataset 'autogluon/chronos_datasets_extra' isn't based on a loading script and remove `trust_remote_code`.
+If the dataset is based on a loading script, please ask the dataset author to remove it and convert it to a standard format like Parquet.
+`trust_remote_code` is not supported anymore.
+Please check that the Hugging Face dataset 'autogluon/chronos_datasets' isn't based on a loading script and remove `trust_remote_code`.
+If the dataset is based on a loading script, please ask the dataset author to remove it and convert it to a standard format like Parquet.
+`trust_remote_code` is not supported anymore.
+Please check that the Hugging Face dataset 'HachiML/Timeseries-QA' isn't based on a loading script and remove `trust_remote_code`.
+If the dataset is based on a loading script, please ask the dataset author to remove it and convert it to a standard format like Parquet.
+`trust_remote_code` is not supported anymore.
+Please check that the Hugging Face dataset 'ChengsenWang/CGTSF' isn't based on a loading script and remove `trust_remote_code`.
+If the dataset is based on a loading script, please ask the dataset author to remove it and convert it to a standard format like Parquet.
+`trust_remote_code` is not supported anymore.
+Please check that the Hugging Face dataset 'ChengsenWang/TSQA' isn't based on a loading script and remove `trust_remote_code`.
+If the dataset is based on a loading script, please ask the dataset author to remove it and convert it to a standard format like Parquet.
+`trust_remote_code` is not supported anymore.
+Please check that the Hugging Face dataset 'ChengsenWang/ChatTime-1-Pretrain-1M' isn't based on a loading script and remove `trust_remote_code`.
+If the dataset is based on a loading script, please ask the dataset author to remove it and convert it to a standard format like Parquet.
+`trust_remote_code` is not supported anymore.
+Please check that the Hugging Face dataset 'ChengsenWang/ChatTime-1-Finetune-100K' isn't based on a loading script and remove `trust_remote_code`.
+If the dataset is based on a loading script, please ask the dataset author to remove it and convert it to a standard format like Parquet.
+`trust_remote_code` is not supported anymore.
+Please check that the Hugging Face dataset 'louisbrulenaudet/obis' isn't based on a loading script and remove `trust_remote_code`.
+If the dataset is based on a loading script, please ask the dataset author to remove it and convert it to a standard format like Parquet.
+`trust_remote_code` is not supported anymore.
+Please check that the Hugging Face dataset 'zaai-ai/time_series_dataset_residuals' isn't based on a loading script and remove `trust_remote_code`.
+If the dataset is based on a loading script, please ask the dataset author to remove it and convert it to a standard format like Parquet.
+`trust_remote_code` is not supported anymore.
+Please check that the Hugging Face dataset 'mik3ml/timeseries-finance-ETF' isn't based on a loading script and remove `trust_remote_code`.
+If the dataset is based on a loading script, please ask the dataset author to remove it and convert it to a standard format like Parquet.
+`trust_remote_code` is not supported anymore.
+Please check that the Hugging Face dataset 'zaai-ai/hierarchical_time_series_datasets' isn't based on a loading script and remove `trust_remote_code`.
+If the dataset is based on a loading script, please ask the dataset author to remove it and convert it to a standard format like Parquet.
+`trust_remote_code` is not supported anymore.
+Please check that the Hugging Face dataset 'jonasmaltebecker/nasa_milling' isn't based on a loading script and remove `trust_remote_code`.
+If the dataset is based on a loading script, please ask the dataset author to remove it and convert it to a standard format like Parquet.
+`trust_remote_code` is not supported anymore.
+Please check that the Hugging Face dataset 'traqq/weekly_activity_data_jul24_jul28' isn't based on a loading script and remove `trust_remote_code`.
+If the dataset is based on a loading script, please ask the dataset author to remove it and convert it to a standard format like Parquet.
+`trust_remote_code` is not supported anymore.
+Please check that the Hugging Face dataset 'Kamilatr/niederschlag_station_4091_bavaria_germany' isn't based on a loading script and remove `trust_remote_code`.
+If the dataset is based on a loading script, please ask the dataset author to remove it and convert it to a standard format like Parquet.
+`trust_remote_code` is not supported anymore.
+Please check that the Hugging Face dataset 'Kamilatr/weather_data_bavaria' isn't based on a loading script and remove `trust_remote_code`.
+If the dataset is based on a loading script, please ask the dataset author to remove it and convert it to a standard format like Parquet.
+
+  -> Inferred schema: timestamp='Date', target='Close'
+[31/200] Processing patrickfleith/controlled-anomalies-time-series-dataset...
+  -> Row count unknown, will probe schema via streaming (will abort if too large)
+  -> Inferred schema: timestamp='timestamp', target='y'
+[32/200] Processing jonasmaltebecker/synthetic_drilling_dataset...
+  -> Row count unknown, will probe schema via streaming (will abort if too large)
+  -> Inferred schema: timestamp='torque_m_c', target='feed'
+[33/200] Processing MLNTeam-Unical/NFT-70M_transactions...
+  -> Row count unknown, will probe schema via streaming (will abort if too large)
+  -> Inferred schema: timestamp='num_sales', target='price'
+[34/200] Processing MLNTeam-Unical/NFT-70M_text...
+  -> Row count unknown, will probe schema via streaming (will abort if too large)
+  -> Inferred schema: timestamp='id', target='emb'
+[35/200] Processing MLNTeam-Unical/NFT-70M_image...
+  -> Row count unknown, will probe schema via streaming (will abort if too large)
+  -> Inferred schema: timestamp='id', target='emb'
+[36/200] Processing andrewlee1807/Gyeonggi...
+  -> Row count unknown, will probe schema via streaming (will abort if too large)
+  -> Inferred schema: timestamp='date', target='electrical-meter-id'
+[37/200] Processing tipani/Shanghai-License-Plate-Auction...
+  -> Row count unknown, will probe schema via streaming (will abort if too large)
+  -> Inferred schema: timestamp='Year', target='Month'
+[38/200] Processing Qdrant/NOAA-Buoy...
+  -> Row count unknown, will probe schema via streaming (will abort if too large)
+  -> Inferred schema: timestamp='TSTMP', target='#YY'
+[39/200] Processing Salesforce/cloudops_tsf...
+  -> Row count unknown, will probe schema via streaming (will abort if too large)
+  -> Failed to load or parse: Dataset scripts are no longer supported, but found cloudops_tsf.py
+[40/200] Processing RaulSalinasHerr/chilean_touristic_data...
+  -> Row count unknown, will probe schema via streaming (will abort if too large)
+  -> Inferred schema: timestamp='origin_commune_code', target='value'
+[41/200] Processing EDS-lab/electricity-demand...
+  -> Row count unknown, will probe schema via streaming (will abort if too large)
+  -> Failed to load or parse: Dataset 'EDS-lab/electricity-demand' is a gated dataset on the Hub. Visit the dataset page at https://huggingface.co/datasets/EDS-lab/electricity-demand to ask for access.
+[42/200] Processing Oumar199/Nalohou_climatic_time_series...
+  -> Row count unknown, will probe schema via streaming (will abort if too large)
+  -> Inferred schema: timestamp='DateUTC', target='season_T_meteo'
+[43/200] Processing LeoTungAnh/electricity_hourly...
+  -> Row count unknown, will probe schema via streaming (will abort if too large)
+  -> Inferred schema: timestamp='start', target='target'
+[44/200] Processing CanariaView/GlobalCopperDemandForecastingDataset...
+  -> Row count unknown, will probe schema via streaming (will abort if too large)
+  -> Inferred schema: timestamp='Date', target='HSI_value'
+[45/200] Processing CanariaView/GlobalCopperSupplyForecastingDataset...
+  -> Row count unknown, will probe schema via streaming (will abort if too large)
+  -> Inferred schema: timestamp='Date', target='Copper price'
+[46/200] Processing raeidsaqur/NIFTY...
+  -> Row count unknown, will probe schema via streaming (will abort if too large)
+  -> Inferred schema: timestamp='date', target='label'
+[47/200] Processing AlgoveraAI/autocast...
+  -> Row count unknown, will probe schema via streaming (will abort if too large)
+  -> Failed to load or parse: Failed to convert pandas DataFrame to Arrow Table from file hf://datasets/AlgoveraAI/autocast@844aa403486950f583e399578cb11f89fa05f87f/autocast_competition_test_set.json.
+[48/200] Processing FaalSa/fastest...
+  -> Row count unknown, will probe schema via streaming (will abort if too large)
+  -> Inferred schema: timestamp='start', target='target'
+[49/200] Processing sebdg/trading_data...
+  -> Row count unknown, will probe schema via streaming (will abort if too large)
+  -> Inferred schema: timestamp='Date', target='Close'
+[50/200] Processing sebdg/crypto_data...
+  -> Row count unknown, will probe schema via streaming (will abort if too large)
+  -> Failed to load or parse: Dataset scripts are no longer supported, but found crypto_data.py
+[51/200] Processing misikoff/zillow...
+  -> Row count unknown, will probe schema via streaming (will abort if too large)
+  -> Failed to load or parse: Dataset scripts are no longer supported, but found zillow.py
+[52/200] Processing aai530-group6/sleep-score-fitbit...
+  -> Row count unknown, will probe schema via streaming (will abort if too large)
+  -> Inferred schema: timestamp='timestamp', target='overall_score'
+[53/200] Processing AUA-Informatics-Lab/eo4wildfires...
+  -> Row count unknown, will probe schema via streaming (will abort if too large)
+  -> Failed to load or parse: Dataset scripts are no longer supported, but found eo4wildfires.py
+[54/200] Processing misikoff/zillow-viewer...
+  -> Row count unknown, will probe schema via streaming (will abort if too large)
+  -> Failed to load or parse: Config name is missing.
+Please pick one among the available configs: ['days_on_market', 'for_sale_listings', 'home_values', 'home_values_forecasts', 'new_construction', 'rentals', 'sales']
+Example of usage:
+	`load_dataset('misikoff/zillow-viewer', 'days_on_market')`
+[55/200] Processing misikoff/SPX...
+  -> Row count unknown, will probe schema via streaming (will abort if too large)
+  -> Inferred schema: timestamp='Date', target='Close'
+[56/200] Processing AutonLab/Timeseries-PILE...
+  -> Row count unknown, will probe schema via streaming (will abort if too large)
+  -> Failed to load or parse: No (supported) data files found in AutonLab/Timeseries-PILE
+[57/200] Processing EDS-lab/pv-generation...
+  -> Row count unknown, will probe schema via streaming (will abort if too large)
+  -> Failed to load or parse: Dataset 'EDS-lab/pv-generation' is a gated dataset on the Hub. Visit the dataset page at https://huggingface.co/datasets/EDS-lab/pv-generation to ask for access.
+[58/200] Processing zaai-ai/time_series_datasets...
+  -> Row count unknown, will probe schema via streaming (will abort if too large)
+  -> Inferred schema: timestamp='Date', target='Unnamed: 0'
+[59/200] Processing raeidsaqur/nifty-rl...
+  -> Row count unknown, will probe schema via streaming (will abort if too large)
+  -> Inferred schema: timestamp='prompt', target='chosen'
+[60/200] Processing saluslab/HM-SYNC...
+  -> Row count unknown, will probe schema via streaming (will abort if too large)
+  -> Inferred schema: timestamp='datetime', target='image'
+[61/200] Processing thuml/UTSD...
+  -> Row count unknown, will probe schema via streaming (will abort if too large)
+  -> Inferred schema: timestamp='item_id', target='target'
+[62/200] Processing mirai-ml/wids2023_competition_weather_forecasting...
+  -> Row count unknown, will probe schema via streaming (will abort if too large)
+  -> Inferred schema: timestamp='index', target='lat'
+[63/200] Processing Lemma-RCA-NEC/Product_Review_Preprocessed...
+  -> Row count unknown, will probe schema via streaming (will abort if too large)
+  -> Failed to load or parse: 'utf-8' codec can't decode byte 0x93 in position 0: invalid start byte
+[64/200] Processing Lemma-RCA-NEC/Product_Review_Original...
+  -> Row count unknown, will probe schema via streaming (will abort if too large)
+  -> Failed to load or parse: Invalid IPv6 URL
+[65/200] Processing Lemma-RCA-NEC/Cloud_Computing_Preprocessed...
+  -> Row count unknown, will probe schema via streaming (will abort if too large)
+  -> Failed to load or parse: 'utf-8' codec can't decode byte 0x93 in position 0: invalid start byte
+[66/200] Processing Lemma-RCA-NEC/Cloud_Computing_Original...
+  -> Row count unknown, will probe schema via streaming (will abort if too large)
+  -> Failed to load or parse: No (supported) data files found in Lemma-RCA-NEC/Cloud_Computing_Original
+[67/200] Processing EDS-lab/gas-demand...
+  -> Row count unknown, will probe schema via streaming (will abort if too large)
+  -> Failed to load or parse: Dataset 'EDS-lab/gas-demand' is a gated dataset on the Hub. Visit the dataset page at https://huggingface.co/datasets/EDS-lab/gas-demand to ask for access.
+[68/200] Processing brandonhxrr/mexico_city_weather...
+  -> Row count unknown, will probe schema via streaming (will abort if too large)
+  -> Failed to load or parse: Error tokenizing data. C error: Expected 1 fields in line 8, saw 6
+
+[69/200] Processing autogluon/chronos_datasets_extra...
+  -> Row count unknown, will probe schema via streaming (will abort if too large)
+  -> Failed to load or parse: Dataset scripts are no longer supported, but found chronos_datasets_extra.py
+[70/200] Processing autogluon/chronos_datasets...
+  -> Row count unknown, will probe schema via streaming (will abort if too large)
+  -> Failed to load or parse: Config name is missing.
+Please pick one among the available configs: ['dominick', 'electricity_15min', 'ercot', 'exchange_rate', 'm4_daily', 'm4_hourly', 'm4_monthly', 'm4_quarterly', 'm4_weekly', 'm4_yearly', 'm5', 'mexico_city_bikes', 'monash_australian_electricity', 'monash_car_parts', 'monash_cif_2016', 'monash_covid_deaths', 'monash_electricity_hourly', 'monash_electricity_weekly', 'monash_fred_md', 'monash_hospital', 'monash_kdd_cup_2018', 'monash_london_smart_meters', 'monash_m1_monthly', 'monash_m1_quarterly', 'monash_m1_yearly', 'monash_m3_monthly', 'monash_m3_quarterly', 'monash_m3_yearly', 'monash_nn5_weekly', 'monash_pedestrian_counts', 'monash_rideshare', 'monash_saugeenday', 'monash_temperature_rain', 'monash_tourism_monthly', 'monash_tourism_quarterly', 'monash_tourism_yearly', 'monash_traffic', 'monash_weather', 'nn5', 'solar', 'solar_1h', 'taxi_1h', 'taxi_30min', 'training_corpus_kernel_synth_1m', 'training_corpus_tsmixup_10m', 'uber_tlc_daily', 'uber_tlc_hourly', 'ushcn_daily', 'weatherbench_daily', 'weatherbench_hourly_10m_u_component_of_wind', 'weatherbench_hourly_10m_v_component_of_wind', 'weatherbench_hourly_2m_temperature', 'weatherbench_hourly_geopotential', 'weatherbench_hourly_potential_vorticity', 'weatherbench_hourly_relative_humidity', 'weatherbench_hourly_specific_humidity', 'weatherbench_hourly_temperature', 'weatherbench_hourly_toa_incident_solar_radiation', 'weatherbench_hourly_total_cloud_cover', 'weatherbench_hourly_total_precipitation', 'weatherbench_hourly_u_component_of_wind', 'weatherbench_hourly_v_component_of_wind', 'weatherbench_hourly_vorticity', 'weatherbench_weekly', 'wiki_daily_100k', 'wind_farms_daily', 'wind_farms_hourly']
+Example of usage:
+	`load_dataset('autogluon/chronos_datasets', 'dominick')`
+[71/200] Processing HachiML/Timeseries-QA...
+  -> Row count unknown, will probe schema via streaming (will abort if too large)
+  -> Inferred schema: timestamp='id', target='data'
+[72/200] Processing ChengsenWang/CGTSF...
+  -> Row count unknown, will probe schema via streaming (will abort if too large)
+  -> Inferred schema: timestamp='Date', target='Idx'
+[73/200] Processing ChengsenWang/TSQA...
+  -> Row count unknown, will probe schema via streaming (will abort if too large)
+  -> Inferred schema: timestamp='Task', target='Label'
+[74/200] Processing ChengsenWang/ChatTime-1-Pretrain-1M...
+  -> Row count unknown, will probe schema via streaming (will abort if too large)
+  -> Failed to load or parse: Couldn't cast
+text: string
+image: null
+-- schema metadata --
+pandas: '{"index_columns": [{"kind": "range", "name": null, "start": 0, "' + 389
+to
+{'image': Image(mode=None, decode=True)}
+because column names don't match
+[75/200] Processing ChengsenWang/ChatTime-1-Finetune-100K...
+  -> Row count unknown, will probe schema via streaming (will abort if too large)
+  -> Failed to load or parse: Couldn't cast
+text: string
+image: null
+-- schema metadata --
+pandas: '{"index_columns": [{"kind": "range", "name": null, "start": 0, "' + 389
+to
+{'image': Image(mode=None, decode=True)}
+because column names don't match
+[76/200] Processing louisbrulenaudet/obis...
+  -> Row count unknown, will probe schema via streaming (will abort if too large)
+  -> Inferred schema: timestamp='id', target='dataset_id'
+[77/200] Processing zaai-ai/time_series_dataset_residuals...
+  -> Row count unknown, will probe schema via streaming (will abort if too large)
+  -> Inferred schema: timestamp='Date', target='unique_id'
+[78/200] Processing mik3ml/timeseries-finance-ETF...
+  -> Row count unknown, will probe schema via streaming (will abort if too large)
+  -> Inferred schema: timestamp='timestamp', target='target'
+[79/200] Processing zaai-ai/hierarchical_time_series_datasets...
+  -> Row count unknown, will probe schema via streaming (will abort if too large)
+  -> Failed to load or parse: No (supported) data files found in zaai-ai/hierarchical_time_series_datasets
+[80/200] Processing jonasmaltebecker/nasa_milling...
+  -> Row count unknown, will probe schema via streaming (will abort if too large)
+  -> Inferred schema: timestamp='time', target='run'
+[81/200] Processing traqq/weekly_activity_data_jul24_jul28...
+  -> Row count unknown, will probe schema via streaming (will abort if too large)
+  -> Inferred schema: timestamp='user_Id', target='user_date'
+[82/200] Processing Kamilatr/niederschlag_station_4091_bavaria_germany...
+  -> Row count unknown, will probe schema via streaming (will abort if too large)
+  -> Inferred schema: timestamp='Date', target='MO_RR.Niederschlagshoehe'
+[83/200] Processing Kamilatr/weather_data_bavaria...
+  -> Row count unknown, will probe schema via streaming (will abort if too large)
+  -> Inferred schema: timestamp='timestamp', target='station_id'
+
+Saved 50 datasets to /Users/yongchoelchoi/Documents/GitHub/tollama/scripts/e2e_realdata/hf_dataset_catalog.yaml

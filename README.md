@@ -383,15 +383,43 @@ python scripts/e2e_realdata/run_tsfm_realdata.py \
   --model all \
   --base-url http://127.0.0.1:11435 \
   --output-dir artifacts/realdata/local-nightly
+
+# Local mode without Kaggle credentials (explicit fallback)
+python scripts/e2e_realdata/run_tsfm_realdata.py \
+  --mode local \
+  --model all \
+  --allow-kaggle-fallback \
+  --base-url http://127.0.0.1:11435 \
+  --output-dir artifacts/realdata/local-open-fallback
 ```
 
 Wrapper script:
 
 ```bash
-bash scripts/e2e_realdata_tsfm.sh pr all http://127.0.0.1:11435 artifacts/realdata/wrapper
+bash scripts/e2e_realdata_tsfm.sh pr all http://127.0.0.1:11435 artifacts/realdata/wrapper false
+# 5th arg=true enables explicit local fallback when Kaggle credentials are missing
 ```
 
 Artifacts include `result.json`, `summary.json`, `summary.md`, and raw per-call payloads.
+
+### HuggingFace Datasets
+
+To test against dynamically gathered HuggingFace time-series datasets, first run the gather script to discover and format 100 metadata catalogs:
+
+```bash
+# Requires `datasets` library. Might take several minutes to stream schemas locally.
+python scripts/e2e_realdata/gather_hf_datasets.py
+```
+
+Then run the evaluation using the newly generated catalog:
+    
+```bash
+python scripts/e2e_realdata/run_tsfm_realdata.py \
+  --mode local \
+  --model mock \
+  --catalog-path scripts/e2e_realdata/hf_dataset_catalog.yaml \
+  --output-dir artifacts/realdata/hf-local
+```
 
 ## Prometheus Metrics
 

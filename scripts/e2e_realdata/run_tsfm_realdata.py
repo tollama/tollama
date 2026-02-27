@@ -72,6 +72,14 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--context-cap", type=int, default=512)
     parser.add_argument(
+        "--allow-kaggle-fallback",
+        action="store_true",
+        help=(
+            "In local mode, allow running with open datasets only when "
+            "Kaggle credentials are missing."
+        ),
+    )
+    parser.add_argument(
         "--skip-pull",
         action="store_true",
         help="Skip pull preflight if models are already installed.",
@@ -104,7 +112,11 @@ def main(argv: list[str] | None = None) -> int:
         )
 
     creds_present = prepare_data.has_kaggle_credentials()
-    policy = prepare_data.kaggle_policy_for_mode(args.mode, creds_present)
+    policy = prepare_data.kaggle_policy_for_mode(
+        args.mode,
+        creds_present,
+        allow_local_fallback=args.allow_kaggle_fallback,
+    )
     if policy.hard_fail_on_missing and not policy.include_kaggle:
         return _write_infra_failure(
             output_dir=output_dir,
@@ -185,13 +197,36 @@ def main(argv: list[str] | None = None) -> int:
                     continue
 
                 for scenario in SCENARIOS:
-                    payload = _build_payload(
-                        scenario=scenario,
-                        model=model,
-                        series=series,
-                        horizon=horizon,
-                        timeout_seconds=float(args.timeout_seconds),
-                    )
+                    try:
+                        payload = _build_payload(
+                            scenario=scenario,
+                            model=model,
+                            series=series,
+                            horizon=horizon,
+                            timeout_seconds=float(args.timeout_seconds),
+                        )
+                    except ValueError as exc:
+                        # Covariate scenarios may fail for HF datasets with non-ISO timestamps.
+                        # Record the failure and continue rather than crashing the whole run.
+                        entries.append(
+                            _build_entry(
+                                run_id=run_id,
+                                mode=args.mode,
+                                dataset=dataset_name,
+                                scenario=scenario,
+                                model=model,
+                                status="fail",
+                                latency_ms=0.0,
+                                metrics={},
+                                warnings=[],
+                                error=f"payload_build_error: {exc}",
+                                started_at=_now_iso(),
+                                finished_at=_now_iso(),
+                                http_status=None,
+                                expected_status=None,
+                            )
+                        )
+                        continue
                     expected_status = _expected_status(scenario=scenario, model=model)
 
                     started = _now_iso()

@@ -431,12 +431,21 @@ python scripts/e2e_realdata/run_tsfm_realdata.py \
   --model all \
   --base-url http://127.0.0.1:11435 \
   --output-dir artifacts/realdata/nightly
+
+# Local mode: requires KAGGLE_USERNAME/KAGGLE_KEY by default
+# Add --allow-kaggle-fallback to run open datasets only when credentials are missing.
+python scripts/e2e_realdata/run_tsfm_realdata.py \
+  --mode local \
+  --model all \
+  --allow-kaggle-fallback \
+  --base-url http://127.0.0.1:11435 \
+  --output-dir artifacts/realdata/local-open-fallback
 ```
 
 Alternative wrapper:
 
 ```bash
-bash scripts/e2e_realdata_tsfm.sh pr all http://127.0.0.1:11435 artifacts/realdata/wrapper
+bash scripts/e2e_realdata_tsfm.sh pr all http://127.0.0.1:11435 artifacts/realdata/wrapper false
 ```
 
 Each run writes:

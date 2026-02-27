@@ -58,7 +58,12 @@ def has_kaggle_credentials(env: Mapping[str, str] | None = None) -> bool:
     return bool(username and key)
 
 
-def kaggle_policy_for_mode(mode: str, credentials_present: bool) -> KagglePolicy:
+def kaggle_policy_for_mode(
+    mode: str,
+    credentials_present: bool,
+    *,
+    allow_local_fallback: bool = False,
+) -> KagglePolicy:
     """Resolve Kaggle policy based on mode and credential availability."""
     normalized = mode.strip().lower()
     if normalized not in SAMPLE_SIZE_BY_MODE:
@@ -72,6 +77,22 @@ def kaggle_policy_for_mode(mode: str, credentials_present: bool) -> KagglePolicy
             include_kaggle=False,
             hard_fail_on_missing=True,
             message="nightly mode requires KAGGLE_USERNAME and KAGGLE_KEY",
+        )
+
+    if normalized == "local":
+        if allow_local_fallback:
+            return KagglePolicy(
+                include_kaggle=False,
+                hard_fail_on_missing=False,
+                message="Kaggle credentials missing; local fallback enabled (open datasets only)",
+            )
+        return KagglePolicy(
+            include_kaggle=False,
+            hard_fail_on_missing=True,
+            message=(
+                "local mode requires KAGGLE_USERNAME and KAGGLE_KEY; "
+                "use --allow-kaggle-fallback to run open datasets only"
+            ),
         )
 
     return KagglePolicy(
@@ -147,6 +168,26 @@ def prepare_datasets(
             )
             continue
 
+        if kind == "huggingface_dataset":
+            hf_id = str(item["hf_id"])
+            timestamp_column = str(item["timestamp_column"])
+            target_column = str(item["target_column"])
+            
+            try:
+                datasets[name] = parse_huggingface_dataset(
+                    hf_id=hf_id,
+                    timestamp_column=timestamp_column,
+                    target_column=target_column,
+                    horizon=horizon,
+                    context_cap=context_cap,
+                    max_series=sample_size,
+                    seed=seed,
+                )
+            except Exception as exc:
+                reason = f"skipped dataset {name}: failed to load or parse from HuggingFace ({exc})"
+                messages.append(reason)
+            continue
+
         if kind == "kaggle_hourly_energy":
             if not include_kaggle:
                 reason = f"skipped dataset {name}: kaggle credentials unavailable"
@@ -176,6 +217,84 @@ def prepare_datasets(
         raise RuntimeError("no datasets were prepared")
 
     return PreparedDataResult(datasets=datasets, messages=messages)
+
+
+def parse_huggingface_dataset(
+    *,
+    hf_id: str,
+    timestamp_column: str,
+    target_column: str,
+    horizon: int,
+    context_cap: int,
+    max_series: int,
+    seed: int,
+) -> list[dict[str, Any]]:
+    """Parse a HuggingFace dataset into normalized request series."""
+    from datasets import load_dataset
+    import datasets as hf_datasets
+
+    # Suppress progress bars
+    hf_datasets.utils.logging.disable_progress_bar()
+
+    # Non-streaming: reads from ~/.cache/huggingface/datasets Arrow cache when available
+    ds = load_dataset(hf_id)
+    split_name = list(ds.keys())[0]
+    split_data = ds[split_name]
+
+    # Validate the columns exist
+    available_cols = split_data.column_names
+    if timestamp_column not in available_cols or target_column not in available_cols:
+        raise RuntimeError(
+            f"columns {timestamp_column!r}/{target_column!r} not in {available_cols}"
+        )
+
+    required_rows = context_cap + horizon
+    candidates: list[dict[str, Any]] = []
+    current_chunk: list[tuple[str, float]] = []
+    chunk_index = 0
+    # Scan at most enough rows to produce max_series*5 chunks
+    row_limit = required_rows * max_series * 10
+
+    for row_idx, item in enumerate(split_data):
+        if row_idx >= row_limit:
+            break
+        try:
+            ts_val = item.get(timestamp_column)
+            t_val = item.get(target_column)
+
+            if ts_val is None or t_val is None:
+                continue
+
+            ts_str = str(ts_val)
+            t_float = _parse_float(str(t_val))
+
+            if t_float is not None:
+                current_chunk.append((ts_str, t_float))
+
+            if len(current_chunk) == required_rows:
+                history = current_chunk[:-horizon]
+                future = current_chunk[-horizon:]
+
+                candidates.append({
+                    "id": f"hf:{hf_id.split('/')[-1].lower()}_{chunk_index}",
+                    "freq": "H",
+                    "timestamps": [p[0] for p in history],
+                    "target": [p[1] for p in history],
+                    "actuals": [p[1] for p in future],
+                })
+
+                chunk_index += 1
+                current_chunk = []
+
+                if len(candidates) >= max_series * 5:
+                    break
+        except Exception:
+            continue
+
+    if not candidates:
+        raise RuntimeError(f"no valid chunks (size {required_rows}) found in {hf_id}")
+
+    return _sample_series(candidates, max_series=max_series, seed=seed)
 
 
 def parse_m4_daily_files(
