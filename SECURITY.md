@@ -8,7 +8,7 @@
 
 ## Reporting a Vulnerability
 
-If you discover a security vulnerability in tollama, please report it through security@ollama.com
+If you discover a security vulnerability in tollama, please report it through security@tollama.com
 rather than opening a public issue.
 
 ### What to include
