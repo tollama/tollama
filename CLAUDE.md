@@ -48,8 +48,18 @@ Exposed tools:
 - `tollama_health`
 - `tollama_models`
 - `tollama_forecast` (non-streaming)
+- `tollama_auto_forecast`
+- `tollama_analyze`
+- `tollama_generate`
+- `tollama_counterfactual`
+- `tollama_scenario_tree`
+- `tollama_report`
+- `tollama_what_if`
+- `tollama_pipeline`
+- `tollama_compare`
 - `tollama_pull`
 - `tollama_show`
+- `tollama_recommend`
 
 Error categories (exit-code aligned):
 - `INVALID_REQUEST` (`2`)
