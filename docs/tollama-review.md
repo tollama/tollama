@@ -203,7 +203,7 @@ src/tollama/
 │   ├── message_router.py # 메시지 라우팅
 │   └── tasks.py     #   태스크 상태 머신
 ├── skill/           # 프레임워크 연동
-│   ├── langchain.py #   LangChain 도구 (14개)
+│   ├── langchain.py #   LangChain 도구 (13개)
 │   ├── crewai.py    #   CrewAI 어댑터
 │   ├── autogen.py   #   AutoGen 어댑터
 │   └── smolagents.py#   Smolagents 어댑터
