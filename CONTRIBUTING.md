@@ -108,6 +108,30 @@ See existing runners for reference on the stdio protocol contract.
   (README.md, docs/, roadmap status markers).
 - Note any API, CLI, protocol, dependency, or config compatibility impact.
 
+## Branching Strategy
+
+Use short-lived feature branches and open a PR against `main`:
+
+| Prefix | When to use |
+|---|---|
+| `feature/` | New features or significant additions |
+| `fix/` | Bug fixes |
+| `docs/` | Documentation-only changes |
+| `chore/` | Maintenance tasks (deps, CI, tooling) |
+
+Examples: `feature/add-toto-runner`, `fix/path-traversal-ingest`, `docs/cli-cheatsheet`.
+
+## CI Pipeline
+
+The CI workflow (`.github/workflows/ci.yml`) runs on every push and PR:
+
+1. **Ruff** — linting and import ordering (`ruff check .`)
+2. **Validate OpenClaw skill** — `scripts/validate_openclaw_skill_tollama_forecast.sh`
+3. **Pytest** — baseline test suite with remote registry validation (`TOLLAMA_VALIDATE_REGISTRY_REMOTE=1 pytest -q`)
+4. **Notebook execution** (Python 3.11 only) — runs tutorial notebooks with a 15-minute timeout
+
+All four steps must pass before a PR can be merged. The matrix runs on Python 3.11, 3.12, and 3.13.
+
 ## Code Style
 
 - Python 3.11+ target.

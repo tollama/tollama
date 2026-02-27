@@ -90,3 +90,71 @@ graph TD
 - **Core is the shared contract layer.** All request/response types live here.
 - **Each runner family is independently installable** via optional extras
   (`runner_torch`, `runner_timesfm`, etc.).
+
+---
+
+## Request Data Flow
+
+What happens inside the daemon when a forecast request arrives:
+
+```mermaid
+sequenceDiagram
+    participant C as Client (CLI / SDK / HTTP)
+    participant R as FastAPI Routes
+    participant A as Auth Middleware
+    participant RL as Rate Limiter
+    participant S as Runner Supervisor
+    participant P as Runner Process (subprocess)
+
+    C->>R: POST /api/forecast {model, horizon, series}
+    R->>A: check Authorization header
+    A-->>R: 401 Unauthorized (if keys configured and missing)
+    A->>RL: pass to rate limiter
+    RL-->>R: 429 Too Many Requests (if limit exceeded)
+    RL->>S: dispatch ForecastRequest
+    S->>P: JSON line: {"id":"<uuid>","method":"forecast","params":{...}}
+    P->>S: JSON line: {"id":"<uuid>","result":{"forecasts":[...]}}
+    S->>R: ForecastResponse
+    R->>C: 200 + JSON body
+```
+
+The runner process is a **separate subprocess** — this is why the daemon can
+stay free of heavy ML dependencies. Each runner family has its own optional extras
+(`runner_torch`, `runner_timesfm`, etc.) and can run in an isolated venv.
+
+---
+
+## Stdio Line Protocol
+
+Runners implement a simple newline-delimited JSON protocol over stdin/stdout.
+The full spec lives in `src/tollama/core/protocol.py`.
+
+**Request** (daemon → runner):
+```json
+{"id": "<uuid>", "method": "<method>", "params": {"key": "value"}}
+```
+
+**Success response** (runner → daemon):
+```json
+{"id": "<uuid>", "result": {"forecasts": [...]}}
+```
+
+**Error response** (runner → daemon):
+```json
+{"id": "<uuid>", "error": {"code": 4, "message": "model not loaded", "data": null}}
+```
+
+**Supported methods:**
+
+| Method | Description |
+|--------|-------------|
+| `hello` | Initial handshake, runner announces itself |
+| `capabilities` | Returns which models and features the runner supports |
+| `load` | Load a model into memory |
+| `unload` | Release a loaded model |
+| `forecast` | Run inference and return forecast results |
+| `ping` | Liveness probe |
+
+**Implementing a new runner:** Spawn a process that reads JSON-line requests from
+stdin and writes JSON-line responses to stdout, implementing the six methods above.
+Use `tollama dev scaffold <family>` to generate the boilerplate.

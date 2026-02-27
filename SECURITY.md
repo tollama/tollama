@@ -44,3 +44,26 @@ The following areas are in scope for security reports:
 - Denial-of-service via large forecast requests (use rate limiting and resource
   controls)
 - Vulnerabilities in optional runner dependencies when tollama is not involved
+
+## Operator Hardening
+
+Recommended settings for production and multi-user deployments:
+
+- **Enable API key authentication.** Add one or more keys to `auth.api_keys` in
+  `~/.tollama/config.json`. Without keys configured, the API is open to any process
+  that can reach the daemon port.
+- **Bind to loopback only.** Start the daemon with `tollama serve --host 127.0.0.1`
+  (the default) rather than `0.0.0.0`. Only expose on a wider interface if you have
+  network-level controls in place.
+- **Do not set `TOLLAMA_DOCS_PUBLIC=1` in production.** This flag removes authentication
+  from the interactive API docs (`/docs`, `/redoc`, `/openapi.json`), exposing your API
+  schema to unauthenticated callers.
+- **Restrict CORS origins.** The daemon's CORS configuration defaults to permissive
+  settings for local development. Review and restrict `allowed_origins` for any
+  deployment where the daemon is reachable from a browser context.
+- **Review rate limit defaults.** The built-in rate limiter protects against request
+  floods. Confirm the default limits are appropriate for your environment; lower them
+  for shared or public-facing instances.
+- **Runner process isolation.** Each runner family runs as a separate subprocess.
+  Avoid running the daemon as root. Use OS-level controls (cgroups, `ulimit`) to
+  cap runner memory and CPU if needed.

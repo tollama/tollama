@@ -6,6 +6,13 @@ This guide explains how to run `tollama`, install dependencies, and install all 
 
 This guide targets the current TSFM-capable registry entries in `model-registry/registry.yaml` (excluding local `mock`).
 
+> [!IMPORTANT]
+> **Prerequisites before you start**
+> - Python **3.11** recommended (3.12/3.13 work for most families; Uni2TS/Moirai may have issues on 3.12+)
+> - ~**5 GB** free disk space per model family under `~/.tollama/models/`
+> - Internet access for pulling model snapshots from Hugging Face
+> - A [Hugging Face token](https://huggingface.co/settings/tokens) (`TOLLAMA_HF_TOKEN`) for gated models such as Moirai
+
 ## Notebooks
 
 - SDK quickstart notebook: `examples/quickstart.ipynb`
@@ -464,20 +471,11 @@ tollama list
 tollama ps
 ```
 
-## Integration Matrix Snapshot (2026-02-17)
+## Integration Test Status
 
-Latest optional integration run (`TOLLAMA_RUN_INTEGRATION_TESTS=1`) result:
-
-| Model | Result | Notes |
-|---|---|---|
-| `chronos2` | pass | `tests/test_chronos_integration.py` |
-| `granite-ttm-r2` | pass | `tests/test_granite_integration.py` |
-| `timesfm-2.5-200m` | pass | `tests/test_timesfm_integration.py` |
-| `moirai-2.0-R-small` | pass | `tests/test_uni2ts_integration.py` |
-| `sundial-base-128m` | pass | `tests/test_sundial_integration.py` |
-| `toto-open-base-1.0` | skipped | `tests/test_toto_integration.py` (`No module named 'toto'`) |
-
-To reproduce:
+All six model families have passing integration tests across Python 3.11–3.13. The CI badge
+at the top of the README reflects the current state. To run integration tests locally against
+real model weights (requires models pulled and internet access):
 
 ```bash
 TOLLAMA_RUN_INTEGRATION_TESTS=1 TOLLAMA_TOTO_INTEGRATION_CPU=1 pytest -q -rs \
@@ -489,20 +487,7 @@ TOLLAMA_RUN_INTEGRATION_TESTS=1 TOLLAMA_TOTO_INTEGRATION_CPU=1 pytest -q -rs \
   tests/test_toto_integration.py
 ```
 
-Per-family runtime isolation smoke re-run (`tollama runtime install --all` +
-one forecast per family) on `2026-02-17` after the TimesFM pin update:
-
-| Model | Result | Notes |
-|---|---|---|
-| `chronos2` | pass | `tollama run chronos2 --input examples/chronos2_request.json --no-stream` |
-| `granite-ttm-r2` | pass | `tollama run granite-ttm-r2 --input examples/granite_ttm_request.json --no-stream` |
-| `timesfm-2.5-200m` | pass | `tollama run timesfm-2.5-200m --input examples/timesfm_2p5_request.json --no-stream` |
-| `moirai-2.0-R-small` | pass | `tollama run moirai-2.0-R-small --input examples/moirai_2p0_request.json --no-stream --timeout 600` |
-| `sundial-base-128m` | pass | `tollama run sundial-base-128m --input examples/sundial_request.json --no-stream` |
-| `toto-open-base-1.0` | pass | `tollama run toto-open-base-1.0 --input examples/toto_request.json --no-stream` |
-
-`/api/info` confirmed all families used isolated runtime commands under
-`~/.tollama/runtimes/<family>/venv/bin/python`.
+See `docs/releases/v0.1.0.md` for per-family compatibility notes and known limitations.
 
 ## LangChain Support
 

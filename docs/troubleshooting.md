@@ -174,6 +174,88 @@ python -m pip install -e ".[mcp]"
 }
 ```
 
+## 11) GPU / memory issues
+
+Symptoms:
+- `CUDA out of memory` during inference.
+- Runner process crashes immediately after load.
+- No GPU detected even with CUDA installed.
+
+Checks:
+```bash
+# Check GPU visibility and memory
+nvidia-smi
+
+# Confirm CUDA is available in the runner environment
+python -c "import torch; print(torch.cuda.is_available(), torch.cuda.device_count())"
+```
+
+Fix:
+- Reduce `num_samples` in request `options` to lower VRAM usage:
+  ```json
+  {"options": {"num_samples": 10}}
+  ```
+- Force CPU inference if VRAM is insufficient:
+  ```bash
+  export CUDA_VISIBLE_DEVICES=""
+  tollama serve
+  ```
+- Use a smaller model variant (e.g. `chronos2-tiny` instead of `chronos2-large`).
+- If running multiple models simultaneously, unload idle ones with `tollama ps` to see what's loaded.
+
+## 12) Reading daemon logs
+
+Symptoms:
+- Unexpected errors with no context.
+- Need to trace a specific request through the daemon.
+
+Where logs go:
+- `tollama serve` writes to **stdout** (uvicorn access log) and **stderr** (app-level errors).
+- Runner subprocess stderr is forwarded to daemon stderr.
+
+Structured JSON logs:
+```bash
+# Enable JSON-formatted stderr for log aggregation
+export TOLLAMA_JSON_STDERR=1
+tollama serve 2>daemon.log
+```
+
+Useful grep filters:
+```bash
+# Filter for forecast errors
+grep -i "error\|exception\|traceback" daemon.log
+
+# Trace a specific request ID
+grep '"id":"<uuid>"' daemon.log
+
+# See runner process events
+grep "runner\|subprocess\|stdio" daemon.log
+```
+
+## 13) First-run is slow
+
+Symptoms:
+- First forecast after `tollama pull` takes several minutes.
+- Subsequent forecasts on the same model are much faster.
+
+Explanation:
+- **TimesFM** and **Sundial** JIT-compile model layers on first use. This is a one-time
+  cost per environment; subsequent runs reuse the compiled artifact from cache.
+- First run also loads model weights from disk into RAM/VRAM.
+
+Fix:
+- Extend the CLI timeout for first-run:
+  ```bash
+  tollama run timesfm-2.0-200m --input examples/request.json --no-stream --timeout 900
+  ```
+- Or increase the daemon-wide timeout environment variable:
+  ```bash
+  export TOLLAMA_FORECAST_TIMEOUT_SECONDS=900
+  ```
+- After the first successful run, normal timeout values (120–300 s) are safe.
+
+---
+
 ## Quick Triage Commands
 
 ```bash

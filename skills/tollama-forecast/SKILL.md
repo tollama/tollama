@@ -300,6 +300,41 @@ Scripts follow this shared contract:
 
 ---
 
+## How agents use this skill
+
+AI agents (OpenClaw, Claude Code, Codex, LangChain-based agents, etc.) use this skill by
+invoking the bash helper scripts under `bin/` as shell commands. The typical flow is:
+
+1. **Health check** — `bin/tollama-health.sh` confirms the daemon is reachable.
+2. **Model inspection** — `bin/tollama-models.sh installed` lists available models.
+3. **Forecast** — `bin/tollama-forecast.sh --model <name> --input <file>` runs inference
+   and prints a single JSON object to stdout.
+
+Agents should inspect the **exit code** and optionally parse the JSON error envelope on
+stderr when `TOLLAMA_JSON_STDERR=1` is set. The exit code contract is deterministic and
+maps to `INVALID_REQUEST` (2), `DAEMON_UNREACHABLE` (3), `MODEL_MISSING` (4),
+`LICENSE_REQUIRED`/`PERMISSION_DENIED` (5), `TIMEOUT` (6), `INTERNAL_ERROR` (10).
+
+For Python-native agents (LangChain, CrewAI, AutoGen, smolagents), first-party tool
+wrappers are available in `tollama.skill` — see the run guide for setup details.
+
+## Deploying in sandboxes and gateways
+
+The skill is designed to work in both local and remote execution environments, but the
+deployment topology requires care. Key points:
+
+- **Sandbox:** The sandbox process cannot reach `127.0.0.1` on the user's host.
+  Set `TOLLAMA_BASE_URL` to an IP/hostname reachable from inside the sandbox.
+  See `docs/openclaw-sandbox-runbook.md` for a full sandbox quirks checklist.
+- **Gateway:** When OpenClaw executes on a gateway host (not the user workstation),
+  the daemon may be on a different machine. Use explicit daemon URLs and verify
+  proxy/firewall rules allow the connection.
+  See `docs/openclaw-gateway-runbook.md` for performance expectations and monitoring.
+- **Docker/container:** Mount `$TOLLAMA_HOME` as a persistent volume to avoid
+  re-downloading models on each container start.
+
+---
+
 # Host Notes
 
 This section contains **host-specific tips**.

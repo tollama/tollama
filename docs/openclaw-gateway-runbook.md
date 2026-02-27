@@ -108,3 +108,37 @@ If new gateway rollout fails, revert to last known-good state:
   in CI before gateway rollout.
 - Prefer daemon URL config as code for reproducible gateway environments.
 - Re-run smoke tests after daemon upgrades and network policy changes.
+
+## 8) Performance expectations
+
+Approximate first-request and steady-state latency per model family (single series, horizon 10):
+
+| Family | First request | Steady state | Notes |
+|---|---|---|---|
+| `mock` | < 1 s | < 1 s | No model loading |
+| `torch` (Chronos-2) | 10–60 s | 1–5 s | Weight load + torch JIT on first use |
+| `timesfm` | 2–5 min | 5–30 s | XLA/JAX compilation on first request |
+| `uni2ts` (Moirai) | 30–90 s | 3–10 s | ONNX or torch weight load |
+| `sundial` | 30–120 s | 3–15 s | Transformer weight load |
+| `toto` | 30–90 s | 3–10 s | Transformer weight load |
+
+These are estimates on CPU-only hardware with no pre-warmed cache. GPU acceleration
+reduces steady-state by 5–10×. Set `--timeout` accordingly for first-run requests.
+
+## 9) Monitoring signals
+
+Endpoints to poll from your monitoring system:
+
+| Endpoint | Method | Purpose | Alert condition |
+|---|---|---|---|
+| `/v1/health` | GET | Daemon liveness | Non-200 → daemon down |
+| `/api/usage` | GET | Per-key request counts and error rates | Error rate spike |
+| `/metrics` | GET | Prometheus metrics (optional dep) | Runner restart counter, P95 latency |
+
+Exit codes to alert on when received from skill scripts:
+
+| Exit code | Alert action |
+|---|---|
+| `3` (DAEMON_UNREACHABLE) | Page on-call — daemon or network failure |
+| `10` (INTERNAL_ERROR) | Investigate runner process crash |
+| `6` (TIMEOUT) | Review timeout config and model load time |
