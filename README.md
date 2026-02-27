@@ -374,6 +374,7 @@ Run the real-data gate + benchmark harness locally:
 python scripts/e2e_realdata/run_tsfm_realdata.py \
   --mode pr \
   --model all \
+  --gate-profile strict \
   --base-url http://127.0.0.1:11435 \
   --output-dir artifacts/realdata/local-pr
 
@@ -381,6 +382,7 @@ python scripts/e2e_realdata/run_tsfm_realdata.py \
 python scripts/e2e_realdata/run_tsfm_realdata.py \
   --mode nightly \
   --model all \
+  --gate-profile strict \
   --base-url http://127.0.0.1:11435 \
   --output-dir artifacts/realdata/local-nightly
 
@@ -388,6 +390,7 @@ python scripts/e2e_realdata/run_tsfm_realdata.py \
 python scripts/e2e_realdata/run_tsfm_realdata.py \
   --mode local \
   --model all \
+  --gate-profile strict \
   --allow-kaggle-fallback \
   --base-url http://127.0.0.1:11435 \
   --output-dir artifacts/realdata/local-open-fallback
@@ -401,24 +404,36 @@ bash scripts/e2e_realdata_tsfm.sh pr all http://127.0.0.1:11435 artifacts/realda
 ```
 
 Artifacts include `result.json`, `summary.json`, `summary.md`, and raw per-call payloads.
+`result.json` entries now carry `status` (`pass`/`fail`/`skip`) and `retry_count`.
 
-### HuggingFace Datasets
+### HuggingFace Datasets (Optional Local Benchmark)
 
-To test against dynamically gathered HuggingFace time-series datasets, first run the gather script to discover and format 100 metadata catalogs:
+HuggingFace datasets are kept as an optional local/manual path and are not part of PR/nightly strict CI gating.
+First gather a deterministic catalog:
 
 ```bash
-# Requires `datasets` library. Might take several minutes to stream schemas locally.
-python scripts/e2e_realdata/gather_hf_datasets.py
+# Requires `datasets`. Produces both accepted catalog and rejection reasons.
+python scripts/e2e_realdata/gather_hf_datasets.py \
+  --output scripts/e2e_realdata/hf_dataset_catalog.yaml \
+  --rejections-output scripts/e2e_realdata/hf_dataset_rejections.json
 ```
 
-Then run the evaluation using the newly generated catalog:
-    
+Then run HF local evaluation with optional gate profile:
+
 ```bash
 python scripts/e2e_realdata/run_tsfm_realdata.py \
   --mode local \
-  --model mock \
+  --model all \
   --catalog-path scripts/e2e_realdata/hf_dataset_catalog.yaml \
+  --gate-profile hf_optional \
+  --allow-kaggle-fallback \
   --output-dir artifacts/realdata/hf-local
+```
+
+Convenience wrapper:
+
+```bash
+bash scripts/e2e_realdata_hf.sh all http://127.0.0.1:11435 artifacts/realdata/hf-local
 ```
 
 ## Prometheus Metrics

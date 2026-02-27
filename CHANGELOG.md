@@ -34,3 +34,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Docker and docker-compose support
 - Tutorial notebooks (covariates, comparison, what-if, auto-forecast)
 - Real-data TSFM E2E harness (`scripts/e2e_realdata/`) with PR smoke + nightly matrix workflow (`.github/workflows/e2e-realdata.yml`)
+- HuggingFace optional local E2E hardening:
+  - deterministic catalog gatherer with schema-quality thresholds and rejection report (`scripts/e2e_realdata/gather_hf_datasets.py`, `hf_dataset_rejections.json`)
+  - normalized HF parser with contiguous-window enforcement and frequency inference (`prepare_data.py`)
+  - orchestrator `--gate-profile {strict,hf_optional}` + transient retry/backoff with per-entry `retry_count`
+  - HF local wrapper script (`scripts/e2e_realdata_hf.sh`)

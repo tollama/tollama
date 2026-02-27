@@ -19,11 +19,14 @@ def summarize_entries(entries: list[dict[str, Any]]) -> dict[str, Any]:
 
     models: dict[str, Any] = {}
     total_failed = 0
+    total_skipped = 0
     for model, model_entries in sorted(by_model.items()):
         total = len(model_entries)
         passed = sum(1 for item in model_entries if item.get("status") == "pass")
-        failed = total - passed
+        failed = sum(1 for item in model_entries if item.get("status") == "fail")
+        skipped = sum(1 for item in model_entries if item.get("status") == "skip")
         total_failed += failed
+        total_skipped += skipped
 
         latencies = [
             float(item["latency_ms"])
@@ -48,13 +51,20 @@ def summarize_entries(entries: list[dict[str, Any]]) -> dict[str, Any]:
         scenario_counts: dict[str, dict[str, int]] = {}
         for item in model_entries:
             scenario = str(item.get("scenario", "unknown"))
-            counter = scenario_counts.setdefault(scenario, {"pass": 0, "fail": 0})
-            counter["pass" if item.get("status") == "pass" else "fail"] += 1
+            counter = scenario_counts.setdefault(scenario, {"pass": 0, "fail": 0, "skip": 0})
+            status = str(item.get("status", "fail"))
+            if status == "pass":
+                counter["pass"] += 1
+            elif status == "skip":
+                counter["skip"] += 1
+            else:
+                counter["fail"] += 1
 
         models[model] = {
             "total": total,
             "passed": passed,
             "failed": failed,
+            "skipped": skipped,
             "mean_latency_ms": round(fmean(latencies), 3) if latencies else None,
             "benchmark_metrics": {
                 key: (round(fmean(values), 6) if values else None)
@@ -67,6 +77,7 @@ def summarize_entries(entries: list[dict[str, Any]]) -> dict[str, Any]:
         "gate_pass": total_failed == 0,
         "total_entries": len(entries),
         "total_failed": total_failed,
+        "total_skipped": total_skipped,
         "models": models,
     }
 
@@ -79,9 +90,10 @@ def render_markdown(summary: dict[str, Any]) -> str:
         f"- Gate pass: **{summary.get('gate_pass')}**",
         f"- Total entries: **{summary.get('total_entries')}**",
         f"- Total failed: **{summary.get('total_failed')}**",
+        f"- Total skipped: **{summary.get('total_skipped', 0)}**",
         "",
-        "| Model | Pass/Total | Mean Latency (ms) | MAE | RMSE | SMAPE |",
-        "| --- | --- | --- | --- | --- | --- |",
+        "| Model | Pass/Total | Skipped | Mean Latency (ms) | MAE | RMSE | SMAPE |",
+        "| --- | --- | --- | --- | --- | --- | --- |",
     ]
 
     rows: list[str] = []
@@ -94,10 +106,14 @@ def render_markdown(summary: dict[str, Any]) -> str:
             if not isinstance(metrics, dict):
                 metrics = {}
             rows.append(
-                "| {model} | {passed}/{total} | {latency} | {mae} | {rmse} | {smape} |".format(
+                (
+                    "| {model} | {passed}/{total} | {skipped} | {latency} | "
+                    "{mae} | {rmse} | {smape} |"
+                ).format(
                     model=model,
                     passed=payload.get("passed", 0),
                     total=payload.get("total", 0),
+                    skipped=payload.get("skipped", 0),
                     latency=_fmt_number(payload.get("mean_latency_ms")),
                     mae=_fmt_number(metrics.get("mae")),
                     rmse=_fmt_number(metrics.get("rmse")),
@@ -106,7 +122,7 @@ def render_markdown(summary: dict[str, Any]) -> str:
             )
 
     if not rows:
-        rows.append("| (none) | 0/0 | - | - | - | - |")
+        rows.append("| (none) | 0/0 | 0 | - | - | - | - |")
 
     return "\n".join([*header, *rows, ""])
 

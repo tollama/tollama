@@ -5,9 +5,10 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
-from time import perf_counter
+from time import perf_counter, sleep
 from typing import Any
 
 from tollama.client import TollamaClient
@@ -39,10 +40,23 @@ SCENARIOS = [
     "contract_strict_covariates",
 ]
 
+RETRYABLE_STATUS_CODES = {502, 503}
+RETRY_ATTEMPTS = 3
+RETRY_BACKOFF_SECONDS = (2.0, 5.0)
+
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run real-data E2E matrix for TSFM models.")
     parser.add_argument("--mode", choices=("pr", "nightly", "local"), required=True)
+    parser.add_argument(
+        "--gate-profile",
+        choices=("strict", "hf_optional"),
+        default="strict",
+        help=(
+            "Gate behavior profile. strict keeps all failures blocking; "
+            "hf_optional downgrades HF data/payload build issues to skip."
+        ),
+    )
     parser.add_argument(
         "--model",
         default="all",
@@ -127,6 +141,12 @@ def main(argv: list[str] | None = None) -> int:
         )
 
     try:
+        catalog = prepare_data.load_dataset_catalog(Path(args.catalog_path))
+        dataset_kinds = {
+            str(item["name"]): str(item["kind"])
+            for item in catalog["datasets"]
+            if isinstance(item, dict)
+        }
         prepared = prepare_data.prepare_datasets(
             mode=args.mode,
             catalog_path=Path(args.catalog_path),
@@ -168,14 +188,20 @@ def main(argv: list[str] | None = None) -> int:
                         finished_at=_now_iso(),
                         http_status=None,
                         expected_status=None,
+                        retry_count=0,
                     )
                 )
                 continue
 
         for dataset_name, series_list in prepared.datasets.items():
+            dataset_kind = dataset_kinds.get(dataset_name, "")
             for series in series_list:
                 horizon = len(series.get("actuals", []))
                 if horizon <= 0:
+                    status = _status_for_data_issue(
+                        gate_profile=args.gate_profile,
+                        dataset_kind=dataset_kind,
+                    )
                     entries.append(
                         _build_entry(
                             run_id=run_id,
@@ -183,7 +209,7 @@ def main(argv: list[str] | None = None) -> int:
                             dataset=dataset_name,
                             scenario="preflight_series",
                             model=model,
-                            status="fail",
+                            status=status,
                             latency_ms=0.0,
                             metrics={},
                             warnings=[],
@@ -192,6 +218,7 @@ def main(argv: list[str] | None = None) -> int:
                             finished_at=_now_iso(),
                             http_status=None,
                             expected_status=None,
+                            retry_count=0,
                         )
                     )
                     continue
@@ -206,8 +233,10 @@ def main(argv: list[str] | None = None) -> int:
                             timeout_seconds=float(args.timeout_seconds),
                         )
                     except ValueError as exc:
-                        # Covariate scenarios may fail for HF datasets with non-ISO timestamps.
-                        # Record the failure and continue rather than crashing the whole run.
+                        status = _status_for_data_issue(
+                            gate_profile=args.gate_profile,
+                            dataset_kind=dataset_kind,
+                        )
                         entries.append(
                             _build_entry(
                                 run_id=run_id,
@@ -215,7 +244,7 @@ def main(argv: list[str] | None = None) -> int:
                                 dataset=dataset_name,
                                 scenario=scenario,
                                 model=model,
-                                status="fail",
+                                status=status,
                                 latency_ms=0.0,
                                 metrics={},
                                 warnings=[],
@@ -224,6 +253,7 @@ def main(argv: list[str] | None = None) -> int:
                                 finished_at=_now_iso(),
                                 http_status=None,
                                 expected_status=None,
+                                retry_count=0,
                             )
                         )
                         continue
@@ -231,7 +261,12 @@ def main(argv: list[str] | None = None) -> int:
 
                     started = _now_iso()
                     call_started = perf_counter()
-                    http_status, response_payload, exception_detail = _call_forecast(
+                    (
+                        http_status,
+                        response_payload,
+                        exception_detail,
+                        retry_count,
+                    ) = _call_forecast_with_retry(
                         client=client,
                         payload=payload,
                     )
@@ -264,6 +299,7 @@ def main(argv: list[str] | None = None) -> int:
                         finished_at=finished,
                         http_status=http_status,
                         expected_status=expected_status,
+                        retry_count=retry_count,
                     )
                     entries.append(entry)
 
@@ -274,6 +310,7 @@ def main(argv: list[str] | None = None) -> int:
                             "response": response_payload,
                             "http_status": http_status,
                             "exception": exception_detail,
+                            "retry_count": retry_count,
                             "entry": entry,
                         },
                     )
@@ -365,7 +402,7 @@ def _resolve_models(raw: str) -> list[str]:
     return selected
 
 
-def _call_forecast(
+def _call_forecast_once(
     *,
     client: TollamaClient,
     payload: dict[str, Any],
@@ -380,6 +417,53 @@ def _call_forecast(
         return status, {"detail": exc.detail}, str(exc)
     except TollamaClientError as exc:
         return None, None, str(exc)
+
+
+def _call_forecast_with_retry(
+    *,
+    client: TollamaClient,
+    payload: dict[str, Any],
+    max_attempts: int = RETRY_ATTEMPTS,
+    backoff_seconds: tuple[float, ...] = RETRY_BACKOFF_SECONDS,
+    sleep_fn: Callable[[float], None] = sleep,
+) -> tuple[int | None, dict[str, Any] | None, str | None, int]:
+    attempts = max(1, int(max_attempts))
+    retry_count = 0
+
+    http_status, response_payload, exception_detail = _call_forecast_once(
+        client=client,
+        payload=payload,
+    )
+
+    while retry_count < attempts - 1 and _is_retryable_failure(
+        http_status=http_status,
+        exception_detail=exception_detail,
+    ):
+        delay = 0.0
+        if backoff_seconds:
+            if retry_count < len(backoff_seconds):
+                delay = float(backoff_seconds[retry_count])
+            else:
+                delay = float(backoff_seconds[-1])
+        if delay > 0:
+            sleep_fn(delay)
+
+        retry_count += 1
+        http_status, response_payload, exception_detail = _call_forecast_once(
+            client=client,
+            payload=payload,
+        )
+
+    return http_status, response_payload, exception_detail, retry_count
+
+
+def _is_retryable_failure(*, http_status: int | None, exception_detail: str | None) -> bool:
+    if http_status in RETRYABLE_STATUS_CODES:
+        return True
+    if not exception_detail:
+        return False
+    lowered = exception_detail.lower()
+    return "timed out" in lowered or "timeout" in lowered
 
 
 def _pull_model(*, client: TollamaClient, model: str) -> str | None:
@@ -409,6 +493,7 @@ def _build_entry(
     finished_at: str,
     http_status: int | None,
     expected_status: int | None,
+    retry_count: int,
 ) -> dict[str, Any]:
     return {
         "run_id": run_id,
@@ -425,7 +510,14 @@ def _build_entry(
         "finished_at": finished_at,
         "http_status": http_status,
         "expected_status": expected_status,
+        "retry_count": int(retry_count),
     }
+
+
+def _status_for_data_issue(*, gate_profile: str, dataset_kind: str) -> str:
+    if gate_profile == "hf_optional" and dataset_kind == "huggingface_dataset":
+        return "skip"
+    return "fail"
 
 
 def _write_infra_failure(
@@ -454,6 +546,7 @@ def _write_infra_failure(
             "gate_pass": False,
             "total_entries": 0,
             "total_failed": 1,
+            "total_skipped": 0,
             "models": {},
             "infra_error": detail,
         },

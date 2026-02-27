@@ -14,6 +14,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
+from statistics import median
 from typing import Any
 
 import yaml
@@ -172,10 +173,13 @@ def prepare_datasets(
             hf_id = str(item["hf_id"])
             timestamp_column = str(item["timestamp_column"])
             target_column = str(item["target_column"])
+            split_name_value = item.get("split")
+            split_name = str(split_name_value) if isinstance(split_name_value, str) else None
             
             try:
                 datasets[name] = parse_huggingface_dataset(
                     hf_id=hf_id,
+                    split_name=split_name,
                     timestamp_column=timestamp_column,
                     target_column=target_column,
                     horizon=horizon,
@@ -222,6 +226,7 @@ def prepare_datasets(
 def parse_huggingface_dataset(
     *,
     hf_id: str,
+    split_name: str | None,
     timestamp_column: str,
     target_column: str,
     horizon: int,
@@ -230,69 +235,103 @@ def parse_huggingface_dataset(
     seed: int,
 ) -> list[dict[str, Any]]:
     """Parse a HuggingFace dataset into normalized request series."""
-    from datasets import load_dataset
     import datasets as hf_datasets
 
     # Suppress progress bars
     hf_datasets.utils.logging.disable_progress_bar()
 
-    # Non-streaming: reads from ~/.cache/huggingface/datasets Arrow cache when available
-    ds = load_dataset(hf_id)
-    split_name = list(ds.keys())[0]
-    split_data = ds[split_name]
+    loaded_dataset = _load_hf_dataset(hf_id=hf_id, split_name=split_name)
+    resolved_split = split_name
+    if hasattr(loaded_dataset, "keys"):
+        split_names = [str(name) for name in loaded_dataset.keys()]
+        if not split_names:
+            raise RuntimeError(f"dataset {hf_id} has no splits")
+        chosen_split = resolved_split or sorted(split_names)[0]
+        if chosen_split not in split_names:
+            raise RuntimeError(
+                f"split {chosen_split!r} not found for {hf_id}; available={sorted(split_names)}"
+            )
+        split_data = loaded_dataset[chosen_split]
+        resolved_split = chosen_split
+    else:
+        split_data = loaded_dataset
+        resolved_split = resolved_split or "default"
 
-    # Validate the columns exist
-    available_cols = split_data.column_names
-    if timestamp_column not in available_cols or target_column not in available_cols:
+    available_cols = list(getattr(split_data, "column_names", []))
+    if available_cols and (
+        timestamp_column not in available_cols or target_column not in available_cols
+    ):
         raise RuntimeError(
             f"columns {timestamp_column!r}/{target_column!r} not in {available_cols}"
         )
 
     required_rows = context_cap + horizon
     candidates: list[dict[str, Any]] = []
-    current_chunk: list[tuple[str, float]] = []
+    normalized_rows: list[tuple[datetime, float]] = []
     chunk_index = 0
-    # Scan at most enough rows to produce max_series*5 chunks
-    row_limit = required_rows * max_series * 10
+    # Scan enough rows to produce stable deterministic candidates while staying bounded.
+    row_limit = required_rows * max_series * 20
 
     for row_idx, item in enumerate(split_data):
         if row_idx >= row_limit:
             break
         try:
-            ts_val = item.get(timestamp_column)
-            t_val = item.get(target_column)
-
-            if ts_val is None or t_val is None:
+            if not isinstance(item, Mapping):
                 continue
 
-            ts_str = str(ts_val)
-            t_float = _parse_float(str(t_val))
+            ts_raw = item.get(timestamp_column)
+            target_raw = item.get(target_column)
+            if ts_raw is None or target_raw is None:
+                continue
 
-            if t_float is not None:
-                current_chunk.append((ts_str, t_float))
+            parsed_dt = _parse_timestamp(str(ts_raw))
+            parsed_value = _parse_float(str(target_raw))
+            if parsed_dt is None or parsed_value is None:
+                continue
 
-            if len(current_chunk) == required_rows:
-                history = current_chunk[:-horizon]
-                future = current_chunk[-horizon:]
-
-                candidates.append({
-                    "id": f"hf:{hf_id.split('/')[-1].lower()}_{chunk_index}",
-                    "freq": "H",
-                    "timestamps": [p[0] for p in history],
-                    "target": [p[1] for p in history],
-                    "actuals": [p[1] for p in future],
-                })
-
-                chunk_index += 1
-                current_chunk = []
-
-                if len(candidates) >= max_series * 5:
-                    break
+            normalized_rows.append((parsed_dt, parsed_value))
         except Exception:
             continue
 
+    if len(normalized_rows) < required_rows:
+        raise RuntimeError(
+            f"insufficient parsed rows for {hf_id}: "
+            f"{len(normalized_rows)} < {required_rows}"
+        )
+
+    normalized_rows.sort(key=lambda item: item[0])
+    inferred_freq = _infer_frequency_from_datetimes([point[0] for point in normalized_rows])
+    expected_step = _step_for_freq(inferred_freq)
+    contiguous_segments = _split_contiguous_rows(normalized_rows, expected_step=expected_step)
+
+    for segment in contiguous_segments:
+        if len(segment) < required_rows:
+            continue
+        for start in range(0, len(segment) - required_rows + 1, required_rows):
+            window = segment[start : start + required_rows]
+            history = window[:-horizon]
+            future = window[-horizon:]
+
+            candidates.append(
+                {
+                    "id": f"hf:{hf_id.split('/')[-1].lower()}_{chunk_index}",
+                    "freq": inferred_freq,
+                    "timestamps": [point[0].isoformat() for point in history],
+                    "target": [point[1] for point in history],
+                    "actuals": [point[1] for point in future],
+                    "split": resolved_split,
+                }
+            )
+            chunk_index += 1
+            if len(candidates) >= max_series * 5:
+                break
+        if len(candidates) >= max_series * 5:
+            break
+
     if not candidates:
-        raise RuntimeError(f"no valid chunks (size {required_rows}) found in {hf_id}")
+        raise RuntimeError(
+            f"no contiguous chunks (size {required_rows}) found in {hf_id} split={resolved_split}"
+        )
 
     return _sample_series(candidates, max_series=max_series, seed=seed)
 
@@ -471,9 +510,19 @@ def _parse_timestamp(raw: str) -> datetime | None:
     if not text:
         return None
 
+    if text.isdigit():
+        try:
+            epoch = int(text)
+            if len(text) >= 13:
+                epoch = epoch // 1000
+            return datetime.fromtimestamp(epoch)
+        except (OverflowError, OSError, ValueError):
+            pass
+
     normalized = text.replace("Z", "+00:00")
     try:
-        return datetime.fromisoformat(normalized)
+        parsed = datetime.fromisoformat(normalized)
+        return parsed.replace(tzinfo=None) if parsed.tzinfo else parsed
     except ValueError:
         pass
 
@@ -481,8 +530,14 @@ def _parse_timestamp(raw: str) -> datetime | None:
         "%Y-%m-%d %H:%M:%S",
         "%Y-%m-%d %H:%M",
         "%Y-%m-%d",
+        "%Y/%m/%d",
+        "%Y/%m/%d %H:%M",
+        "%Y/%m/%d %H:%M:%S",
+        "%d-%m-%Y",
+        "%d/%m/%Y",
         "%m/%d/%Y %H:%M",
         "%m/%d/%Y %H:%M:%S",
+        "%m/%d/%Y",
     )
     for fmt in formats:
         try:
@@ -490,6 +545,66 @@ def _parse_timestamp(raw: str) -> datetime | None:
         except ValueError:
             continue
     return None
+
+
+def _load_hf_dataset(*, hf_id: str, split_name: str | None) -> Any:
+    from datasets import load_dataset
+
+    if split_name:
+        return load_dataset(hf_id, split=split_name)
+    return load_dataset(hf_id)
+
+
+def _infer_frequency_from_datetimes(points: list[datetime]) -> str:
+    if len(points) < 2:
+        return "D"
+
+    deltas = sorted(
+        (points[index] - points[index - 1]).total_seconds()
+        for index in range(1, len(points))
+        if points[index] > points[index - 1]
+    )
+    if not deltas:
+        return "D"
+
+    median_seconds = float(median(deltas))
+    if 1800.0 <= median_seconds <= 5400.0:
+        return "H"
+    if 64800.0 <= median_seconds <= 108000.0:
+        return "D"
+    return "D"
+
+
+def _step_for_freq(freq: str) -> timedelta:
+    return timedelta(hours=1) if freq.strip().upper().startswith("H") else timedelta(days=1)
+
+
+def _split_contiguous_rows(
+    rows: list[tuple[datetime, float]],
+    *,
+    expected_step: timedelta,
+) -> list[list[tuple[datetime, float]]]:
+    if not rows:
+        return []
+
+    expected_seconds = expected_step.total_seconds()
+    tolerance = max(expected_seconds * 0.5, 1.0)
+    segments: list[list[tuple[datetime, float]]] = []
+    current: list[tuple[datetime, float]] = [rows[0]]
+
+    for item in rows[1:]:
+        prev_dt = current[-1][0]
+        delta_seconds = (item[0] - prev_dt).total_seconds()
+        if abs(delta_seconds - expected_seconds) <= tolerance:
+            current.append(item)
+            continue
+
+        segments.append(current)
+        current = [item]
+
+    if current:
+        segments.append(current)
+    return segments
 
 
 def _synthetic_timestamps(*, freq: str, count: int) -> list[str]:

@@ -422,6 +422,9 @@ tollama/
   - added: `scripts/e2e_realdata/validate_results.py`
   - added: `scripts/e2e_realdata/summarize_report.py`
   - added: `.github/workflows/e2e-realdata.yml` (PR smoke + nightly full matrix + aggregate report)
+  - updated: HuggingFace path is optional local/manual profile via
+    `--gate-profile hf_optional` and `scripts/e2e_realdata_hf.sh` (PR/nightly remain strict Kaggle+M4)
+  - updated: per-entry artifacts now include `status=pass|fail|skip` and `retry_count`
 - Phase 4 feature set was re-validated on `2026-02-19`:
   - pass: OpenClaw skill regression (`bash scripts/e2e_skills_test.sh`)
   - pass: metrics expansion live daemon checks (`/api/forecast` non-stream):

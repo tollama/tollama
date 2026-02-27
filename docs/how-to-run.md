@@ -422,6 +422,7 @@ Use the real-data harness to run contract-gate + benchmark checks for the 6-mode
 python scripts/e2e_realdata/run_tsfm_realdata.py \
   --mode pr \
   --model all \
+  --gate-profile strict \
   --base-url http://127.0.0.1:11435 \
   --output-dir artifacts/realdata/pr
 
@@ -429,6 +430,7 @@ python scripts/e2e_realdata/run_tsfm_realdata.py \
 python scripts/e2e_realdata/run_tsfm_realdata.py \
   --mode nightly \
   --model all \
+  --gate-profile strict \
   --base-url http://127.0.0.1:11435 \
   --output-dir artifacts/realdata/nightly
 
@@ -437,6 +439,7 @@ python scripts/e2e_realdata/run_tsfm_realdata.py \
 python scripts/e2e_realdata/run_tsfm_realdata.py \
   --mode local \
   --model all \
+  --gate-profile strict \
   --allow-kaggle-fallback \
   --base-url http://127.0.0.1:11435 \
   --output-dir artifacts/realdata/local-open-fallback
@@ -454,6 +457,37 @@ Each run writes:
 - `summary.json`: aggregated pass/fail + latency/metric summary
 - `summary.md`: human-readable leaderboard
 - `raw/`: per-request payload/response captures
+
+`--gate-profile strict` is the CI default. For optional HuggingFace local runs use
+`--gate-profile hf_optional` to downgrade HF data/payload issues to `skip`.
+
+## HuggingFace Optional Local Profile
+
+Generate a quality-gated catalog plus rejection report:
+
+```bash
+python scripts/e2e_realdata/gather_hf_datasets.py \
+  --output scripts/e2e_realdata/hf_dataset_catalog.yaml \
+  --rejections-output scripts/e2e_realdata/hf_dataset_rejections.json
+```
+
+Run the local optional profile:
+
+```bash
+python scripts/e2e_realdata/run_tsfm_realdata.py \
+  --mode local \
+  --model all \
+  --catalog-path scripts/e2e_realdata/hf_dataset_catalog.yaml \
+  --gate-profile hf_optional \
+  --allow-kaggle-fallback \
+  --output-dir artifacts/realdata/hf-local
+```
+
+Wrapper script:
+
+```bash
+bash scripts/e2e_realdata_hf.sh all http://127.0.0.1:11435 artifacts/realdata/hf-local
+```
 
 ## Shell Completion
 

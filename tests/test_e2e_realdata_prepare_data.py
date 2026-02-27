@@ -7,6 +7,8 @@ import zipfile
 from importlib.util import module_from_spec, spec_from_file_location
 from pathlib import Path
 
+import pytest
+
 _MODULE_PATH = Path(__file__).resolve().parents[1] / "scripts" / "e2e_realdata" / "prepare_data.py"
 _MODULE_SPEC = spec_from_file_location("scripts_e2e_realdata_prepare_data", _MODULE_PATH)
 assert _MODULE_SPEC is not None and _MODULE_SPEC.loader is not None
@@ -15,6 +17,7 @@ sys.modules[_MODULE_SPEC.name] = _MODULE
 _MODULE_SPEC.loader.exec_module(_MODULE)
 
 parse_kaggle_hourly_directory = _MODULE.parse_kaggle_hourly_directory
+parse_huggingface_dataset = _MODULE.parse_huggingface_dataset
 parse_m4_daily_files = _MODULE.parse_m4_daily_files
 sample_size_for_mode = _MODULE.sample_size_for_mode
 ensure_kaggle_dataset = _MODULE._ensure_kaggle_dataset
@@ -159,3 +162,129 @@ def test_ensure_kaggle_dataset_downloads_and_extracts(tmp_path: Path, monkeypatc
     )
 
     assert (resolved / "AEP_hourly.csv").exists()
+
+
+def test_parse_huggingface_dataset_normalizes_timestamps_and_infers_hourly(
+    monkeypatch,
+) -> None:
+    class _FakeSplit(list):
+        @property
+        def column_names(self) -> list[str]:
+            return ["ts", "value"]
+
+    fake_rows = _FakeSplit(
+        [
+            {"ts": "2024-01-01 00:00:00", "value": "1"},
+            {"ts": "2024/01/01 01:00:00", "value": "2"},
+            {"ts": "2024-01-01T02:00:00Z", "value": "3"},
+            {"ts": "01/01/2024 03:00:00", "value": "4"},
+            {"ts": "2024-01-01 04:00:00", "value": "5"},
+        ]
+    )
+
+    def _fake_loader(*, hf_id: str, split_name: str | None):  # noqa: ANN202
+        assert hf_id == "org/ds"
+        assert split_name == "train"
+        return {"train": fake_rows}
+
+    monkeypatch.setattr(_MODULE, "_load_hf_dataset", _fake_loader)
+
+    series = parse_huggingface_dataset(
+        hf_id="org/ds",
+        split_name="train",
+        timestamp_column="ts",
+        target_column="value",
+        horizon=2,
+        context_cap=3,
+        max_series=1,
+        seed=42,
+    )
+
+    assert len(series) == 1
+    item = series[0]
+    assert item["freq"] == "H"
+    assert len(item["target"]) == 3
+    assert len(item["actuals"]) == 2
+    assert all("T" in stamp for stamp in item["timestamps"])
+    assert item["timestamps"] == sorted(item["timestamps"])
+
+
+def test_parse_huggingface_dataset_requires_contiguous_windows(monkeypatch) -> None:
+    class _FakeSplit(list):
+        @property
+        def column_names(self) -> list[str]:
+            return ["ts", "value"]
+
+    fake_rows = _FakeSplit(
+        [
+            {"ts": "2024-01-01 00:00:00", "value": "1"},
+            {"ts": "2024-01-01 01:00:00", "value": "2"},
+            {"ts": "2024-01-01 04:00:00", "value": "3"},
+            {"ts": "2024-01-01 05:00:00", "value": "4"},
+            {"ts": "2024-01-01 06:00:00", "value": "5"},
+        ]
+    )
+
+    monkeypatch.setattr(
+        _MODULE,
+        "_load_hf_dataset",
+        lambda *, hf_id, split_name: {"train": fake_rows},
+    )
+
+    with pytest.raises(RuntimeError, match="no contiguous chunks"):
+        parse_huggingface_dataset(
+            hf_id="org/ds",
+            split_name="train",
+            timestamp_column="ts",
+            target_column="value",
+            horizon=2,
+            context_cap=3,
+            max_series=1,
+            seed=42,
+        )
+
+
+def test_parse_huggingface_dataset_sampling_is_deterministic(monkeypatch) -> None:
+    class _FakeSplit(list):
+        @property
+        def column_names(self) -> list[str]:
+            return ["ts", "value"]
+
+    rows = _FakeSplit(
+        [
+            {
+                "ts": f"2024-01-01 {hour:02d}:00:00",
+                "value": str(hour),
+            }
+            for hour in range(20)
+        ]
+    )
+
+    monkeypatch.setattr(
+        _MODULE,
+        "_load_hf_dataset",
+        lambda *, hf_id, split_name: {"train": rows},
+    )
+
+    first = parse_huggingface_dataset(
+        hf_id="org/ds",
+        split_name="train",
+        timestamp_column="ts",
+        target_column="value",
+        horizon=2,
+        context_cap=3,
+        max_series=2,
+        seed=42,
+    )
+    second = parse_huggingface_dataset(
+        hf_id="org/ds",
+        split_name="train",
+        timestamp_column="ts",
+        target_column="value",
+        horizon=2,
+        context_cap=3,
+        max_series=2,
+        seed=42,
+    )
+
+    assert first == second

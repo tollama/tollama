@@ -175,8 +175,18 @@ def _parse_timestamp(raw: str) -> datetime | None:
     if not normalized:
         return None
 
+    if normalized.isdigit():
+        try:
+            epoch = int(normalized)
+            if len(normalized) >= 13:
+                epoch = epoch // 1000
+            return datetime.fromtimestamp(epoch)
+        except (OverflowError, OSError, ValueError):
+            pass
+
     try:
-        return datetime.fromisoformat(normalized)
+        parsed = datetime.fromisoformat(normalized)
+        return parsed.replace(tzinfo=None) if parsed.tzinfo else parsed
     except ValueError:
         pass
 
@@ -185,6 +195,15 @@ def _parse_timestamp(raw: str) -> datetime | None:
         "%Y-%m-%d %H:%M:%S",
         "%Y-%m-%d %H:%M",
         "%Y-%m-%dT%H:%M:%S",
+        "%Y/%m/%d",
+        "%Y/%m/%d %H:%M:%S",
+        "%Y/%m/%d %H:%M",
+        "%m/%d/%Y",
+        "%m/%d/%Y %H:%M:%S",
+        "%m/%d/%Y %H:%M",
+        "%d/%m/%Y",
+        "%d/%m/%Y %H:%M:%S",
+        "%d/%m/%Y %H:%M",
     )
     for fmt in formats:
         try:

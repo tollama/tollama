@@ -348,3 +348,9 @@
     `tests/test_e2e_realdata_payload_builder.py`,
     `tests/test_e2e_realdata_validate_results.py`,
     `tests/test_e2e_realdata_policy.py`)
+- [x] (P1) HuggingFace optional local E2E hardening
+  - 기준 일자: `2026-02-27`
+  - 추가: `scripts/e2e_realdata/gather_hf_datasets.py` 품질 게이트(타임스탬프/타깃 파싱비율, contiguous rows) + `hf_dataset_rejections.json`
+  - 추가: `scripts/e2e_realdata_hf.sh` (`--gate-profile hf_optional` 기본)
+  - 반영: `run_tsfm_realdata.py` 상태 확장(`pass|fail|skip`) + transient retry/backoff + `retry_count`
+  - 반영: PR/nightly CI는 `--gate-profile strict`로 Kaggle+M4 게이팅 유지
