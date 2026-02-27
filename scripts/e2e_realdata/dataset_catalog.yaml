@@ -1,0 +1,13 @@
+datasets:
+  - name: m4_daily
+    kind: open_m4_daily
+    freq: D
+    horizon: 14
+    train_url: https://raw.githubusercontent.com/Mcompetitions/M4-methods/master/Dataset/Train/Daily-train.csv
+    test_url: https://raw.githubusercontent.com/Mcompetitions/M4-methods/master/Dataset/Test/Daily-test.csv
+
+  - name: pjm_hourly_energy
+    kind: kaggle_hourly_energy
+    freq: H
+    horizon: 24
+    kaggle_dataset: robikscube/hourly-energy-consumption

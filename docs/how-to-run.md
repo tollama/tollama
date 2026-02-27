@@ -413,6 +413,39 @@ tollama run sundial-base-128m --input examples/sundial_request.json --no-stream
 tollama run toto-open-base-1.0 --input examples/toto_request.json --no-stream
 ```
 
+## Real-Data E2E Matrix (Kaggle + Open Data)
+
+Use the real-data harness to run contract-gate + benchmark checks for the 6-model TSFM matrix.
+
+```bash
+# PR smoke mode: 1 sample per dataset, falls back to open-only if Kaggle creds are missing
+python scripts/e2e_realdata/run_tsfm_realdata.py \
+  --mode pr \
+  --model all \
+  --base-url http://127.0.0.1:11435 \
+  --output-dir artifacts/realdata/pr
+
+# Nightly mode: 4 samples per dataset, requires KAGGLE_USERNAME/KAGGLE_KEY
+python scripts/e2e_realdata/run_tsfm_realdata.py \
+  --mode nightly \
+  --model all \
+  --base-url http://127.0.0.1:11435 \
+  --output-dir artifacts/realdata/nightly
+```
+
+Alternative wrapper:
+
+```bash
+bash scripts/e2e_realdata_tsfm.sh pr all http://127.0.0.1:11435 artifacts/realdata/wrapper
+```
+
+Each run writes:
+
+- `result.json`: raw scenario/model run entries
+- `summary.json`: aggregated pass/fail + latency/metric summary
+- `summary.md`: human-readable leaderboard
+- `raw/`: per-request payload/response captures
+
 ## Shell Completion
 
 Install or inspect completion scripts:

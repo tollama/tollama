@@ -365,6 +365,34 @@ ruff check .
 pytest -q
 ```
 
+## Real-Data E2E (6 TSFM Models)
+
+Run the real-data gate + benchmark harness locally:
+
+```bash
+# PR-like smoke mode (1 sample per dataset, open-data fallback if Kaggle creds are missing)
+python scripts/e2e_realdata/run_tsfm_realdata.py \
+  --mode pr \
+  --model all \
+  --base-url http://127.0.0.1:11435 \
+  --output-dir artifacts/realdata/local-pr
+
+# Nightly-like mode (requires KAGGLE_USERNAME/KAGGLE_KEY)
+python scripts/e2e_realdata/run_tsfm_realdata.py \
+  --mode nightly \
+  --model all \
+  --base-url http://127.0.0.1:11435 \
+  --output-dir artifacts/realdata/local-nightly
+```
+
+Wrapper script:
+
+```bash
+bash scripts/e2e_realdata_tsfm.sh pr all http://127.0.0.1:11435 artifacts/realdata/wrapper
+```
+
+Artifacts include `result.json`, `summary.json`, `summary.md`, and raw per-call payloads.
+
 ## Prometheus Metrics
 
 Install optional metrics dependency:

@@ -415,6 +415,13 @@ tollama/
   - pass: OpenClaw skill suite (`bash scripts/e2e_skills_test.sh`)
   - pass: MCP SDK stdio smoke (`tollama-mcp` tool calls:
     `tollama_health`, `tollama_models`, `tollama_show`, `tollama_forecast`)
+- Real-data E2E harness + CI matrix added on `2026-02-27`:
+  - added: `scripts/e2e_realdata/run_tsfm_realdata.py`
+  - added: `scripts/e2e_realdata/prepare_data.py`
+  - added: `scripts/e2e_realdata/payload_builder.py`
+  - added: `scripts/e2e_realdata/validate_results.py`
+  - added: `scripts/e2e_realdata/summarize_report.py`
+  - added: `.github/workflows/e2e-realdata.yml` (PR smoke + nightly full matrix + aggregate report)
 - Phase 4 feature set was re-validated on `2026-02-19`:
   - pass: OpenClaw skill regression (`bash scripts/e2e_skills_test.sh`)
   - pass: metrics expansion live daemon checks (`/api/forecast` non-stream):

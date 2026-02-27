@@ -338,3 +338,13 @@
   - pass: `pytest -q`
   - pass: ingest/modelfile/ensemble 신규 테스트
     (`tests/test_ingest.py`, `tests/test_modelfile.py`, `tests/test_ensemble.py`)
+- [x] (P1) Real-data 6모델 E2E harness + CI matrix 추가
+  - 기준 일자: `2026-02-27`
+  - 추가: `scripts/e2e_realdata/` (dataset 준비, payload 빌더, gate 검증, summary 리포트)
+  - 추가: `scripts/e2e_realdata_tsfm.sh`
+  - 추가: `.github/workflows/e2e-realdata.yml`
+  - 추가: 테스트
+    (`tests/test_e2e_realdata_prepare_data.py`,
+    `tests/test_e2e_realdata_payload_builder.py`,
+    `tests/test_e2e_realdata_validate_results.py`,
+    `tests/test_e2e_realdata_policy.py`)

@@ -33,3 +33,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Path traversal protection in data ingest and model storage
 - Docker and docker-compose support
 - Tutorial notebooks (covariates, comparison, what-if, auto-forecast)
+- Real-data TSFM E2E harness (`scripts/e2e_realdata/`) with PR smoke + nightly matrix workflow (`.github/workflows/e2e-realdata.yml`)
