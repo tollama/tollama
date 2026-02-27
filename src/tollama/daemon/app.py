@@ -40,6 +40,7 @@ from pydantic import (
     StrictStr,
     ValidationError,
 )
+from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.middleware.cors import CORSMiddleware
 
 from tollama.a2a import A2AOperationHandlers, A2AServer
@@ -458,6 +459,17 @@ def create_app(*, runner_manager: RunnerManager | None = None) -> FastAPI:
     app.state.event_stream = EventStream()
     app.state.dashboard_resource_stack = ExitStack()
     app.state.dashboard_index_path = None
+
+    # Security response headers ------------------------------------------------
+    class _SecurityHeadersMiddleware(BaseHTTPMiddleware):
+        async def dispatch(self, request: Request, call_next):  # type: ignore[override]
+            response = await call_next(request)
+            response.headers.setdefault("X-Content-Type-Options", "nosniff")
+            response.headers.setdefault("X-Frame-Options", "DENY")
+            response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+            return response
+
+    app.add_middleware(_SecurityHeadersMiddleware)
 
     cors_origins = _resolve_cors_origins_from_env()
     if cors_origins:

@@ -1,5 +1,19 @@
 # Covariates Contract
 
+## Primer
+
+Covariates are optional side-information you can pass alongside your target time series to help
+the model make better forecasts. **Past covariates** are features you observed historically — they
+have one value per timestamp in your target window (e.g. a promotion flag for each past day).
+**Future covariates** are features whose values you already know for the forecast horizon — for
+example, a holiday calendar or a scheduled promotion. Future covariates must also appear as past
+covariates so the model sees the full sequence. **Static covariates** are time-invariant metadata
+about the series itself (e.g. `{"store_id": "A42", "category": "electronics"}`); they have no
+time axis. Not all models support all covariate types — check the compatibility matrix below or
+run `tollama explain <model>` to see what a specific model accepts.
+
+---
+
 `tollama` accepts two dynamic covariate groups and one static covariate map per input series:
 
 - `past_covariates`: aligned to history (`len(target)`).
@@ -131,6 +145,54 @@ curl -s http://localhost:11435/api/forecast \
     "options":{}
   }'
 ```
+
+## Common Mistakes
+
+**1. Future covariate key not in `past_covariates`**
+
+A key in `future_covariates` must also appear in `past_covariates`. The daemon rejects requests
+where the past sequence is missing.
+
+```json
+// Wrong — "promo" in future_covariates but missing from past_covariates
+{
+  "past_covariates": {},
+  "future_covariates": {"promo": [1.0, 1.0]}
+}
+
+// Correct
+{
+  "past_covariates": {"promo": [0.0, 1.0, 0.0]},
+  "future_covariates": {"promo": [1.0, 1.0]}
+}
+```
+
+**2. Mixed types in one covariate array**
+
+Each covariate array must be uniformly numeric (`int`/`float`) or uniformly string (categorical).
+Mixing causes a 400 validation error.
+
+```json
+// Wrong — mixing int and string in one array
+{"temperature": [20, "cold", 18]}
+
+// Correct — numeric only
+{"temperature": [20.0, 19.5, 18.0]}
+```
+
+**3. Passing covariates to Sundial (target-only model)**
+
+Sundial does not use any covariates. In `best_effort` mode they are silently dropped (you will
+see a `warnings[]` entry). In `strict` mode the request is rejected with HTTP 400. Use a model
+that supports covariates, or omit the covariate fields entirely for Sundial.
+
+**4. Categorical covariates on numeric-only families**
+
+Granite TTM, TimesFM, Uni2TS, and Toto only accept **numeric** covariates. Passing string
+arrays (categorical) for these families generates a warning in `best_effort` mode or fails in
+`strict` mode. Chronos-2 is currently the only family that accepts categorical covariates.
+
+---
 
 ## API Example (Python)
 

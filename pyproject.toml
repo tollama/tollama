@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "tollama"
 version = "0.1.0"
-description = "Lightweight foundation for the tollama project."
+description = "Local-first time-series forecasting daemon with Ollama-compatible APIs."
 readme = "README.md"
 requires-python = ">=3.11"
 license = { file = "LICENSE" }
@@ -57,6 +57,7 @@ tollama-dashboard = "tollama.tui.app:main"
 dev = [
   "pytest>=8.0",
   "pytest-asyncio>=0.23",
+  "pytest-cov>=5.0",
   "ruff>=0.6.0",
 ]
 mcp = [
@@ -122,6 +123,7 @@ package-dir = { "" = "src" }
 where = ["src"]
 
 [tool.setuptools.package-data]
+"tollama" = ["py.typed"]
 "tollama.dashboard" = ["static/**/*"]
 "tollama.tui" = ["styles/*.tcss"]
 

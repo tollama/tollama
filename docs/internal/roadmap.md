@@ -8,7 +8,7 @@ Status legend:
 - `[ ]` planned
 
 This roadmap is implementation-aware for the repository under
-`/Users/yongchoelchoi/Documents/GitHub/tollama/src/tollama/*` and still tracks
+`src/tollama/*` and still tracks
 the optional future `packages/*` split as a migration phase.
 
 ## 0) Product goals [~]
@@ -92,7 +92,7 @@ the optional future `packages/*` split as a migration phase.
 - Current implemented layout is:
 
 ```text
-/Users/yongchoelchoi/Documents/GitHub/tollama/
+tollama/
   src/tollama/
     cli/
     core/

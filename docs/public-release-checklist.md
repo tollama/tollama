@@ -10,9 +10,10 @@ with extra attention on licensing and redistributability.
   - root `LICENSE` file is present and accurate.
 - Confirm docs and status trackers are in sync:
   - `README.md`
+  - `CHANGELOG.md`
   - `docs/covariates.md`
-  - `roadmap.md`
-  - `todo-list.md`
+  - `docs/internal/roadmap.md`
+  - `docs/internal/todo-list.md`
 
 ## 2) License / compliance gate (required)
 

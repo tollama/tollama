@@ -101,3 +101,33 @@ bash skills/tollama-forecast/bin/tollama-forecast.sh \
 - If local terminal works but sandbox fails:
   - treat as host mismatch first,
   - move from loopback to a reachable host/IP in `TOLLAMA_BASE_URL`.
+
+## 8) Sandbox quirks
+
+**`127.0.0.1` points inside the sandbox, not the user host.**
+If the tollama daemon is running on your local machine, the sandbox cannot reach it via
+`127.0.0.1` — that loopback resolves to the sandbox container itself. Use the host's
+LAN IP or a forwarded port instead, and set `TOLLAMA_BASE_URL` accordingly.
+
+**`python3` vs `python` availability.**
+Some sandbox images only have `python3` in PATH; others only `python`. The skill scripts
+use `python3`. If `python3` is absent, create a symlink or set `TOLLAMA_PYTHON_CMD`:
+```bash
+export TOLLAMA_PYTHON_CMD=python
+```
+
+**Snapshot persistence across sessions.**
+Sandbox sessions are typically ephemeral. Model snapshots downloaded inside a sandbox
+session (under `~/.tollama/models/`) are lost when the sandbox exits unless the directory
+is explicitly mounted or backed by a persistent volume. Pre-pull models on your host and
+mount `$TOLLAMA_HOME` into the sandbox, or point `TOLLAMA_BASE_URL` at a daemon that
+already has models installed.
+
+**First-run bootstrap delay.**
+If the daemon auto-bootstraps a runner venv inside the sandbox (on first forecast request),
+expect a 1–5 minute delay for `pip install`. Use `TOLLAMA_FORECAST_TIMEOUT_SECONDS=600`
+or pre-install runtimes on the host before starting the sandbox.
+
+**PATH isolation.**
+The sandbox PATH may not include the virtualenv where `tollama` is installed. Verify with
+`which tollama` and use an absolute path if needed (e.g. `/home/user/.venv/bin/tollama`).
