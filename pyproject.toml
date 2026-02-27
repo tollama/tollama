@@ -97,7 +97,7 @@ runner_uni2ts = [
   "numpy>=1.26,<3.0",
   "pandas>=2.0,<3.0",
   "huggingface_hub>=0.20,<1.0",
-  "gluonts>=0.14.0,<0.16.0",
+  "gluonts>=0.14.0,<0.17.0",
 ]
 runner_sundial = [
   "transformers>=4.40.1,<5.0",
