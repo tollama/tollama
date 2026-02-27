@@ -100,7 +100,7 @@ runner_uni2ts = [
   "gluonts>=0.14.0,<0.16.0",
 ]
 runner_sundial = [
-  "transformers>=4.40.1,<5.0",
+  "transformers>=4.40.1,<6.0",
   "torch>=2.0",
   "numpy>=1.26,<3.0",
   "pandas>=2.0,<3.0",
