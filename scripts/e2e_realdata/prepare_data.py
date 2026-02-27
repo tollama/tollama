@@ -267,10 +267,18 @@ def parse_huggingface_dataset(
 
     required_rows = context_cap + horizon
     candidates: list[dict[str, Any]] = []
-    normalized_rows: list[tuple[datetime, float]] = []
+    parsed_rows: list[tuple[datetime, float, dict[str, str | None]]] = []
+    series_id_candidates = _hf_series_id_candidates(
+        available_cols,
+        timestamp_column=timestamp_column,
+        target_column=target_column,
+    )
+    series_id_value_counts: dict[str, dict[str, int]] = {
+        column: {} for column in series_id_candidates
+    }
     chunk_index = 0
     # Scan enough rows to produce stable deterministic candidates while staying bounded.
-    row_limit = required_rows * max_series * 20
+    row_limit = max(required_rows * max_series * 20, 20_000)
 
     for row_idx, item in enumerate(split_data):
         if row_idx >= row_limit:
@@ -289,44 +297,121 @@ def parse_huggingface_dataset(
             if parsed_dt is None or parsed_value is None:
                 continue
 
-            normalized_rows.append((parsed_dt, parsed_value))
+            series_values: dict[str, str | None] = {}
+            for column in series_id_candidates:
+                raw_series_value = item.get(column)
+                if raw_series_value is None:
+                    series_values[column] = None
+                    continue
+                normalized_series_value = str(raw_series_value).strip()
+                if not normalized_series_value:
+                    series_values[column] = None
+                    continue
+                series_values[column] = normalized_series_value
+                counts = series_id_value_counts[column]
+                counts[normalized_series_value] = counts.get(normalized_series_value, 0) + 1
+
+            parsed_rows.append((parsed_dt, parsed_value, series_values))
         except Exception:
             continue
 
-    if len(normalized_rows) < required_rows:
+    if len(parsed_rows) < required_rows:
         raise RuntimeError(
             f"insufficient parsed rows for {hf_id}: "
-            f"{len(normalized_rows)} < {required_rows}"
+            f"{len(parsed_rows)} < {required_rows}"
         )
 
-    normalized_rows.sort(key=lambda item: item[0])
-    inferred_freq = _infer_frequency_from_datetimes([point[0] for point in normalized_rows])
-    expected_step = _step_for_freq(inferred_freq)
-    contiguous_segments = _split_contiguous_rows(normalized_rows, expected_step=expected_step)
+    series_id_column = _select_hf_series_id_column(
+        series_id_value_counts,
+        required_rows=required_rows,
+    )
 
-    for segment in contiguous_segments:
-        if len(segment) < required_rows:
+    grouped_rows: dict[str, list[tuple[datetime, float]]] = {}
+    for parsed_dt, parsed_value, series_values in parsed_rows:
+        series_key = "__single__"
+        if series_id_column is not None:
+            candidate_series_key = series_values.get(series_id_column)
+            if candidate_series_key is None:
+                continue
+            series_key = candidate_series_key
+        grouped_rows.setdefault(series_key, []).append((parsed_dt, parsed_value))
+
+    for series_key in sorted(grouped_rows):
+        series_rows = grouped_rows[series_key]
+        if len(series_rows) < required_rows:
             continue
-        for start in range(0, len(segment) - required_rows + 1, required_rows):
-            window = segment[start : start + required_rows]
-            history = window[:-horizon]
-            future = window[-horizon:]
 
-            candidates.append(
-                {
-                    "id": f"hf:{hf_id.split('/')[-1].lower()}_{chunk_index}",
-                    "freq": inferred_freq,
-                    "timestamps": [point[0].isoformat() for point in history],
-                    "target": [point[1] for point in history],
-                    "actuals": [point[1] for point in future],
-                    "split": resolved_split,
-                }
-            )
-            chunk_index += 1
+        series_rows.sort(key=lambda item: item[0])
+        inferred_freq = _infer_frequency_from_datetimes([point[0] for point in series_rows])
+        expected_step = _step_for_freq(inferred_freq)
+        contiguous_segments = _split_contiguous_rows(series_rows, expected_step=expected_step)
+
+        for segment in contiguous_segments:
+            if len(segment) < required_rows:
+                continue
+            for start in range(0, len(segment) - required_rows + 1, required_rows):
+                window = segment[start : start + required_rows]
+                history = window[:-horizon]
+                future = window[-horizon:]
+
+                series_suffix = (
+                    f"_{_sanitize_series_component(series_key)}"
+                    if series_id_column is not None
+                    else ""
+                )
+                candidates.append(
+                    {
+                        "id": f"hf:{hf_id.split('/')[-1].lower()}{series_suffix}_{chunk_index}",
+                        "freq": inferred_freq,
+                        "timestamps": [point[0].isoformat() for point in history],
+                        "target": [point[1] for point in history],
+                        "actuals": [point[1] for point in future],
+                        "split": resolved_split,
+                    }
+                )
+                chunk_index += 1
+                if len(candidates) >= max_series * 5:
+                    break
             if len(candidates) >= max_series * 5:
                 break
         if len(candidates) >= max_series * 5:
             break
+
+    if not candidates:
+        # Optional HF datasets are often sparse/irregular panel data. If strict contiguity
+        # yields no windows, fall back to deterministic index windows from parsed rows.
+        for series_key in sorted(grouped_rows):
+            series_rows = grouped_rows[series_key]
+            if len(series_rows) < required_rows:
+                continue
+
+            series_rows.sort(key=lambda item: item[0])
+            inferred_freq = _infer_frequency_from_datetimes([point[0] for point in series_rows])
+            for start in range(0, len(series_rows) - required_rows + 1, required_rows):
+                window = series_rows[start : start + required_rows]
+                history = window[:-horizon]
+                future = window[-horizon:]
+
+                series_suffix = (
+                    f"_{_sanitize_series_component(series_key)}"
+                    if series_id_column is not None
+                    else ""
+                )
+                candidates.append(
+                    {
+                        "id": f"hf:{hf_id.split('/')[-1].lower()}{series_suffix}_{chunk_index}",
+                        "freq": inferred_freq,
+                        "timestamps": [point[0].isoformat() for point in history],
+                        "target": [point[1] for point in history],
+                        "actuals": [point[1] for point in future],
+                        "split": resolved_split,
+                    }
+                )
+                chunk_index += 1
+                if len(candidates) >= max_series * 5:
+                    break
+            if len(candidates) >= max_series * 5:
+                break
 
     if not candidates:
         raise RuntimeError(
@@ -334,6 +419,83 @@ def parse_huggingface_dataset(
         )
 
     return _sample_series(candidates, max_series=max_series, seed=seed)
+
+
+def _hf_series_id_candidates(
+    columns: list[str],
+    *,
+    timestamp_column: str,
+    target_column: str,
+) -> list[str]:
+    hints = (
+        "series_id",
+        "unique_id",
+        "item_id",
+        "entity_id",
+        "store_id",
+        "sku",
+        "symbol",
+        "ticker",
+        "station",
+        "sensor",
+        "node",
+        "store",
+        "entity",
+        "id",
+    )
+    excluded = {timestamp_column, target_column}
+    ranked: list[tuple[int, str]] = []
+    for column in columns:
+        if column in excluded:
+            continue
+        normalized = column.strip().lower().replace("-", "_").replace(" ", "_")
+        if not normalized:
+            continue
+        rank = 10_000
+        for idx, hint in enumerate(hints):
+            if normalized == hint:
+                rank = idx
+                break
+            if hint in normalized:
+                rank = min(rank, len(hints) + idx)
+        if rank < 10_000:
+            ranked.append((rank, column))
+
+    ranked.sort(key=lambda item: (item[0], item[1]))
+    return [column for _, column in ranked]
+
+
+def _select_hf_series_id_column(
+    value_counts: Mapping[str, Mapping[str, int]],
+    *,
+    required_rows: int,
+) -> str | None:
+    candidates: list[tuple[str, int, int]] = []
+    for column, counts in value_counts.items():
+        distinct_count = len(counts)
+        if distinct_count <= 1:
+            continue
+        max_group_rows = max(counts.values(), default=0)
+        if max_group_rows < required_rows:
+            continue
+        candidates.append((column, distinct_count, max_group_rows))
+
+    if not candidates:
+        return None
+
+    candidates.sort(key=lambda item: (-item[2], item[1], item[0]))
+    return candidates[0][0]
+
+
+def _sanitize_series_component(raw: str) -> str:
+    text = raw.strip().lower()
+    if not text:
+        return "series"
+    cleaned = "".join(char if char.isalnum() else "_" for char in text)
+    trimmed = cleaned.strip("_")
+    if not trimmed:
+        return "series"
+    return trimmed[:48]
 
 
 def parse_m4_daily_files(
