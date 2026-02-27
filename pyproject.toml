@@ -113,7 +113,7 @@ runner_toto = [
   "pandas>=2.0,<3.0",
 ]
 tui = [
-  "textual>=0.47,<1.0",
+  "textual>=0.47,<9.0",
 ]
 
 [tool.setuptools]
