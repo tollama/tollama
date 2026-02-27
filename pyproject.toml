@@ -26,7 +26,7 @@ dependencies = [
   "fastapi>=0.111.0,<1.0.0",
   "huggingface_hub>=0.20,<1.0",
   "httpx>=0.27.0,<1.0.0",
-  "pandas>=2.0,<3.0",
+  "pandas>=2.0,<4.0",
   "pydantic>=2.0,<3.0",
   "python-multipart>=0.0.9,<1.0",
   "pyyaml>=6.0,<7.0",
@@ -83,19 +83,19 @@ runner_torch = [
   "chronos-forecasting>=2.0",
   "granite-tsfm>=0.3.0,<0.4",
   "torch>=2.0",
-  "pandas>=2.0,<3.0",
+  "pandas>=2.0,<4.0",
   "numpy>=1.26,<3.0",
 ]
 runner_timesfm = [
   "numpy>=1.26,<3.0",
-  "pandas>=2.0,<3.0",
+  "pandas>=2.0,<4.0",
   "huggingface_hub>=0.20,<1.0",
   "timesfm[torch] @ git+https://github.com/google-research/timesfm.git@2dcc66fbfe2155adba1af66aa4d564a0ee52f61e",
 ]
 runner_uni2ts = [
   "uni2ts>=2.0.0",
   "numpy>=1.26,<3.0",
-  "pandas>=2.0,<3.0",
+  "pandas>=2.0,<4.0",
   "huggingface_hub>=0.20,<1.0",
   "gluonts>=0.14.0,<0.16.0",
 ]
@@ -103,14 +103,14 @@ runner_sundial = [
   "transformers>=4.40.1,<5.0",
   "torch>=2.0",
   "numpy>=1.26,<3.0",
-  "pandas>=2.0,<3.0",
+  "pandas>=2.0,<4.0",
   "huggingface_hub>=0.20,<1.0",
 ]
 runner_toto = [
   "toto-ts>=0.1.4",
   "torch>=2.5",
   "numpy>=1.26,<3.0",
-  "pandas>=2.0,<3.0",
+  "pandas>=2.0,<4.0",
 ]
 tui = [
   "textual>=0.47,<1.0",
