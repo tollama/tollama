@@ -89,7 +89,6 @@ class ChronosAdapter:
         pipeline = self._pipelines[request.model]
 
         context_df, future_df = _build_chronos_frames(pandas=pandas, request=request)
-        import logging; logging.getLogger(__name__).error("CHRONOS ADAPTER IS RUNNING FROM SRC")
         quantile_levels = list(request.quantiles)
         if not quantile_levels:
             # Chronos predict_df crashes if quantile_levels is empty

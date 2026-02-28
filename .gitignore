@@ -39,3 +39,4 @@ check_*.py
 .test_daemon.log
 artifacts/realdata/
 data/raw/
+hf_data/ 

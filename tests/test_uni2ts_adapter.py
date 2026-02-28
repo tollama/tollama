@@ -234,11 +234,15 @@ def test_build_pandas_dataset_maps_dynamic_and_past_dynamic_covariates() -> None
         horizon=2,
     )
 
-    assert result.feat_dynamic_real_dim == 1
-    assert result.past_feat_dynamic_real_dim == 1
+    # Past-only covariates (temperature) are merged into feat_dynamic_real
+    # alongside future-known covariates (promo).  past_feat_dynamic_real is
+    # no longer used because GluonTS extracts only the context slice for that
+    # field, causing a tensor shape mismatch in Moirai2's forward pass.
+    assert result.feat_dynamic_real_dim == 2
+    assert result.past_feat_dynamic_real_dim == 0
     dataset = result.dataset
-    assert dataset.kwargs["feat_dynamic_real"] == ["promo"]
-    assert dataset.kwargs["past_feat_dynamic_real"] == ["temperature"]
+    assert dataset.kwargs["feat_dynamic_real"] == ["promo", "temperature"]
+    assert dataset.kwargs["past_feat_dynamic_real"] is None
     frame = dataset.frames["s1"]["payload"]
     assert len(frame["target"]) == 5
     assert frame["promo"] == [0.0, 1.0, 0.0, 1.0, 1.0]

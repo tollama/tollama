@@ -55,11 +55,11 @@ def test_recommend_models_excludes_restricted_license_by_default() -> None:
 
 
 def test_recommend_models_allows_restricted_license_when_enabled() -> None:
+    # Moirai's CC-BY-NC-4.0 license is restricted. When allow_restricted_license
+    # is True, it should appear in target-only recommendations (Moirai does not
+    # claim covariate support in the registry, so omit covariate filters here).
     payload = recommend_models(
         horizon=24,
-        has_past_covariates=True,
-        has_future_covariates=True,
-        covariates_type="numeric",
         allow_restricted_license=True,
         top_k=10,
     )

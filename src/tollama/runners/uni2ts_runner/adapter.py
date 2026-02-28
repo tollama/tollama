@@ -424,19 +424,30 @@ def build_pandas_dataset_with_horizon(
         column_name = _unique_column_name(series.id, index, frames)
         frames[column_name] = dataframe
 
-    feat_dynamic_real_columns = sorted(known_future_columns)
-    past_feat_dynamic_real_columns = sorted(past_only_columns)
+    # Treat all covariate columns (both future-known and past-only) as
+    # feat_dynamic_real.  Past-only columns are already NaN-padded for the
+    # forecast horizon in the DataFrame, so the full context+horizon tensor
+    # is available.  Moirai2 uses observed_mask to distinguish observed vs.
+    # NaN positions, so NaN future values for past-only covariates are handled
+    # correctly.
+    #
+    # Using past_feat_dynamic_real here causes a tensor shape mismatch in
+    # Moirai2's forward pass: GluonTS extracts only the context slice
+    # (length = context_len) for past_feat_dynamic_real, but Moirai2's
+    # prediction_mask covers the full context+horizon window, causing
+    # observed_mask * ~prediction_mask.unsqueeze(-1) to fail.
+    all_feature_columns = sorted(known_future_columns | past_only_columns)
     dataset = pandas_dataset_cls(
         frames,
         target="target",
-        feat_dynamic_real=feat_dynamic_real_columns or None,
-        past_feat_dynamic_real=past_feat_dynamic_real_columns or None,
+        feat_dynamic_real=all_feature_columns or None,
+        past_feat_dynamic_real=None,
     )
     return _DatasetBuildResult(
         dataset=dataset,
         ordered_series=list(series_list),
-        feat_dynamic_real_dim=len(feat_dynamic_real_columns),
-        past_feat_dynamic_real_dim=len(past_feat_dynamic_real_columns),
+        feat_dynamic_real_dim=len(all_feature_columns),
+        past_feat_dynamic_real_dim=0,
     )
 
 

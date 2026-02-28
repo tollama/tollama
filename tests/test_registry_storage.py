@@ -56,7 +56,8 @@ def test_registry_loads_required_model_specs() -> None:
     assert timesfm.license.type == "apache-2.0"
     assert timesfm.license.needs_acceptance is False
     assert timesfm.capabilities is not None
-    assert timesfm.capabilities.future_covariates_numeric is True
+    assert timesfm.capabilities.past_covariates_numeric is False
+    assert timesfm.capabilities.future_covariates_numeric is False
     assert timesfm.capabilities.future_covariates_categorical is False
     assert timesfm.metadata == {
         "implementation": "timesfm_2p5_torch",
