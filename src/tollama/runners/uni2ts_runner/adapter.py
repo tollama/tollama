@@ -385,17 +385,20 @@ def build_pandas_dataset_with_horizon(
         known_future_columns.update(known_future)
         past_only_columns.update(past_only)
 
+        # Build a regular DatetimeIndex covering both history and forecast
+        # horizon.  Real-world timestamps often have gaps (missing weekends,
+        # holidays) which cause GluonTS ``PandasDataset`` frequency inference
+        # to return ``None`` and crash.  A regular grid avoids this.
         try:
-            future_index = pandas_module.date_range(
-                start=timestamps[-1],
-                periods=horizon + 1,
+            full_index = pandas_module.date_range(
+                start=timestamps[0],
+                periods=len(timestamps) + horizon,
                 freq=series.freq,
-            )[1:]
+            )
         except ValueError as exc:
             raise AdapterInputError(
                 f"invalid frequency {series.freq!r} for series {series.id!r}",
             ) from exc
-        full_index = list(timestamps) + list(future_index)
         target_values = numpy_module.asarray(series.target, dtype=float).tolist() + [
             float("nan")
         ] * horizon

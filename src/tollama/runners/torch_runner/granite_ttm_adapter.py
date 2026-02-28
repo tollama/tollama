@@ -177,11 +177,14 @@ class GraniteTTMAdapter:
             freq=series.freq,
             batch_size=1,
         )
+        # The TSFM pipeline requires future_time_series with exactly
+        # prediction_length rows, not the (possibly shorter) request horizon.
+        # Pad covariate values when horizon < prediction_length.
         future_time_series = _build_future_time_series(
             series=series,
             pandas=dependencies.pandas,
             timestamps=timestamps,
-            horizon=request.horizon,
+            horizon=loaded.prediction_length,
             known_future_columns=known_future_columns,
         )
         if future_time_series is None:
@@ -430,7 +433,16 @@ def _build_future_time_series(
         }
         for name in known_future_columns:
             values = future_covariates[name]
-            row[name] = _to_numeric_covariate(values[step], covariate=name)
+            # When the caller requests more steps than the covariate array
+            # provides (e.g. prediction_length > request.horizon), pad with
+            # the last known value so the TSFM pipeline receives a complete
+            # future_time_series.
+            if step < len(values):
+                row[name] = _to_numeric_covariate(values[step], covariate=name)
+            elif values:
+                row[name] = _to_numeric_covariate(values[-1], covariate=name)
+            else:
+                row[name] = 0.0
         rows.append(row)
     return pandas.DataFrame(rows)
 

@@ -132,8 +132,8 @@ class ChronosAdapter:
 
         try:
             from chronos import Chronos2Pipeline
-        except ModuleNotFoundError as exc:
-            missing_name = exc.name or "chronos-forecasting"
+        except (ModuleNotFoundError, ImportError) as exc:
+            missing_name = getattr(exc, "name", None) or "chronos-forecasting"
             missing_packages.append(missing_name)
             Chronos2Pipeline = None
 
@@ -173,6 +173,17 @@ def _build_chronos_frames(
     for series in request.series:
         timestamps = pandas.to_datetime(series.timestamps, utc=True, errors="raise")
         history_length = len(series.timestamps)
+
+        # Chronos predict_df infers frequency from the timestamp column. When
+        # real-world timestamps have gaps (e.g. missing weekends in stock data)
+        # inference fails.  Regenerate a regular grid matching the declared freq
+        # so predict_df can always determine the series frequency.
+        timestamps = _regularize_timestamps(
+            pandas=pandas,
+            timestamps=timestamps,
+            freq=series.freq,
+        )
+
         past_covariates = series.past_covariates or {}
         future_covariates = series.future_covariates or {}
         known_future = sorted(set(past_covariates).intersection(future_covariates))
@@ -230,6 +241,37 @@ def _validate_future_covariates(*, series: SeriesInput, horizon: int) -> None:
             raise ValueError(
                 f"future_covariates[{name!r}] must include exactly horizon values ({horizon})",
             )
+
+
+def _regularize_timestamps(
+    *,
+    pandas: Any,
+    timestamps: Any,
+    freq: str,
+) -> Any:
+    """Regenerate timestamps as a regular grid so Chronos can infer frequency.
+
+    Real-world datasets often have irregular spacing (missing weekends, holidays,
+    etc.).  Chronos ``predict_df`` infers frequency from the timestamp column and
+    fails when the spacing is not uniform.  We replace the original timestamps
+    with a synthetic ``date_range`` of the same length anchored at the first
+    observed timestamp with the declared ``freq``.
+    """
+    length = len(timestamps)
+    if length == 0:
+        return timestamps
+
+    try:
+        regular = pandas.date_range(
+            start=timestamps[0],
+            periods=length,
+            freq=freq,
+        )
+        return regular
+    except ValueError:
+        # Fall back to original timestamps if freq is unrecognised – the
+        # pipeline may still be able to infer frequency from the raw data.
+        return timestamps
 
 
 def _future_timestamps(

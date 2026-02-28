@@ -530,8 +530,10 @@ def _forecast_with_covariates(
             fallback_kwargs["horizon"] = horizon
         elif "forecast_horizon" in parameter_names:
             fallback_kwargs["forecast_horizon"] = horizon
-        else:
-            fallback_kwargs["horizon"] = horizon
+        elif "prediction_length" in parameter_names:
+            fallback_kwargs["prediction_length"] = horizon
+        # If no recognized horizon parameter exists, omit it — the model
+        # may use the value set during initialization instead.
         return forecast_with_covariates(**fallback_kwargs)
 
 

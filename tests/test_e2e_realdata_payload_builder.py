@@ -44,7 +44,7 @@ def test_build_target_only_request_includes_metrics() -> None:
 
     assert payload["model"] == "chronos2"
     assert payload["horizon"] == 2
-    assert payload["parameters"]["metrics"]["names"] == ["mae", "rmse", "smape"]
+    assert payload["parameters"]["metrics"]["names"] == ["mae", "rmse", "smape", "mape", "mase"]
 
 
 def test_build_covariate_request_builds_known_future_covariates() -> None:

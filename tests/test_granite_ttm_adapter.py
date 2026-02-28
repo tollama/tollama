@@ -266,5 +266,8 @@ def test_granite_adapter_passes_future_time_series_and_covariate_columns(monkeyp
     assert len(_FakePreprocessor.last_train_payload._rows) == 90
     assert _FakePipeline.last_init_kwargs == {"device": "cpu", "freq": "D", "batch_size": 1}
     assert _FakePipeline.last_future_time_series is not None
-    assert len(_FakePipeline.last_future_time_series._rows) == 4
+    # future_time_series must have prediction_length rows (30), not
+    # the request horizon (4), because the TSFM pipeline expects the
+    # full prediction window for covariate data.
+    assert len(_FakePipeline.last_future_time_series._rows) == 30
     assert set(_FakePipeline.last_future_time_series.columns) >= {"id", "timestamp", "promo"}
