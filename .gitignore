@@ -36,5 +36,6 @@ reproduce_*.py
 check_*.py
 
 # Test Data and Artifacts
+.test_daemon.log
 artifacts/realdata/
 data/raw/

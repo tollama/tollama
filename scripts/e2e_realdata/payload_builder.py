@@ -56,7 +56,7 @@ def build_target_only_request(
         "timeout": timeout_seconds,
         "parameters": {
             "covariates_mode": "best_effort",
-            "metrics": {"names": ["mae", "rmse", "smape"]},
+            "metrics": {"names": ["mae", "rmse", "smape", "mape", "mase"]},
         },
     }
 

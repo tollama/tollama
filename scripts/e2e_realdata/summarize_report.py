@@ -34,7 +34,7 @@ def summarize_entries(entries: list[dict[str, Any]]) -> dict[str, Any]:
             if item.get("status") == "pass" and isinstance(item.get("latency_ms"), (int, float))
         ]
 
-        benchmark_metrics: dict[str, list[float]] = {"mae": [], "rmse": [], "smape": []}
+        benchmark_metrics: dict[str, list[float]] = {"mae": [], "rmse": [], "smape": [], "mape": [], "mase": []}
         for item in model_entries:
             if item.get("status") != "pass":
                 continue
@@ -92,8 +92,8 @@ def render_markdown(summary: dict[str, Any]) -> str:
         f"- Total failed: **{summary.get('total_failed')}**",
         f"- Total skipped: **{summary.get('total_skipped', 0)}**",
         "",
-        "| Model | Pass/Total | Skipped | Mean Latency (ms) | MAE | RMSE | SMAPE |",
-        "| --- | --- | --- | --- | --- | --- | --- |",
+        "| Model | Pass/Total | Skipped | Mean Latency (ms) | MAE | RMSE | SMAPE | MAPE | MASE |",
+        "| --- | --- | --- | --- | --- | --- | --- | --- | --- |",
     ]
 
     rows: list[str] = []
@@ -108,7 +108,7 @@ def render_markdown(summary: dict[str, Any]) -> str:
             rows.append(
                 (
                     "| {model} | {passed}/{total} | {skipped} | {latency} | "
-                    "{mae} | {rmse} | {smape} |"
+                    "{mae} | {rmse} | {smape} | {mape} | {mase} |"
                 ).format(
                     model=model,
                     passed=payload.get("passed", 0),
@@ -118,11 +118,13 @@ def render_markdown(summary: dict[str, Any]) -> str:
                     mae=_fmt_number(metrics.get("mae")),
                     rmse=_fmt_number(metrics.get("rmse")),
                     smape=_fmt_number(metrics.get("smape")),
+                    mape=_fmt_number(metrics.get("mape")),
+                    mase=_fmt_number(metrics.get("mase")),
                 )
             )
 
     if not rows:
-        rows.append("| (none) | 0/0 | 0 | - | - | - | - |")
+        rows.append("| (none) | 0/0 | 0 | - | - | - | - | - | - |")
 
     return "\n".join([*header, *rows, ""])
 
