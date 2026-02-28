@@ -14,7 +14,7 @@ from tollama.core.schemas import ForecastRequest, ForecastResponse, SeriesForeca
 
 from .errors import AdapterInputError, DependencyMissingError, UnsupportedModelError
 
-_DEFAULT_NUM_SAMPLES = 20
+_DEFAULT_NUM_SAMPLES = 100
 _SUNDIAL_MODELS: dict[str, dict[str, Any]] = {
     "sundial-base-128m": {
         "repo_id": "thuml/sundial-base-128m",

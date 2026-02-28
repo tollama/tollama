@@ -5,6 +5,18 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 from typing import Any
 
+# Per-model runtime options passed to the daemon via the ``options`` dict.
+# These override adapter defaults and are the primary mechanism for tuning
+# model accuracy at the E2E harness level.
+MODEL_OPTIONS: dict[str, dict[str, Any]] = {
+    "chronos2": {},
+    "granite-ttm-r2": {},
+    "moirai-2.0-R-small": {},
+    "timesfm-2.5-200m": {},
+    "sundial-base-128m": {"num_samples": 100},
+    "toto-open-base-1.0": {},
+}
+
 STRICT_EXPECTED_STATUS: dict[str, int] = {
     "chronos2": 200,
     "granite-ttm-r2": 400,
@@ -52,7 +64,7 @@ def build_target_only_request(
         "horizon": horizon,
         "quantiles": [],
         "series": [request_series],
-        "options": {},
+        "options": dict(MODEL_OPTIONS.get(model, {})),
         "timeout": timeout_seconds,
         "parameters": {
             "covariates_mode": "best_effort",
@@ -84,7 +96,7 @@ def build_covariate_request(
         "horizon": horizon,
         "quantiles": [],
         "series": [request_series],
-        "options": {},
+        "options": dict(MODEL_OPTIONS.get(model, {})),
         "timeout": timeout_seconds,
         "parameters": {
             "covariates_mode": covariates_mode,

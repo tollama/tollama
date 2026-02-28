@@ -34,6 +34,20 @@ SUPPORTED_MODELS = [
     "toto-open-base-1.0",
 ]
 
+# Per-model context caps for accuracy optimisation.  Models that support
+# longer context windows benefit from receiving more history than the
+# harness-level --context-cap (which controls data *preparation*).  The
+# _truncate_series_for_model helper trims each payload to the cap that
+# matches the model's architecture.
+MODEL_CONTEXT_CAPS: dict[str, int] = {
+    "chronos2": 1024,
+    "granite-ttm-r2": 512,  # adapter further truncates to context_length
+    "moirai-2.0-R-small": 512,  # small variant works best with shorter context
+    "timesfm-2.5-200m": 1024,  # model's max_context
+    "sundial-base-128m": 2048,  # conservative subset of 2880
+    "toto-open-base-1.0": 2048,  # conservative subset of 4096
+}
+
 SCENARIOS = [
     "benchmark_target_only",
     "contract_best_effort_covariates",
@@ -84,7 +98,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument("--timeout-seconds", type=float, default=900.0)
     parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--context-cap", type=int, default=512)
+    parser.add_argument("--context-cap", type=int, default=2048)
     parser.add_argument(
         "--allow-kaggle-fallback",
         action="store_true",
@@ -344,6 +358,15 @@ def main(argv: list[str] | None = None) -> int:
     return 0
 
 
+def _truncate_series_for_model(series: dict[str, Any], model: str) -> dict[str, Any]:
+    """Return a copy of *series* with target/timestamps trimmed to the model's context cap."""
+    cap = MODEL_CONTEXT_CAPS.get(model, 512)
+    truncated = dict(series)
+    truncated["target"] = list(series["target"][-cap:])
+    truncated["timestamps"] = list(series["timestamps"][-cap:])
+    return truncated
+
+
 def _build_payload(
     *,
     scenario: str,
@@ -352,10 +375,12 @@ def _build_payload(
     horizon: int,
     timeout_seconds: float,
 ) -> dict[str, Any]:
+    trimmed = _truncate_series_for_model(series, model)
+
     if scenario == "benchmark_target_only":
         return payload_builder.build_target_only_request(
             model=model,
-            series=series,
+            series=trimmed,
             horizon=horizon,
             timeout_seconds=timeout_seconds,
         )
@@ -363,7 +388,7 @@ def _build_payload(
     if scenario == "contract_best_effort_covariates":
         return payload_builder.build_covariate_request(
             model=model,
-            series=series,
+            series=trimmed,
             horizon=horizon,
             covariates_mode="best_effort",
             timeout_seconds=timeout_seconds,
@@ -372,7 +397,7 @@ def _build_payload(
     if scenario == "contract_strict_covariates":
         return payload_builder.build_covariate_request(
             model=model,
-            series=series,
+            series=trimmed,
             horizon=horizon,
             covariates_mode="strict",
             timeout_seconds=timeout_seconds,
