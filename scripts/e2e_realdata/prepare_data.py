@@ -342,6 +342,7 @@ def parse_huggingface_dataset(
             continue
 
         series_rows.sort(key=lambda item: item[0])
+        series_rows = _deduplicate_timestamps(series_rows)
         inferred_freq = _infer_frequency_from_datetimes([point[0] for point in series_rows])
         expected_step = _step_for_freq(inferred_freq)
         contiguous_segments = _split_contiguous_rows(series_rows, expected_step=expected_step)
@@ -386,6 +387,7 @@ def parse_huggingface_dataset(
                 continue
 
             series_rows.sort(key=lambda item: item[0])
+            series_rows = _deduplicate_timestamps(series_rows)
             inferred_freq = _infer_frequency_from_datetimes([point[0] for point in series_rows])
             for start in range(0, len(series_rows) - required_rows + 1, required_rows):
                 window = series_rows[start : start + required_rows]
@@ -739,6 +741,28 @@ def _infer_frequency_from_datetimes(points: list[datetime]) -> str:
 
 def _step_for_freq(freq: str) -> timedelta:
     return timedelta(hours=1) if freq.strip().upper().startswith("H") else timedelta(days=1)
+
+
+def _deduplicate_timestamps(
+    rows: list[tuple[datetime, float]],
+) -> list[tuple[datetime, float]]:
+    """Remove duplicate timestamps, keeping the first occurrence.
+
+    Some HuggingFace datasets contain rows with identical timestamps (e.g.
+    FreshRetailNet panel data where multiple records share the same time).
+    Duplicate timestamps cause the daemon to reject the series with
+    "timestamps must be strictly increasing".  Keeping the first occurrence
+    after a stable sort preserves temporal order and eliminates the
+    duplicates.
+    """
+    seen: set[datetime] = set()
+    deduped: list[tuple[datetime, float]] = []
+    for point in rows:
+        ts = point[0]
+        if ts not in seen:
+            seen.add(ts)
+            deduped.append(point)
+    return deduped
 
 
 def _split_contiguous_rows(
