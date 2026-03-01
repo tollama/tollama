@@ -65,7 +65,9 @@ def read_index(source_root: Path, index_name: str) -> dict:
     return payload
 
 
-def iter_source_entries(source_root: Path, index: dict, limit: int | None) -> list[tuple[str, Path]]:
+def iter_source_entries(
+    source_root: Path, index: dict, limit: int | None
+) -> list[tuple[str, Path]]:
     raw_items = []
     for item in index.get("items", []):
         if isinstance(item, dict):
@@ -170,14 +172,14 @@ def main() -> int:
         for item in result.errors[:20]:
             print(f"  - {item}")
         if len(result.errors) > 20:
-            print(f"  ... and {len(result.errors)-20} more")
+            print(f"  ... and {len(result.errors) - 20} more")
 
     if result.missing:
         print(f"missing={len(result.missing)}")
         for item in result.missing[:20]:
             print(f"  - {item}")
         if len(result.missing) > 20:
-            print(f"  ... and {len(result.missing)-20} more")
+            print(f"  ... and {len(result.missing) - 20} more")
 
     print(f"copied={result.copied}")
     return 0

@@ -190,16 +190,24 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--out-dir", default="hf_data", help="Output directory (default: hf_data)")
     parser.add_argument("--count", type=int, default=300, help="Number of datasets to collect")
     parser.add_argument("--limit", type=int, default=2500, help="HF dataset query limit")
-    parser.add_argument("--attempt-limit", type=int, default=40_000, help="Hard cap on candidate attempts")
+    parser.add_argument(
+        "--attempt-limit", type=int, default=40_000, help="Hard cap on candidate attempts"
+    )
     parser.add_argument("--seed", type=int, default=42, help="Random seed")
-    parser.add_argument("--max-rows", type=int, default=MAX_ROWS, help="Per-dataset row cap (1,000,000)")
-    parser.add_argument("--sample-rows", type=int, default=DEFAULT_SAMPLE_ROWS, help="Sample rows per split")
+    parser.add_argument(
+        "--max-rows", type=int, default=MAX_ROWS, help="Per-dataset row cap (1,000,000)"
+    )
+    parser.add_argument(
+        "--sample-rows", type=int, default=DEFAULT_SAMPLE_ROWS, help="Sample rows per split"
+    )
     parser.add_argument("--context-cap", type=int, default=DEFAULT_CONTEXT_CAP)
     parser.add_argument("--horizon", type=int, default=DEFAULT_HORIZON)
     parser.add_argument("--min-timestamp-ratio", type=float, default=DEFAULT_MIN_RATIO)
     parser.add_argument("--min-target-ratio", type=float, default=DEFAULT_MIN_RATIO)
     parser.add_argument("--min-contiguous", type=int, default=None)
-    parser.add_argument("--min-pool-multiplier", type=float, default=2.0, help="Candidate pool size multiplier")
+    parser.add_argument(
+        "--min-pool-multiplier", type=float, default=2.0, help="Candidate pool size multiplier"
+    )
     parser.add_argument("--force", action="store_true", help="Overwrite non-empty output directory")
     parser.add_argument(
         "--filter",
@@ -333,7 +341,9 @@ def infer_schema_from_rows(rows: list[dict[str, Any]]) -> tuple[str | None, str 
                 target_ok += 1
 
         ts_scores.append((column, ts_ok / total_rows, name_priority(column, TIMESTAMP_NAME_HINTS)))
-        target_scores.append((column, target_ok / total_rows, name_priority(column, TARGET_NAME_HINTS)))
+        target_scores.append(
+            (column, target_ok / total_rows, name_priority(column, TARGET_NAME_HINTS))
+        )
 
     ts_scores.sort(key=lambda item: (-item[1], item[2], item[0]))
     target_scores.sort(key=lambda item: (-item[1], item[2], item[0]))
@@ -434,8 +444,7 @@ def infer_shape_and_ids(
         values = {
             str(row[column])
             for row in rows
-            if row.get(column) not in (None, "")
-            and isinstance(row, dict)
+            if row.get(column) not in (None, "") and isinstance(row, dict)
         }
         if len(values) > 1:
             has_multi_id = True
@@ -514,7 +523,9 @@ def discover_splits(hf_id: str) -> list[str]:
 
 
 def stream_rows(hf_id: str, split: str, sample_rows: int) -> list[dict[str, Any]]:
-    dataset = load_dataset(hf_id, split=split, streaming=True, trust_remote_code=DEFAULT_TRUST_REMOTE_CODE)
+    dataset = load_dataset(
+        hf_id, split=split, streaming=True, trust_remote_code=DEFAULT_TRUST_REMOTE_CODE
+    )
     rows: list[dict[str, Any]] = []
     for item in dataset:
         if not isinstance(item, dict):
@@ -575,17 +586,42 @@ def evaluate_dataset(
     rejections: list[dict[str, Any]] = []
 
     if hf_id in KNOWN_BAD_DATASETS:
-        return None, [{"hf_id": hf_id, "split": "-", "reason": "blocklisted", "detail": "in KNOWN_BAD_DATASETS"}]
+        return None, [
+            {
+                "hf_id": hf_id,
+                "split": "-",
+                "reason": "blocklisted",
+                "detail": "in KNOWN_BAD_DATASETS",
+            }
+        ]
 
     try:
         tags, desc, row_est, sibling_files = load_dataset_metadata(api, hf_id)
     except Exception as exc:
-        return None, [{"hf_id": hf_id, "split": "-", "reason": "metadata_error", "detail": str(exc)}]
+        return None, [
+            {"hf_id": hf_id, "split": "-", "reason": "metadata_error", "detail": str(exc)}
+        ]
 
     if any(file.endswith(".py") for file in sibling_files):
-        return None, [{"hf_id": hf_id, "split": "-", "reason": "scripted_dataset", "detail": "contains .py dataset script"}]
+        return None, [
+            {
+                "hf_id": hf_id,
+                "split": "-",
+                "reason": "scripted_dataset",
+                "detail": "contains .py dataset script",
+            }
+        ]
 
-    standard_extensions = (".arrow", ".parquet", ".csv", ".csv.gz", ".json", ".jsonl", ".tsv", ".tsv.gz")
+    standard_extensions = (
+        ".arrow",
+        ".parquet",
+        ".csv",
+        ".csv.gz",
+        ".json",
+        ".jsonl",
+        ".tsv",
+        ".tsv.gz",
+    )
     if not any(file.endswith(ext) for file in sibling_files for ext in standard_extensions):
         return (
             None,
@@ -615,7 +651,9 @@ def evaluate_dataset(
     try:
         splits = discover_splits(hf_id)
     except Exception as exc:
-        return None, [{"hf_id": hf_id, "split": "-", "reason": "split_discovery_error", "detail": str(exc)}]
+        return None, [
+            {"hf_id": hf_id, "split": "-", "reason": "split_discovery_error", "detail": str(exc)}
+        ]
 
     best_candidate: Candidate | None = None
 
@@ -623,16 +661,32 @@ def evaluate_dataset(
         try:
             rows = stream_rows(hf_id, split, sample_rows)
         except Exception as exc:
-            rejections.append({"hf_id": hf_id, "split": split, "reason": "sample_load_error", "detail": str(exc)})
+            rejections.append(
+                {"hf_id": hf_id, "split": split, "reason": "sample_load_error", "detail": str(exc)}
+            )
             continue
 
         if not rows:
-            rejections.append({"hf_id": hf_id, "split": split, "reason": "empty_sample", "detail": "no rows returned"})
+            rejections.append(
+                {
+                    "hf_id": hf_id,
+                    "split": split,
+                    "reason": "empty_sample",
+                    "detail": "no rows returned",
+                }
+            )
             continue
 
         ts_col, target_col = infer_schema_from_rows(rows)
         if not ts_col or not target_col:
-            rejections.append({"hf_id": hf_id, "split": split, "reason": "schema_inference_failed", "detail": "timestamp/target not inferred"})
+            rejections.append(
+                {
+                    "hf_id": hf_id,
+                    "split": split,
+                    "reason": "schema_inference_failed",
+                    "detail": "timestamp/target not inferred",
+                }
+            )
             continue
 
         ok, detail = assess_sample_rows(
@@ -644,10 +698,19 @@ def evaluate_dataset(
             min_contiguous_rows=min_contiguous_rows,
         )
         if not ok:
-            rejections.append({"hf_id": hf_id, "split": split, "reason": "schema_quality_failed", "detail": detail})
+            rejections.append(
+                {
+                    "hf_id": hf_id,
+                    "split": split,
+                    "reason": "schema_quality_failed",
+                    "detail": detail,
+                }
+            )
             continue
 
-        columns = sorted({key for row in rows for key in row.keys() if isinstance(key, str) and key})
+        columns = sorted(
+            {key for row in rows for key in row.keys() if isinstance(key, str) and key}
+        )
         parsed_dts = [parse_datetime(row.get(ts_col)) for row in rows]
         dts = [dt for dt in parsed_dts if dt is not None]
         interval_bucket, interval_seconds = infer_interval_bucket(dts)
@@ -720,9 +783,15 @@ def select_diverse(
 
         selected_item = remaining.pop(best_idx)
         selected.append(selected_item)
-        interval_counts[selected_item.interval_bucket] = interval_counts.get(selected_item.interval_bucket, 0) + 1
-        shape_counts[selected_item.shape_bucket] = shape_counts.get(selected_item.shape_bucket, 0) + 1
-        industry_counts[selected_item.industry_hint] = industry_counts.get(selected_item.industry_hint, 0) + 1
+        interval_counts[selected_item.interval_bucket] = (
+            interval_counts.get(selected_item.interval_bucket, 0) + 1
+        )
+        shape_counts[selected_item.shape_bucket] = (
+            shape_counts.get(selected_item.shape_bucket, 0) + 1
+        )
+        industry_counts[selected_item.industry_hint] = (
+            industry_counts.get(selected_item.industry_hint, 0) + 1
+        )
         multi_counts[selected_item.has_multi_id] = multi_counts[selected_item.has_multi_id] + 1
 
     return selected
@@ -788,7 +857,8 @@ def main(argv: list[str] | None = None) -> int:
     filter_query = resolve_filter_query(args.filter, args.source_url)
 
     print(
-        f"querying HF time-series-forecasting datasets (limit={args.limit}, target_pool={candidate_pool_target})"
+        "querying HF time-series-forecasting datasets "
+        f"(limit={args.limit}, target_pool={candidate_pool_target})"
     )
     try:
         listed = api.list_datasets(filter=filter_query, limit=args.limit)
@@ -826,8 +896,9 @@ def main(argv: list[str] | None = None) -> int:
 
         candidates.append(candidate)
         print(
-            f"accepted {candidate.hf_id} | split={candidate.split} | interval={candidate.interval_bucket} "
-            f"shape={candidate.shape_bucket} | multi_id={candidate.has_multi_id}"
+            f"accepted {candidate.hf_id} | split={candidate.split} | "
+            f"interval={candidate.interval_bucket} shape={candidate.shape_bucket} | "
+            f"multi_id={candidate.has_multi_id}"
         )
 
     if not candidates:
@@ -851,21 +922,25 @@ def main(argv: list[str] | None = None) -> int:
                 max_rows=args.max_rows,
             )
         except Exception as exc:
-            rejections.append({
-                "hf_id": candidate.hf_id,
-                "split": candidate.split,
-                "reason": "save_error",
-                "detail": str(exc),
-            })
+            rejections.append(
+                {
+                    "hf_id": candidate.hf_id,
+                    "split": candidate.split,
+                    "reason": "save_error",
+                    "detail": str(exc),
+                }
+            )
             continue
 
         if saved_rows <= 0:
-            rejections.append({
-                "hf_id": candidate.hf_id,
-                "split": candidate.split,
-                "reason": "empty_save",
-                "detail": "dataset produced no rows",
-            })
+            rejections.append(
+                {
+                    "hf_id": candidate.hf_id,
+                    "split": candidate.split,
+                    "reason": "empty_save",
+                    "detail": "dataset produced no rows",
+                }
+            )
             continue
 
         raw_path = dataset_dir / "raw" / "rows.jsonl"
@@ -919,7 +994,9 @@ def main(argv: list[str] | None = None) -> int:
         "items": manifest_items,
     }
 
-    (out_dir / "_index.json").write_text(json.dumps(index, ensure_ascii=False, indent=2), encoding="utf-8")
+    (out_dir / "_index.json").write_text(
+        json.dumps(index, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
     with (out_dir / "_rejections.jsonl").open("w", encoding="utf-8") as handle:
         for row in rejections:
             handle.write(json.dumps(row, ensure_ascii=False))
@@ -929,7 +1006,9 @@ def main(argv: list[str] | None = None) -> int:
     industry_summary: dict[str, int] = {}
     shape_summary: dict[str, int] = {}
     for item in manifest_items:
-        interval_summary[item["interval_bucket"]] = interval_summary.get(item["interval_bucket"], 0) + 1
+        interval_summary[item["interval_bucket"]] = (
+            interval_summary.get(item["interval_bucket"], 0) + 1
+        )
         industry_summary[item["industry_hint"]] = industry_summary.get(item["industry_hint"], 0) + 1
         shape_summary[item["shape_bucket"]] = shape_summary.get(item["shape_bucket"], 0) + 1
 

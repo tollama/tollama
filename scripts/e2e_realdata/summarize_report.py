@@ -34,7 +34,13 @@ def summarize_entries(entries: list[dict[str, Any]]) -> dict[str, Any]:
             if item.get("status") == "pass" and isinstance(item.get("latency_ms"), (int, float))
         ]
 
-        benchmark_metrics: dict[str, list[float]] = {"mae": [], "rmse": [], "smape": [], "mape": [], "mase": []}
+        benchmark_metrics: dict[str, list[float]] = {
+            "mae": [],
+            "rmse": [],
+            "smape": [],
+            "mape": [],
+            "mase": [],
+        }
         for item in model_entries:
             if item.get("status") != "pass":
                 continue

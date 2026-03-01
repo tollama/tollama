@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 """Randomly pick N unique HF datasets from the full catalog and write a subset YAML."""
+
 import argparse
 import random
-import yaml
 from pathlib import Path
+
+import yaml
 
 
 def main() -> None:
