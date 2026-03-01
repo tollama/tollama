@@ -191,14 +191,23 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--count", type=int, default=300, help="Number of datasets to collect")
     parser.add_argument("--limit", type=int, default=2500, help="HF dataset query limit")
     parser.add_argument(
-        "--attempt-limit", type=int, default=40_000, help="Hard cap on candidate attempts"
+        "--attempt-limit",
+        type=int,
+        default=40_000,
+        help="Hard cap on candidate attempts",
     )
     parser.add_argument("--seed", type=int, default=42, help="Random seed")
     parser.add_argument(
-        "--max-rows", type=int, default=MAX_ROWS, help="Per-dataset row cap (1,000,000)"
+        "--max-rows",
+        type=int,
+        default=MAX_ROWS,
+        help="Per-dataset row cap (1,000,000)",
     )
     parser.add_argument(
-        "--sample-rows", type=int, default=DEFAULT_SAMPLE_ROWS, help="Sample rows per split"
+        "--sample-rows",
+        type=int,
+        default=DEFAULT_SAMPLE_ROWS,
+        help="Sample rows per split",
     )
     parser.add_argument("--context-cap", type=int, default=DEFAULT_CONTEXT_CAP)
     parser.add_argument("--horizon", type=int, default=DEFAULT_HORIZON)
@@ -206,7 +215,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--min-target-ratio", type=float, default=DEFAULT_MIN_RATIO)
     parser.add_argument("--min-contiguous", type=int, default=None)
     parser.add_argument(
-        "--min-pool-multiplier", type=float, default=2.0, help="Candidate pool size multiplier"
+        "--min-pool-multiplier",
+        type=float,
+        default=2.0,
+        help="Candidate pool size multiplier",
     )
     parser.add_argument("--force", action="store_true", help="Overwrite non-empty output directory")
     parser.add_argument(
