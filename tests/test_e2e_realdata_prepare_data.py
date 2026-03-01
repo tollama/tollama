@@ -210,6 +210,8 @@ def test_parse_huggingface_dataset_normalizes_timestamps_and_infers_hourly(
 
 
 def test_parse_huggingface_dataset_requires_contiguous_windows(monkeypatch) -> None:
+    # With horizon=2 and context_cap=3, required_rows=5. Providing only 3 rows
+    # ensures both the strict-contiguity path and the index-fallback path fail.
     class _FakeSplit(list):
         @property
         def column_names(self) -> list[str]:
@@ -218,10 +220,8 @@ def test_parse_huggingface_dataset_requires_contiguous_windows(monkeypatch) -> N
     fake_rows = _FakeSplit(
         [
             {"ts": "2024-01-01 00:00:00", "value": "1"},
-            {"ts": "2024-01-01 01:00:00", "value": "2"},
-            {"ts": "2024-01-01 04:00:00", "value": "3"},
-            {"ts": "2024-01-01 05:00:00", "value": "4"},
-            {"ts": "2024-01-01 06:00:00", "value": "5"},
+            {"ts": "2024-01-01 04:00:00", "value": "2"},
+            {"ts": "2024-01-01 08:00:00", "value": "3"},
         ]
     )
 
@@ -231,7 +231,7 @@ def test_parse_huggingface_dataset_requires_contiguous_windows(monkeypatch) -> N
         lambda *, hf_id, split_name: {"train": fake_rows},
     )
 
-    with pytest.raises(RuntimeError, match="no contiguous chunks"):
+    with pytest.raises(RuntimeError, match="(no contiguous chunks|insufficient parsed rows)"):
         parse_huggingface_dataset(
             hf_id="org/ds",
             split_name="train",

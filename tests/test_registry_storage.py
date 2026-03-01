@@ -38,14 +38,14 @@ def test_registry_loads_required_model_specs() -> None:
     granite = registry["granite-ttm-r2"]
     assert granite.family == "torch"
     assert granite.source.repo_id == "ibm-granite/granite-timeseries-ttm-r2"
-    assert granite.source.revision == "90-30-ft-l1-r2.1"
+    assert granite.source.revision == "512-96-ft-l1-r2.1"
     assert granite.capabilities is not None
     assert granite.capabilities.past_covariates_numeric is True
     assert granite.capabilities.past_covariates_categorical is False
     assert granite.metadata == {
         "implementation": "granite_ttm",
-        "context_length": 90,
-        "prediction_length": 30,
+        "context_length": 512,
+        "prediction_length": 96,
         "license": "apache-2.0",
     }
 
@@ -90,7 +90,7 @@ def test_registry_loads_required_model_specs() -> None:
         "implementation": "sundial_base",
         "max_context": 2880,
         "max_horizon": 720,
-        "default_num_samples": 20,
+        "default_num_samples": 100,
     }
 
     toto = registry["toto-open-base-1.0"]

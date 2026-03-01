@@ -638,7 +638,7 @@ def test_ollama_pull_granite_uses_registry_repo_and_revision(monkeypatch, tmp_pa
     assert body["model"] == "granite-ttm-r2"
     assert captures["model_info"] == {
         "repo_id": "ibm-granite/granite-timeseries-ttm-r2",
-        "revision": "90-30-ft-l1-r2.1",
+        "revision": "512-96-ft-l1-r2.1",
         "token": None,
     }
 
@@ -646,12 +646,12 @@ def test_ollama_pull_granite_uses_registry_repo_and_revision(monkeypatch, tmp_pa
     assert manifest["source"] == {
         "type": "huggingface",
         "repo_id": "ibm-granite/granite-timeseries-ttm-r2",
-        "revision": "90-30-ft-l1-r2.1",
+        "revision": "512-96-ft-l1-r2.1",
     }
     assert manifest["metadata"] == {
         "implementation": "granite_ttm",
-        "context_length": 90,
-        "prediction_length": 30,
+        "context_length": 512,
+        "prediction_length": 96,
         "license": "apache-2.0",
     }
     assert manifest["resolved"]["commit_sha"] == "fake-commit-sha"
@@ -1632,12 +1632,12 @@ def test_forecast_passes_manifest_source_and_metadata_to_runner(monkeypatch, tmp
     assert captured_params["model_source"] == {
         "type": "huggingface",
         "repo_id": "ibm-granite/granite-timeseries-ttm-r2",
-        "revision": "90-30-ft-l1-r2.1",
+        "revision": "512-96-ft-l1-r2.1",
     }
     assert captured_params["model_metadata"] == {
         "implementation": "granite_ttm",
-        "context_length": 90,
-        "prediction_length": 30,
+        "context_length": 512,
+        "prediction_length": 96,
         "license": "apache-2.0",
     }
 

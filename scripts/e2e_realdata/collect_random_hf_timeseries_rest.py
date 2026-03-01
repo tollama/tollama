@@ -16,7 +16,9 @@ import json
 import random
 import re
 import shutil
+import subprocess
 import tempfile
+import time
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -40,10 +42,14 @@ DEFAULT_CONTEXT_CAP = 512
 DEFAULT_HORIZON = 24
 DEFAULT_SAMPLE_ROWS = 600
 DEFAULT_MIN_RATIO = 0.90
+MAX_RAW_BYTES = 1_000_000
+MAX_TEXT_SOURCE_BYTES = 20 * 1024 * 1024
+HEAD_TIMEOUT_SECONDS = 8
+MAX_SOURCE_FILES_PER_DATASET = 200
 HTTP_TIMEOUT_SECONDS = 45
 DEFAULT_HTTP_PAGE_SIZE = 250
 DEFAULT_LIST_ATTEMPTS = 20_000
-MAX_PARQUET_ARROW_BYTES = 600 * 1024 * 1024
+MAX_PARQUET_ARROW_BYTES = 120 * 1024 * 1024
 
 
 KNOWN_BAD_DATASETS = {
@@ -79,6 +85,9 @@ TIMESTAMP_NAME_HINTS = (
     "ds",
     "tstmp",
 )
+
+TEXT_EXTENSIONS = {"json", "jsonl", "csv", "tsv"}
+BINARY_EXTENSIONS = {"parquet", "arrow"}
 
 TARGET_NAME_HINTS = (
     "target",
@@ -249,6 +258,23 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--min-pool-multiplier", type=float, default=2.0, help="Candidate pool target multiplier"
     )
     parser.add_argument("--force", action="store_true", help="Overwrite non-empty output directory")
+    parser.add_argument(
+        "--allow-binary",
+        action="store_true",
+        help="Allow parquet/arrow sources (default: text formats only)",
+    )
+    parser.add_argument(
+        "--raw-max-bytes",
+        type=int,
+        default=MAX_RAW_BYTES,
+        help="Per-dataset raw file size cap in bytes (default: 1,000,000)",
+    )
+    parser.add_argument(
+        "--source-max-bytes",
+        type=int,
+        default=MAX_TEXT_SOURCE_BYTES,
+        help="Max source file size for sampling (default: 20,000,000)",
+    )
     parser.add_argument(
         "--filter",
         default="task_categories:time-series-forecasting",
@@ -559,12 +585,124 @@ def serialize_json_line(value: Any) -> str:
 
 
 def get_json(url: str) -> Any:
-    req = Request(url, headers={"User-Agent": USER_AGENT})
-    with urlopen(req, timeout=HTTP_TIMEOUT_SECONDS) as response:
-        if response.status >= 400:
-            raise RuntimeError(f"request failed status={response.status}: {url}")
-        payload = json.loads(response.read().decode("utf-8"))
-    return payload
+    try:
+        req = Request(url, headers={"User-Agent": USER_AGENT})
+        with urlopen(req, timeout=HTTP_TIMEOUT_SECONDS) as response:
+            if response.status >= 400:
+                raise RuntimeError(f"request failed status={response.status}: {url}")
+            payload = json.loads(response.read().decode("utf-8"))
+        return payload
+    except Exception as exc:
+        return _get_json_via_curl(url, exc)
+
+
+def _run_curl(
+    args: list[str],
+    *,
+    max_output: int | None = None,
+    timeout_seconds: int = HTTP_TIMEOUT_SECONDS,
+) -> subprocess.CompletedProcess[bytes]:
+    completed = subprocess.run(
+        [
+            "curl",
+            "-sS",
+            "--max-time",
+            str(HTTP_TIMEOUT_SECONDS),
+            "-H",
+            f"User-Agent: {USER_AGENT}",
+        ]
+        + args,
+        check=False,
+        capture_output=True,
+        timeout=timeout_seconds + 10,
+    )
+    if completed.returncode != 0:
+        stderr_text = completed.stderr.decode("utf-8", errors="replace").strip()
+        raise RuntimeError(
+            f"curl failed status={completed.returncode}: {stderr_text}"
+        )
+    if max_output is not None and len(completed.stdout) > max_output:
+        raise RuntimeError(
+            f"response exceeded output cap: {len(completed.stdout)} > {max_output}"
+        )
+    return completed
+
+
+def _run_curl_text(url: str) -> bytes:
+    completed = _run_curl(["--compressed", "-L", url])
+    return completed.stdout
+
+
+def _run_curl_to_file(
+    output_file: Path, url: str, *, max_bytes: int | None = None
+) -> None:
+    cmd = [
+        "curl",
+        "-sS",
+        "--max-time",
+        str(HTTP_TIMEOUT_SECONDS),
+        "--compressed",
+        "-L",
+        "-o",
+        str(output_file),
+        "-H",
+        f"User-Agent: {USER_AGENT}",
+        url,
+    ]
+    if max_bytes is not None:
+        cmd.extend(["--max-filesize", str(max_bytes)])
+    completed = subprocess.run(
+        cmd,
+        check=False,
+        capture_output=True,
+        timeout=HTTP_TIMEOUT_SECONDS + 20,
+    )
+    if completed.returncode != 0:
+        stderr_text = completed.stderr.decode("utf-8", errors="replace").strip()
+        raise RuntimeError(
+            f"curl download failed status={completed.returncode}: {stderr_text}"
+        )
+
+
+def _get_content_length_via_curl(url: str) -> int | None:
+    headers = (
+        _run_curl(["-I", "--head", "-L", url], timeout_seconds=HEAD_TIMEOUT_SECONDS)
+        .stdout.decode("utf-8", errors="replace")
+        .splitlines()
+    )
+    for line in headers:
+        lower = line.lower()
+        if lower.startswith("content-length:"):
+            try:
+                return int(line.split(":", 1)[1].strip())
+            except ValueError:
+                return None
+    return None
+
+
+def _get_json_via_curl(url: str, original_error: Exception) -> Any:
+    completed = _run_curl([url])
+    try:
+        return json.loads(completed.stdout.decode("utf-8"))
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(f"json fetch failed via curl for {url}: {original_error}") from exc
+
+
+def get_content_length(url: str) -> int | None:
+    try:
+        req = Request(url, method="HEAD", headers={"User-Agent": USER_AGENT})
+        with urlopen(req, timeout=HEAD_TIMEOUT_SECONDS) as response:
+            if response.status >= 400:
+                return None
+            length = response.getheader("Content-Length")
+            if length is None:
+                return None
+            try:
+                return int(length)
+            except ValueError:
+                return None
+    except Exception:
+        return _get_content_length_via_curl(url)
 
 
 def urlsafe_hf_id(hf_id: str) -> str:
@@ -580,7 +718,14 @@ def normalize_ext(path: str) -> str:
 
 def is_supported_data_file(path: str) -> bool:
     ext = normalize_ext(path)
-    return ext in {"json", "jsonl", "csv", "tsv", "parquet", "arrow"}
+    return ext in TEXT_EXTENSIONS | BINARY_EXTENSIONS
+
+
+def is_supported_data_file_with_options(path: str, *, allow_binary: bool) -> bool:
+    ext = normalize_ext(path)
+    if ext in TEXT_EXTENSIONS:
+        return True
+    return bool(allow_binary and ext in BINARY_EXTENSIONS)
 
 
 def dataset_listing_url(filter_query: str, page_size: int, offset: int) -> str:
@@ -637,7 +782,9 @@ def iter_dataset_ids(
     return ids
 
 
-def parse_dataset_info(hf_id: str) -> tuple[list[str], str, bool, bool, set[str], list[SourceFile]]:
+def parse_dataset_info(
+    hf_id: str, allow_binary: bool
+) -> tuple[list[str], str, bool, bool, set[str], list[SourceFile]]:
     payload = get_json(dataset_info_url(hf_id))
     if not isinstance(payload, dict):
         raise ValueError("dataset info payload is not object")
@@ -667,11 +814,15 @@ def parse_dataset_info(hf_id: str) -> tuple[list[str], str, bool, bool, set[str]
                         if not isinstance(item, dict):
                             continue
                         path = item.get("path")
+                        if len(source_files) >= MAX_SOURCE_FILES_PER_DATASET:
+                            break
                         split = item.get("split", "train")
                         if not isinstance(path, str) or not path.strip():
                             continue
-                        if not is_supported_data_file(path):
+                        if not is_supported_data_file_with_options(path, allow_binary=allow_binary):
                             continue
+                        if len(source_files) >= MAX_SOURCE_FILES_PER_DATASET:
+                            break
                         source_files.append(
                             SourceFile(path=path, split=str(split), config_name=config_name)
                         )
@@ -683,8 +834,10 @@ def parse_dataset_info(hf_id: str) -> tuple[list[str], str, bool, bool, set[str]
             path = sibling.get("rfilename")
             if not isinstance(path, str) or not path.strip():
                 continue
-            if not is_supported_data_file(path):
+            if not is_supported_data_file_with_options(path, allow_binary=allow_binary):
                 continue
+            if len(source_files) >= MAX_SOURCE_FILES_PER_DATASET:
+                break
             source_files.append(SourceFile(path=path, split="train", config_name=None))
 
     unique_sources: list[SourceFile] = []
@@ -722,17 +875,13 @@ def iter_rows_from_text_file(
     ext: str,
     sample_rows: int,
     split_limit: int,
+    is_gzip: bool = False,
 ) -> list[dict[str, Any]]:
     # ``split_limit`` exists only for signature consistency with binary loaders.
     _ = split_limit
     if ext == "jsonl":
         rows: list[dict[str, Any]] = []
-        reader = ensure_text_reader(
-            response,
-            gzip_compressed=hasattr(response, "url")
-            and isinstance(response.url, str)
-            and response.url.endswith(".gz"),
-        )
+        reader = ensure_text_reader(response, gzip_compressed=is_gzip)
         for line in reader:
             stripped = line.strip()
             if not stripped:
@@ -749,10 +898,7 @@ def iter_rows_from_text_file(
 
     if ext in {"csv", "tsv"}:
         delimiter = "," if ext == "csv" else "\t"
-        reader = ensure_text_reader(
-            response,
-            gzip_compressed=hasattr(response, "url") and str(response.url).endswith(".gz"),
-        )
+        reader = ensure_text_reader(response, gzip_compressed=is_gzip)
         csv_reader = csv.DictReader(reader, delimiter=delimiter)
         rows: list[dict[str, Any]] = []
         for row in csv_reader:
@@ -763,10 +909,7 @@ def iter_rows_from_text_file(
         return rows
 
     if ext == "json":
-        reader = ensure_text_reader(
-            response,
-            gzip_compressed=hasattr(response, "url") and str(response.url).endswith(".gz"),
-        )
+        reader = ensure_text_reader(response, gzip_compressed=is_gzip)
         payload = json.load(reader)
         rows = []
         if isinstance(payload, list):
@@ -824,40 +967,89 @@ def iter_rows_from_binary_file(path: Path, ext: str, sample_rows: int) -> list[d
 
 
 def stream_rows_from_file(
-    hf_id: str, source: SourceFile, sample_rows: int, *, max_bytes: int | None = None
+    hf_id: str,
+    source: SourceFile,
+    sample_rows: int,
+    *,
+    max_bytes: int | None = None,
+    source_max_bytes: int | None = None,
 ) -> list[dict[str, Any]]:
     path = source.path
     base_ext = normalize_ext(path)
     url = file_url(hf_id, path)
 
     request = Request(url, headers={"User-Agent": USER_AGENT})
+    is_gzip = path.endswith(".gz")
+
+    if source_max_bytes is not None:
+        content_length = get_content_length(url)
+        if content_length is None:
+            raise RuntimeError(f"source file size unavailable: {url}")
+        if content_length is not None and content_length > source_max_bytes:
+            raise RuntimeError(f"source file too large: {content_length} > {source_max_bytes}")
 
     if base_ext in {"jsonl", "json", "csv", "tsv"}:
-        with urlopen(request, timeout=HTTP_TIMEOUT_SECONDS) as response:
-            if response.status >= 400:
-                raise RuntimeError(f"download failed {response.status}: {url}")
-            return iter_rows_from_text_file(
-                response=response, ext=base_ext, sample_rows=sample_rows, split_limit=sample_rows
-            )
+        try:
+            with urlopen(request, timeout=HTTP_TIMEOUT_SECONDS) as response:
+                if response.status >= 400:
+                    raise RuntimeError(f"download failed {response.status}: {url}")
+                return iter_rows_from_text_file(
+                    response=response,
+                    ext=base_ext,
+                    sample_rows=sample_rows,
+                    split_limit=sample_rows,
+                    is_gzip=is_gzip,
+                )
+        except Exception:
+            try:
+                fallback_bytes = _run_curl_text(url)
+            except Exception as exc2:
+                raise RuntimeError(
+                    f"download failed and curl fallback failed {url}: {exc2}"
+                ) from exc2
+            with io.BytesIO(fallback_bytes) as response:
+                return iter_rows_from_text_file(
+                    response=response,
+                    ext=base_ext,
+                    sample_rows=sample_rows,
+                    split_limit=sample_rows,
+                    is_gzip=is_gzip,
+                )
 
     if base_ext not in {"parquet", "arrow"}:
         raise ValueError(f"unsupported data extension: {path}")
 
     with tempfile.NamedTemporaryFile(suffix=f".{base_ext}", delete=False) as tmp:
         bytes_read = 0
-        with urlopen(request, timeout=HTTP_TIMEOUT_SECONDS) as response:
-            if response.status >= 400:
-                raise RuntimeError(f"download failed {response.status}: {url}")
-            while True:
-                chunk = response.read(1024 * 1024)
-                if not chunk:
-                    break
-                bytes_read += len(chunk)
-                if max_bytes is not None and bytes_read > max_bytes:
-                    raise RuntimeError(
-                        f"binary file too large for safe read {bytes_read} > {max_bytes}"
-                    )
-                tmp.write(chunk)
+        try:
+            with urlopen(request, timeout=HTTP_TIMEOUT_SECONDS) as response:
+                if response.status >= 400:
+                    raise RuntimeError(f"download failed {response.status}: {url}")
+                content_length = response.getheader("Content-Length")
+                if content_length is not None:
+                    try:
+                        estimated_size = int(content_length)
+                        if max_bytes is not None and estimated_size > max_bytes:
+                            raise RuntimeError(
+                                "binary file size too large for preview "
+                                f"{estimated_size} > {max_bytes}"
+                            )
+                    except ValueError:
+                        pass
+                while True:
+                    chunk = response.read(1024 * 1024)
+                    if not chunk:
+                        break
+                    bytes_read += len(chunk)
+                    if max_bytes is not None and bytes_read > max_bytes:
+                        raise RuntimeError(
+                            f"binary file too large for safe read {bytes_read} > {max_bytes}"
+                        )
+                    tmp.write(chunk)
+        except Exception:
+            tmp.seek(0)
+            tmp.truncate()
+            _run_curl_to_file(Path(tmp.name), url, max_bytes=max_bytes)
         tmp.flush()
         local_path = Path(tmp.name)
     try:
@@ -866,12 +1058,15 @@ def stream_rows_from_file(
         local_path.unlink(missing_ok=True)
 
 
-def sample_candidate_rows(hf_id: str, source: SourceFile, sample_rows: int) -> list[dict[str, Any]]:
+def sample_candidate_rows(
+    hf_id: str, source: SourceFile, sample_rows: int, *, source_max_bytes: int | None = None
+) -> list[dict[str, Any]]:
     return stream_rows_from_file(
         hf_id=hf_id,
         source=source,
         sample_rows=sample_rows,
         max_bytes=MAX_PARQUET_ARROW_BYTES,
+        source_max_bytes=source_max_bytes,
     )
 
 
@@ -881,6 +1076,8 @@ def evaluate_dataset(
     min_timestamp_ratio: float,
     min_target_ratio: float,
     min_contiguous_rows: int,
+    allow_binary: bool,
+    source_max_bytes: int,
 ) -> tuple[Candidate | None, list[dict[str, Any]]]:
     rejections: list[dict[str, Any]] = []
 
@@ -895,7 +1092,9 @@ def evaluate_dataset(
         ]
 
     try:
-        tags, desc, gated, private, sibling_files, source_files = parse_dataset_info(hf_id)
+        tags, desc, gated, private, sibling_files, source_files = parse_dataset_info(
+            hf_id, allow_binary
+        )
     except Exception as exc:
         return None, [
             {"hf_id": hf_id, "split": "-", "reason": "metadata_error", "detail": str(exc)}
@@ -937,7 +1136,9 @@ def evaluate_dataset(
     best_candidate: Candidate | None = None
     for source in source_files:
         try:
-            rows = sample_candidate_rows(hf_id, source, sample_rows=sample_rows)
+            rows = sample_candidate_rows(
+                hf_id, source, sample_rows=sample_rows, source_max_bytes=source_max_bytes
+            )
         except Exception as exc:
             rejections.append(
                 {
@@ -1080,8 +1281,14 @@ def select_diverse(
 
 
 def save_raw_dataset(
-    hf_id: str, source_path: str, split: str, output_dir: Path, max_rows: int
-) -> int:
+    hf_id: str,
+    source_path: str,
+    split: str,
+    output_dir: Path,
+    max_rows: int,
+    max_bytes: int,
+    source_max_bytes: int,
+) -> tuple[int, int]:
     source = SourceFile(path=source_path, split=split, config_name=None)
     raw_dir = output_dir / "raw"
     raw_dir.mkdir(parents=True, exist_ok=True)
@@ -1091,23 +1298,34 @@ def save_raw_dataset(
         raise ValueError("empty source path")
 
     # We only need a deterministic subset here; preserve order.
-    rows = sample_candidate_rows(hf_id, source, sample_rows=max_rows)
+    rows = sample_candidate_rows(
+        hf_id, source, sample_rows=max_rows, source_max_bytes=source_max_bytes
+    )
+    raw_size = 0
 
     with raw_path.open("w", encoding="utf-8") as handle:
         saved = 0
         for row in rows[:max_rows]:
             if not isinstance(row, dict):
                 continue
-            handle.write(serialize_json_line(row))
-            handle.write("\n")
+            line = serialize_json_line(row) + "\n"
+            encoded = line.encode("utf-8")
+            if raw_size + len(encoded) > max_bytes:
+                break
+            handle.write(line)
             saved += 1
-    return saved
+            raw_size += len(encoded)
+    return saved, raw_size
 
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     if args.count <= 0:
         raise SystemExit("--count must be > 0")
+    if args.raw_max_bytes <= 0:
+        raise SystemExit("--raw-max-bytes must be > 0")
+    if args.source_max_bytes <= 0:
+        raise SystemExit("--source-max-bytes must be > 0")
 
     out_dir = Path(args.out_dir).resolve()
     if out_dir.exists() and any(out_dir.iterdir()):
@@ -1144,17 +1362,23 @@ def main(argv: list[str] | None = None) -> int:
 
     candidates: list[Candidate] = []
     rejections: list[dict[str, Any]] = []
+    started_at = time.time()
 
     for hf_id in ids:
         if attempts >= args.attempt_limit:
             break
         attempts += 1
+        if attempts == 1 or attempts % 10 == 0:
+            elapsed = int(time.time() - started_at)
+            print(f"evaluating candidate #{attempts} / {len(ids)} (time={elapsed}s)")
         candidate, cand_rejections = evaluate_dataset(
             hf_id=hf_id,
             sample_rows=args.sample_rows,
             min_timestamp_ratio=args.min_timestamp_ratio,
             min_target_ratio=args.min_target_ratio,
             min_contiguous_rows=min_contiguous,
+            allow_binary=args.allow_binary,
+            source_max_bytes=args.source_max_bytes,
         )
         rejections.extend(cand_rejections)
         if candidate is None:
@@ -1183,12 +1407,14 @@ def main(argv: list[str] | None = None) -> int:
         meta_path = dataset_dir / "meta.json"
 
         try:
-            saved_rows = save_raw_dataset(
+            saved_rows, raw_size = save_raw_dataset(
                 hf_id=candidate.hf_id,
                 source_path=candidate.source_path,
                 split=candidate.split,
                 output_dir=dataset_dir,
                 max_rows=args.max_rows,
+                max_bytes=args.raw_max_bytes,
+                source_max_bytes=args.source_max_bytes,
             )
         except Exception as exc:
             rejections.append(
@@ -1212,8 +1438,18 @@ def main(argv: list[str] | None = None) -> int:
             )
             continue
 
+        if raw_size > args.raw_max_bytes:
+            rejections.append(
+                {
+                    "hf_id": candidate.hf_id,
+                    "split": candidate.split,
+                    "reason": "raw_size_exceeded",
+                    "detail": f"raw bytes {raw_size} > limit {args.raw_max_bytes}",
+                }
+            )
+            continue
+
         raw_path = dataset_dir / "raw" / "rows.jsonl"
-        raw_size = raw_path.stat().st_size
 
         meta = {
             "hf_id": candidate.hf_id,

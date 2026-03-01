@@ -14,9 +14,9 @@ from .errors import AdapterInputError, DependencyMissingError, UnsupportedModelE
 GRANITE_MODEL_REGISTRY: dict[str, dict[str, Any]] = {
     "granite-ttm-r2": {
         "repo_id": "ibm-granite/granite-timeseries-ttm-r2",
-        "revision": "90-30-ft-l1-r2.1",
-        "context_length": 90,
-        "prediction_length": 30,
+        "revision": "512-96-ft-l1-r2.1",
+        "context_length": 512,
+        "prediction_length": 96,
         "implementation": "granite_ttm",
     },
 }
