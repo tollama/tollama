@@ -235,10 +235,13 @@ def parse_huggingface_dataset(
     seed: int,
 ) -> list[dict[str, Any]]:
     """Parse a HuggingFace dataset into normalized request series."""
-    import datasets as hf_datasets
-
-    # Suppress progress bars
-    hf_datasets.utils.logging.disable_progress_bar()
+    try:
+        import datasets as hf_datasets
+    except ModuleNotFoundError:
+        hf_datasets = None
+    else:
+        # Suppress progress bars when the datasets package is available.
+        hf_datasets.utils.logging.disable_progress_bar()
 
     loaded_dataset = _load_hf_dataset(hf_id=hf_id, split_name=split_name)
     resolved_split = split_name
