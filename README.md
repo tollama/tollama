@@ -74,6 +74,7 @@ AI agents can **invoke TSFMs as tools the moment they need a forecast.**
 | Moirai 2.0-R Small | Salesforce | Past + Future |
 | Sundial Base 128M | THUML | Target only |
 | Toto Open Base 1.0 | Datadog | Past only |
+| Lag-Llama | TSFM Community | Target only |
 
 ## Overview Architecture
 
@@ -89,8 +90,8 @@ AI agents can **invoke TSFMs as tools the moment they need a forecast.**
 ├──────┬──────┬──────┬──────┬──────┬──────┬──────────────┤
 │      │ stdio JSON-lines protocol      │              │
 │      ▼      ▼      ▼      ▼      ▼      ▼              │
-│   torch  timesfm  uni2ts  sundial  toto  mock          │
-│   (Chronos, Granite)                                   │
+│   torch  timesfm  uni2ts  sundial  toto  lag_llama mock│
+│   (Chronos, Granite, Lag-Llama)                        │
 │   Independent venv per family — zero dependency clash   │
 └────────────────────────────────────────────────────────┘
 ```
