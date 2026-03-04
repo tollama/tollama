@@ -138,3 +138,26 @@ models:
       future_covariates_numeric: true
       future_covariates_categorical: false
       static_covariates: false
+
+  - name: lag-llama
+    family: lag_llama
+    source:
+      type: huggingface
+      repo_id: time-series-foundation-models/Lag-Llama
+      revision: main
+    license:
+      type: apache-2.0
+      needs_acceptance: false
+    metadata:
+      implementation: lag_llama
+      default_context_length: 1024
+      default_num_samples: 100
+      default_batch_size: 32
+      checkpoint_filename: lag-llama.ckpt
+    capabilities:
+      past_covariates_numeric: false
+      past_covariates_categorical: false
+      future_covariates_numeric: false
+      future_covariates_categorical: false
+      static_covariates: false
+
