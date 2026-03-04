@@ -1,6 +1,6 @@
 """Per-family virtual environment bootstrap for runner dependency isolation.
 
-Each runner family (torch, timesfm, uni2ts, sundial, toto) can be installed
+Each runner family (torch, timesfm, uni2ts, sundial, toto, lag_llama) can be installed
 into its own virtualenv under ``~/.tollama/runtimes/<family>/venv/``.  This
 keeps heavyweight and potentially conflicting ML dependencies from interfering
 with one another.
@@ -37,6 +37,7 @@ FAMILY_EXTRAS: dict[str, str] = {
     "uni2ts": "runner_uni2ts",
     "sundial": "runner_sundial",
     "toto": "runner_toto",
+    "lag_llama": "runner_lag_llama",
 }
 
 # Families that require specific Python versions.
@@ -56,6 +57,7 @@ FAMILY_RUNNER_MODULES: dict[str, str] = {
     "uni2ts": "tollama.runners.uni2ts_runner.main",
     "sundial": "tollama.runners.sundial_runner.main",
     "toto": "tollama.runners.toto_runner.main",
+    "lag_llama": "tollama.runners.lag_llama_runner.main",
 }
 
 _STATE_FILENAME = "installed.json"
