@@ -144,11 +144,13 @@ def test_registry_loads_required_model_specs() -> None:
     assert tide.source.revision == "main"
     assert tide.metadata == {
         "implementation": "tide",
-        "status": "phase1_placeholder",
-        "support_level": "planned",
+        "status": "phase2_inference",
+        "support_level": "baseline",
+        "default_input_chunk_length": 32,
+        "default_n_epochs": 20,
         "install_extra": "runner_tide",
         "install_command": 'python -m pip install -e ".[dev,runner_tide]"',
-        "notes": "TiDE integration is scaffolded in phase-1 only. Runner validates requests and returns actionable DEPENDENCY_MISSING or NOT_IMPLEMENTED responses until inference support lands.",
+        "notes": "TiDE runner executes canonical forecasts with Darts TiDEModel (target + optional numeric covariates/static features) and currently returns deterministic mean forecasts only.",
     }
 
     lag_llama = registry["lag-llama"]

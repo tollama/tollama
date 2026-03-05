@@ -32,14 +32,14 @@ logger = logging.getLogger(__name__)
 # Maps runner family names to the ``pyproject.toml`` optional-extra name that
 # carries the family's heavy dependencies.
 FAMILY_EXTRAS: dict[str, str] = {
-    "torch": "runner-torch",
-    "timesfm": "runner-timesfm",
-    "uni2ts": "runner-uni2ts",
-    "sundial": "runner-sundial",
-    "toto": "runner-toto",
-    "lag_llama": "runner-lag-llama",
-    "patchtst": "runner-patchtst",
-    "tide": "runner-tide",
+    "torch": "runner_torch",
+    "timesfm": "runner_timesfm",
+    "uni2ts": "runner_uni2ts",
+    "sundial": "runner_sundial",
+    "toto": "runner_toto",
+    "lag_llama": "runner_lag_llama",
+    "patchtst": "runner_patchtst",
+    "tide": "runner_tide",
 }
 
 # Families that require specific Python versions.

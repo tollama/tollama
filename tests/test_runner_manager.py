@@ -115,6 +115,23 @@ def _patchtst_payload() -> dict[str, object]:
     }
 
 
+def _tide_payload() -> dict[str, object]:
+    return {
+        "model": "tide",
+        "horizon": 2,
+        "quantiles": [0.1, 0.9],
+        "series": [
+            {
+                "id": "s1",
+                "freq": "D",
+                "timestamps": ["2025-01-01", "2025-01-02", "2025-01-03"],
+                "target": [10.0, 12.0, 14.0],
+            }
+        ],
+        "options": {},
+    }
+
+
 def _lag_llama_payload() -> dict[str, object]:
     return {
         "model": "lag-llama",
@@ -376,6 +393,42 @@ def test_missing_patchtst_runner_command_returns_install_hint(monkeypatch, tmp_p
     detail = response.json()["detail"]
     assert "runner_patchtst" in detail
     assert "pip install -e" in detail
+
+
+def test_daemon_routes_tide_family_to_runner_command_override(monkeypatch, tmp_path) -> None:
+    paths = TollamaPaths(base_dir=tmp_path / ".tollama")
+    monkeypatch.setenv("TOLLAMA_HOME", str(paths.base_dir))
+    install_from_registry("tide", accept_license=False, paths=paths)
+
+    manager = RunnerManager(
+        runner_commands={"tide": ("tollama-runner-mock",)},
+    )
+    with TestClient(create_app(runner_manager=manager)) as client:
+        response = client.post("/v1/forecast", json=_tide_payload())
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["model"] == "tide"
+    assert body["forecasts"][0]["id"] == "s1"
+    assert body["forecasts"][0]["mean"] == [14.0, 14.0]
+
+
+def test_missing_tide_runner_command_returns_install_hint(monkeypatch, tmp_path) -> None:
+    paths = TollamaPaths(base_dir=tmp_path / ".tollama")
+    monkeypatch.setenv("TOLLAMA_HOME", str(paths.base_dir))
+    install_from_registry("tide", accept_license=False, paths=paths)
+
+    manager = RunnerManager(
+        runner_commands={"tide": ("tollama-runner-tide-missing",)},
+    )
+    with TestClient(create_app(runner_manager=manager)) as client:
+        response = client.post("/v1/forecast", json=_tide_payload())
+
+    assert response.status_code == 503
+    detail = response.json()["detail"]
+    assert "runner_tide" in detail
+    assert "pip install -e" in detail
+
 
 def test_runner_manager_list_families_includes_expected_defaults() -> None:
     manager = RunnerManager()

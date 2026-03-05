@@ -86,8 +86,14 @@ class TiDEAdapter:
                 kind="past_covariates",
                 series_id=series.id,
             )
+            future_cov_timestamps = _future_covariate_timestamps(
+                last_timestamp=series.timestamps[-1],
+                freq=series.freq,
+                horizon=request.horizon,
+                pandas_module=deps.pandas,
+            )
             future_cov_ts = _build_covariate_timeseries(
-                timestamps=series.timestamps,
+                timestamps=future_cov_timestamps,
                 covariates=series.future_covariates,
                 timeseries_cls=deps.timeseries_cls,
                 kind="future_covariates",
@@ -98,8 +104,6 @@ class TiDEAdapter:
             fit_kwargs: dict[str, Any] = {"series": target_ts}
             if past_cov_ts is not None:
                 fit_kwargs["past_covariates"] = past_cov_ts
-            if future_cov_ts is not None:
-                fit_kwargs["future_covariates"] = future_cov_ts
             model.fit(**fit_kwargs)
 
             predict_kwargs: dict[str, Any] = {"n": request.horizon, "series": target_ts}
@@ -309,12 +313,28 @@ def _extract_values(predicted: Any, *, horizon: int) -> list[float]:
 
 
 def _future_start_timestamp(*, last_timestamp: str, freq: str, pandas_module: Any) -> str:
+    timestamps = _future_covariate_timestamps(
+        last_timestamp=last_timestamp,
+        freq=freq,
+        horizon=1,
+        pandas_module=pandas_module,
+    )
+    return timestamps[0]
+
+
+def _future_covariate_timestamps(
+    *,
+    last_timestamp: str,
+    freq: str,
+    horizon: int,
+    pandas_module: Any,
+) -> list[str]:
     try:
         parsed = pandas_module.to_datetime([last_timestamp], utc=True, errors="raise")
-        generated = pandas_module.date_range(start=parsed[0], periods=2, freq=freq)
+        generated = pandas_module.date_range(start=parsed[0], periods=horizon + 1, freq=freq)
     except ValueError as exc:
         raise AdapterInputError(f"invalid frequency {freq!r} for TiDE forecast") from exc
-    return _to_iso_timestamp(generated[1])
+    return [_to_iso_timestamp(value) for value in generated[1:]]
 
 
 def build_covariate_warnings(series_list: list[SeriesInput], *, requested_quantiles: list[float]) -> list[str]:

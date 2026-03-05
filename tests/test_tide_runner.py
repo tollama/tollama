@@ -72,8 +72,8 @@ def _valid_forecast_params() -> dict[str, Any]:
             {
                 "id": "s1",
                 "freq": "D",
-                "timestamps": ["2025-01-01", "2025-01-02"],
-                "target": [1.0, 2.0],
+                "timestamps": ["2025-01-01", "2025-01-02", "2025-01-03"],
+                "target": [1.0, 2.0, 3.0],
             }
         ],
         "options": {},
@@ -86,6 +86,8 @@ def test_tide_runner_hello_reports_supported_family_and_status() -> None:
         _CapturingAdapter(),
     )
     payload = response.model_dump(mode="json", exclude_none=True)
+    assert payload["id"] == "req-1"
+    assert payload["result"]["name"] == "tollama-tide"
     assert payload["result"]["supported_families"] == ["tide"]
     assert payload["result"]["status"] == "phase2_inference"
 
@@ -96,8 +98,37 @@ def test_tide_runner_forecast_returns_dependency_missing_when_dependencies_absen
         _MissingDependencyAdapter(),
     )
     payload = response.model_dump(mode="json", exclude_none=True)
+    assert payload["id"] == "req-2"
     assert payload["error"]["code"] == "DEPENDENCY_MISSING"
     assert "runner_tide" in payload["error"]["message"]
+
+
+def test_tide_runner_validates_runner_specific_optional_params() -> None:
+    params = _valid_forecast_params()
+    params["model_local_dir"] = 123
+
+    response = handle_request_line(
+        json.dumps({"id": "req-3", "method": "forecast", "params": params}),
+        _CapturingAdapter(),
+    )
+    payload = response.model_dump(mode="json", exclude_none=True)
+    assert payload["id"] == "req-3"
+    assert payload["error"]["code"] == "BAD_REQUEST"
+    assert payload["error"]["message"] == "model_local_dir must be a non-empty string when provided"
+
+
+def test_tide_runner_rejects_non_object_model_source_before_adapter_invocation() -> None:
+    params = _valid_forecast_params()
+    params["model_source"] = "hf://unit8co/tide"
+
+    response = handle_request_line(
+        json.dumps({"id": "req-4", "method": "forecast", "params": params}),
+        _CapturingAdapter(),
+    )
+    payload = response.model_dump(mode="json", exclude_none=True)
+    assert payload["id"] == "req-4"
+    assert payload["error"]["code"] == "BAD_REQUEST"
+    assert payload["error"]["message"] == "model_source must be an object when provided"
 
 
 def test_tide_runner_forecast_smoke_wires_request_and_response() -> None:
@@ -105,16 +136,23 @@ def test_tide_runner_forecast_smoke_wires_request_and_response() -> None:
     params = _valid_forecast_params()
     params["model_local_dir"] = " /tmp/tide "
     params["model_source"] = {"repo_id": "unit8co/tide", "revision": "main"}
-    params["model_metadata"] = {"implementation": "tide"}
+    params["model_metadata"] = {"implementation": "tide", "default_n_epochs": 1}
 
     response = handle_request_line(
-        json.dumps({"id": "req-3", "method": "forecast", "params": params}),
+        json.dumps({"id": "req-5", "method": "forecast", "params": params}),
         adapter,
     )
     payload = response.model_dump(mode="json", exclude_none=True)
+
+    assert payload["id"] == "req-5"
     assert payload["result"]["model"] == "tide"
+    assert payload["result"]["forecasts"][0]["id"] == "s1"
     assert payload["result"]["forecasts"][0]["mean"] == [2.0, 2.0]
 
     assert len(adapter.forecast_calls) == 1
     call = adapter.forecast_calls[0]
+    assert call["request"].model == "tide"
+    assert call["request"].horizon == 2
     assert call["model_local_dir"] == "/tmp/tide"
+    assert call["model_source"] == {"repo_id": "unit8co/tide", "revision": "main"}
+    assert call["model_metadata"] == {"implementation": "tide", "default_n_epochs": 1}

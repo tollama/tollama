@@ -375,3 +375,31 @@ tollama pull patchtst
 # run forecast
 tollama run patchtst --input examples/request.json --no-stream
 ```
+
+## TiDE Forecasting (Phase-2 baseline)
+
+TiDE is integrated for **real forecast execution** via the dedicated `tide` runner family.
+
+- model name: `tide`
+- runner family: `tide`
+- install extra: `runner_tide`
+- current runtime behavior:
+  - returns `DEPENDENCY_MISSING` when optional dependencies are absent (`pandas`, `u8darts`)
+  - validates canonical forecast payloads and returns `BAD_REQUEST` for malformed input
+  - supports single/multi-series forecasts with target history
+  - supports numeric `past_covariates` / `future_covariates` and optional `static_covariates`
+  - horizon is honored via `predict(n=horizon)` and output is normalized to standard Tollama response schema
+- known limitations:
+  - current TiDE path is deterministic and returns mean forecasts only (`quantiles` are ignored with warning)
+  - model is fit per request (no persisted model cache yet), so repeated calls can be slower than cached runners
+
+```bash
+# install TiDE runner dependencies
+python -m pip install -e ".[dev,runner_tide]"
+
+# pull registry entry
+tollama pull tide
+
+# run forecast
+tollama run tide --input examples/request.json --no-stream
+```
