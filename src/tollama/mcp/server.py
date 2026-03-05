@@ -57,7 +57,7 @@ from .tools import (
 _MCP_IMPORT_HINT = 'MCP dependency is not installed. Install with: pip install "tollama[mcp]"'
 _MODEL_NAME_EXAMPLES = (
     "mock, chronos2, granite-ttm-r2, timesfm-2.5-200m, "
-    "moirai-2.0-R-small, sundial-base-128m, toto-open-base-1.0"
+    "moirai-2.0-R-small, sundial-base-128m, toto-open-base-1.0, lag-llama"
 )
 
 

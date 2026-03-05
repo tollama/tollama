@@ -145,6 +145,7 @@ Compatibility snapshot:
 | Uni2TS / Moirai | Yes | No | Yes | No |
 | Sundial | No | No | No | No |
 | Toto Open Base 1.0 | Yes | No | No | No |
+| Lag-Llama | No | No | No | No |
 
 TimesFM XReg knobs are available at `parameters.timesfm`:
 `xreg_mode`, `ridge`, `force_on_cpu`.
@@ -307,4 +308,61 @@ tollama run toto-open-base-1.0 --input examples/toto_request.json --no-stream
 curl -s http://localhost:11435/api/forecast \
   -H 'content-type: application/json' \
   -d @examples/toto_request.json
+```
+
+## Lag-Llama Forecasting (separate lag_llama runner family)
+
+Lag-Llama is integrated as a target-only runner in Tollama.
+
+Runtime notes:
+
+- install optional runner dependencies: `runner_lag_llama`
+- `lag-llama` is installed from GitHub (git must be available in your environment)
+- first run downloads checkpoint artifacts from Hugging Face during `tollama pull`
+- covariates/static features are unsupported (ignored in `best_effort`, rejected in `strict`)
+
+```bash
+# install optional Lag-Llama runner dependencies
+python -m pip install -e ".[dev,runner_lag_llama]"
+# note: install a compatible torch build first for your platform when needed
+
+# run daemon (default http://127.0.0.1:11435)
+tollama serve
+
+# pull Lag-Llama snapshot + checkpoint metadata
+tollama pull lag-llama
+
+# run forecast
+tollama run lag-llama --input examples/lag_llama_request.json --no-stream
+```
+
+```bash
+curl -s http://localhost:11435/api/forecast \
+  -H 'content-type: application/json' \
+  -d @examples/lag_llama_request.json
+```
+
+
+## PatchTST Forecasting (Phase-2 baseline)
+
+PatchTST is integrated for **real forecast execution** via the dedicated `patchtst` runner family.
+
+- model name: `patchtst`
+- runner family: `patchtst`
+- install extra: `runner_patchtst`
+- current runtime behavior:
+  - returns `DEPENDENCY_MISSING` when optional dependencies are absent
+  - supports canonical point forecasts for single/multi-series requests
+  - supports quantiles when exposed by the runtime backend
+  - currently ignores covariates/static features (target-only history)
+
+```bash
+# install PatchTST runner dependencies
+python -m pip install -e ".[dev,runner_patchtst]"
+
+# pull registry entry
+tollama pull patchtst
+
+# run forecast
+tollama run patchtst --input examples/request.json --no-stream
 ```

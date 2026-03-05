@@ -39,3 +39,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   - normalized HF parser with contiguous-window enforcement and frequency inference (`prepare_data.py`)
   - orchestrator `--gate-profile {strict,hf_optional}` + transient retry/backoff with per-entry `retry_count`
   - HF local wrapper script (`scripts/e2e_realdata_hf.sh`)
+- Lag-Llama + PatchTST merge-hardening pack:
+  - E2E verification checklist (`docs/lag-llama-patchtst-e2e-checklist.md`)
+  - helper script for targeted checks (`scripts/e2e_lag_llama_patchtst_check.sh`)
+  - runner regression coverage for payload validation and validation-before-dependency-gating behavior

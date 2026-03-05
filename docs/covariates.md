@@ -122,6 +122,7 @@ Covariate compatibility is exposed in:
 | Uni2TS / Moirai | Yes | No | Yes | No | Planned |
 | Sundial | No | No | No | No | Planned |
 | Toto Open Base 1.0 | Yes | No | No | No | Planned |
+| Lag-Llama | No | No | No | No | Planned |
 
 ## API Example (curl)
 

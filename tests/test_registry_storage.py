@@ -6,7 +6,7 @@ import json
 
 import pytest
 
-from tollama.core.registry import load_registry
+from tollama.core.registry import list_registry_models, load_registry
 from tollama.core.storage import (
     TollamaPaths,
     install_from_registry,
@@ -18,6 +18,8 @@ from tollama.core.storage import (
 
 def test_registry_loads_required_model_specs() -> None:
     registry = load_registry()
+    listed_names = [spec.name for spec in list_registry_models()]
+    assert "lag-llama" in listed_names
     assert {
         "mock",
         "chronos2",
@@ -25,7 +27,10 @@ def test_registry_loads_required_model_specs() -> None:
         "moirai-2.0-R-small",
         "sundial-base-128m",
         "toto-open-base-1.0",
+        "lag-llama",
         "granite-ttm-r2",
+        "patchtst",
+        "tide",
     } <= set(registry)
 
     mock = registry["mock"]
@@ -109,6 +114,59 @@ def test_registry_loads_required_model_specs() -> None:
         "default_num_samples": 256,
         "default_samples_per_batch": 256,
         "default_use_kv_cache": True,
+    }
+
+
+
+    patchtst = registry["patchtst"]
+    assert patchtst.family == "patchtst"
+    assert patchtst.source.repo_id == "ibm-granite/granite-timeseries-patchtst"
+    assert patchtst.source.revision == "main"
+    assert patchtst.license.type == "apache-2.0"
+    assert patchtst.license.needs_acceptance is False
+    assert patchtst.capabilities is not None
+    assert patchtst.capabilities.past_covariates_numeric is False
+    assert patchtst.metadata == {
+        "implementation": "patchtst",
+        "status": "phase2_inference",
+        "support_level": "baseline",
+        "default_context_length": 512,
+        "install_extra": "runner_patchtst",
+        "install_command": 'python -m pip install -e ".[dev,runner_patchtst]"',
+        "notes": "PatchTST runner supports canonical point forecasts (single/multi series) with optional quantiles when the backend exposes them; covariates are currently ignored.",
+    }
+
+
+
+    tide = registry["tide"]
+    assert tide.family == "tide"
+    assert tide.source.repo_id == "unit8co/tide"
+    assert tide.source.revision == "main"
+    assert tide.metadata == {
+        "implementation": "tide",
+        "status": "phase1_placeholder",
+        "support_level": "planned",
+        "install_extra": "runner_tide",
+        "install_command": 'python -m pip install -e ".[dev,runner_tide]"',
+        "notes": "TiDE integration is scaffolded in phase-1 only. Runner validates requests and returns actionable DEPENDENCY_MISSING or NOT_IMPLEMENTED responses until inference support lands.",
+    }
+
+    lag_llama = registry["lag-llama"]
+    assert lag_llama.family == "lag_llama"
+    assert lag_llama.source.repo_id == "time-series-foundation-models/Lag-Llama"
+    assert lag_llama.source.revision == "main"
+    assert lag_llama.license.type == "apache-2.0"
+    assert lag_llama.license.needs_acceptance is False
+    assert lag_llama.capabilities is not None
+    assert lag_llama.capabilities.past_covariates_numeric is False
+    assert lag_llama.capabilities.future_covariates_numeric is False
+    assert lag_llama.capabilities.static_covariates is False
+    assert lag_llama.metadata == {
+        "implementation": "lag_llama",
+        "default_context_length": 1024,
+        "default_num_samples": 100,
+        "default_batch_size": 32,
+        "checkpoint_filename": "lag-llama.ckpt",
     }
 
 

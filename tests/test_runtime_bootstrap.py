@@ -13,6 +13,7 @@ from tollama.core.runtime_bootstrap import (
     FAMILY_EXTRAS,
     FAMILY_RUNNER_MODULES,
     BootstrapError,
+    _resolve_install_spec,
     ensure_family_runtime,
     get_runtime_status,
     list_runtime_statuses,
@@ -214,7 +215,7 @@ def test_get_status_installed(tmp_path: Path) -> None:
 
     assert status["installed"] is True
     assert status["family"] == "sundial"
-    assert status["extra"] == "runner_sundial"
+    assert status["extra"] == "runner-sundial"
     assert status["tollama_version"] is not None
     assert status["python_constraint"] is None  # sundial has no constraint
 
@@ -323,3 +324,24 @@ def test_corrupted_state_json_triggers_reinstall(tmp_path: Path) -> None:
         mock_create.side_effect = lambda vd: _write_fake_python(paths, "torch")
         ensure_family_runtime("torch", paths=paths)
         mock_create.assert_called_once()
+
+
+def test_resolve_install_spec_prefers_local_project_root() -> None:
+    with patch("tollama.core.runtime_bootstrap._resolve_local_project_root") as mock_local:
+        mock_local.return_value = "/tmp/tollama-local"
+        spec = _resolve_install_spec("runner-lag-llama")
+    assert spec == "/tmp/tollama-local[runner-lag-llama]"
+
+
+def test_resolve_install_spec_uses_direct_url_when_no_local_root() -> None:
+    fake_dist = MagicMock()
+    fake_dist.read_text.return_value = '{"url": "file:///opt/tollama-src"}'
+
+    with (
+        patch("tollama.core.runtime_bootstrap._resolve_local_project_root") as mock_local,
+        patch("importlib.metadata.distribution", return_value=fake_dist),
+    ):
+        mock_local.return_value = None
+        spec = _resolve_install_spec("runner-torch")
+
+    assert spec == "/opt/tollama-src[runner-torch]"

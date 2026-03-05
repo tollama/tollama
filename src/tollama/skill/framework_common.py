@@ -28,7 +28,7 @@ from tollama.core.schemas import (
 
 _MODEL_NAME_EXAMPLES = (
     "mock, chronos2, granite-ttm-r2, timesfm-2.5-200m, "
-    "moirai-2.0-R-small, sundial-base-128m, toto-open-base-1.0"
+    "moirai-2.0-R-small, sundial-base-128m, toto-open-base-1.0, lag-llama"
 )
 
 

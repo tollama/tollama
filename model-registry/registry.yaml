@@ -138,3 +138,73 @@ models:
       future_covariates_numeric: true
       future_covariates_categorical: false
       static_covariates: false
+
+  - name: lag-llama
+    family: lag_llama
+    source:
+      type: huggingface
+      repo_id: time-series-foundation-models/Lag-Llama
+      revision: main
+    license:
+      type: apache-2.0
+      needs_acceptance: false
+    metadata:
+      implementation: lag_llama
+      default_context_length: 1024
+      default_num_samples: 100
+      default_batch_size: 32
+      checkpoint_filename: lag-llama.ckpt
+    capabilities:
+      past_covariates_numeric: false
+      past_covariates_categorical: false
+      future_covariates_numeric: false
+      future_covariates_categorical: false
+      static_covariates: false
+
+  - name: patchtst
+    family: patchtst
+    source:
+      type: huggingface
+      repo_id: ibm-granite/granite-timeseries-patchtst
+      revision: main
+    license:
+      type: apache-2.0
+      needs_acceptance: false
+    metadata:
+      implementation: patchtst
+      status: phase2_inference
+      support_level: baseline
+      default_context_length: 512
+      install_extra: runner_patchtst
+      install_command: python -m pip install -e ".[dev,runner_patchtst]"
+      notes: PatchTST runner supports canonical point forecasts (single/multi series) with optional quantiles when the backend exposes them; covariates are currently ignored.
+    capabilities:
+      past_covariates_numeric: false
+      past_covariates_categorical: false
+      future_covariates_numeric: false
+      future_covariates_categorical: false
+      static_covariates: false
+
+
+  - name: tide
+    family: tide
+    source:
+      type: huggingface
+      repo_id: unit8co/tide
+      revision: main
+    license:
+      type: apache-2.0
+      needs_acceptance: false
+    metadata:
+      implementation: tide
+      status: phase1_placeholder
+      support_level: planned
+      install_extra: runner_tide
+      install_command: python -m pip install -e ".[dev,runner_tide]"
+      notes: TiDE integration is scaffolded in phase-1 only. Runner validates requests and returns actionable DEPENDENCY_MISSING or NOT_IMPLEMENTED responses until inference support lands.
+    capabilities:
+      past_covariates_numeric: true
+      past_covariates_categorical: false
+      future_covariates_numeric: true
+      future_covariates_categorical: false
+      static_covariates: true

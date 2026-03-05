@@ -50,6 +50,9 @@ tollama-runner-timesfm = "tollama.runners.timesfm_runner.main:main"
 tollama-runner-uni2ts = "tollama.runners.uni2ts_runner.main:main"
 tollama-runner-sundial = "tollama.runners.sundial_runner.main:main"
 tollama-runner-toto = "tollama.runners.toto_runner.main:main"
+tollama-runner-lag-llama = "tollama.runners.lag_llama_runner.main:main"
+tollama-runner-patchtst = "tollama.runners.patchtst_runner.main:main"
+tollama-runner-tide = "tollama.runners.tide_runner.main:main"
 tollama-mcp = "tollama.mcp.__main__:main"
 tollama-dashboard = "tollama.tui.app:main"
 
@@ -111,6 +114,22 @@ runner_toto = [
   "torch>=2.5",
   "numpy>=1.26,<3.0",
   "pandas>=2.0,<3.0",
+]
+runner_lag_llama = [
+  "lag-llama @ git+https://github.com/time-series-foundation-models/lag-llama.git",
+  "gluonts>=0.14.0,<0.16.0",
+  "lightning>=2.0,<2.2",
+  "huggingface_hub>=0.20,<1.0",
+  "numpy>=1.26,<3.0",
+  "pandas>=2.0,<3.0",
+  "wandb==0.16.6",
+]
+runner_patchtst = [
+  "transformers>=4.40.1,<5.0",
+]
+runner_tide = [
+  "u8darts>=0.30.0",
+  "torch>=2.0",
 ]
 tui = [
   "textual>=0.47,<1.0",
