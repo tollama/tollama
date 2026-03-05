@@ -379,7 +379,7 @@ def test_missing_patchtst_runner_command_returns_install_hint(monkeypatch, tmp_p
 
 def test_runner_manager_list_families_includes_expected_defaults() -> None:
     manager = RunnerManager()
-    assert manager.list_families() == ["mock", "torch", "timesfm", "uni2ts", "sundial", "toto", "lag_llama", "patchtst"]
+    assert manager.list_families() == ["mock", "torch", "timesfm", "uni2ts", "sundial", "toto", "lag_llama", "patchtst", "tide"]
 
 
 def test_runner_manager_get_all_statuses_does_not_start_missing_supervisors(monkeypatch) -> None:
@@ -415,7 +415,7 @@ def test_runner_manager_get_all_statuses_does_not_start_missing_supervisors(monk
     by_family = {item["family"]: item for item in statuses}
 
     assert fake.calls == 1
-    assert set(by_family) == {"mock", "torch", "timesfm", "uni2ts", "sundial", "toto", "lag_llama", "patchtst"}
+    assert set(by_family) == {"mock", "torch", "timesfm", "uni2ts", "sundial", "toto", "lag_llama", "patchtst", "tide"}
     assert by_family["mock"]["running"] is True
     assert by_family["torch"]["command"] == [
         sys.executable,
@@ -453,6 +453,12 @@ def test_runner_manager_get_all_statuses_does_not_start_missing_supervisors(monk
         "tollama.runners.patchtst_runner.main",
     ]
     assert by_family["patchtst"]["running"] is False
+    assert by_family["tide"]["command"] == [
+        sys.executable,
+        "-m",
+        "tollama.runners.tide_runner.main",
+    ]
+    assert by_family["tide"]["running"] is False
 
 
 def test_runner_manager_reports_lag_llama_default_command(monkeypatch) -> None:

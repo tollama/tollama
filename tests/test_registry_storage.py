@@ -30,6 +30,7 @@ def test_registry_loads_required_model_specs() -> None:
         "lag-llama",
         "granite-ttm-r2",
         "patchtst",
+        "tide",
     } <= set(registry)
 
     mock = registry["mock"]
@@ -133,6 +134,21 @@ def test_registry_loads_required_model_specs() -> None:
         "install_extra": "runner_patchtst",
         "install_command": 'python -m pip install -e ".[dev,runner_patchtst]"',
         "notes": "PatchTST runner supports canonical point forecasts (single/multi series) with optional quantiles when the backend exposes them; covariates are currently ignored.",
+    }
+
+
+
+    tide = registry["tide"]
+    assert tide.family == "tide"
+    assert tide.source.repo_id == "unit8co/tide"
+    assert tide.source.revision == "main"
+    assert tide.metadata == {
+        "implementation": "tide",
+        "status": "phase1_placeholder",
+        "support_level": "planned",
+        "install_extra": "runner_tide",
+        "install_command": 'python -m pip install -e ".[dev,runner_tide]"',
+        "notes": "TiDE integration is scaffolded in phase-1 only. Runner validates requests and returns actionable DEPENDENCY_MISSING or NOT_IMPLEMENTED responses until inference support lands.",
     }
 
     lag_llama = registry["lag-llama"]

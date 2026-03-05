@@ -2213,7 +2213,7 @@ def runtime_list(
 def runtime_install(
     family: str = typer.Argument(
         None,
-        help="Runner family to install (torch, timesfm, uni2ts, sundial, toto, lag_llama, patchtst).",
+        help="Runner family to install (torch, timesfm, uni2ts, sundial, toto, lag_llama, patchtst, tide).",
     ),
     all_families: bool = typer.Option(False, "--all", help="Install all runner families."),
     reinstall: bool = typer.Option(
@@ -2248,7 +2248,7 @@ def runtime_install(
 def runtime_remove(
     family: str = typer.Argument(
         None,
-        help="Runner family to remove (torch, timesfm, uni2ts, sundial, toto, lag_llama, patchtst).",
+        help="Runner family to remove (torch, timesfm, uni2ts, sundial, toto, lag_llama, patchtst, tide).",
     ),
     all_families: bool = typer.Option(False, "--all", help="Remove all runner runtimes."),
 ) -> None:

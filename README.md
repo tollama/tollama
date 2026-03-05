@@ -76,6 +76,7 @@ AI agents can **invoke TSFMs as tools the moment they need a forecast.**
 | Toto Open Base 1.0 | Datadog | Past only |
 | Lag-Llama | TSFM Community | Target only |
 | PatchTST (Phase-2 baseline) | IBM Granite | Target-only point forecast (quantiles optional) |
+| TiDE (Phase-1 placeholder) | Unit8 | Planned covariate-aware runner (gated placeholder) |
 
 ## Overview Architecture
 
@@ -91,7 +92,7 @@ AI agents can **invoke TSFMs as tools the moment they need a forecast.**
 ├──────┬──────┬──────┬──────┬──────┬──────┬──────────────┤
 │      │ stdio JSON-lines protocol      │              │
 │      ▼      ▼      ▼      ▼      ▼      ▼              │
-│ torch timesfm uni2ts sundial toto lag_llama patchtst mock │
+│ torch timesfm uni2ts sundial toto lag_llama patchtst tide mock │
 │   (Chronos, Granite, Lag-Llama)                        │
 │   Independent venv per family — zero dependency clash   │
 └────────────────────────────────────────────────────────┘

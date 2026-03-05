@@ -184,3 +184,27 @@ models:
       future_covariates_numeric: false
       future_covariates_categorical: false
       static_covariates: false
+
+
+  - name: tide
+    family: tide
+    source:
+      type: huggingface
+      repo_id: unit8co/tide
+      revision: main
+    license:
+      type: apache-2.0
+      needs_acceptance: false
+    metadata:
+      implementation: tide
+      status: phase1_placeholder
+      support_level: planned
+      install_extra: runner_tide
+      install_command: python -m pip install -e ".[dev,runner_tide]"
+      notes: TiDE integration is scaffolded in phase-1 only. Runner validates requests and returns actionable DEPENDENCY_MISSING or NOT_IMPLEMENTED responses until inference support lands.
+    capabilities:
+      past_covariates_numeric: true
+      past_covariates_categorical: false
+      future_covariates_numeric: true
+      future_covariates_categorical: false
+      static_covariates: true
