@@ -1,9 +1,9 @@
-"""PatchTST runner process over stdio JSON-RPC (Phase-1 placeholder)."""
+"""PatchTST runner process over stdio JSON-RPC."""
 
 from __future__ import annotations
 
-import importlib
 import sys
+import time
 from collections.abc import Mapping
 from typing import Any, TextIO
 
@@ -19,16 +19,18 @@ from tollama.core.protocol import (
     validate_request,
 )
 from tollama.core.schemas import ForecastRequest
+from tollama.runners.runtime_telemetry import enrich_forecast_response
+
+from .adapter import PatchTSTAdapter
+from .errors import AdapterInputError, DependencyMissingError, UnsupportedModelError
 
 RUNNER_NAME = "tollama-patchtst"
-RUNNER_VERSION = "0.1.0"
+RUNNER_VERSION = "0.2.0"
 UNKNOWN_REQUEST_ID = "unknown"
-CAPABILITIES = ("hello", "forecast")
+CAPABILITIES = ("hello", "forecast", "unload")
 _FORECAST_REQUEST_FIELDS = frozenset(
     {"model", "horizon", "quantiles", "series", "options", "parameters"},
 )
-_REQUIRED_DEPENDENCIES = ("transformers",)
-_INSTALL_HINT = 'pip install -e ".[dev,runner_patchtst]"'
 
 
 def _extract_request_id(payload: Mapping[str, Any] | None) -> str:
@@ -51,14 +53,28 @@ def _error_response(
     )
 
 
-def _missing_dependencies() -> list[str]:
-    missing: list[str] = []
-    for module_name in _REQUIRED_DEPENDENCIES:
-        try:
-            importlib.import_module(module_name)
-        except Exception:  # noqa: BLE001
-            missing.append(module_name)
-    return missing
+def _optional_nonempty_str(params: Mapping[str, Any], key: str) -> str | None:
+    value = params.get(key)
+    if value is None:
+        return None
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"{key} must be a non-empty string when provided")
+    return value.strip()
+
+
+def _optional_string_key_mapping(params: Mapping[str, Any], key: str) -> dict[str, Any] | None:
+    value = params.get(key)
+    if value is None:
+        return None
+    if not isinstance(value, Mapping):
+        raise ValueError(f"{key} must be an object when provided")
+
+    normalized: dict[str, Any] = {}
+    for raw_key, raw_value in value.items():
+        if not isinstance(raw_key, str):
+            raise ValueError(f"{key} keys must be strings")
+        normalized[raw_key] = raw_value
+    return normalized
 
 
 def _handle_hello(request: ProtocolRequest) -> ProtocolResponse:
@@ -69,17 +85,40 @@ def _handle_hello(request: ProtocolRequest) -> ProtocolResponse:
             "version": RUNNER_VERSION,
             "capabilities": list(CAPABILITIES),
             "supported_families": ["patchtst"],
-            "status": "phase1_placeholder",
+            "status": "phase2_inference",
         },
     )
 
 
-def _handle_forecast(request: ProtocolRequest) -> ProtocolResponse:
+def _handle_unload(request: ProtocolRequest, adapter: PatchTSTAdapter) -> ProtocolResponse:
+    model_name = request.params.get("model")
+    if model_name is not None and (not isinstance(model_name, str) or not model_name):
+        return _error_response(
+            request.id,
+            code=-32602,
+            message="invalid params",
+            data={"details": "model must be a non-empty string when provided"},
+        )
+    adapter.unload(model_name if isinstance(model_name, str) else None)
+    return ProtocolResponse(
+        id=request.id,
+        result={"unloaded": True, "model": model_name},
+    )
+
+
+def _handle_forecast(request: ProtocolRequest, adapter: PatchTSTAdapter) -> ProtocolResponse:
     canonical_params = {
         key: value for key, value in request.params.items() if key in _FORECAST_REQUEST_FIELDS
     }
     try:
-        ForecastRequest.model_validate(canonical_params)
+        model_local_dir = _optional_nonempty_str(request.params, "model_local_dir")
+        model_source = _optional_string_key_mapping(request.params, "model_source")
+        model_metadata = _optional_string_key_mapping(request.params, "model_metadata")
+    except ValueError as exc:
+        return _error_response(request.id, code="BAD_REQUEST", message=str(exc))
+
+    try:
+        forecast_request = ForecastRequest.model_validate(canonical_params)
     except ValidationError as exc:
         return _error_response(
             request.id,
@@ -88,34 +127,33 @@ def _handle_forecast(request: ProtocolRequest) -> ProtocolResponse:
             data={"details": str(exc)},
         )
 
-    missing = _missing_dependencies()
-    if missing:
-        joined = ", ".join(sorted(missing))
-        return _error_response(
-            request.id,
-            code="DEPENDENCY_MISSING",
-            message=(
-                "missing optional patchtst runner dependencies "
-                f"({joined}); install them with `{_INSTALL_HINT}`"
-            ),
-            data={"missing": missing, "install": _INSTALL_HINT},
+    try:
+        started_at = time.perf_counter()
+        response = adapter.forecast(
+            forecast_request,
+            model_local_dir=model_local_dir,
+            model_source=model_source,
+            model_metadata=model_metadata,
         )
+        inference_ms = (time.perf_counter() - started_at) * 1000.0
+    except DependencyMissingError as exc:
+        return _error_response(request.id, code="DEPENDENCY_MISSING", message=str(exc))
+    except UnsupportedModelError as exc:
+        return _error_response(request.id, code="MODEL_UNSUPPORTED", message=str(exc))
+    except AdapterInputError as exc:
+        return _error_response(request.id, code="BAD_REQUEST", message=str(exc))
+    except ValueError as exc:
+        return _error_response(request.id, code="FORECAST_ERROR", message=str(exc))
 
-    return _error_response(
-        request.id,
-        code="NOT_IMPLEMENTED",
-        message=(
-            "PatchTST Phase-1 baseline is registered and routable, "
-            "but full inference is not implemented yet."
-        ),
-        data={
-            "status": "phase1_placeholder",
-            "next_step": "Implement a PatchTST adapter and wire forecast execution.",
-        },
+    response = enrich_forecast_response(
+        response=response,
+        runner_name=RUNNER_NAME,
+        inference_ms=inference_ms,
     )
+    return ProtocolResponse(id=request.id, result=response.model_dump(mode="json", exclude_none=True))
 
 
-def handle_request_line(line: str | bytes) -> ProtocolResponse:
+def handle_request_line(line: str | bytes, adapter: PatchTSTAdapter) -> ProtocolResponse:
     payload: Mapping[str, Any] | None = None
     request_id = UNKNOWN_REQUEST_ID
 
@@ -133,9 +171,10 @@ def handle_request_line(line: str | bytes) -> ProtocolResponse:
 
     if request.method == "hello":
         return _handle_hello(request)
-
     if request.method == "forecast":
-        return _handle_forecast(request)
+        return _handle_forecast(request, adapter)
+    if request.method == "unload":
+        return _handle_unload(request, adapter)
 
     return _error_response(
         request.id,
@@ -146,10 +185,11 @@ def handle_request_line(line: str | bytes) -> ProtocolResponse:
 
 
 def serve(stdin: TextIO = sys.stdin, stdout: TextIO = sys.stdout) -> int:
+    adapter = PatchTSTAdapter()
     for line in stdin:
         if not line.strip():
             continue
-        response = handle_request_line(line)
+        response = handle_request_line(line, adapter)
         stdout.write(encode_line(response))
         stdout.flush()
     return 0

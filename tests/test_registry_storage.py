@@ -127,11 +127,12 @@ def test_registry_loads_required_model_specs() -> None:
     assert patchtst.capabilities.past_covariates_numeric is False
     assert patchtst.metadata == {
         "implementation": "patchtst",
-        "status": "phase1_placeholder",
+        "status": "phase2_inference",
         "support_level": "baseline",
+        "default_context_length": 512,
         "install_extra": "runner_patchtst",
         "install_command": 'python -m pip install -e ".[dev,runner_patchtst]"',
-        "notes": "Full PatchTST inference is not wired yet; runner currently returns guided placeholder errors.",
+        "notes": "PatchTST runner supports canonical point forecasts (single/multi series) with optional quantiles when the backend exposes them; covariates are currently ignored.",
     }
 
     lag_llama = registry["lag-llama"]

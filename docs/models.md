@@ -343,24 +343,26 @@ curl -s http://localhost:11435/api/forecast \
 ```
 
 
-## PatchTST Forecasting (Phase-1 baseline, placeholder runner family)
+## PatchTST Forecasting (Phase-2 baseline)
 
-PatchTST is integrated for **discoverability and routing** in this phase:
+PatchTST is integrated for **real forecast execution** via the dedicated `patchtst` runner family.
 
 - model name: `patchtst`
 - runner family: `patchtst`
 - install extra: `runner_patchtst`
 - current runtime behavior:
   - returns `DEPENDENCY_MISSING` when optional dependencies are absent
-  - returns `NOT_IMPLEMENTED` when dependencies are present (full inference adapter pending)
+  - supports canonical point forecasts for single/multi-series requests
+  - supports quantiles when exposed by the runtime backend
+  - currently ignores covariates/static features (target-only history)
 
 ```bash
-# install placeholder PatchTST runner dependencies
+# install PatchTST runner dependencies
 python -m pip install -e ".[dev,runner_patchtst]"
 
 # pull registry entry
 tollama pull patchtst
 
-# run (expected Phase-1 placeholder error until adapter lands)
+# run forecast
 tollama run patchtst --input examples/request.json --no-stream
 ```

@@ -1,1 +1,1 @@
-"""PatchTST runner package (Phase-1 placeholder baseline)."""
+"""PatchTST runner package with Phase-2 inference adapter."""

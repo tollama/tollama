@@ -40,7 +40,7 @@ Additional docs:
 | `moirai-2.0-R-small` | `uni2ts` | `Salesforce/moirai-2.0-R-small` | `main` | `cc-by-nc-4.0` | Yes | `runner_uni2ts` |
 | `sundial-base-128m` | `sundial` | `thuml/sundial-base-128m` | `main` | `apache-2.0` | No | `runner_sundial` |
 | `toto-open-base-1.0` | `toto` | `Datadog/Toto-Open-Base-1.0` | `main` | `apache-2.0` | No | `runner_toto` |
-| `patchtst` | `patchtst` | `ibm-granite/granite-timeseries-patchtst` | `main` | `apache-2.0` | No | `runner_patchtst` (Phase-1 placeholder) |
+| `patchtst` | `patchtst` | `ibm-granite/granite-timeseries-patchtst` | `main` | `apache-2.0` | No | `runner_patchtst` |
 
 > [!NOTE]
 > `timesfm` models may take several minutes to compile on the first run. The default timeout has been increased to 5 minutes to accommodate this, but slower machines may require even more time.
@@ -49,7 +49,7 @@ Sundial is target-only in the current runner; do not include covariates in Sundi
 Toto supports target + past numeric covariates; known-future/static/categorical covariates are unsupported.
 
 > [!IMPORTANT]
-> `patchtst` is currently a **Phase-1 baseline integration**: it is discoverable/pullable and routed to a dedicated runner family, but forecast inference returns guided `NOT_IMPLEMENTED` until a full adapter is wired. If dependencies are missing, the runner returns `DEPENDENCY_MISSING` with the install command `python -m pip install -e ".[dev,runner_patchtst]"`.
+> `patchtst` is a **Phase-2 baseline integration**: it is discoverable/pullable and now executes canonical target-only forecasts via the dedicated runner family. Quantiles are returned when the backend exposes them; otherwise the runner returns mean-only forecasts with a warning. If dependencies are missing, the runner returns `DEPENDENCY_MISSING` with the install command `python -m pip install -e ".[dev,runner_patchtst]"`.
 
 ## Requirements
 
@@ -88,7 +88,7 @@ Optional extras:
 | `runner_uni2ts` | Uni2TS/Moirai runner dependencies | `uni2ts`, `numpy`, `pandas`, `huggingface_hub`, `gluonts` |
 | `runner_sundial` | Sundial runner dependencies | `transformers`, `torch`, `numpy`, `pandas`, `huggingface_hub` |
 | `runner_toto` | Toto runner dependencies | `toto-ts`, `torch`, `numpy`, `pandas` |
-| `runner_patchtst` | PatchTST placeholder runner dependency gate | `transformers` |
+| `runner_patchtst` | PatchTST runner dependencies | `transformers` |
 
 ## One-Time Environment Setup (Default: Per-Family Runtime Isolation)
 
