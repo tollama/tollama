@@ -355,6 +355,15 @@ PatchTST is integrated for **real forecast execution** via the dedicated `patcht
   - supports canonical point forecasts for single/multi-series requests
   - supports quantiles when exposed by the runtime backend
   - currently ignores covariates/static features (target-only history)
+  - validates frequency/timestamp generation and surfaces malformed input as `BAD_REQUEST`
+  - rejects non-finite targets (`NaN`, `inf`) before model invocation
+- known limitations:
+  - all outputs are interpreted as a single target channel; multi-target patch layouts are not supported
+  - if backend quantile tensors are unavailable/incomplete, the runner returns mean-only forecasts with a warning
+- tuning guidance:
+  - `options.context_length` controls history window size (default: model metadata or `512`)
+  - larger context can improve seasonality capture but increases memory/latency linearly
+  - start with `context_length` near 1-3 seasonal cycles and reduce if inference becomes slow
 
 ```bash
 # install PatchTST runner dependencies

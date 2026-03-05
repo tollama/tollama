@@ -49,7 +49,9 @@ Sundial is target-only in the current runner; do not include covariates in Sundi
 Toto supports target + past numeric covariates; known-future/static/categorical covariates are unsupported.
 
 > [!IMPORTANT]
-> `patchtst` is a **Phase-2 baseline integration**: it is discoverable/pullable and now executes canonical target-only forecasts via the dedicated runner family. Quantiles are returned when the backend exposes them; otherwise the runner returns mean-only forecasts with a warning. If dependencies are missing, the runner returns `DEPENDENCY_MISSING` with the install command `python -m pip install -e ".[dev,runner_patchtst]"`.
+> `patchtst` is a **Phase-2 baseline integration**: it is discoverable/pullable and executes canonical target-only forecasts via the dedicated runner family. Quantiles are returned when the backend exposes them; otherwise the runner returns mean-only forecasts with a warning. Malformed frequency/timestamp inputs and non-finite target values are rejected as `BAD_REQUEST`. If dependencies are missing, the runner returns `DEPENDENCY_MISSING` with the install command `python -m pip install -e ".[dev,runner_patchtst]"`.
+>
+> Tuning tip: adjust `options.context_length` (default `512` or model metadata override). Larger windows can improve seasonal fit but increase memory + latency.
 
 ## Requirements
 

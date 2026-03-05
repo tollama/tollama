@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+from contextlib import nullcontext
 from typing import Any
+
+import pytest
 
 from tollama.core.schemas import ForecastRequest
 from tollama.runners.patchtst_runner.adapter import PatchTSTAdapter
@@ -19,6 +22,10 @@ class _FakeTorch:
     def tensor(values: list[list[float]], dtype: Any = None) -> _FakeTensor:
         del dtype
         return _FakeTensor(values)
+
+    @staticmethod
+    def no_grad() -> Any:
+        return nullcontext()
 
 
 class _FakeDate:
@@ -110,6 +117,11 @@ def test_patchtst_adapter_forecast_smoke_multi_series(monkeypatch) -> None:
     assert response.warnings is not None
     assert "ignores covariates" in response.warnings[0]
 
+    model = next(iter(adapter._model_cache.values()))
+    assert isinstance(model, _FakeModel)
+    first_call = model.calls[0]
+    assert first_call["past_values"].values == [[2.0, 3.0]]
+
 
 def test_patchtst_adapter_rejects_invalid_frequency(monkeypatch) -> None:
     adapter = PatchTSTAdapter()
@@ -121,8 +133,34 @@ def test_patchtst_adapter_rejects_invalid_frequency(monkeypatch) -> None:
     req = _request()
     req.series[0].freq = "BAD"
 
-    try:
+    with pytest.raises(AdapterInputError, match="invalid frequency"):
         adapter.forecast(req)
-        raise AssertionError("expected AdapterInputError")
-    except AdapterInputError as exc:
-        assert "invalid frequency" in str(exc)
+
+
+def test_patchtst_adapter_allows_whitespace_frequency(monkeypatch) -> None:
+    adapter = PatchTSTAdapter()
+    monkeypatch.setattr(
+        adapter,
+        "_resolve_dependencies",
+        lambda: type("D", (), {"torch": _FakeTorch(), "pandas": _FakePandas(), "model_loader_cls": _FakeModel})(),
+    )
+    req = _request()
+    req.series[0].freq = " D "
+    req.series[1].freq = "D"
+
+    response = adapter.forecast(req)
+    assert response.forecasts[0].start_timestamp.startswith("2025-01-")
+
+
+def test_patchtst_adapter_rejects_non_finite_target(monkeypatch) -> None:
+    adapter = PatchTSTAdapter()
+    monkeypatch.setattr(
+        adapter,
+        "_resolve_dependencies",
+        lambda: type("D", (), {"torch": _FakeTorch(), "pandas": _FakePandas(), "model_loader_cls": _FakeModel})(),
+    )
+    req = _request()
+    req.series[0].target = [1.0, float("nan"), 3.0]
+
+    with pytest.raises(AdapterInputError, match="non-finite"):
+        adapter.forecast(req)

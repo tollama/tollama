@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime
+import math
 from pathlib import Path
 from typing import Any
 
@@ -213,7 +214,7 @@ def _forecast_one_series(
 
     _validate_frequency(series.freq, pandas_module)
 
-    history = [float(value) for value in series.target]
+    history = _normalize_target_history(series)
     window = history[-context_length:] if context_length < len(history) else history
     tensor = torch_module.tensor([window], dtype=torch_module.float32)
 
@@ -221,13 +222,16 @@ def _forecast_one_series(
         model=model,
         tensor=tensor,
         horizon=horizon,
+        torch_module=torch_module,
     )
     mean = _extract_mean(outputs, horizon=horizon)
     quantiles = _extract_quantiles(outputs, requested_quantiles=requested_quantiles, horizon=horizon)
+    if quantiles is not None:
+        _validate_quantile_payload(quantiles, series_id=series.id)
     return mean, quantiles
 
 
-def _invoke_forecast(*, model: Any, tensor: Any, horizon: int) -> Any:
+def _invoke_forecast(*, model: Any, tensor: Any, horizon: int, torch_module: Any) -> Any:
     call_variants = (
         {"past_values": tensor, "prediction_length": horizon},
         {"past_values": tensor},
@@ -236,23 +240,24 @@ def _invoke_forecast(*, model: Any, tensor: Any, horizon: int) -> Any:
         {"inputs": tensor},
     )
 
-    generate = getattr(model, "generate", None)
-    if callable(generate):
+    with _torch_no_grad(torch_module):
+        generate = getattr(model, "generate", None)
+        if callable(generate):
+            for kwargs in call_variants:
+                try:
+                    return generate(**kwargs)
+                except TypeError:
+                    continue
+                except Exception as exc:  # noqa: BLE001
+                    raise AdapterInputError(f"PatchTST generate failed: {exc}") from exc
+
         for kwargs in call_variants:
             try:
-                return generate(**kwargs)
+                return model(**kwargs)
             except TypeError:
                 continue
             except Exception as exc:  # noqa: BLE001
-                raise AdapterInputError(f"PatchTST generate failed: {exc}") from exc
-
-    for kwargs in call_variants:
-        try:
-            return model(**kwargs)
-        except TypeError:
-            continue
-        except Exception as exc:  # noqa: BLE001
-            raise AdapterInputError(f"PatchTST forward pass failed: {exc}") from exc
+                raise AdapterInputError(f"PatchTST forward pass failed: {exc}") from exc
 
     raise AdapterInputError("PatchTST model signature is incompatible with runner adapter")
 
@@ -325,6 +330,23 @@ def _extract_quantiles(
     return None
 
 
+def _normalize_target_history(series: SeriesInput) -> list[float]:
+    normalized: list[float] = []
+    for index, raw in enumerate(series.target):
+        try:
+            value = float(raw)
+        except (TypeError, ValueError) as exc:
+            raise AdapterInputError(
+                f"series {series.id!r} target contains non-numeric value at index {index}: {raw!r}",
+            ) from exc
+        if not math.isfinite(value):
+            raise AdapterInputError(
+                f"series {series.id!r} target contains non-finite value at index {index}: {raw!r}",
+            )
+        normalized.append(value)
+    return normalized
+
+
 def _flatten_forecast_vector(value: Any) -> list[float]:
     if value is None:
         return []
@@ -348,19 +370,22 @@ def _flatten_forecast_vector(value: Any) -> list[float]:
     normalized: list[float] = []
     for item in value:
         if isinstance(item, bool):
-            normalized.append(float(int(item)))
+            parsed = float(int(item))
         elif isinstance(item, (int, float)):
-            normalized.append(float(item))
+            parsed = float(item)
         elif hasattr(item, "item"):
             scalar = item.item()
             if isinstance(scalar, bool):
-                normalized.append(float(int(scalar)))
+                parsed = float(int(scalar))
             elif isinstance(scalar, (int, float)):
-                normalized.append(float(scalar))
+                parsed = float(scalar)
             else:
                 return []
         else:
             return []
+        if not math.isfinite(parsed):
+            return []
+        normalized.append(parsed)
     return normalized
 
 
@@ -378,18 +403,50 @@ def _extract_attr_or_key(payload: Any, key: str) -> Any | None:
     return getattr(payload, key, None)
 
 
+def _validate_quantile_payload(payload: dict[str, list[float]], *, series_id: str) -> None:
+    for key, values in payload.items():
+        if any(not math.isfinite(value) for value in values):
+            raise AdapterInputError(
+                f"quantile {key!r} for series {series_id!r} contains non-finite values",
+            )
+
+
+def _torch_no_grad(torch_module: Any) -> Any:
+    context = getattr(torch_module, "no_grad", None)
+    if callable(context):
+        return context()
+
+    class _NullContext:
+        def __enter__(self) -> None:
+            return None
+
+        def __exit__(self, exc_type: Any, exc: Any, tb: Any) -> bool:
+            return False
+
+    return _NullContext()
+
+
 def _future_start_timestamp(*, series: SeriesInput, horizon: int, pandas_module: Any) -> str:
-    _validate_frequency(series.freq, pandas_module)
-    parsed = pandas_module.to_datetime([series.timestamps[-1]], utc=True, errors="raise")
-    generated = pandas_module.date_range(start=parsed[0], periods=horizon + 1, freq=series.freq)
+    normalized_freq = _validate_frequency(series.freq, pandas_module)
+    try:
+        parsed = pandas_module.to_datetime([series.timestamps[-1]], utc=True, errors="raise")
+        generated = pandas_module.date_range(start=parsed[0], periods=horizon + 1, freq=normalized_freq)
+    except Exception as exc:  # noqa: BLE001
+        raise AdapterInputError(
+            f"failed to generate future timestamps for series {series.id!r}: {exc}",
+        ) from exc
     return _to_iso_timestamp(generated[1])
 
 
-def _validate_frequency(freq: str, pandas_module: Any) -> None:
+def _validate_frequency(freq: str, pandas_module: Any) -> str:
+    normalized = freq.strip()
+    if not normalized:
+        raise AdapterInputError("frequency must be a non-empty string")
     try:
-        pandas_module.date_range(start="2025-01-01", periods=2, freq=freq)
-    except ValueError as exc:
+        pandas_module.date_range(start="2025-01-01", periods=2, freq=normalized)
+    except Exception as exc:  # noqa: BLE001
         raise AdapterInputError(f"invalid frequency {freq!r} for patchtst forecast") from exc
+    return normalized
 
 
 def build_covariate_warnings(series_list: list[SeriesInput]) -> list[str]:

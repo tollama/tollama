@@ -1,13 +1,69 @@
-"""Unit tests for TiDE phase-1 placeholder runner."""
+"""Unit tests for TiDE runner protocol behavior."""
 
 from __future__ import annotations
 
 import json
+from typing import Any
 
-from tollama.runners.tide_runner import main as tide_main
+from tollama.core.schemas import ForecastResponse, SeriesForecast
+from tollama.runners.tide_runner.errors import DependencyMissingError
+from tollama.runners.tide_runner.main import handle_request_line
 
 
-def _valid_forecast_params() -> dict[str, object]:
+class _CapturingAdapter:
+    def __init__(self) -> None:
+        self.forecast_calls: list[dict[str, Any]] = []
+
+    def unload(self, model_name: str | None = None) -> None:
+        del model_name
+
+    def forecast(
+        self,
+        request,
+        *,
+        model_local_dir: str | None = None,
+        model_source: dict[str, object] | None = None,
+        model_metadata: dict[str, object] | None = None,
+    ) -> ForecastResponse:
+        self.forecast_calls.append(
+            {
+                "request": request,
+                "model_local_dir": model_local_dir,
+                "model_source": model_source,
+                "model_metadata": model_metadata,
+            },
+        )
+        return ForecastResponse(
+            model=request.model,
+            forecasts=[
+                SeriesForecast(
+                    id=request.series[0].id,
+                    freq=request.series[0].freq,
+                    start_timestamp="2025-01-03T00:00:00Z",
+                    mean=[2.0, 2.0],
+                ),
+            ],
+            usage={"runner": "tollama-tide"},
+        )
+
+
+class _MissingDependencyAdapter(_CapturingAdapter):
+    def forecast(
+        self,
+        request,
+        *,
+        model_local_dir: str | None = None,
+        model_source: dict[str, object] | None = None,
+        model_metadata: dict[str, object] | None = None,
+    ) -> ForecastResponse:
+        del request, model_local_dir, model_source, model_metadata
+        raise DependencyMissingError(
+            "missing optional TiDE runner dependencies (darts); "
+            "install them with `pip install -e \".[dev,runner_tide]\"`",
+        )
+
+
+def _valid_forecast_params() -> dict[str, Any]:
     return {
         "model": "tide",
         "horizon": 2,
@@ -25,29 +81,40 @@ def _valid_forecast_params() -> dict[str, object]:
 
 
 def test_tide_runner_hello_reports_supported_family_and_status() -> None:
-    response = tide_main.handle_request_line(
+    response = handle_request_line(
         json.dumps({"id": "req-1", "method": "hello", "params": {}}),
+        _CapturingAdapter(),
     )
     payload = response.model_dump(mode="json", exclude_none=True)
     assert payload["result"]["supported_families"] == ["tide"]
-    assert payload["result"]["status"] == "phase1_placeholder"
+    assert payload["result"]["status"] == "phase2_inference"
 
 
-def test_tide_runner_forecast_returns_dependency_missing_when_darts_absent(monkeypatch) -> None:
-    monkeypatch.setattr(tide_main, "_has_tide_dependencies", lambda: False)
-    response = tide_main.handle_request_line(
+def test_tide_runner_forecast_returns_dependency_missing_when_dependencies_absent() -> None:
+    response = handle_request_line(
         json.dumps({"id": "req-2", "method": "forecast", "params": _valid_forecast_params()}),
+        _MissingDependencyAdapter(),
     )
     payload = response.model_dump(mode="json", exclude_none=True)
     assert payload["error"]["code"] == "DEPENDENCY_MISSING"
     assert "runner_tide" in payload["error"]["message"]
 
 
-def test_tide_runner_forecast_returns_not_implemented_when_darts_present(monkeypatch) -> None:
-    monkeypatch.setattr(tide_main, "_has_tide_dependencies", lambda: True)
-    response = tide_main.handle_request_line(
-        json.dumps({"id": "req-3", "method": "forecast", "params": _valid_forecast_params()}),
+def test_tide_runner_forecast_smoke_wires_request_and_response() -> None:
+    adapter = _CapturingAdapter()
+    params = _valid_forecast_params()
+    params["model_local_dir"] = " /tmp/tide "
+    params["model_source"] = {"repo_id": "unit8co/tide", "revision": "main"}
+    params["model_metadata"] = {"implementation": "tide"}
+
+    response = handle_request_line(
+        json.dumps({"id": "req-3", "method": "forecast", "params": params}),
+        adapter,
     )
     payload = response.model_dump(mode="json", exclude_none=True)
-    assert payload["error"]["code"] == "NOT_IMPLEMENTED"
-    assert "phase-1 placeholder" in payload["error"]["message"]
+    assert payload["result"]["model"] == "tide"
+    assert payload["result"]["forecasts"][0]["mean"] == [2.0, 2.0]
+
+    assert len(adapter.forecast_calls) == 1
+    call = adapter.forecast_calls[0]
+    assert call["model_local_dir"] == "/tmp/tide"
