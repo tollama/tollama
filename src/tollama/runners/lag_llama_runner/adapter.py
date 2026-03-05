@@ -231,7 +231,12 @@ class LagLlamaAdapter:
         try:
             predictor = create_predictor(batch_size=predictor_config.batch_size)
         except TypeError:
-            predictor = create_predictor()
+            try:
+                transformation = estimator.create_transformation()
+                module = estimator.create_lightning_module()
+                predictor = create_predictor(transformation, module)
+            except TypeError:
+                predictor = create_predictor()
 
         self._predictor_cache[key] = predictor
         return predictor
@@ -306,7 +311,36 @@ def create_lag_llama_estimator(
     context_length: int,
     num_samples: int,
 ) -> Any:
-    variants = (
+    checkpoint_hparams = load_checkpoint_hparams(ckpt_path)
+    model_kwargs = checkpoint_hparams.get("model_kwargs", {})
+
+    ckpt_context_length = _int_or_none(model_kwargs.get("context_length")) or _int_or_none(
+        checkpoint_hparams.get("context_length"),
+    )
+    resolved_context_length = ckpt_context_length or context_length
+
+    ckpt_max_context_length = _int_or_none(model_kwargs.get("max_context_length"))
+    resolved_max_context_length = max(context_length, ckpt_max_context_length or resolved_context_length)
+
+    architecture_overrides: dict[str, Any] = {
+        "context_length": resolved_context_length,
+        "max_context_length": resolved_max_context_length,
+        "input_size": _int_or_none(model_kwargs.get("input_size")),
+        "n_layer": _int_or_none(model_kwargs.get("n_layer")),
+        "n_embd_per_head": _int_or_none(model_kwargs.get("n_embd_per_head")),
+        "n_head": _int_or_none(model_kwargs.get("n_head")),
+        "scaling": _string_or_none(model_kwargs.get("scaling")),
+        "rope_scaling": model_kwargs.get("rope_scaling"),
+        "time_feat": model_kwargs.get("time_feat") if isinstance(model_kwargs.get("time_feat"), bool) else None,
+        "dropout": float(model_kwargs.get("dropout")) if isinstance(model_kwargs.get("dropout"), (int, float)) else None,
+        "lags_seq": list(model_kwargs.get("lags_seq"))
+        if isinstance(model_kwargs.get("lags_seq"), list)
+        and all(isinstance(item, str) for item in model_kwargs.get("lags_seq"))
+        else None,
+    }
+    architecture_overrides = {key: value for key, value in architecture_overrides.items() if value is not None}
+
+    base_variants = (
         {
             "ckpt_path": ckpt_path,
             "prediction_length": prediction_length,
@@ -325,7 +359,33 @@ def create_lag_llama_estimator(
             "context_length": context_length,
             "num_samples": num_samples,
         },
+        {
+            "ckpt_path": ckpt_path,
+            "prediction_length": prediction_length,
+            "context_length": context_length,
+            "num_parallel_samples": num_samples,
+        },
+        {
+            "ckpt_path": ckpt_path,
+            "prediction_length": prediction_length,
+            "max_context_length": context_length,
+            "num_parallel_samples": num_samples,
+        },
+        {
+            "checkpoint_path": ckpt_path,
+            "prediction_length": prediction_length,
+            "max_context_length": context_length,
+            "num_parallel_samples": num_samples,
+        },
+        {
+            "model_path": ckpt_path,
+            "prediction_length": prediction_length,
+            "max_context_length": context_length,
+            "num_parallel_samples": num_samples,
+        },
     )
+    variants = tuple({**kwargs, **architecture_overrides} for kwargs in base_variants)
+
     last_error: TypeError | None = None
     for kwargs in variants:
         try:
@@ -335,6 +395,23 @@ def create_lag_llama_estimator(
     raise AdapterInputError(
         "LagLlamaEstimator constructor signature is incompatible with tollama runner",
     ) from last_error
+
+
+def load_checkpoint_hparams(ckpt_path: str) -> dict[str, Any]:
+    try:
+        import torch
+    except ModuleNotFoundError:
+        return {}
+
+    try:
+        checkpoint = torch.load(ckpt_path, map_location="cpu")
+    except Exception:  # noqa: BLE001
+        return {}
+    if not isinstance(checkpoint, dict):
+        return {}
+
+    hyper_parameters = checkpoint.get("hyper_parameters")
+    return hyper_parameters if isinstance(hyper_parameters, dict) else {}
 
 
 def resolve_checkpoint_path(
@@ -374,6 +451,7 @@ def build_pandas_dataset(
     pandas_dataset_cls: Any,
 ) -> tuple[Any, list[SeriesInput]]:
     frames: dict[str, Any] = {}
+    dataset_freq: str | None = None
     for index, series in enumerate(series_list):
         if len(series.timestamps) != len(series.target):
             raise AdapterInputError(
@@ -382,15 +460,21 @@ def build_pandas_dataset(
         if len(series.target) < 2:
             raise AdapterInputError("each input series must include at least two target points")
 
+        if dataset_freq is None:
+            dataset_freq = series.freq
+        elif series.freq != dataset_freq:
+            raise AdapterInputError("all input series must use the same frequency for lag-llama")
+
         timestamps = pandas_module.to_datetime(series.timestamps, utc=True, errors="raise")
         frame = pandas_module.DataFrame(
             {"target": [float(value) for value in series.target]},
             index=timestamps,
+            dtype="float32",
         )
         key = _unique_column_name(series.id, index, frames)
         frames[key] = frame
 
-    return pandas_dataset_cls(frames, target="target"), list(series_list)
+    return pandas_dataset_cls(frames, target="target", freq=dataset_freq), list(series_list)
 
 
 def resolve_positive_int(*, option_value: Any, default_value: int, field_name: str) -> int:

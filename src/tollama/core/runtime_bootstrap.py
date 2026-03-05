@@ -32,13 +32,13 @@ logger = logging.getLogger(__name__)
 # Maps runner family names to the ``pyproject.toml`` optional-extra name that
 # carries the family's heavy dependencies.
 FAMILY_EXTRAS: dict[str, str] = {
-    "torch": "runner_torch",
-    "timesfm": "runner_timesfm",
-    "uni2ts": "runner_uni2ts",
-    "sundial": "runner_sundial",
-    "toto": "runner_toto",
-    "lag_llama": "runner_lag_llama",
-    "patchtst": "runner_patchtst",
+    "torch": "runner-torch",
+    "timesfm": "runner-timesfm",
+    "uni2ts": "runner-uni2ts",
+    "sundial": "runner-sundial",
+    "toto": "runner-toto",
+    "lag_llama": "runner-lag-llama",
+    "patchtst": "runner-patchtst",
 }
 
 # Families that require specific Python versions.
@@ -285,10 +285,16 @@ def _install_extras(python_path: Path, family: str) -> None:
 def _resolve_install_spec(extra: str) -> str:
     """Determine the pip install specifier for the given extra.
 
-    When running from an editable (development) install, returns the project
-    root directory with the extra: ``/path/to/tollama[runner_torch]``.
-    Otherwise falls back to ``tollama[runner_torch]``.
+    Preference order:
+    1) local source tree containing ``pyproject.toml`` (works even when the
+       currently-running tollama install is non-editable),
+    2) editable-install ``direct_url.json`` metadata,
+    3) published package name from PyPI.
     """
+    local_root = _resolve_local_project_root()
+    if local_root is not None:
+        return f"{local_root}[{extra}]"
+
     # Try to detect an editable / local install by inspecting our own package path.
     try:
         from importlib.metadata import distribution
@@ -306,6 +312,38 @@ def _resolve_install_spec(extra: str) -> str:
         pass
 
     return f"tollama[{extra}]"
+
+
+def _resolve_local_project_root() -> str | None:
+    """Return a local repo root when running from a source checkout."""
+
+    def _candidate_root(root: Path) -> str | None:
+        pyproject = root / "pyproject.toml"
+        if not pyproject.is_file():
+            return None
+        try:
+            content = pyproject.read_text(encoding="utf-8")
+        except OSError:
+            return None
+        if "name = \"tollama\"" in content:
+            return str(root)
+        return None
+
+    # Prefer the current working directory (or one of its parents). This lets
+    # local development checkouts work even when the active ``tollama`` import
+    # comes from a previously-installed wheel in a different environment.
+    cwd = Path.cwd().resolve()
+    for parent in (cwd, *cwd.parents):
+        resolved = _candidate_root(parent)
+        if resolved is not None:
+            return resolved
+
+    current = Path(__file__).resolve()
+    for parent in current.parents:
+        resolved = _candidate_root(parent)
+        if resolved is not None:
+            return resolved
+    return None
 
 
 def _write_runtime_state(family_dir: Path, family: str) -> None:
