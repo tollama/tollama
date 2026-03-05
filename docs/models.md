@@ -341,3 +341,26 @@ curl -s http://localhost:11435/api/forecast \
   -H 'content-type: application/json' \
   -d @examples/lag_llama_request.json
 ```
+
+
+## PatchTST Forecasting (Phase-1 baseline, placeholder runner family)
+
+PatchTST is integrated for **discoverability and routing** in this phase:
+
+- model name: `patchtst`
+- runner family: `patchtst`
+- install extra: `runner_patchtst`
+- current runtime behavior:
+  - returns `DEPENDENCY_MISSING` when optional dependencies are absent
+  - returns `NOT_IMPLEMENTED` when dependencies are present (full inference adapter pending)
+
+```bash
+# install placeholder PatchTST runner dependencies
+python -m pip install -e ".[dev,runner_patchtst]"
+
+# pull registry entry
+tollama pull patchtst
+
+# run (expected Phase-1 placeholder error until adapter lands)
+tollama run patchtst --input examples/request.json --no-stream
+```

@@ -38,6 +38,7 @@ FAMILY_EXTRAS: dict[str, str] = {
     "sundial": "runner_sundial",
     "toto": "runner_toto",
     "lag_llama": "runner_lag_llama",
+    "patchtst": "runner_patchtst",
 }
 
 # Families that require specific Python versions.
@@ -58,6 +59,7 @@ FAMILY_RUNNER_MODULES: dict[str, str] = {
     "sundial": "tollama.runners.sundial_runner.main",
     "toto": "tollama.runners.toto_runner.main",
     "lag_llama": "tollama.runners.lag_llama_runner.main",
+    "patchtst": "tollama.runners.patchtst_runner.main",
 }
 
 _STATE_FILENAME = "installed.json"

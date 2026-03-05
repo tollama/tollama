@@ -161,3 +161,25 @@ models:
       future_covariates_categorical: false
       static_covariates: false
 
+  - name: patchtst
+    family: patchtst
+    source:
+      type: huggingface
+      repo_id: ibm-granite/granite-timeseries-patchtst
+      revision: main
+    license:
+      type: apache-2.0
+      needs_acceptance: false
+    metadata:
+      implementation: patchtst
+      status: phase1_placeholder
+      support_level: baseline
+      install_extra: runner_patchtst
+      install_command: python -m pip install -e ".[dev,runner_patchtst]"
+      notes: Full PatchTST inference is not wired yet; runner currently returns guided placeholder errors.
+    capabilities:
+      past_covariates_numeric: false
+      past_covariates_categorical: false
+      future_covariates_numeric: false
+      future_covariates_categorical: false
+      static_covariates: false

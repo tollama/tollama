@@ -29,6 +29,7 @@ def test_registry_loads_required_model_specs() -> None:
         "toto-open-base-1.0",
         "lag-llama",
         "granite-ttm-r2",
+        "patchtst",
     } <= set(registry)
 
     mock = registry["mock"]
@@ -112,6 +113,25 @@ def test_registry_loads_required_model_specs() -> None:
         "default_num_samples": 256,
         "default_samples_per_batch": 256,
         "default_use_kv_cache": True,
+    }
+
+
+
+    patchtst = registry["patchtst"]
+    assert patchtst.family == "patchtst"
+    assert patchtst.source.repo_id == "ibm-granite/granite-timeseries-patchtst"
+    assert patchtst.source.revision == "main"
+    assert patchtst.license.type == "apache-2.0"
+    assert patchtst.license.needs_acceptance is False
+    assert patchtst.capabilities is not None
+    assert patchtst.capabilities.past_covariates_numeric is False
+    assert patchtst.metadata == {
+        "implementation": "patchtst",
+        "status": "phase1_placeholder",
+        "support_level": "baseline",
+        "install_extra": "runner_patchtst",
+        "install_command": 'python -m pip install -e ".[dev,runner_patchtst]"',
+        "notes": "Full PatchTST inference is not wired yet; runner currently returns guided placeholder errors.",
     }
 
     lag_llama = registry["lag-llama"]
