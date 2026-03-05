@@ -125,6 +125,34 @@ def test_patchtst_runner_validates_runner_specific_optional_params() -> None:
     assert payload["error"]["message"] == "model_local_dir must be a non-empty string when provided"
 
 
+def test_patchtst_runner_rejects_non_object_model_source_before_adapter_invocation() -> None:
+    params = _valid_forecast_params()
+    params["model_source"] = "hf://ibm-granite/granite-timeseries-patchtst"
+
+    response = handle_request_line(
+        json.dumps({"id": "req-3b", "method": "forecast", "params": params}),
+        _CapturingAdapter(),
+    )
+    payload = response.model_dump(mode="json", exclude_none=True)
+    assert payload["id"] == "req-3b"
+    assert payload["error"]["code"] == "BAD_REQUEST"
+    assert payload["error"]["message"] == "model_source must be an object when provided"
+
+
+def test_patchtst_runner_performs_payload_validation_before_dependency_gating() -> None:
+    params = _valid_forecast_params()
+    params["model_local_dir"] = 123
+
+    response = handle_request_line(
+        json.dumps({"id": "req-3c", "method": "forecast", "params": params}),
+        _MissingDependencyAdapter(),
+    )
+    payload = response.model_dump(mode="json", exclude_none=True)
+    assert payload["id"] == "req-3c"
+    assert payload["error"]["code"] == "BAD_REQUEST"
+    assert "model_local_dir must be a non-empty string" in payload["error"]["message"]
+
+
 def test_patchtst_runner_returns_invalid_params_for_schema_validation_errors() -> None:
     params = _valid_forecast_params()
     params["horizon"] = "2"
