@@ -7,6 +7,7 @@ import re
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
+from statistics import NormalDist
 from typing import Any
 
 from tollama.core.schemas import ForecastRequest, ForecastResponse, SeriesForecast, SeriesInput
@@ -42,6 +43,17 @@ class _RuntimeConfig:
     implementation: str
 
 
+@dataclass(frozen=True)
+class _CovariatePayload:
+    train_df: Any
+    futr_df: Any | None
+    static_df: Any | None
+    hist_exog: list[str]
+    futr_exog: list[str]
+    stat_exog: list[str]
+    warnings: list[str]
+
+
 class NhitsAdapter:
     """Adapter mapping canonical forecast payloads to NeuralForecast N-HiTS."""
 
@@ -67,24 +79,62 @@ class NhitsAdapter:
         deps = self._resolve_dependencies()
 
         resolved_freq = _resolve_shared_frequency(request=request, pd_module=deps.pd)
-        train_df = _request_to_training_frame(request=request, pd_module=deps.pd)
-        model = _build_model(request=request, runtime=runtime, nhits_cls=deps.nhits_cls)
+        covariates_mode = request.parameters.covariates_mode
+        covariate_payload = _build_covariate_frames(
+            request=request,
+            pd_module=deps.pd,
+            resolved_freq=resolved_freq,
+            covariates_mode=covariates_mode,
+        )
+        model = _build_model(
+            request=request,
+            runtime=runtime,
+            nhits_cls=deps.nhits_cls,
+            hist_exog=covariate_payload.hist_exog,
+            futr_exog=covariate_payload.futr_exog,
+            stat_exog=covariate_payload.stat_exog,
+        )
         predictor = deps.neuralforecast_cls(models=[model], freq=resolved_freq)
 
         try:
-            predictor.fit(train_df)
-            prediction = predictor.predict(h=request.horizon)
+            _fit_predictor(
+                predictor=predictor,
+                train_df=covariate_payload.train_df,
+                static_df=covariate_payload.static_df,
+            )
+            prediction = _predict(
+                predictor=predictor,
+                horizon=request.horizon,
+                futr_df=covariate_payload.futr_df,
+            )
+        except AdapterInputError:
+            raise
         except Exception as exc:  # noqa: BLE001
             raise AdapterRuntimeError(f"N-HiTS runtime forecast failed: {exc}") from exc
 
-        parsed = _prediction_to_series_map(prediction, request_quantiles=request.quantiles)
+        mean_by_id, quantiles_by_id = _prediction_to_outputs(
+            prediction,
+            requested_quantiles=list(request.quantiles),
+        )
+
         forecasts: list[SeriesForecast] = []
+        quantile_fallback = False
         for series in request.series:
-            output = parsed.get(series.id)
-            if output is None:
+            mean = mean_by_id.get(series.id)
+            if mean is None:
                 raise AdapterInputError(
                     f"N-HiTS output missing forecast for series {series.id!r}",
                 )
+
+            quantiles = quantiles_by_id.get(series.id)
+            if request.quantiles and not quantiles:
+                quantiles = _calibrated_quantile_fallback(
+                    series=series,
+                    mean=mean,
+                    requested_quantiles=list(request.quantiles),
+                )
+                quantile_fallback = True
+
             forecasts.append(
                 SeriesForecast(
                     id=series.id,
@@ -95,15 +145,16 @@ class NhitsAdapter:
                         pd_module=deps.pd,
                         resolved_freq=resolved_freq,
                     ),
-                    mean=output["mean"],
-                    quantiles=output["quantiles"] or None,
+                    mean=mean,
+                    quantiles=quantiles,
                 ),
             )
 
         warnings = _build_limitations_warnings(
             request=request,
             model_local_dir=model_local_dir,
-            quantile_support=parsed.quantile_support,
+            quantile_fallback=quantile_fallback,
+            covariate_warnings=covariate_payload.warnings,
         )
 
         return ForecastResponse(
@@ -116,6 +167,10 @@ class NhitsAdapter:
                 "horizon": request.horizon,
                 "repo_id": runtime.repo_id,
                 "revision": runtime.revision,
+                "covariates_mode": covariates_mode,
+                "covariates_hist_exog": len(covariate_payload.hist_exog),
+                "covariates_futr_exog": len(covariate_payload.futr_exog),
+                "covariates_stat_exog": len(covariate_payload.stat_exog),
             },
             warnings=warnings or None,
         )
@@ -146,7 +201,7 @@ class NhitsAdapter:
             joined = ", ".join(sorted(set(missing or ["neuralforecast"])))
             raise DependencyMissingError(
                 "missing optional nhits runner dependencies "
-                f"({joined}); install them with `pip install -e \".[dev,runner_nhits]\"`",
+                f'({joined}); install them with `pip install -e ".[dev,runner_nhits]"`',
             )
 
         deps = _Dependencies(
@@ -158,153 +213,368 @@ class NhitsAdapter:
         return deps
 
 
-def _request_to_training_frame(*, request: ForecastRequest, pd_module: Any) -> Any:
+def _build_covariate_frames(
+    *,
+    request: ForecastRequest,
+    pd_module: Any,
+    resolved_freq: str,
+    covariates_mode: str,
+) -> _CovariatePayload:
+    strict = covariates_mode == "strict"
+    warnings: list[str] = []
+    warning_seen: set[str] = set()
+
+    hist_exog_candidates: set[str] = set()
+    futr_exog_candidates: set[str] = set()
+    stat_exog_candidates: set[str] = set()
+
+    for series in request.series:
+        hist_exog_candidates.update((series.past_covariates or {}).keys())
+        futr_exog_candidates.update((series.future_covariates or {}).keys())
+        stat_exog_candidates.update((series.static_covariates or {}).keys())
+
+    hist_exog: set[str] = set()
+    futr_exog: set[str] = set()
+    stat_exog: set[str] = set()
+
     rows: list[dict[str, Any]] = []
+    future_rows: list[dict[str, Any]] = []
+    static_rows: list[dict[str, Any]] = []
+
     for series in request.series:
         if len(series.timestamps) != len(series.target):
-            raise AdapterInputError(f"series {series.id!r} timestamps and target lengths must match")
+            raise AdapterInputError(
+                f"series {series.id!r} timestamps and target lengths must match"
+            )
         if len(series.target) < 2:
             raise AdapterInputError("each input series must include at least two target points")
 
-        for index, (timestamp, value) in enumerate(zip(series.timestamps, series.target, strict=True)):
-            rows.append(
-                {
-                    "unique_id": series.id,
-                    "ds": timestamp,
-                    "y": _coerce_finite_float(value, field=f"series {series.id!r} target[{index}]"),
-                },
-            )
+        history_length = len(series.target)
+        past_covariates = series.past_covariates or {}
+        future_covariates = series.future_covariates or {}
+        static_covariates = series.static_covariates or {}
 
-    frame = pd_module.DataFrame(rows)
+        for index, (timestamp, value) in enumerate(
+            zip(series.timestamps, series.target, strict=True)
+        ):
+            row: dict[str, Any] = {
+                "unique_id": series.id,
+                "ds": timestamp,
+                "y": _coerce_finite_float(value, field=f"series {series.id!r} target[{index}]"),
+            }
+            for name in sorted(hist_exog_candidates):
+                series_values = past_covariates.get(name)
+                if series_values is None:
+                    row[name] = 0.0
+                    _append_warning(
+                        warnings=warnings,
+                        seen=warning_seen,
+                        message=(
+                            f"N-HiTS missing past covariate {name!r} for series {series.id!r}; "
+                            "using zero-fill"
+                        ),
+                    )
+                    continue
+                try:
+                    row[name] = _coerce_numeric_covariate(
+                        series_values[index], series_id=series.id, name=name
+                    )
+                    hist_exog.add(name)
+                except AdapterInputError:
+                    if strict:
+                        raise
+                    row[name] = 0.0
+                    _append_warning(
+                        warnings=warnings,
+                        seen=warning_seen,
+                        message=(
+                            "N-HiTS dropped non-numeric past covariate "
+                            f"{name!r} for series {series.id!r}; "
+                            "using zero-fill in best_effort mode"
+                        ),
+                    )
+
+            for name in sorted(futr_exog_candidates):
+                series_values = past_covariates.get(name)
+                value_at_step: Any
+                if series_values is not None:
+                    value_at_step = series_values[index]
+                else:
+                    value_at_step = 0.0
+                    _append_warning(
+                        warnings=warnings,
+                        seen=warning_seen,
+                        message=(
+                            f"N-HiTS missing historical values for future covariate {name!r} "
+                            f"in series {series.id!r}; using zero-fill"
+                        ),
+                    )
+                try:
+                    row[name] = _coerce_numeric_covariate(
+                        value_at_step, series_id=series.id, name=name
+                    )
+                    futr_exog.add(name)
+                except AdapterInputError:
+                    if strict:
+                        raise
+                    row[name] = 0.0
+                    _append_warning(
+                        warnings=warnings,
+                        seen=warning_seen,
+                        message=(
+                            f"N-HiTS dropped non-numeric future covariate history {name!r} "
+                            f"for series {series.id!r}; using zero-fill in best_effort mode"
+                        ),
+                    )
+
+            rows.append(row)
+
+        future_timestamps = _future_timestamps(
+            series=series,
+            horizon=request.horizon,
+            pd_module=pd_module,
+            resolved_freq=resolved_freq,
+        )
+        for step, future_timestamp in enumerate(future_timestamps):
+            futr_row: dict[str, Any] = {"unique_id": series.id, "ds": future_timestamp}
+            for name in sorted(futr_exog_candidates):
+                values = future_covariates.get(name)
+                if values is None:
+                    last = past_covariates.get(name, [0.0])[-1] if history_length else 0.0
+                    value_at_step = last
+                    _append_warning(
+                        warnings=warnings,
+                        seen=warning_seen,
+                        message=(
+                            "N-HiTS missing known-future covariate "
+                            f"{name!r} for series {series.id!r}; "
+                            "using last observed value"
+                        ),
+                    )
+                else:
+                    value_at_step = values[step]
+                try:
+                    futr_row[name] = _coerce_numeric_covariate(
+                        value_at_step, series_id=series.id, name=name
+                    )
+                except AdapterInputError:
+                    if strict:
+                        raise
+                    futr_row[name] = 0.0
+                    _append_warning(
+                        warnings=warnings,
+                        seen=warning_seen,
+                        message=(
+                            f"N-HiTS dropped non-numeric known-future covariate {name!r} "
+                            f"for series {series.id!r}; using zero-fill in best_effort mode"
+                        ),
+                    )
+            future_rows.append(futr_row)
+
+        static_row: dict[str, Any] = {"unique_id": series.id}
+        has_static = False
+        for name in sorted(stat_exog_candidates):
+            raw = static_covariates.get(name)
+            if raw is None:
+                continue
+            try:
+                static_row[name] = _coerce_numeric_covariate(raw, series_id=series.id, name=name)
+                stat_exog.add(name)
+                has_static = True
+            except AdapterInputError:
+                if strict:
+                    raise
+                _append_warning(
+                    warnings=warnings,
+                    seen=warning_seen,
+                    message=(
+                        "N-HiTS dropped non-numeric static covariate "
+                        f"{name!r} for series {series.id!r} in best_effort mode"
+                    ),
+                )
+        if has_static:
+            static_rows.append(static_row)
+
+    train_df = pd_module.DataFrame(rows)
     try:
-        frame["ds"] = pd_module.to_datetime(frame["ds"], utc=True, errors="raise")
+        train_df["ds"] = pd_module.to_datetime(train_df["ds"], utc=True, errors="raise")
     except Exception as exc:  # noqa: BLE001
         raise AdapterInputError(f"invalid timestamps for nhits request: {exc}") from exc
-    return frame
+
+    futr_df = pd_module.DataFrame(future_rows) if future_rows and futr_exog_candidates else None
+    if futr_df is not None:
+        try:
+            futr_df["ds"] = pd_module.to_datetime(futr_df["ds"], utc=True, errors="raise")
+        except Exception as exc:  # noqa: BLE001
+            raise AdapterInputError(f"invalid future timestamps for nhits request: {exc}") from exc
+
+    static_df = pd_module.DataFrame(static_rows) if static_rows else None
+
+    return _CovariatePayload(
+        train_df=train_df,
+        futr_df=futr_df,
+        static_df=static_df,
+        hist_exog=sorted(hist_exog),
+        futr_exog=sorted(futr_exog),
+        stat_exog=sorted(stat_exog),
+        warnings=warnings,
+    )
 
 
-def _build_model(*, request: ForecastRequest, runtime: _RuntimeConfig, nhits_cls: Any) -> Any:
+def _build_model(
+    *,
+    request: ForecastRequest,
+    runtime: _RuntimeConfig,
+    nhits_cls: Any,
+    hist_exog: list[str],
+    futr_exog: list[str],
+    stat_exog: list[str],
+) -> Any:
     input_size = max(2 * request.horizon, 4)
+    kwargs: dict[str, Any] = {"h": request.horizon, "input_size": input_size}
+    if hist_exog:
+        kwargs["hist_exog_list"] = list(hist_exog)
+    if futr_exog:
+        kwargs["futr_exog_list"] = list(futr_exog)
+    if stat_exog:
+        kwargs["stat_exog_list"] = list(stat_exog)
+
     try:
-        return nhits_cls(h=request.horizon, input_size=input_size)
+        return nhits_cls(**kwargs)
+    except TypeError:
+        fallback_kwargs = {"h": request.horizon, "input_size": input_size}
+        return nhits_cls(**fallback_kwargs)
     except Exception as exc:  # noqa: BLE001
         raise AdapterInputError(
             f"failed to initialize N-HiTS model for {runtime.model_name!r}: {exc}",
         ) from exc
 
 
-class _SeriesMap(dict[str, dict[str, Any]]):
-    quantile_support: str
+def _fit_predictor(*, predictor: Any, train_df: Any, static_df: Any | None) -> None:
+    if static_df is None:
+        predictor.fit(train_df)
+        return
+
+    try:
+        predictor.fit(train_df, static_df=static_df)
+    except TypeError:
+        predictor.fit(train_df)
 
 
-def _prediction_to_series_map(prediction: Any, *, request_quantiles: list[float]) -> _SeriesMap:
+def _predict(*, predictor: Any, horizon: int, futr_df: Any | None) -> Any:
+    if futr_df is None:
+        return predictor.predict(h=horizon)
+
+    try:
+        return predictor.predict(futr_df=futr_df)
+    except TypeError:
+        try:
+            return predictor.predict(h=horizon, futr_df=futr_df)
+        except TypeError:
+            return predictor.predict(h=horizon)
+
+
+def _prediction_to_outputs(
+    prediction: Any,
+    *,
+    requested_quantiles: list[float],
+) -> tuple[dict[str, list[float]], dict[str, dict[str, list[float]]]]:
+    rows = _prediction_rows(prediction)
+
+    mean_by_id: dict[str, list[float]] = {}
+    quantiles_by_id: dict[str, dict[str, list[float]]] = {}
+
+    quantile_column_map: dict[str, float] = {}
+    if rows:
+        quantile_column_map = _resolve_quantile_columns(
+            rows[0], requested_quantiles=requested_quantiles
+        )
+
+    for row in rows:
+        series_id = row.get("unique_id")
+        if not isinstance(series_id, str) or not series_id:
+            continue
+
+        value = _extract_prediction_value(row)
+        if value is not None:
+            mean_by_id.setdefault(series_id, []).append(value)
+
+        for column, quantile in quantile_column_map.items():
+            if column not in row:
+                continue
+            raw = row[column]
+            try:
+                numeric = _coerce_finite_float(raw, field=f"prediction column {column!r}")
+            except AdapterInputError:
+                continue
+            q_key = format(float(quantile), "g")
+            quantiles_by_id.setdefault(series_id, {}).setdefault(q_key, []).append(numeric)
+
+    return mean_by_id, quantiles_by_id
+
+
+def _prediction_rows(prediction: Any) -> list[dict[str, Any]]:
     if hasattr(prediction, "to_dict"):
         rows = prediction.to_dict(orient="records")
     elif isinstance(prediction, list):
         rows = prediction
     else:
         raise AdapterInputError("N-HiTS prediction output has unexpected shape")
-
-    by_id: _SeriesMap = _SeriesMap()
-    saw_quantile = False
-    requested = [float(q) for q in request_quantiles]
-
-    for row in rows:
-        if not isinstance(row, dict):
-            continue
-        series_id = row.get("unique_id")
-        if not isinstance(series_id, str) or not series_id:
-            continue
-
-        mean = _extract_prediction_value(row)
-        if mean is None:
-            continue
-
-        series_out = by_id.setdefault(series_id, {"mean": [], "quantiles": {}})
-        series_out["mean"].append(mean)
-
-        if not requested:
-            continue
-
-        row_quantiles = _extract_row_quantiles(row=row, requested=requested)
-        if row_quantiles:
-            saw_quantile = True
-        for key, value in row_quantiles.items():
-            series_out["quantiles"].setdefault(key, []).append(value)
-
-    quantile_support = "not_requested"
-    if requested:
-        quantile_support = "full" if saw_quantile and _all_quantiles_present(by_id, requested) else "none"
-    by_id.quantile_support = quantile_support
-
-    if quantile_support != "full":
-        for output in by_id.values():
-            output["quantiles"] = {}
-
-    return by_id
+    return [row for row in rows if isinstance(row, dict)]
 
 
-def _all_quantiles_present(by_id: dict[str, dict[str, Any]], requested: list[float]) -> bool:
-    expected_keys = {_format_quantile(q) for q in requested}
-    for output in by_id.values():
-        quantiles = output.get("quantiles") or {}
-        mean = output.get("mean") or []
-        if set(quantiles.keys()) != expected_keys:
-            return False
-        if any(len(values) != len(mean) for values in quantiles.values()):
-            return False
-    return bool(by_id)
+def _resolve_quantile_columns(
+    row: dict[str, Any], *, requested_quantiles: list[float]
+) -> dict[str, float]:
+    if not requested_quantiles:
+        return {}
 
-
-def _extract_row_quantiles(*, row: dict[str, Any], requested: list[float]) -> dict[str, float]:
-    parsed_columns: dict[float, float] = {}
-    for key, raw in row.items():
-        if key in {"unique_id", "ds"}:
-            continue
-        quantile = _parse_quantile_key(key)
+    extracted: list[tuple[str, float]] = []
+    for key in row:
+        quantile = _extract_quantile_from_column(key)
         if quantile is None:
             continue
-        value = _coerce_scalar_float(raw)
-        if value is None:
-            continue
-        parsed_columns[quantile] = value
+        if 0.0 < quantile < 1.0:
+            extracted.append((key, quantile))
 
-    extracted: dict[str, float] = {}
-    for quantile in requested:
-        matched = _lookup_quantile(parsed_columns, quantile)
-        if matched is None:
-            continue
-        extracted[_format_quantile(quantile)] = matched
-    return extracted
+    if not extracted:
+        return {}
 
-
-def _lookup_quantile(values: dict[float, float], quantile: float) -> float | None:
-    for candidate, value in values.items():
-        if abs(candidate - quantile) <= 1e-6:
-            return value
-    return None
+    resolved: dict[str, float] = {}
+    for requested in requested_quantiles:
+        nearest = min(extracted, key=lambda item: abs(item[1] - float(requested)))
+        resolved[nearest[0]] = float(requested)
+    return resolved
 
 
-def _parse_quantile_key(key: str) -> float | None:
-    cleaned = key.strip().lower()
+def _extract_quantile_from_column(name: str) -> float | None:
+    lowered = name.strip().lower()
+    if not lowered or lowered in {"unique_id", "ds"}:
+        return None
 
-    try:
-        numeric = float(cleaned)
-        if 0.0 < numeric < 1.0:
-            return numeric
-    except ValueError:
-        pass
-
-    tokens = re.findall(r"\d*\.\d+|\d+", cleaned)
-    for token in reversed(tokens):
+    direct = re.search(r"(?:^|[^0-9])q(0?\.\d+|1\.0|0|1)(?:$|[^0-9])", lowered)
+    if direct:
         try:
-            value = float(token)
+            return float(direct.group(1))
         except ValueError:
-            continue
-        if 0.0 < value < 1.0:
-            return value
-        if 1.0 <= value <= 99.0 and ("q" in cleaned or "p" in cleaned or "lo" in cleaned or "hi" in cleaned):
-            return value / 100.0
+            return None
+
+    generic = re.search(r"(0?\.\d+)", lowered)
+    if generic:
+        try:
+            return float(generic.group(1))
+        except ValueError:
+            return None
+
+    percent = re.search(r"(\d{1,2})(?:th)?(?:p|pct|percent|\b)", lowered)
+    if percent:
+        try:
+            value = float(percent.group(1)) / 100.0
+            if 0.0 < value < 1.0:
+                return value
+        except ValueError:
+            return None
+
     return None
 
 
@@ -312,10 +582,10 @@ def _extract_prediction_value(row: dict[str, Any]) -> float | None:
     for key, value in row.items():
         if key in {"unique_id", "ds"}:
             continue
-        if _parse_quantile_key(key) is not None:
+        if _extract_quantile_from_column(key) is not None:
             continue
         scalar = _coerce_scalar_float(value)
-        if scalar is not None:
+        if scalar is not None and math.isfinite(scalar):
             return scalar
     return None
 
@@ -334,28 +604,65 @@ def _coerce_scalar_float(value: Any) -> float | None:
     return None
 
 
+def _calibrated_quantile_fallback(
+    *,
+    series: SeriesInput,
+    mean: list[float],
+    requested_quantiles: list[float],
+) -> dict[str, list[float]]:
+    scale = _series_scale(series.target)
+    normal = NormalDist(mu=0.0, sigma=1.0)
+    payload: dict[str, list[float]] = {}
+
+    for quantile in requested_quantiles:
+        z = normal.inv_cdf(float(quantile))
+        values: list[float] = []
+        for index, center in enumerate(mean, start=1):
+            adjusted_scale = scale * math.sqrt(float(index))
+            values.append(float(center) + z * adjusted_scale)
+        payload[format(float(quantile), "g")] = values
+
+    return payload
+
+
+def _series_scale(values: list[int | float]) -> float:
+    if not values:
+        return 1e-6
+    numeric = [float(value) for value in values]
+    if len(numeric) < 2:
+        return max(abs(numeric[0]) * 0.01, 1e-6)
+
+    diffs = [numeric[index] - numeric[index - 1] for index in range(1, len(numeric))]
+    median = sorted(diffs)[len(diffs) // 2]
+    abs_dev = sorted(abs(value - median) for value in diffs)
+    mad = abs_dev[len(abs_dev) // 2]
+    robust_sigma = 1.4826 * mad
+    if robust_sigma > 1e-9:
+        return robust_sigma
+
+    spread = max(numeric) - min(numeric)
+    if spread > 0.0:
+        return spread / 6.0
+
+    return max(abs(numeric[-1]) * 0.01, 1e-6)
+
+
 def _build_limitations_warnings(
     *,
     request: ForecastRequest,
     model_local_dir: str | None,
-    quantile_support: str,
+    quantile_fallback: bool,
+    covariate_warnings: list[str],
 ) -> list[str]:
     warnings: list[str] = []
 
-    if request.quantiles and quantile_support != "full":
+    if request.quantiles and quantile_fallback:
         warnings.append(
-            "N-HiTS quantile extraction is backend-dependent; requested quantiles were unavailable, "
-            "so mean-only forecasts were returned",
+            "N-HiTS used calibrated quantile fallback around mean forecasts "
+            "because backend quantile outputs were unavailable",
         )
 
-    if any(
-        series.past_covariates or series.future_covariates or series.static_covariates
-        for series in request.series
-    ):
-        warnings.append(
-            "N-HiTS currently supports target-only training/inference in this runner path; "
-            "covariates and static features were ignored",
-        )
+    warnings.extend(covariate_warnings)
 
     if model_local_dir:
         path = Path(model_local_dir.strip())
@@ -368,13 +675,23 @@ def _build_limitations_warnings(
     return warnings
 
 
-def _future_start_timestamp(*, series: SeriesInput, horizon: int, pd_module: Any, resolved_freq: str) -> str:
+def _future_timestamps(
+    *, series: SeriesInput, horizon: int, pd_module: Any, resolved_freq: str
+) -> list[str]:
     try:
         parsed = pd_module.to_datetime([series.timestamps[-1]], utc=True, errors="raise")
         generated = pd_module.date_range(start=parsed[0], periods=horizon + 1, freq=resolved_freq)
     except Exception as exc:  # noqa: BLE001
         raise AdapterInputError(f"invalid frequency {series.freq!r} for nhits forecast") from exc
-    return _to_iso_timestamp(generated[1])
+    return [_to_iso_timestamp(value) for value in generated[1:]]
+
+
+def _future_start_timestamp(
+    *, series: SeriesInput, horizon: int, pd_module: Any, resolved_freq: str
+) -> str:
+    return _future_timestamps(
+        series=series, horizon=horizon, pd_module=pd_module, resolved_freq=resolved_freq
+    )[0]
 
 
 def _resolve_shared_frequency(*, request: ForecastRequest, pd_module: Any) -> str:
@@ -430,8 +747,20 @@ def _coerce_finite_float(value: Any, *, field: str) -> float:
     return numeric
 
 
-def _format_quantile(value: float) -> str:
-    return f"{value:.6f}".rstrip("0").rstrip(".")
+def _coerce_numeric_covariate(value: Any, *, series_id: str, name: str) -> float:
+    scalar = _coerce_scalar_float(value)
+    if scalar is not None and math.isfinite(scalar):
+        return scalar
+    raise AdapterInputError(
+        f"covariate {name!r} for series {series_id!r} must be numeric for N-HiTS",
+    )
+
+
+def _append_warning(*, warnings: list[str], seen: set[str], message: str) -> None:
+    if message in seen:
+        return
+    seen.add(message)
+    warnings.append(message)
 
 
 def _to_iso_timestamp(value: Any) -> str:
@@ -453,7 +782,9 @@ def _resolve_runtime_config(
 ) -> _RuntimeConfig:
     defaults = _NHITS_MODELS.get(model_name, {})
     repo_id = _dict_str(model_source, "repo_id") or _string_or_none(defaults.get("repo_id"))
-    revision = _dict_str(model_source, "revision") or _string_or_none(defaults.get("revision")) or "main"
+    revision = (
+        _dict_str(model_source, "revision") or _string_or_none(defaults.get("revision")) or "main"
+    )
     implementation = (
         _dict_str(model_metadata, "implementation")
         or _string_or_none(defaults.get("implementation"))

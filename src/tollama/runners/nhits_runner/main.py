@@ -25,7 +25,7 @@ from .adapter import NhitsAdapter
 from .errors import AdapterInputError, AdapterRuntimeError, DependencyMissingError, UnsupportedModelError
 
 RUNNER_NAME = "tollama-nhits"
-RUNNER_VERSION = "0.3.0"
+RUNNER_VERSION = "0.4.0"
 UNKNOWN_REQUEST_ID = "unknown"
 CAPABILITIES = ("hello", "forecast", "unload")
 _SUPPORTED_FAMILIES = ["nhits"]
@@ -86,7 +86,7 @@ def _handle_hello(request: ProtocolRequest) -> ProtocolResponse:
             "version": RUNNER_VERSION,
             "capabilities": list(CAPABILITIES),
             "supported_families": _SUPPORTED_FAMILIES,
-            "status": "phase3_hardened",
+            "status": "phase4_quality",
         },
     )
 
