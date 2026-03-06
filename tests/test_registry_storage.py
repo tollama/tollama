@@ -164,7 +164,7 @@ def test_registry_loads_required_model_specs() -> None:
 
     nhits = registry["nhits"]
     assert nhits.family == "nhits"
-    assert nhits.source.repo_id == "cchallu/nhits-air-passengers"
+    assert nhits.source.repo_id == "tollama/nhits-runner"
     assert nhits.source.revision == "main"
     assert nhits.metadata == {
         "implementation": "nhits",
@@ -174,7 +174,8 @@ def test_registry_loads_required_model_specs() -> None:
         "install_command": 'python -m pip install -e ".[dev,runner_nhits]"',
         "notes": (
             "N-HiTS runner supports canonical point forecasts (single/multi series) "
-            "via runtime NeuralForecast inference. Requested quantiles and covariates "
+            "via runtime NeuralForecast inference. Pull is manifest-only (local source, "
+            "no Hugging Face snapshot/auth required). Requested quantiles and covariates "
             "are currently best-effort limitations and return explicit response "
             "warnings."
         ),
@@ -182,7 +183,7 @@ def test_registry_loads_required_model_specs() -> None:
 
     nbeatsx = registry["nbeatsx"]
     assert nbeatsx.family == "nbeatsx"
-    assert nbeatsx.source.repo_id == "cchallu/nbeatsx-air-passengers"
+    assert nbeatsx.source.repo_id == "tollama/nbeatsx-runner"
     assert nbeatsx.source.revision == "main"
     assert nbeatsx.metadata == {
         "implementation": "nbeatsx",
@@ -192,7 +193,8 @@ def test_registry_loads_required_model_specs() -> None:
         "install_command": 'python -m pip install -e ".[dev,runner_nbeatsx]"',
         "notes": (
             "N-BEATSx runner supports canonical single/multi-series forecasts via runtime "
-            "NeuralForecast inference with stricter input validation. Requested quantiles "
+            "NeuralForecast inference with stricter input validation. Pull is manifest-only "
+            "(local source, no Hugging Face snapshot/auth required). Requested quantiles "
             "are best-effort (returned when backend probabilistic outputs are exposed, "
             "otherwise omitted with explicit warnings). Covariates and static features are "
             "currently ignored with explicit warnings."

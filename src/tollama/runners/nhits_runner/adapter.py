@@ -20,7 +20,7 @@ from .errors import (
 
 _NHITS_MODELS: dict[str, dict[str, Any]] = {
     "nhits": {
-        "repo_id": "cchallu/nhits-air-passengers",
+        "repo_id": "tollama/nhits-runner",
         "revision": "main",
         "implementation": "nhits",
     },

@@ -14,7 +14,7 @@ from .errors import AdapterInputError, DependencyMissingError, UnsupportedModelE
 
 _NBEATSX_MODELS: dict[str, dict[str, Any]] = {
     "nbeatsx": {
-        "repo_id": "cchallu/nbeatsx-air-passengers",
+        "repo_id": "tollama/nbeatsx-runner",
         "revision": "main",
         "implementation": "nbeatsx",
     },

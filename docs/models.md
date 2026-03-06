@@ -413,6 +413,7 @@ N-HiTS is integrated for real inference via the dedicated `nhits` runner family.
 - model name: `nhits`
 - runner family: `nhits`
 - install extra: `runner_nhits`
+- pull behavior: registry pull is manifest-only (local source), so `tollama pull nhits` does not require Hugging Face auth/snapshot download
 - current runtime behavior:
   - returns `DEPENDENCY_MISSING` with install guidance when optional dependencies are absent
   - performs runtime NeuralForecast inference for canonical single/multi-series forecast requests
@@ -447,6 +448,7 @@ N-BEATSx is integrated for real inference via the dedicated `nbeatsx` runner fam
 - model name: `nbeatsx`
 - runner family: `nbeatsx`
 - install extra: `runner_nbeatsx`
+- pull behavior: registry pull is manifest-only (local source), so `tollama pull nbeatsx` does not require Hugging Face auth/snapshot download
 - current runtime behavior:
   - returns `DEPENDENCY_MISSING` with install guidance when optional dependencies are absent
   - performs runtime NeuralForecast inference for canonical single/multi-series forecast requests

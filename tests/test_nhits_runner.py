@@ -127,7 +127,7 @@ def test_nhits_runner_forecast_smoke_wires_request_and_response() -> None:
     adapter = _CapturingAdapter()
     params = _valid_forecast_params()
     params["model_local_dir"] = " /tmp/nhits "
-    params["model_source"] = {"repo_id": "cchallu/nhits-air-passengers", "revision": "main"}
+    params["model_source"] = {"repo_id": "tollama/nhits-runner", "revision": "main"}
     params["model_metadata"] = {"implementation": "nhits"}
 
     response = handle_request_line(
@@ -146,7 +146,7 @@ def test_nhits_runner_forecast_smoke_wires_request_and_response() -> None:
     assert call["request"].model == "nhits"
     assert call["request"].horizon == 2
     assert call["model_local_dir"] == "/tmp/nhits"
-    assert call["model_source"] == {"repo_id": "cchallu/nhits-air-passengers", "revision": "main"}
+    assert call["model_source"] == {"repo_id": "tollama/nhits-runner", "revision": "main"}
     assert call["model_metadata"] == {"implementation": "nhits"}
 
 

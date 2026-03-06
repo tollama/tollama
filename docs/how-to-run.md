@@ -41,8 +41,8 @@ Additional docs:
 | `sundial-base-128m` | `sundial` | `thuml/sundial-base-128m` | `main` | `apache-2.0` | No | `runner_sundial` |
 | `toto-open-base-1.0` | `toto` | `Datadog/Toto-Open-Base-1.0` | `main` | `apache-2.0` | No | `runner_toto` |
 | `patchtst` | `patchtst` | `ibm-granite/granite-timeseries-patchtst` | `main` | `apache-2.0` | No | `runner_patchtst` |
-| `nhits` | `nhits` | `cchallu/nhits-air-passengers` | `main` | `apache-2.0` | No | `runner_nhits` |
-| `nbeatsx` | `nbeatsx` | `cchallu/nbeatsx-air-passengers` | `main` | `apache-2.0` | No | `runner_nbeatsx` |
+| `nhits` | `nhits` | `tollama/nhits-runner` (local source manifest) | `main` | `apache-2.0` | No | `runner_nhits` |
+| `nbeatsx` | `nbeatsx` | `tollama/nbeatsx-runner` (local source manifest) | `main` | `apache-2.0` | No | `runner_nbeatsx` |
 
 > [!NOTE]
 > `timesfm` models may take several minutes to compile on the first run. The default timeout has been increased to 5 minutes to accommodate this, but slower machines may require even more time.
@@ -56,6 +56,20 @@ Toto supports target + past numeric covariates; known-future/static/categorical 
 > `nhits` is a **Phase-3 hardened integration**: it is discoverable/pullable and executes canonical single/multi-series forecasts via the dedicated runner family with stricter input/frequency validation. Quantiles are returned on a best-effort basis when backend probabilistic outputs are available; otherwise the runner falls back to mean-only forecasts with explicit warnings. Covariates/static features are still ignored with explicit contract warnings. If dependencies are missing, the runner returns `DEPENDENCY_MISSING` with the install command `python -m pip install -e ".[dev,runner_nhits]"`.
 >
 > `nbeatsx` is a **Phase-3 hardened integration**: it is discoverable/pullable and executes canonical single/multi-series forecasts via the dedicated runner family with stricter input/frequency validation. Quantiles are returned on a best-effort basis when backend probabilistic outputs are available; otherwise the runner falls back to mean-only forecasts with explicit warnings. Covariates/static features are still ignored with warnings. If dependencies are missing, the runner returns `DEPENDENCY_MISSING` with the install command `python -m pip install -e ".[dev,runner_nbeatsx]"`.
+
+## Expected Failure Signatures vs Regressions
+
+Use these signatures when triaging smoke failures:
+
+- **Expected dependency-gated** (environment/setup issue):
+  - HTTP `503` from `/v1/forecast`
+  - detail contains `DEPENDENCY_MISSING`
+  - install hint includes the family extra (for example `runner_patchtst`, `runner_tide`, `runner_nhits`, `runner_nbeatsx`)
+- **Regression** (runtime registration/config issue):
+  - detail contains `runner family '<family>' is not supported`
+  - or pull fails for local-source models (`tide`, `nhits`, `nbeatsx`) that should be manifest-only
+
+For `tide`, `nhits`, and `nbeatsx`, `tollama pull` is manifest-only (`source.type=local`), so pull should succeed without Hugging Face auth/network snapshot fetches.
 
 ## Requirements
 
