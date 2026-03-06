@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sys
+import time
 from collections.abc import Mapping
 from typing import Any, TextIO
 
@@ -18,14 +19,16 @@ from tollama.core.protocol import (
     validate_request,
 )
 from tollama.core.schemas import ForecastRequest
+from tollama.runners.runtime_telemetry import enrich_forecast_response
 
 from .adapter import NbeatsxAdapter
-from .errors import AdapterInputError, DependencyMissingError, NotImplementedRunnerError
+from .errors import AdapterInputError, DependencyMissingError, UnsupportedModelError
 
 RUNNER_NAME = "tollama-nbeatsx"
-RUNNER_VERSION = "0.1.0"
+RUNNER_VERSION = "0.2.0"
 UNKNOWN_REQUEST_ID = "unknown"
 CAPABILITIES = ("hello", "forecast", "unload")
+_SUPPORTED_FAMILIES = ["nbeatsx"]
 _FORECAST_REQUEST_FIELDS = frozenset(
     {"model", "horizon", "quantiles", "series", "options", "parameters"},
 )
@@ -82,8 +85,8 @@ def _handle_hello(request: ProtocolRequest) -> ProtocolResponse:
             "name": RUNNER_NAME,
             "version": RUNNER_VERSION,
             "capabilities": list(CAPABILITIES),
-            "supported_families": ["nbeatsx"],
-            "status": "phase1_placeholder",
+            "supported_families": _SUPPORTED_FAMILIES,
+            "status": "phase2_inference",
         },
     )
 
@@ -126,24 +129,29 @@ def _handle_forecast(request: ProtocolRequest, adapter: NbeatsxAdapter) -> Proto
         )
 
     try:
-        adapter.forecast(
+        started_at = time.perf_counter()
+        response = adapter.forecast(
             forecast_request,
             model_local_dir=model_local_dir,
             model_source=model_source,
             model_metadata=model_metadata,
         )
+        inference_ms = (time.perf_counter() - started_at) * 1000.0
     except DependencyMissingError as exc:
         return _error_response(request.id, code="DEPENDENCY_MISSING", message=str(exc))
-    except NotImplementedRunnerError as exc:
-        return _error_response(request.id, code="NOT_IMPLEMENTED", message=str(exc))
+    except UnsupportedModelError as exc:
+        return _error_response(request.id, code="MODEL_UNSUPPORTED", message=str(exc))
     except AdapterInputError as exc:
         return _error_response(request.id, code="BAD_REQUEST", message=str(exc))
+    except ValueError as exc:
+        return _error_response(request.id, code="FORECAST_ERROR", message=str(exc))
 
-    return _error_response(
-        request.id,
-        code="NOT_IMPLEMENTED",
-        message="N-BEATSx placeholder runner did not return a forecast payload",
+    response = enrich_forecast_response(
+        response=response,
+        runner_name=RUNNER_NAME,
+        inference_ms=inference_ms,
     )
+    return ProtocolResponse(id=request.id, result=response.model_dump(mode="json", exclude_none=True))
 
 
 def handle_request_line(line: str | bytes, adapter: NbeatsxAdapter) -> ProtocolResponse:

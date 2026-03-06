@@ -426,21 +426,26 @@ tollama pull nhits
 ```
 
 
-## N-BEATSx Forecasting (Phase-1 placeholder)
+## N-BEATSx Forecasting (Phase-2 baseline)
 
-N-BEATSx is registered under its own `nbeatsx` runner family for discovery, pull/install, and routing.
+N-BEATSx is integrated for real inference via the dedicated `nbeatsx` runner family.
 
 - model name: `nbeatsx`
 - runner family: `nbeatsx`
 - install extra: `runner_nbeatsx`
 - current runtime behavior:
   - returns `DEPENDENCY_MISSING` with install guidance when optional dependencies are absent
-  - returns `NOT_IMPLEMENTED` after dependency gating because forecast execution is intentionally disabled in phase-1
+  - performs runtime NeuralForecast inference for canonical single/multi-series forecast requests
+  - currently returns point forecasts only (`quantiles` are omitted with warnings)
+  - currently ignores covariates/static features and emits warnings when provided
 
 ```bash
-# install N-BEATSx placeholder runner dependencies
+# install N-BEATSx runner dependencies
 python -m pip install -e ".[dev,runner_nbeatsx]"
 
 # pull registry entry
 tollama pull nbeatsx
+
+# run forecast
+tollama run nbeatsx --input examples/request.json --no-stream
 ```
