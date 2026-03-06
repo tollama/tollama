@@ -424,3 +424,23 @@ python -m pip install -e ".[dev,runner_nhits]"
 # pull registry entry
 tollama pull nhits
 ```
+
+
+## N-BEATSx Forecasting (Phase-1 placeholder)
+
+N-BEATSx is registered under its own `nbeatsx` runner family for discovery, pull/install, and routing.
+
+- model name: `nbeatsx`
+- runner family: `nbeatsx`
+- install extra: `runner_nbeatsx`
+- current runtime behavior:
+  - returns `DEPENDENCY_MISSING` with install guidance when optional dependencies are absent
+  - returns `NOT_IMPLEMENTED` after dependency gating because forecast execution is intentionally disabled in phase-1
+
+```bash
+# install N-BEATSx placeholder runner dependencies
+python -m pip install -e ".[dev,runner_nbeatsx]"
+
+# pull registry entry
+tollama pull nbeatsx
+```

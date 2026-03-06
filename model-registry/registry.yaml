@@ -231,3 +231,27 @@ models:
       future_covariates_numeric: false
       future_covariates_categorical: false
       static_covariates: false
+
+  - name: nbeatsx
+    family: nbeatsx
+    source:
+      type: huggingface
+      repo_id: cchallu/nbeatsx-air-passengers
+      revision: main
+    license:
+      type: apache-2.0
+      needs_acceptance: false
+    metadata:
+      implementation: nbeatsx
+      status: phase1_placeholder
+      support_level: experimental
+      install_extra: runner_nbeatsx
+      install_command: python -m pip install -e ".[dev,runner_nbeatsx]"
+      notes: N-BEATSx is registered for discovery and routing. Phase-1 runner is a capability-gated placeholder and returns explicit DEPENDENCY_MISSING or NOT_IMPLEMENTED guidance until full inference support lands.
+    capabilities:
+      past_covariates_numeric: false
+      past_covariates_categorical: false
+      future_covariates_numeric: false
+      future_covariates_categorical: false
+      static_covariates: false
+
