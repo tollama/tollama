@@ -25,7 +25,7 @@ from .adapter import PatchTSTAdapter
 from .errors import AdapterInputError, DependencyMissingError, UnsupportedModelError
 
 RUNNER_NAME = "tollama-patchtst"
-RUNNER_VERSION = "0.2.0"
+RUNNER_VERSION = "0.2.1"
 UNKNOWN_REQUEST_ID = "unknown"
 CAPABILITIES = ("hello", "forecast", "unload")
 _FORECAST_REQUEST_FIELDS = frozenset(
