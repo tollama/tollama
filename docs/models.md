@@ -441,7 +441,7 @@ tollama run nhits --input examples/request.json --no-stream
 ```
 
 
-## N-BEATSx Forecasting (Phase-3 hardening)
+## N-BEATSx Forecasting (Phase-4 quality)
 
 N-BEATSx is integrated for real inference via the dedicated `nbeatsx` runner family.
 
@@ -453,15 +453,15 @@ N-BEATSx is integrated for real inference via the dedicated `nbeatsx` runner fam
   - returns `DEPENDENCY_MISSING` with install guidance when optional dependencies are absent
   - performs runtime NeuralForecast inference for canonical single/multi-series forecast requests
   - validates edge cases more strictly (finite numeric targets, timestamp parsing, and per-series frequency sanity)
-  - supports best-effort quantiles when the active backend exposes probabilistic columns (for example `lo/hi` interval outputs)
-  - explicitly falls back to mean-only forecasts with warnings when requested quantiles cannot be produced
-  - currently ignores covariates/static features and emits warnings when provided
+  - uses backend quantile outputs when available; otherwise applies calibrated residual-based quantile fallback with explicit warnings
+  - supports numeric covariates/static features in practical best-effort mode (with strict-mode validation via `parameters.covariates_mode`)
 
 Runtime tuning & limitations (N-BEATSx):
 
 - requests with multiple series must currently use one shared resolved frequency
 - `series[].freq: "auto"` is accepted, but frequency inference can fail for irregular timestamps (provide explicit `freq` when possible)
-- quantile support is backend-dependent; when unavailable, response warnings will state that mean-only output was returned
+- if backend quantile columns are unavailable, fallback quantiles are generated from robust residual scale; warnings will identify this path
+- covariates/static features are numeric-only for this runner path; in `best_effort` mode non-numeric values are dropped/zero-filled with warnings, and in `strict` mode they raise `BAD_REQUEST`
 - `model_local_dir` is currently metadata-only for this runner path (runtime trains from request history) and is ignored with warning when present
 
 ```bash

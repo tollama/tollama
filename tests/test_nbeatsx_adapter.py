@@ -57,12 +57,14 @@ class _FakeNF:
     def __init__(self, models: list[Any], freq: str) -> None:
         self._models = models
         self._freq = freq
+        self.fit_calls: list[dict[str, Any]] = []
+        self.predict_calls: list[dict[str, Any]] = []
 
-    def fit(self, train_df: _FakeDataFrame) -> None:
-        del train_df
+    def fit(self, train_df: _FakeDataFrame, static_df: _FakeDataFrame | None = None) -> None:
+        self.fit_calls.append({"train_df": train_df, "static_df": static_df})
 
-    def predict(self, h: int) -> _FakeDataFrame:
-        del h
+    def predict(self, h: int | None = None, futr_df: _FakeDataFrame | None = None) -> _FakeDataFrame:
+        self.predict_calls.append({"h": h, "futr_df": futr_df})
         return _FakeDataFrame(
             [
                 {"unique_id": "s1", "ds": "2025-01-04", "NBEATSx": 10.0},
@@ -74,9 +76,10 @@ class _FakeNF:
 
 
 class _FakeNBEATSx:
-    def __init__(self, h: int, input_size: int) -> None:
+    def __init__(self, h: int, input_size: int, **kwargs: Any) -> None:
         self.h = h
         self.input_size = input_size
+        self.kwargs = kwargs
 
 
 def _request() -> ForecastRequest:
@@ -98,6 +101,8 @@ def _request() -> ForecastRequest:
                     "timestamps": ["2025-01-01", "2025-01-02", "2025-01-03"],
                     "target": [3.0, 2.0, 1.0],
                     "past_covariates": {"promo": [0, 1, 1]},
+                    "future_covariates": {"promo": [1, 0]},
+                    "static_covariates": {"tier": 2},
                 },
             ],
             "options": {},
@@ -123,12 +128,58 @@ def test_nbeatsx_adapter_forecast_smoke_multi_series(monkeypatch) -> None:
     assert len(response.forecasts) == 2
     assert response.forecasts[0].mean == [10.0, 11.0]
     assert response.forecasts[1].mean == [20.0, 21.0]
-    assert response.forecasts[0].quantiles is None
+    assert response.forecasts[0].quantiles is not None
+    assert set(response.forecasts[0].quantiles) == {"0.1", "0.9"}
     assert response.usage is not None
     assert response.usage["runner"] == "tollama-nbeatsx"
+    assert response.usage["covariates_hist_exog"] == 1
     assert response.warnings is not None
-    assert any("point forecasts only" in warning for warning in response.warnings)
-    assert any("ignores covariates" in warning for warning in response.warnings)
+    assert any("calibrated quantile fallback" in warning for warning in response.warnings)
+
+
+def test_nbeatsx_adapter_best_effort_drops_non_numeric_covariates(monkeypatch) -> None:
+    adapter = NbeatsxAdapter()
+    monkeypatch.setattr(
+        adapter,
+        "_resolve_dependencies",
+        lambda: type(
+            "D",
+            (),
+            {"pd": _FakePandas(), "neuralforecast_cls": _FakeNF, "nbeatsx_cls": _FakeNBEATSx},
+        )(),
+    )
+    req = _request()
+    req.series[1].past_covariates = {"promo": ["bad", "bad", "bad"]}
+    req.series[1].future_covariates = {"promo": ["bad", "bad"]}
+
+    response = adapter.forecast(req)
+
+    assert response.warnings is not None
+    assert any("non-numeric" in warning for warning in response.warnings)
+
+
+def test_nbeatsx_adapter_strict_covariate_mode_rejects_non_numeric_covariates(monkeypatch) -> None:
+    from tollama.runners.nbeatsx_runner.errors import AdapterInputError
+
+    adapter = NbeatsxAdapter()
+    monkeypatch.setattr(
+        adapter,
+        "_resolve_dependencies",
+        lambda: type(
+            "D",
+            (),
+            {"pd": _FakePandas(), "neuralforecast_cls": _FakeNF, "nbeatsx_cls": _FakeNBEATSx},
+        )(),
+    )
+    req = _request()
+    req.parameters.covariates_mode = "strict"
+    req.series[1].past_covariates = {"promo": ["bad", "bad", "bad"]}
+
+    try:
+        adapter.forecast(req)
+        raise AssertionError("expected AdapterInputError")
+    except AdapterInputError as exc:
+        assert "must be numeric" in str(exc)
 
 
 def test_nbeatsx_adapter_invalid_frequency_maps_to_input_error(monkeypatch) -> None:

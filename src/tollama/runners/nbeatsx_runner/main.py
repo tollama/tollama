@@ -86,7 +86,7 @@ def _handle_hello(request: ProtocolRequest) -> ProtocolResponse:
             "version": RUNNER_VERSION,
             "capabilities": list(CAPABILITIES),
             "supported_families": _SUPPORTED_FAMILIES,
-            "status": "phase2_inference",
+            "status": "phase4_quality",
         },
     )
 
