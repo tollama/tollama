@@ -132,6 +132,24 @@ def _lag_llama_payload() -> dict[str, object]:
     }
 
 
+
+
+def _nbeatsx_payload() -> dict[str, object]:
+    return {
+        "model": "nbeatsx",
+        "horizon": 2,
+        "quantiles": [0.1, 0.9],
+        "series": [
+            {
+                "id": "s1",
+                "freq": "D",
+                "timestamps": ["2025-01-01", "2025-01-02"],
+                "target": [10.0, 12.0],
+            }
+        ],
+        "options": {},
+    }
+
 def _nhits_payload() -> dict[str, object]:
     return {
         "model": "nhits",
@@ -432,6 +450,42 @@ def test_missing_nhits_runner_command_returns_install_hint(monkeypatch, tmp_path
     assert "pip install -e" in detail
 
 
+
+
+def test_daemon_routes_nbeatsx_family_to_runner_command_override(monkeypatch, tmp_path) -> None:
+    paths = TollamaPaths(base_dir=tmp_path / ".tollama")
+    monkeypatch.setenv("TOLLAMA_HOME", str(paths.base_dir))
+    install_from_registry("nbeatsx", accept_license=False, paths=paths)
+
+    manager = RunnerManager(
+        runner_commands={"nbeatsx": ("tollama-runner-mock",)},
+    )
+    with TestClient(create_app(runner_manager=manager)) as client:
+        response = client.post("/v1/forecast", json=_nbeatsx_payload())
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["model"] == "nbeatsx"
+    assert body["forecasts"][0]["id"] == "s1"
+    assert body["forecasts"][0]["mean"] == [12.0, 12.0]
+
+
+def test_missing_nbeatsx_runner_command_returns_install_hint(monkeypatch, tmp_path) -> None:
+    paths = TollamaPaths(base_dir=tmp_path / ".tollama")
+    monkeypatch.setenv("TOLLAMA_HOME", str(paths.base_dir))
+    install_from_registry("nbeatsx", accept_license=False, paths=paths)
+
+    manager = RunnerManager(
+        runner_commands={"nbeatsx": ("tollama-runner-nbeatsx-missing",)},
+    )
+    with TestClient(create_app(runner_manager=manager)) as client:
+        response = client.post("/v1/forecast", json=_nbeatsx_payload())
+
+    assert response.status_code == 503
+    detail = response.json()["detail"]
+    assert "runner-nbeatsx" in detail
+    assert "pip install -e" in detail
+
 def test_runner_manager_list_families_includes_expected_defaults() -> None:
     manager = RunnerManager()
     assert manager.list_families() == [
@@ -445,6 +499,7 @@ def test_runner_manager_list_families_includes_expected_defaults() -> None:
         "patchtst",
         "tide",
         "nhits",
+        "nbeatsx",
     ]
 
 
@@ -492,6 +547,7 @@ def test_runner_manager_get_all_statuses_does_not_start_missing_supervisors(monk
         "patchtst",
         "tide",
         "nhits",
+        "nbeatsx",
     }
     assert by_family["mock"]["running"] is True
     assert by_family["torch"]["command"] == [
@@ -542,6 +598,12 @@ def test_runner_manager_get_all_statuses_does_not_start_missing_supervisors(monk
         "tollama.runners.nhits_runner.main",
     ]
     assert by_family["nhits"]["running"] is False
+    assert by_family["nbeatsx"]["command"] == [
+        sys.executable,
+        "-m",
+        "tollama.runners.nbeatsx_runner.main",
+    ]
+    assert by_family["nbeatsx"]["running"] is False
 
 
 def test_runner_manager_reports_lag_llama_default_command(monkeypatch) -> None:

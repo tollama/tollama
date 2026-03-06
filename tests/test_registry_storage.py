@@ -32,6 +32,7 @@ def test_registry_loads_required_model_specs() -> None:
         "patchtst",
         "tide",
         "nhits",
+        "nbeatsx",
     } <= set(registry)
 
     mock = registry["mock"]
@@ -163,6 +164,19 @@ def test_registry_loads_required_model_specs() -> None:
         "install_extra": "runner_nhits",
         "install_command": 'python -m pip install -e ".[dev,runner_nhits]"',
         "notes": "N-HiTS is registered for discovery and routing. Phase-1 runner is a capability-gated placeholder and returns explicit DEPENDENCY_MISSING or NOT_IMPLEMENTED guidance until full inference support lands.",
+    }
+
+    nbeatsx = registry["nbeatsx"]
+    assert nbeatsx.family == "nbeatsx"
+    assert nbeatsx.source.repo_id == "cchallu/nbeatsx-air-passengers"
+    assert nbeatsx.source.revision == "main"
+    assert nbeatsx.metadata == {
+        "implementation": "nbeatsx",
+        "status": "phase1_placeholder",
+        "support_level": "experimental",
+        "install_extra": "runner_nbeatsx",
+        "install_command": 'python -m pip install -e ".[dev,runner_nbeatsx]"',
+        "notes": "N-BEATSx is registered for discovery and routing. Phase-1 runner is a capability-gated placeholder and returns explicit DEPENDENCY_MISSING or NOT_IMPLEMENTED guidance until full inference support lands.",
     }
 
     lag_llama = registry["lag-llama"]
