@@ -428,7 +428,7 @@ def test_missing_nhits_runner_command_returns_install_hint(monkeypatch, tmp_path
 
     assert response.status_code == 503
     detail = response.json()["detail"]
-    assert "runner-nhits" in detail
+    assert "runner_nhits" in detail
     assert "pip install -e" in detail
 
 

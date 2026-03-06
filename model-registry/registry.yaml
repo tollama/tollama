@@ -189,8 +189,8 @@ models:
   - name: tide
     family: tide
     source:
-      type: huggingface
-      repo_id: unit8co/tide
+      type: local
+      repo_id: tollama/tide-runner
       revision: main
     license:
       type: apache-2.0

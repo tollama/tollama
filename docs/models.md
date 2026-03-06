@@ -389,6 +389,7 @@ TiDE is integrated for inference via the dedicated `tide` runner family.
 - model name: `tide`
 - runner family: `tide`
 - install extra: `runner_tide`
+- pull behavior: registry pull is manifest-only (local source), so `tollama pull tide` does not require Hugging Face auth/snapshot download
 - current runtime behavior:
   - returns `DEPENDENCY_MISSING` when optional dependencies are absent
   - returns deterministic mean forecasts for valid requests

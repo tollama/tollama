@@ -38,6 +38,7 @@ def _write_fake_state(paths: TollamaPaths, family: str, **overrides: object) -> 
         "extra": FAMILY_EXTRAS[family],
         "python_version": platform.python_version(),
         "installed_at": "2026-01-01T00:00:00+00:00",
+        "schema_version": 2,
     }
     state.update(overrides)
     (family_dir / "installed.json").write_text(json.dumps(state), encoding="utf-8")
@@ -215,7 +216,7 @@ def test_get_status_installed(tmp_path: Path) -> None:
 
     assert status["installed"] is True
     assert status["family"] == "sundial"
-    assert status["extra"] == "runner-sundial"
+    assert status["extra"] == "runner_sundial"
     assert status["tollama_version"] is not None
     assert status["python_constraint"] is None  # sundial has no constraint
 
@@ -326,11 +327,29 @@ def test_corrupted_state_json_triggers_reinstall(tmp_path: Path) -> None:
         mock_create.assert_called_once()
 
 
+def test_missing_schema_version_triggers_reinstall(tmp_path: Path) -> None:
+    paths = _paths(tmp_path)
+    _write_fake_state(paths, "torch")
+    state_path = paths.runtimes_dir / "torch" / "installed.json"
+    payload = json.loads(state_path.read_text(encoding="utf-8"))
+    payload.pop("schema_version", None)
+    state_path.write_text(json.dumps(payload), encoding="utf-8")
+    _write_fake_python(paths, "torch")
+
+    with (
+        patch("tollama.core.runtime_bootstrap._create_venv") as mock_create,
+        patch("tollama.core.runtime_bootstrap._install_extras"),
+    ):
+        mock_create.side_effect = lambda vd: _write_fake_python(paths, "torch")
+        ensure_family_runtime("torch", paths=paths)
+        mock_create.assert_called_once()
+
+
 def test_resolve_install_spec_prefers_local_project_root() -> None:
     with patch("tollama.core.runtime_bootstrap._resolve_local_project_root") as mock_local:
         mock_local.return_value = "/tmp/tollama-local"
-        spec = _resolve_install_spec("runner-lag-llama")
-    assert spec == "/tmp/tollama-local[runner-lag-llama]"
+        spec = _resolve_install_spec("runner_lag_llama")
+    assert spec == "/tmp/tollama-local[runner_lag_llama]"
 
 
 def test_resolve_install_spec_uses_direct_url_when_no_local_root() -> None:
@@ -342,6 +361,6 @@ def test_resolve_install_spec_uses_direct_url_when_no_local_root() -> None:
         patch("importlib.metadata.distribution", return_value=fake_dist),
     ):
         mock_local.return_value = None
-        spec = _resolve_install_spec("runner-torch")
+        spec = _resolve_install_spec("runner_torch")
 
-    assert spec == "/opt/tollama-src[runner-torch]"
+    assert spec == "/opt/tollama-src[runner_torch]"
