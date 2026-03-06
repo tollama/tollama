@@ -185,14 +185,15 @@ def test_registry_loads_required_model_specs() -> None:
     assert nbeatsx.source.revision == "main"
     assert nbeatsx.metadata == {
         "implementation": "nbeatsx",
-        "status": "phase1_placeholder",
-        "support_level": "experimental",
+        "status": "phase2_inference",
+        "support_level": "baseline",
         "install_extra": "runner_nbeatsx",
         "install_command": 'python -m pip install -e ".[dev,runner_nbeatsx]"',
         "notes": (
-            "N-BEATSx is registered for discovery and routing. Phase-1 runner is a "
-            "capability-gated placeholder and returns explicit DEPENDENCY_MISSING or "
-            "NOT_IMPLEMENTED guidance until full inference support lands."
+            "N-BEATSx runner supports canonical point forecasts (single/multi series) "
+            "via runtime NeuralForecast inference. Requested quantiles and covariates "
+            "are currently best-effort limitations and return explicit response "
+            "warnings."
         ),
     }
 
