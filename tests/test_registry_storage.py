@@ -135,7 +135,11 @@ def test_registry_loads_required_model_specs() -> None:
         "default_context_length": 512,
         "install_extra": "runner_patchtst",
         "install_command": 'python -m pip install -e ".[dev,runner_patchtst]"',
-        "notes": "PatchTST runner supports canonical point forecasts (single/multi series) with optional quantiles when the backend exposes them; covariates are currently ignored.",
+        "notes": (
+            "PatchTST runner supports canonical point forecasts (single/multi series) "
+            "with optional quantiles when the backend exposes them; covariates are "
+            "currently ignored."
+        ),
     }
 
 
@@ -150,7 +154,12 @@ def test_registry_loads_required_model_specs() -> None:
         "support_level": "baseline",
         "install_extra": "runner_tide",
         "install_command": 'python -m pip install -e ".[dev,runner_tide]"',
-        "notes": "TiDE runner supports deterministic forecasts and best-effort requested quantiles when runtime probabilistic outputs are available. When quantiles cannot be produced, responses explicitly fall back to mean-only forecasts with warnings.",
+        "notes": (
+            "TiDE runner supports deterministic forecasts and best-effort requested "
+            "quantiles when runtime probabilistic outputs are available. When quantiles "
+            "cannot be produced, responses explicitly fall back to mean-only forecasts "
+            "with warnings."
+        ),
     }
 
     nhits = registry["nhits"]
@@ -163,7 +172,11 @@ def test_registry_loads_required_model_specs() -> None:
         "support_level": "experimental",
         "install_extra": "runner_nhits",
         "install_command": 'python -m pip install -e ".[dev,runner_nhits]"',
-        "notes": "N-HiTS is registered for discovery and routing. Phase-1 runner is a capability-gated placeholder and returns explicit DEPENDENCY_MISSING or NOT_IMPLEMENTED guidance until full inference support lands.",
+        "notes": (
+            "N-HiTS is registered for discovery and routing. Phase-1 runner is a "
+            "capability-gated placeholder and returns explicit DEPENDENCY_MISSING or "
+            "NOT_IMPLEMENTED guidance until full inference support lands."
+        ),
     }
 
     nbeatsx = registry["nbeatsx"]
@@ -176,7 +189,11 @@ def test_registry_loads_required_model_specs() -> None:
         "support_level": "experimental",
         "install_extra": "runner_nbeatsx",
         "install_command": 'python -m pip install -e ".[dev,runner_nbeatsx]"',
-        "notes": "N-BEATSx is registered for discovery and routing. Phase-1 runner is a capability-gated placeholder and returns explicit DEPENDENCY_MISSING or NOT_IMPLEMENTED guidance until full inference support lands.",
+        "notes": (
+            "N-BEATSx is registered for discovery and routing. Phase-1 runner is a "
+            "capability-gated placeholder and returns explicit DEPENDENCY_MISSING or "
+            "NOT_IMPLEMENTED guidance until full inference support lands."
+        ),
     }
 
     lag_llama = registry["lag-llama"]
