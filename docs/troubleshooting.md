@@ -254,6 +254,49 @@ Fix:
   ```
 - After the first successful run, normal timeout values (120–300 s) are safe.
 
+## 14) Runtime re-installs once after upgrade (schema version mismatch)
+
+Symptoms:
+- Right after upgrading Tollama, the first run/pull for a model family is slower than usual.
+- Logs mention runtime re-bootstrap due to `schema_version` mismatch.
+- It only happens once per family, then normal speed returns.
+
+Explanation:
+- Tollama stores per-family runtime metadata (including `schema_version`) in runtime state.
+- After an upgrade that bumps runtime state schema, Tollama intentionally rebuilds the affected runtime once so the environment matches the current code.
+- This is expected migration behavior, not runtime corruption.
+
+Quick verification:
+```bash
+# Check runtime state, including schema_version
+# (look at schema_version and tollama_version per family)
+tollama runtime list --json
+
+# Trigger one run for the affected family/model
+# First run may be slower while rebuild happens
+tollama run <model> --input examples/request.json --no-stream --timeout 900
+
+# Re-check state; subsequent runs should be fast
+tollama runtime list --json
+```
+
+Safe remediation (if rebuild did not complete cleanly):
+```bash
+# Rebuild only the affected runtime family
+# Examples: torch, timesfm, uni2ts, sundial, toto, lag_llama, patchtst, tide
+tollama runtime update <family>
+
+# Or refresh all currently installed runtime families
+tollama runtime update --all
+
+# If needed, force a clean reinstall for one family
+tollama runtime install <family> --reinstall
+```
+
+Notes:
+- Prefer `runtime update`/`install --reinstall` over manual venv deletion.
+- If rebuild keeps failing, capture stderr logs and run `tollama doctor` before opening an issue.
+
 ---
 
 ## Quick Triage Commands
