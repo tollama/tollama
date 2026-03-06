@@ -406,27 +406,32 @@ Calibration & limitations guidance:
 - if you need tighter/steadier quantile estimates, increase `options.quantile_samples` (at the cost of latency/compute).
 - if runtime/model combination does not expose quantile extraction, response warnings will state that quantiles were omitted and mean-only output was returned.
 
-## N-HiTS Forecasting (Phase-1 placeholder)
+## N-HiTS Forecasting (Phase-2 baseline)
 
-N-HiTS is registered under its own `nhits` runner family for discovery, pull/install, and routing.
+N-HiTS is integrated for real inference via the dedicated `nhits` runner family.
 
 - model name: `nhits`
 - runner family: `nhits`
 - install extra: `runner_nhits`
 - current runtime behavior:
   - returns `DEPENDENCY_MISSING` with install guidance when optional dependencies are absent
-  - returns `NOT_IMPLEMENTED` after dependency gating because forecast execution is intentionally disabled in phase-1
+  - performs runtime NeuralForecast inference for canonical single/multi-series forecast requests
+  - currently returns point forecasts only (`quantiles` are omitted with warnings)
+  - currently ignores covariates/static features and emits warnings when provided
 
 ```bash
-# install N-HiTS placeholder runner dependencies
+# install N-HiTS runner dependencies
 python -m pip install -e ".[dev,runner_nhits]"
 
 # pull registry entry
 tollama pull nhits
+
+# run forecast
+tollama run nhits --input examples/request.json --no-stream
 ```
 
 
-## N-BEATSx Forecasting (Phase-2 baseline)
+## N-BEATSx Forecasting (Phase-3 hardening)
 
 N-BEATSx is integrated for real inference via the dedicated `nbeatsx` runner family.
 
@@ -436,8 +441,17 @@ N-BEATSx is integrated for real inference via the dedicated `nbeatsx` runner fam
 - current runtime behavior:
   - returns `DEPENDENCY_MISSING` with install guidance when optional dependencies are absent
   - performs runtime NeuralForecast inference for canonical single/multi-series forecast requests
-  - currently returns point forecasts only (`quantiles` are omitted with warnings)
+  - validates edge cases more strictly (finite numeric targets, timestamp parsing, and per-series frequency sanity)
+  - supports best-effort quantiles when the active backend exposes probabilistic columns (for example `lo/hi` interval outputs)
+  - explicitly falls back to mean-only forecasts with warnings when requested quantiles cannot be produced
   - currently ignores covariates/static features and emits warnings when provided
+
+Runtime tuning & limitations (N-BEATSx):
+
+- requests with multiple series must currently use one shared resolved frequency
+- `series[].freq: "auto"` is accepted, but frequency inference can fail for irregular timestamps (provide explicit `freq` when possible)
+- quantile support is backend-dependent; when unavailable, response warnings will state that mean-only output was returned
+- `model_local_dir` is currently metadata-only for this runner path (runtime trains from request history) and is ignored with warning when present
 
 ```bash
 # install N-BEATSx runner dependencies

@@ -53,9 +53,9 @@ Toto supports target + past numeric covariates; known-future/static/categorical 
 > [!IMPORTANT]
 > `patchtst` is a **Phase-2 baseline integration**: it is discoverable/pullable and now executes canonical target-only forecasts via the dedicated runner family. Quantiles are returned when the backend exposes them; otherwise the runner returns mean-only forecasts with a warning. If dependencies are missing, the runner returns `DEPENDENCY_MISSING` with the install command `python -m pip install -e ".[dev,runner_patchtst]"`.
 >
-> `nhits` is currently a **Phase-1 placeholder integration**: it is discoverable/pullable and routes to a dedicated runner family, but forecast execution intentionally returns `DEPENDENCY_MISSING`/`NOT_IMPLEMENTED` with guidance until full N-HiTS inference support lands.
+> `nhits` is a **Phase-2 baseline integration**: it is discoverable/pullable and executes canonical point forecasts via the dedicated runner family. Quantiles are currently omitted with warnings, and covariates/static features are currently ignored with warnings. If dependencies are missing, the runner returns `DEPENDENCY_MISSING` with the install command `python -m pip install -e ".[dev,runner_nhits]"`.
 >
-> `nbeatsx` is currently a **Phase-1 placeholder integration**: it is discoverable/pullable and routes to a dedicated runner family, but forecast execution intentionally returns `DEPENDENCY_MISSING`/`NOT_IMPLEMENTED` with guidance until full N-BEATSx inference support lands.
+> `nbeatsx` is a **Phase-3 hardened integration**: it is discoverable/pullable and executes canonical single/multi-series forecasts via the dedicated runner family with stricter input/frequency validation. Quantiles are returned on a best-effort basis when backend probabilistic outputs are available; otherwise the runner falls back to mean-only forecasts with explicit warnings. Covariates/static features are still ignored with warnings. If dependencies are missing, the runner returns `DEPENDENCY_MISSING` with the install command `python -m pip install -e ".[dev,runner_nbeatsx]"`.
 
 ## Requirements
 
