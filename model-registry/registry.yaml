@@ -212,8 +212,8 @@ models:
   - name: nhits
     family: nhits
     source:
-      type: huggingface
-      repo_id: cchallu/nhits-air-passengers
+      type: local
+      repo_id: tollama/nhits-runner
       revision: main
     license:
       type: apache-2.0
@@ -224,7 +224,7 @@ models:
       support_level: baseline
       install_extra: runner_nhits
       install_command: python -m pip install -e ".[dev,runner_nhits]"
-      notes: N-HiTS runner supports canonical point forecasts (single/multi series) via runtime NeuralForecast inference. Requested quantiles and covariates are currently best-effort limitations and return explicit response warnings.
+      notes: N-HiTS runner supports canonical point forecasts (single/multi series) via runtime NeuralForecast inference. Pull is manifest-only (local source, no Hugging Face snapshot/auth required). Requested quantiles and covariates are currently best-effort limitations and return explicit response warnings.
     capabilities:
       past_covariates_numeric: false
       past_covariates_categorical: false
@@ -235,8 +235,8 @@ models:
   - name: nbeatsx
     family: nbeatsx
     source:
-      type: huggingface
-      repo_id: cchallu/nbeatsx-air-passengers
+      type: local
+      repo_id: tollama/nbeatsx-runner
       revision: main
     license:
       type: apache-2.0
@@ -247,7 +247,7 @@ models:
       support_level: baseline
       install_extra: runner_nbeatsx
       install_command: python -m pip install -e ".[dev,runner_nbeatsx]"
-      notes: N-BEATSx runner supports canonical single/multi-series forecasts via runtime NeuralForecast inference with stricter input validation. Requested quantiles are best-effort (returned when backend probabilistic outputs are exposed, otherwise omitted with explicit warnings). Covariates and static features are currently ignored with explicit warnings.
+      notes: N-BEATSx runner supports canonical single/multi-series forecasts via runtime NeuralForecast inference with stricter input validation. Pull is manifest-only (local source, no Hugging Face snapshot/auth required). Requested quantiles are best-effort (returned when backend probabilistic outputs are exposed, otherwise omitted with explicit warnings). Covariates and static features are currently ignored with explicit warnings.
     capabilities:
       past_covariates_numeric: false
       past_covariates_categorical: false

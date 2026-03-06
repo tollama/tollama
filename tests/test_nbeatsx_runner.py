@@ -114,7 +114,7 @@ def test_nbeatsx_runner_forecast_smoke_wires_request_and_response() -> None:
     adapter = _CapturingAdapter()
     params = _valid_forecast_params()
     params["model_local_dir"] = " /tmp/nbeatsx "
-    params["model_source"] = {"repo_id": "cchallu/nbeatsx-air-passengers", "revision": "main"}
+    params["model_source"] = {"repo_id": "tollama/nbeatsx-runner", "revision": "main"}
     params["model_metadata"] = {"implementation": "nbeatsx"}
 
     response = handle_request_line(
@@ -133,7 +133,7 @@ def test_nbeatsx_runner_forecast_smoke_wires_request_and_response() -> None:
     assert call["request"].model == "nbeatsx"
     assert call["request"].horizon == 2
     assert call["model_local_dir"] == "/tmp/nbeatsx"
-    assert call["model_source"] == {"repo_id": "cchallu/nbeatsx-air-passengers", "revision": "main"}
+    assert call["model_source"] == {"repo_id": "tollama/nbeatsx-runner", "revision": "main"}
     assert call["model_metadata"] == {"implementation": "nbeatsx"}
 
 
