@@ -740,6 +740,30 @@ and raw client calls:
 PYTHONPATH=src python benchmarks/tollama_vs_raw.py --model mock --iterations 3 --warmup 1
 ```
 
+Cross-model TSFM benchmark + routing-default recommendation (Lag-Llama, PatchTST,
+TiDE, N-HiTS, N-BEATSx):
+
+```bash
+# Template-only protocol/report artifact (works without a running daemon)
+PYTHONPATH=src python benchmarks/cross_model_tsfm.py \
+  --template-only \
+  --output-dir benchmarks/reports/cross_model_baseline
+
+# Full benchmark run against a running daemon
+PYTHONPATH=src python benchmarks/cross_model_tsfm.py \
+  --base-url http://127.0.0.1:11435 \
+  --output-dir artifacts/benchmarks/cross_model
+```
+
+Artifacts:
+
+- `result.json` / `result.md`: per-model per-dataset quality + latency results and
+  a routing recommendation (`default`, `fast_path`, `high_accuracy`)
+- `report_template.json` / `report_template.md`: protocol/report template when
+  execution environment is unavailable
+
+See `docs/tsfm-routing-defaults.md` for protocol details and policy interpretation.
+
 ## Development Checks
 
 ```bash

@@ -1,0 +1,44 @@
+{
+  "generated_at": "2026-03-06T14:10:42+00:00",
+  "protocol": {
+    "base_url": "http://127.0.0.1:11435",
+    "context_length": 96,
+    "datasets": [
+      "seasonal_daily",
+      "trend_weekly",
+      "intermittent_daily"
+    ],
+    "horizon": 24,
+    "metrics": [
+      "mae",
+      "rmse",
+      "mape",
+      "smape",
+      "mase",
+      "latency_p50",
+      "latency_p95"
+    ],
+    "models": [
+      "lag-llama",
+      "patchtst",
+      "tide",
+      "nhits",
+      "nbeatsx"
+    ],
+    "repeats": 3,
+    "seed": 42,
+    "split": "last horizon points as holdout; remaining as context"
+  },
+  "routing_recommendation": {
+    "caveats": [
+      "Template-only run. No daemon/model execution performed.",
+      "Fill with actual results after running with a live tollama daemon."
+    ],
+    "default": "<to-be-filled>",
+    "fast_path": "<to-be-filled>",
+    "high_accuracy": "<to-be-filled>",
+    "policy": "Populate after benchmark execution."
+  },
+  "run_id": "20260306T141042Z",
+  "runs": []
+}
