@@ -32,16 +32,20 @@ logger = logging.getLogger(__name__)
 # Maps runner family names to the ``pyproject.toml`` optional-extra name that
 # carries the family's heavy dependencies.
 FAMILY_EXTRAS: dict[str, str] = {
-    "torch": "runner-torch",
-    "timesfm": "runner-timesfm",
-    "uni2ts": "runner-uni2ts",
-    "sundial": "runner-sundial",
-    "toto": "runner-toto",
-    "lag_llama": "runner-lag-llama",
-    "patchtst": "runner-patchtst",
-    "tide": "runner-tide",
-    "nhits": "runner-nhits",
+    "torch": "runner_torch",
+    "timesfm": "runner_timesfm",
+    "uni2ts": "runner_uni2ts",
+    "sundial": "runner_sundial",
+    "toto": "runner_toto",
+    "lag_llama": "runner_lag_llama",
+    "patchtst": "runner_patchtst",
+    "tide": "runner_tide",
+    "nhits": "runner_nhits",
 }
+
+# Increment when runtime state compatibility changes even without a package
+# version bump (for example, extra-name normalization or bootstrap semantics).
+_RUNTIME_STATE_SCHEMA_VERSION = 2
 
 # Families that require specific Python versions.
 # uni2ts and timesfm have build-time or runtime failures on Python 3.12+.
@@ -165,6 +169,7 @@ def get_runtime_status(
             "python_version": None,
             "python_constraint": python_constraint,
             "installed_at": None,
+            "schema_version": None,
         }
 
     state = _read_state(state_path)
@@ -177,6 +182,7 @@ def get_runtime_status(
         "python_version": state.get("python_version"),
         "python_constraint": python_constraint,
         "installed_at": state.get("installed_at"),
+        "schema_version": state.get("schema_version"),
     }
 
 
@@ -230,6 +236,15 @@ def _is_runtime_valid(family_dir: Path, family: str) -> bool:
         return False
 
     if state.get("extra") != FAMILY_EXTRAS.get(family):
+        return False
+
+    if state.get("schema_version") != _RUNTIME_STATE_SCHEMA_VERSION:
+        logger.debug(
+            "runtime for %r has schema_version=%s (expected %s); will re-bootstrap",
+            family,
+            state.get("schema_version"),
+            _RUNTIME_STATE_SCHEMA_VERSION,
+        )
         return False
 
     return True
@@ -357,6 +372,7 @@ def _write_runtime_state(family_dir: Path, family: str) -> None:
         "extra": FAMILY_EXTRAS[family],
         "python_version": platform.python_version(),
         "installed_at": datetime.now(UTC).isoformat(),
+        "schema_version": _RUNTIME_STATE_SCHEMA_VERSION,
     }
     state_path = family_dir / _STATE_FILENAME
     state_path.parent.mkdir(parents=True, exist_ok=True)

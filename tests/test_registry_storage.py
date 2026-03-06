@@ -141,7 +141,7 @@ def test_registry_loads_required_model_specs() -> None:
 
     tide = registry["tide"]
     assert tide.family == "tide"
-    assert tide.source.repo_id == "unit8co/tide"
+    assert tide.source.repo_id == "tollama/tide-runner"
     assert tide.source.revision == "main"
     assert tide.metadata == {
         "implementation": "tide",

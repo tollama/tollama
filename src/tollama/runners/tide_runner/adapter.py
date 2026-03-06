@@ -13,7 +13,7 @@ from .errors import AdapterInputError, DependencyMissingError, UnsupportedModelE
 
 _TIDE_MODELS: dict[str, dict[str, Any]] = {
     "tide": {
-        "repo_id": "unit8co/tide",
+        "repo_id": "tollama/tide-runner",
         "revision": "main",
         "implementation": "tide",
     },
