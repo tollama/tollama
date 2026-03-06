@@ -41,9 +41,14 @@ class _FakePandas:
         return values
 
     @staticmethod
+    def infer_freq(values: list[str]) -> str | None:
+        del values
+        return "D"
+
+    @staticmethod
     def date_range(start: Any, periods: int, freq: str) -> list[_FakeDate]:
         del start
-        if freq != "D":
+        if freq not in {"D", "H"}:
             raise ValueError("unsupported")
         return [_FakeDate(f"2025-01-{index:02d}T00:00:00+00:00") for index in range(1, periods + 1)]
 
@@ -147,3 +152,49 @@ def test_nbeatsx_adapter_invalid_frequency_maps_to_input_error(monkeypatch) -> N
         raise AssertionError("expected AdapterInputError")
     except AdapterInputError as exc:
         assert "invalid frequency" in str(exc)
+
+
+def test_nbeatsx_adapter_rejects_non_finite_target(monkeypatch) -> None:
+    from tollama.runners.nbeatsx_runner.errors import AdapterInputError
+
+    adapter = NbeatsxAdapter()
+    monkeypatch.setattr(
+        adapter,
+        "_resolve_dependencies",
+        lambda: type(
+            "D",
+            (),
+            {"pd": _FakePandas(), "neuralforecast_cls": _FakeNF, "nbeatsx_cls": _FakeNBEATSx},
+        )(),
+    )
+    req = _request()
+    req.series[0].target[0] = float("nan")
+
+    try:
+        adapter.forecast(req)
+        raise AssertionError("expected AdapterInputError")
+    except AdapterInputError as exc:
+        assert "must be finite" in str(exc)
+
+
+def test_nbeatsx_adapter_rejects_mixed_multi_series_frequency(monkeypatch) -> None:
+    from tollama.runners.nbeatsx_runner.errors import AdapterInputError
+
+    adapter = NbeatsxAdapter()
+    monkeypatch.setattr(
+        adapter,
+        "_resolve_dependencies",
+        lambda: type(
+            "D",
+            (),
+            {"pd": _FakePandas(), "neuralforecast_cls": _FakeNF, "nbeatsx_cls": _FakeNBEATSx},
+        )(),
+    )
+    req = _request()
+    req.series[1].freq = "H"
+
+    try:
+        adapter.forecast(req)
+        raise AssertionError("expected AdapterInputError")
+    except AdapterInputError as exc:
+        assert "shared frequency" in str(exc)
