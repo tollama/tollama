@@ -208,3 +208,26 @@ models:
       future_covariates_numeric: true
       future_covariates_categorical: false
       static_covariates: true
+
+  - name: nhits
+    family: nhits
+    source:
+      type: huggingface
+      repo_id: cchallu/nhits-air-passengers
+      revision: main
+    license:
+      type: apache-2.0
+      needs_acceptance: false
+    metadata:
+      implementation: nhits
+      status: phase1_placeholder
+      support_level: experimental
+      install_extra: runner_nhits
+      install_command: python -m pip install -e ".[dev,runner_nhits]"
+      notes: N-HiTS is registered for discovery and routing. Phase-1 runner is a capability-gated placeholder and returns explicit DEPENDENCY_MISSING or NOT_IMPLEMENTED guidance until full inference support lands.
+    capabilities:
+      past_covariates_numeric: false
+      past_covariates_categorical: false
+      future_covariates_numeric: false
+      future_covariates_categorical: false
+      static_covariates: false

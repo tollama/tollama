@@ -404,3 +404,22 @@ Calibration & limitations guidance:
 - quantile quality depends on runtime sampling behavior and underlying TiDE checkpoint calibration; treat intervals as best-effort uncertainty estimates, not guaranteed calibrated prediction intervals.
 - if you need tighter/steadier quantile estimates, increase `options.quantile_samples` (at the cost of latency/compute).
 - if runtime/model combination does not expose quantile extraction, response warnings will state that quantiles were omitted and mean-only output was returned.
+
+## N-HiTS Forecasting (Phase-1 placeholder)
+
+N-HiTS is registered under its own `nhits` runner family for discovery, pull/install, and routing.
+
+- model name: `nhits`
+- runner family: `nhits`
+- install extra: `runner_nhits`
+- current runtime behavior:
+  - returns `DEPENDENCY_MISSING` with install guidance when optional dependencies are absent
+  - returns `NOT_IMPLEMENTED` after dependency gating because forecast execution is intentionally disabled in phase-1
+
+```bash
+# install N-HiTS placeholder runner dependencies
+python -m pip install -e ".[dev,runner_nhits]"
+
+# pull registry entry
+tollama pull nhits
+```
