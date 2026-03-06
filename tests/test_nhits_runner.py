@@ -103,7 +103,7 @@ def test_nhits_runner_hello_reports_supported_family_and_status() -> None:
     )
     payload = response.model_dump(mode="json", exclude_none=True)
     assert payload["result"]["supported_families"] == ["nhits"]
-    assert payload["result"]["status"] == "phase3_hardened"
+    assert payload["result"]["status"] == "phase4_quality"
 
 
 def test_nhits_runner_forecast_returns_dependency_missing_error() -> None:
