@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -59,9 +60,10 @@ class NbeatsxAdapter:
         )
         deps = self._resolve_dependencies()
 
+        resolved_freq = _resolve_shared_frequency(request=request, pd_module=deps.pd)
         train_df = _request_to_training_frame(request=request, pd_module=deps.pd)
         model = _build_model(request=request, runtime=runtime, nbeatsx_cls=deps.nbeatsx_cls)
-        predictor = deps.neuralforecast_cls(models=[model], freq=request.series[0].freq)
+        predictor = deps.neuralforecast_cls(models=[model], freq=resolved_freq)
 
         try:
             predictor.fit(train_df)
@@ -80,11 +82,12 @@ class NbeatsxAdapter:
             forecasts.append(
                 SeriesForecast(
                     id=series.id,
-                    freq=series.freq,
+                    freq=resolved_freq,
                     start_timestamp=_future_start_timestamp(
                         series=series,
                         horizon=request.horizon,
                         pd_module=deps.pd,
+                        resolved_freq=resolved_freq,
                     ),
                     mean=mean,
                     quantiles=None,
@@ -156,8 +159,14 @@ def _request_to_training_frame(*, request: ForecastRequest, pd_module: Any) -> A
         if len(series.target) < 2:
             raise AdapterInputError("each input series must include at least two target points")
 
-        for timestamp, value in zip(series.timestamps, series.target, strict=True):
-            rows.append({"unique_id": series.id, "ds": timestamp, "y": float(value)})
+        for index, (timestamp, value) in enumerate(zip(series.timestamps, series.target, strict=True)):
+            rows.append(
+                {
+                    "unique_id": series.id,
+                    "ds": timestamp,
+                    "y": _coerce_finite_float(value, field=f"series {series.id!r} target[{index}]"),
+                },
+            )
 
     frame = pd_module.DataFrame(rows)
     try:
@@ -245,13 +254,66 @@ def _build_limitations_warnings(*, request: ForecastRequest, model_local_dir: st
     return warnings
 
 
-def _future_start_timestamp(*, series: SeriesInput, horizon: int, pd_module: Any) -> str:
+def _future_start_timestamp(*, series: SeriesInput, horizon: int, pd_module: Any, resolved_freq: str) -> str:
     try:
         parsed = pd_module.to_datetime([series.timestamps[-1]], utc=True, errors="raise")
-        generated = pd_module.date_range(start=parsed[0], periods=horizon + 1, freq=series.freq)
+        generated = pd_module.date_range(start=parsed[0], periods=horizon + 1, freq=resolved_freq)
     except Exception as exc:  # noqa: BLE001
         raise AdapterInputError(f"invalid frequency {series.freq!r} for nbeatsx forecast") from exc
     return _to_iso_timestamp(generated[1])
+
+
+def _resolve_shared_frequency(*, request: ForecastRequest, pd_module: Any) -> str:
+    resolved: str | None = None
+    for series in request.series:
+        freq = _normalize_frequency(series=series, pd_module=pd_module)
+        if resolved is None:
+            resolved = freq
+            continue
+        if freq != resolved:
+            raise AdapterInputError(
+                "N-BEATSx currently requires one shared frequency across all series in a request",
+            )
+    if resolved is None:
+        raise AdapterInputError("nbeatsx forecast requires at least one input series")
+    return resolved
+
+
+def _normalize_frequency(*, series: SeriesInput, pd_module: Any) -> str:
+    freq = (series.freq or "").strip()
+    if freq.lower() == "auto":
+        infer_freq = getattr(pd_module, "infer_freq", None)
+        if not callable(infer_freq):
+            raise AdapterInputError(
+                f"unable to infer frequency for series {series.id!r}; provide explicit freq",
+            )
+        try:
+            parsed = pd_module.to_datetime(series.timestamps, utc=True, errors="raise")
+            inferred = infer_freq(parsed)
+        except Exception as exc:  # noqa: BLE001
+            raise AdapterInputError(f"invalid timestamps for series {series.id!r}: {exc}") from exc
+        if not inferred:
+            raise AdapterInputError(
+                f"unable to infer frequency for series {series.id!r}; provide explicit freq",
+            )
+        freq = str(inferred)
+
+    try:
+        parsed = pd_module.to_datetime([series.timestamps[-1]], utc=True, errors="raise")
+        pd_module.date_range(start=parsed[0], periods=2, freq=freq)
+    except Exception as exc:  # noqa: BLE001
+        raise AdapterInputError(f"invalid frequency {series.freq!r} for nbeatsx forecast") from exc
+    return freq
+
+
+def _coerce_finite_float(value: Any, *, field: str) -> float:
+    try:
+        numeric = float(value)
+    except (TypeError, ValueError) as exc:
+        raise AdapterInputError(f"{field} must be numeric") from exc
+    if not math.isfinite(numeric):
+        raise AdapterInputError(f"{field} must be finite")
+    return numeric
 
 
 def _to_iso_timestamp(value: Any) -> str:
