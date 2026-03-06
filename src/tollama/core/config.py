@@ -44,6 +44,16 @@ class AuthConfig(BaseModel):
     api_keys: list[StrictStr] = Field(default_factory=list)
 
 
+class RoutingDefaults(BaseModel):
+    """Optional benchmark-driven model routing defaults."""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    default: StrictStr | None = None
+    fast_path: StrictStr | None = None
+    high_accuracy: StrictStr | None = None
+
+
 class TollamaConfig(BaseModel):
     """Top-level persisted tollama config."""
 
@@ -53,6 +63,7 @@ class TollamaConfig(BaseModel):
     pull: PullDefaults = Field(default_factory=PullDefaults)
     daemon: DaemonDefaults = Field(default_factory=DaemonDefaults)
     auth: AuthConfig = Field(default_factory=AuthConfig)
+    routing: RoutingDefaults = Field(default_factory=RoutingDefaults)
 
 
 CONFIG_KEY_DESCRIPTIONS: dict[str, str] = {
@@ -64,6 +75,9 @@ CONFIG_KEY_DESCRIPTIONS: dict[str, str] = {
     "pull.local_files_only": "Use cached artifacts only without forcing full offline mode.",
     "pull.insecure": "Disable TLS verification during pulls (debugging only).",
     "pull.max_workers": "Maximum download worker threads for model pulls.",
+    "routing.default": "Preferred model for balanced default routing mode.",
+    "routing.fast_path": "Preferred model for low-latency routing mode.",
+    "routing.high_accuracy": "Preferred model for high-accuracy routing mode.",
 }
 
 

@@ -150,3 +150,26 @@ def test_auth_api_keys_round_trip(monkeypatch, tmp_path) -> None:
 
     reloaded = load_config(paths)
     assert reloaded.auth.api_keys == ["key-1", "key-2"]
+
+
+def test_routing_defaults_round_trip(monkeypatch, tmp_path) -> None:
+    paths = _paths_from_env(monkeypatch, tmp_path)
+    updated = update_config(
+        paths,
+        {
+            "routing": {
+                "default": "lag-llama",
+                "fast_path": "nhits",
+                "high_accuracy": "nbeatsx",
+            }
+        },
+    )
+
+    assert updated.routing.default == "lag-llama"
+    assert updated.routing.fast_path == "nhits"
+    assert updated.routing.high_accuracy == "nbeatsx"
+
+    reloaded = load_config(paths)
+    assert reloaded.routing.default == "lag-llama"
+    assert reloaded.routing.fast_path == "nhits"
+    assert reloaded.routing.high_accuracy == "nbeatsx"

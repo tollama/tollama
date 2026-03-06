@@ -67,6 +67,30 @@ Use policy like this:
 - interactive/low-latency requests → `fast_path`
 - backtesting/critical forecasting requests → `high_accuracy`
 
+Persist benchmark output into tollama config:
+
+```bash
+tollama config set routing.default lag-llama
+tollama config set routing.fast_path nhits
+tollama config set routing.high_accuracy nbeatsx
+```
+
+Then select routing mode per request (model omitted on purpose):
+
+```bash
+curl -s http://127.0.0.1:11435/api/auto-forecast \
+  -H 'content-type: application/json' \
+  -d '{
+    "horizon": 24,
+    "mode": "fast_path",
+    "series": [{"id":"s1","freq":"D","timestamps":["1","2","3"],"target":[1,2,3]}]
+  }'
+```
+
+If the configured routing model is unavailable or fails, daemon falls back to
+normal auto-selection. Explicit `model` requests still take precedence over
+configured routing defaults.
+
 ## Caveats
 
 - Synthetic data is reproducible and useful for regressions, but final routing
