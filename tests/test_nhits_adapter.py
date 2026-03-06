@@ -41,9 +41,14 @@ class _FakePandas:
         return values
 
     @staticmethod
+    def infer_freq(values: list[str]) -> str | None:
+        del values
+        return "D"
+
+    @staticmethod
     def date_range(start: Any, periods: int, freq: str) -> list[_FakeDate]:
         del start
-        if freq != "D":
+        if freq not in {"D", "H"}:
             raise ValueError("unsupported")
         return [_FakeDate(f"2025-01-{index:02d}T00:00:00+00:00") for index in range(1, periods + 1)]
 
@@ -64,6 +69,19 @@ class _FakeNF:
                 {"unique_id": "s1", "ds": "2025-01-05", "NHITS": 11.0},
                 {"unique_id": "s2", "ds": "2025-01-04", "NHITS": 20.0},
                 {"unique_id": "s2", "ds": "2025-01-05", "NHITS": 21.0},
+            ],
+        )
+
+
+class _FakeNFWithQuantiles(_FakeNF):
+    def predict(self, h: int) -> _FakeDataFrame:
+        del h
+        return _FakeDataFrame(
+            [
+                {"unique_id": "s1", "ds": "2025-01-04", "NHITS": 10.0, "q0.1": 8.0, "q0.9": 12.0},
+                {"unique_id": "s1", "ds": "2025-01-05", "NHITS": 11.0, "q0.1": 9.0, "q0.9": 13.0},
+                {"unique_id": "s2", "ds": "2025-01-04", "NHITS": 20.0, "q0.1": 18.0, "q0.9": 22.0},
+                {"unique_id": "s2", "ds": "2025-01-05", "NHITS": 21.0, "q0.1": 19.0, "q0.9": 23.0},
             ],
         )
 
@@ -100,17 +118,17 @@ def _request() -> ForecastRequest:
     )
 
 
-def test_nhits_adapter_forecast_smoke_multi_series(monkeypatch) -> None:
-    adapter = NhitsAdapter()
+def _patch_deps(monkeypatch, adapter: NhitsAdapter, nf_cls: Any = _FakeNF) -> None:
     monkeypatch.setattr(
         adapter,
         "_resolve_dependencies",
-        lambda: type(
-            "D",
-            (),
-            {"pd": _FakePandas(), "neuralforecast_cls": _FakeNF, "nhits_cls": _FakeNHITS},
-        )(),
+        lambda: type("D", (), {"pd": _FakePandas(), "neuralforecast_cls": nf_cls, "nhits_cls": _FakeNHITS})(),
     )
+
+
+def test_nhits_adapter_forecast_smoke_multi_series(monkeypatch) -> None:
+    adapter = NhitsAdapter()
+    _patch_deps(monkeypatch, adapter)
 
     response = adapter.forecast(_request(), model_local_dir="/tmp")
 
@@ -122,23 +140,27 @@ def test_nhits_adapter_forecast_smoke_multi_series(monkeypatch) -> None:
     assert response.usage is not None
     assert response.usage["runner"] == "tollama-nhits"
     assert response.warnings is not None
-    assert any("point forecasts only" in warning for warning in response.warnings)
-    assert any("ignores covariates" in warning for warning in response.warnings)
+    assert any("mean-only" in warning for warning in response.warnings)
+    assert any("covariates" in warning for warning in response.warnings)
+
+
+def test_nhits_adapter_returns_quantiles_when_backend_exposes_columns(monkeypatch) -> None:
+    adapter = NhitsAdapter()
+    _patch_deps(monkeypatch, adapter, _FakeNFWithQuantiles)
+
+    response = adapter.forecast(_request())
+
+    assert response.forecasts[0].quantiles == {"0.1": [8.0, 9.0], "0.9": [12.0, 13.0]}
+    assert response.forecasts[1].quantiles == {"0.1": [18.0, 19.0], "0.9": [22.0, 23.0]}
+    assert response.warnings is not None
+    assert not any("mean-only" in warning for warning in response.warnings)
 
 
 def test_nhits_adapter_invalid_frequency_maps_to_input_error(monkeypatch) -> None:
     from tollama.runners.nhits_runner.errors import AdapterInputError
 
     adapter = NhitsAdapter()
-    monkeypatch.setattr(
-        adapter,
-        "_resolve_dependencies",
-        lambda: type(
-            "D",
-            (),
-            {"pd": _FakePandas(), "neuralforecast_cls": _FakeNF, "nhits_cls": _FakeNHITS},
-        )(),
-    )
+    _patch_deps(monkeypatch, adapter)
     req = _request()
     req.series[0].freq = "BAD"
 
@@ -147,3 +169,33 @@ def test_nhits_adapter_invalid_frequency_maps_to_input_error(monkeypatch) -> Non
         raise AssertionError("expected AdapterInputError")
     except AdapterInputError as exc:
         assert "invalid frequency" in str(exc)
+
+
+def test_nhits_adapter_rejects_non_finite_target(monkeypatch) -> None:
+    from tollama.runners.nhits_runner.errors import AdapterInputError
+
+    adapter = NhitsAdapter()
+    _patch_deps(monkeypatch, adapter)
+    req = _request()
+    req.series[0].target[0] = float("nan")
+
+    try:
+        adapter.forecast(req)
+        raise AssertionError("expected AdapterInputError")
+    except AdapterInputError as exc:
+        assert "must be finite" in str(exc)
+
+
+def test_nhits_adapter_rejects_mixed_multi_series_frequency(monkeypatch) -> None:
+    from tollama.runners.nhits_runner.errors import AdapterInputError
+
+    adapter = NhitsAdapter()
+    _patch_deps(monkeypatch, adapter)
+    req = _request()
+    req.series[1].freq = "H"
+
+    try:
+        adapter.forecast(req)
+        raise AssertionError("expected AdapterInputError")
+    except AdapterInputError as exc:
+        assert "shared frequency" in str(exc)
