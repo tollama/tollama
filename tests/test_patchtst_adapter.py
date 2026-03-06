@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from typing import Any
 
 from tollama.core.schemas import ForecastRequest
@@ -126,3 +127,95 @@ def test_patchtst_adapter_rejects_invalid_frequency(monkeypatch) -> None:
         raise AssertionError("expected AdapterInputError")
     except AdapterInputError as exc:
         assert "invalid frequency" in str(exc)
+
+
+def test_patchtst_adapter_reuses_cached_model_for_repeated_requests(monkeypatch) -> None:
+    load_count = 0
+
+    class _SlowFakeModel(_FakeModel):
+        @classmethod
+        def from_pretrained(cls, *args: Any, **kwargs: Any) -> _SlowFakeModel:
+            nonlocal load_count
+            del args, kwargs
+            load_count += 1
+            time.sleep(0.03)
+            return cls()
+
+    adapter = PatchTSTAdapter()
+    monkeypatch.setattr(
+        adapter,
+        "_resolve_dependencies",
+        lambda: type("D", (), {"torch": _FakeTorch(), "pandas": _FakePandas(), "model_loader_cls": _SlowFakeModel})(),
+    )
+
+    req = _request()
+    started = time.perf_counter()
+    adapter.forecast(req)
+    first_elapsed = time.perf_counter() - started
+
+    started = time.perf_counter()
+    adapter.forecast(req)
+    second_elapsed = time.perf_counter() - started
+
+    assert load_count == 1
+    assert second_elapsed < first_elapsed
+
+
+def test_patchtst_adapter_allows_disabling_cache_per_request(monkeypatch) -> None:
+    load_count = 0
+
+    class _CountingModel(_FakeModel):
+        @classmethod
+        def from_pretrained(cls, *args: Any, **kwargs: Any) -> _CountingModel:
+            nonlocal load_count
+            del args, kwargs
+            load_count += 1
+            return cls()
+
+    adapter = PatchTSTAdapter()
+    monkeypatch.setattr(
+        adapter,
+        "_resolve_dependencies",
+        lambda: type("D", (), {"torch": _FakeTorch(), "pandas": _FakePandas(), "model_loader_cls": _CountingModel})(),
+    )
+
+    req = _request()
+    req.options["cache_reuse"] = False
+    adapter.forecast(req)
+    adapter.forecast(req)
+
+    assert load_count == 2
+
+
+def test_patchtst_adapter_enforces_context_length_guardrail(monkeypatch) -> None:
+    monkeypatch.setenv("TOLLAMA_PATCHTST_MAX_CONTEXT_LENGTH", "8")
+    adapter = PatchTSTAdapter()
+    monkeypatch.setattr(
+        adapter,
+        "_resolve_dependencies",
+        lambda: type("D", (), {"torch": _FakeTorch(), "pandas": _FakePandas(), "model_loader_cls": _FakeModel})(),
+    )
+    req = _request()
+    req.options["context_length"] = 16
+
+    try:
+        adapter.forecast(req)
+        raise AssertionError("expected AdapterInputError")
+    except AdapterInputError as exc:
+        assert "context_length exceeds patchtst guardrail" in str(exc)
+
+
+def test_patchtst_adapter_enforces_series_count_guardrail(monkeypatch) -> None:
+    monkeypatch.setenv("TOLLAMA_PATCHTST_MAX_SERIES_PER_REQUEST", "1")
+    adapter = PatchTSTAdapter()
+    monkeypatch.setattr(
+        adapter,
+        "_resolve_dependencies",
+        lambda: type("D", (), {"torch": _FakeTorch(), "pandas": _FakePandas(), "model_loader_cls": _FakeModel})(),
+    )
+
+    try:
+        adapter.forecast(_request())
+        raise AssertionError("expected AdapterInputError")
+    except AdapterInputError as exc:
+        assert "series count exceeds patchtst guardrail" in str(exc)

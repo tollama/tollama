@@ -352,9 +352,24 @@ PatchTST is integrated for **real forecast execution** via the dedicated `patcht
 - install extra: `runner_patchtst`
 - current runtime behavior:
   - returns `DEPENDENCY_MISSING` when optional dependencies are absent
+  - caches loaded PatchTST model instances in-process (LRU) to reduce repeat-request latency
   - supports canonical point forecasts for single/multi-series requests
   - supports quantiles when exposed by the runtime backend
   - currently ignores covariates/static features (target-only history)
+
+Runtime tuning knobs (PatchTST):
+
+- request `options.context_length` — history window length used for inference
+- request `options.cache_reuse` (default: `true`) — set `false` for one-off/no-reuse loads
+- env `TOLLAMA_PATCHTST_CACHE_MAX_MODELS` (default: `4`) — max distinct cached model entries
+- env `TOLLAMA_PATCHTST_DISABLE_CACHE` (default: `false`) — disable shared in-process cache
+- env `TOLLAMA_PATCHTST_MAX_SERIES_PER_REQUEST` (default: `64`) — guardrail for batch size
+- env `TOLLAMA_PATCHTST_MAX_CONTEXT_LENGTH` (default: `4096`) — upper bound for context length
+
+Timeout note:
+
+- request-level timeout is controlled by API/CLI `timeout` (runner supervisor watchdog).
+- lower timeout improves stuck-runner recovery but may cut off large cold-start runs.
 
 ```bash
 # install PatchTST runner dependencies

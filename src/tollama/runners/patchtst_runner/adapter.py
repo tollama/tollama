@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+from collections import OrderedDict
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -12,6 +14,10 @@ from tollama.core.schemas import ForecastRequest, ForecastResponse, SeriesForeca
 from .errors import AdapterInputError, DependencyMissingError, UnsupportedModelError
 
 _DEFAULT_CONTEXT_LENGTH = 512
+_DEFAULT_CACHE_MAX_MODELS = 4
+_DEFAULT_MAX_SERIES_PER_REQUEST = 64
+_DEFAULT_MAX_CONTEXT_LENGTH = 4096
+
 _PATCHTST_MODELS: dict[str, dict[str, Any]] = {
     "patchtst": {
         "repo_id": "ibm-granite/granite-timeseries-patchtst",
@@ -38,20 +44,39 @@ class _RuntimeConfig:
     default_context_length: int
 
 
+@dataclass(frozen=True)
+class _Guardrails:
+    max_series_per_request: int
+    max_context_length: int
+
+
 class PatchTSTAdapter:
     """Adapter that maps canonical request/response to PatchTST predictor calls."""
 
     def __init__(self) -> None:
         self._dependencies: _Dependencies | None = None
-        self._model_cache: dict[tuple[str, str, str], Any] = {}
+        self._model_cache: OrderedDict[tuple[str, str, str], Any] = OrderedDict()
+        self._cache_max_models = _resolve_cache_max_models()
+        self._cache_enabled = not _resolve_env_bool("TOLLAMA_PATCHTST_DISABLE_CACHE", default=False)
+        self._guardrails = _Guardrails(
+            max_series_per_request=_resolve_positive_env_int(
+                "TOLLAMA_PATCHTST_MAX_SERIES_PER_REQUEST",
+                default=_DEFAULT_MAX_SERIES_PER_REQUEST,
+            ),
+            max_context_length=_resolve_positive_env_int(
+                "TOLLAMA_PATCHTST_MAX_CONTEXT_LENGTH",
+                default=_DEFAULT_MAX_CONTEXT_LENGTH,
+            ),
+        )
 
     def unload(self, model_name: str | None = None) -> None:
         if model_name is None:
             self._model_cache.clear()
             return
-        self._model_cache = {
-            key: value for key, value in self._model_cache.items() if key[0] != model_name
-        }
+
+        for key in list(self._model_cache.keys()):
+            if key[0] == model_name:
+                self._model_cache.pop(key, None)
 
     def forecast(
         self,
@@ -67,15 +92,24 @@ class PatchTSTAdapter:
             model_metadata=model_metadata,
         )
         dependencies = self._resolve_dependencies()
-        model = self._get_or_load_model(
-            runtime=runtime,
-            model_local_dir=model_local_dir,
+
+        cache_reuse = resolve_bool_option(
+            option_value=request.options.get("cache_reuse"),
+            default_value=self._cache_enabled,
+            field_name="cache_reuse",
         )
 
         context_length = resolve_positive_int(
             option_value=request.options.get("context_length"),
             default_value=runtime.default_context_length,
             field_name="context_length",
+        )
+        self._validate_guardrails(request=request, context_length=context_length)
+
+        model = self._get_or_load_model(
+            runtime=runtime,
+            model_local_dir=model_local_dir,
+            cache_reuse=cache_reuse,
         )
 
         forecasts: list[SeriesForecast] = []
@@ -123,17 +157,27 @@ class PatchTSTAdapter:
                 "series_count": len(forecasts),
                 "horizon": request.horizon,
                 "context_length": context_length,
+                "cache_reuse": cache_reuse,
             },
             warnings=warnings or None,
         )
 
-    def _get_or_load_model(self, *, runtime: _RuntimeConfig, model_local_dir: str | None) -> Any:
+    def _get_or_load_model(
+        self,
+        *,
+        runtime: _RuntimeConfig,
+        model_local_dir: str | None,
+        cache_reuse: bool,
+    ) -> Any:
         deps = self._resolve_dependencies()
         model_ref = _existing_local_model_path(model_local_dir) or runtime.repo_id
         key = (runtime.model_name, model_ref, runtime.revision)
-        cached = self._model_cache.get(key)
-        if cached is not None:
-            return cached
+
+        if cache_reuse:
+            cached = self._model_cache.get(key)
+            if cached is not None:
+                self._model_cache.move_to_end(key)
+                return cached
 
         kwargs = {"revision": runtime.revision}
         try:
@@ -141,8 +185,28 @@ class PatchTSTAdapter:
         except TypeError:
             model = deps.model_loader_cls.from_pretrained(model_ref)
         model.eval()
-        self._model_cache[key] = model
+
+        if cache_reuse and self._cache_max_models > 0:
+            self._model_cache[key] = model
+            self._model_cache.move_to_end(key)
+            while len(self._model_cache) > self._cache_max_models:
+                self._model_cache.popitem(last=False)
         return model
+
+    def _validate_guardrails(self, *, request: ForecastRequest, context_length: int) -> None:
+        if len(request.series) > self._guardrails.max_series_per_request:
+            raise AdapterInputError(
+                "series count exceeds patchtst guardrail "
+                f"({len(request.series)} > {self._guardrails.max_series_per_request}); "
+                "reduce input batch size or raise TOLLAMA_PATCHTST_MAX_SERIES_PER_REQUEST",
+            )
+
+        if context_length > self._guardrails.max_context_length:
+            raise AdapterInputError(
+                "context_length exceeds patchtst guardrail "
+                f"({context_length} > {self._guardrails.max_context_length}); "
+                "lower options.context_length or raise TOLLAMA_PATCHTST_MAX_CONTEXT_LENGTH",
+            )
 
     def _resolve_dependencies(self) -> _Dependencies:
         cached = self._dependencies
@@ -446,6 +510,46 @@ def resolve_positive_int(*, option_value: Any, default_value: int, field_name: s
     if option_value <= 0:
         raise AdapterInputError(f"{field_name} option must be greater than zero")
     return option_value
+
+
+def resolve_bool_option(*, option_value: Any, default_value: bool, field_name: str) -> bool:
+    if option_value is None:
+        return default_value
+    if isinstance(option_value, bool):
+        return option_value
+    raise AdapterInputError(f"{field_name} option must be a boolean")
+
+
+def _resolve_cache_max_models() -> int:
+    return _resolve_positive_env_int(
+        "TOLLAMA_PATCHTST_CACHE_MAX_MODELS",
+        default=_DEFAULT_CACHE_MAX_MODELS,
+    )
+
+
+def _resolve_positive_env_int(name: str, *, default: int) -> int:
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    try:
+        value = int(raw.strip())
+    except ValueError:
+        return default
+    if value <= 0:
+        return default
+    return value
+
+
+def _resolve_env_bool(name: str, *, default: bool) -> bool:
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    lowered = raw.strip().lower()
+    if lowered in {"1", "true", "yes", "on"}:
+        return True
+    if lowered in {"0", "false", "no", "off"}:
+        return False
+    return default
 
 
 def _existing_local_model_path(model_local_dir: str | None) -> str | None:
