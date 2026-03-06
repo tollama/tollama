@@ -43,3 +43,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   - E2E verification checklist (`docs/lag-llama-patchtst-e2e-checklist.md`)
   - helper script for targeted checks (`scripts/e2e_lag_llama_patchtst_check.sh`)
   - runner regression coverage for payload validation and validation-before-dependency-gating behavior
+- TiDE phase-3 runner path:
+  - stdio JSON-RPC inference runner with adapter-based error handling
+  - deterministic mean forecasts with best-effort quantile extraction
+  - explicit warning-based mean-only fallback when quantile outputs are unavailable
+  - regression tests for quantile success/fallback and runner wiring

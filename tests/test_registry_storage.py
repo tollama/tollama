@@ -144,11 +144,11 @@ def test_registry_loads_required_model_specs() -> None:
     assert tide.source.revision == "main"
     assert tide.metadata == {
         "implementation": "tide",
-        "status": "phase1_placeholder",
-        "support_level": "planned",
+        "status": "phase3_probabilistic",
+        "support_level": "baseline",
         "install_extra": "runner_tide",
         "install_command": 'python -m pip install -e ".[dev,runner_tide]"',
-        "notes": "TiDE integration is scaffolded in phase-1 only. Runner validates requests and returns actionable DEPENDENCY_MISSING or NOT_IMPLEMENTED responses until inference support lands.",
+        "notes": "TiDE runner supports deterministic forecasts and best-effort requested quantiles when runtime probabilistic outputs are available. When quantiles cannot be produced, responses explicitly fall back to mean-only forecasts with warnings.",
     }
 
     lag_llama = registry["lag-llama"]
