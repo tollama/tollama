@@ -13,3 +13,7 @@ class NotImplementedRunnerError(RuntimeError):
 
 class AdapterInputError(ValueError):
     """Raised when request input is invalid for the N-HiTS adapter."""
+
+
+class UnsupportedModelError(ValueError):
+    """Raised when model metadata/source is incompatible with N-HiTS adapter."""

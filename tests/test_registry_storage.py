@@ -168,14 +168,15 @@ def test_registry_loads_required_model_specs() -> None:
     assert nhits.source.revision == "main"
     assert nhits.metadata == {
         "implementation": "nhits",
-        "status": "phase1_placeholder",
-        "support_level": "experimental",
+        "status": "phase2_inference",
+        "support_level": "baseline",
         "install_extra": "runner_nhits",
         "install_command": 'python -m pip install -e ".[dev,runner_nhits]"',
         "notes": (
-            "N-HiTS is registered for discovery and routing. Phase-1 runner is a "
-            "capability-gated placeholder and returns explicit DEPENDENCY_MISSING or "
-            "NOT_IMPLEMENTED guidance until full inference support lands."
+            "N-HiTS runner supports canonical point forecasts (single/multi series) "
+            "via runtime NeuralForecast inference. Requested quantiles and covariates "
+            "are currently best-effort limitations and return explicit response "
+            "warnings."
         ),
     }
 
@@ -185,15 +186,16 @@ def test_registry_loads_required_model_specs() -> None:
     assert nbeatsx.source.revision == "main"
     assert nbeatsx.metadata == {
         "implementation": "nbeatsx",
-        "status": "phase2_inference",
+        "status": "phase3_hardened",
         "support_level": "baseline",
         "install_extra": "runner_nbeatsx",
         "install_command": 'python -m pip install -e ".[dev,runner_nbeatsx]"',
         "notes": (
-            "N-BEATSx runner supports canonical point forecasts (single/multi series) "
-            "via runtime NeuralForecast inference. Requested quantiles and covariates "
-            "are currently best-effort limitations and return explicit response "
-            "warnings."
+            "N-BEATSx runner supports canonical single/multi-series forecasts via runtime "
+            "NeuralForecast inference with stricter input validation. Requested quantiles "
+            "are best-effort (returned when backend probabilistic outputs are exposed, "
+            "otherwise omitted with explicit warnings). Covariates and static features are "
+            "currently ignored with explicit warnings."
         ),
     }
 
