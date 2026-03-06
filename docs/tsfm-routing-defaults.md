@@ -75,6 +75,42 @@ Use policy like this:
 - If model dependencies are missing, use template artifacts and mark recommendation
   as provisional.
 
+## Known blocker matrix (live benchmark runs)
+
+If `result.md` shows `DEPENDENCY_MISSING`, install the corresponding optional extras
+before retrying the full benchmark.
+
+| model | blocker shown by daemon | install command |
+|---|---|---|
+| `lag-llama` | missing `gluonts`, `lag-llama`, `lag_llama` | `python -m pip install -e ".[dev,runner_lag_llama]"` |
+| `patchtst` | missing `torch`, `transformers` | `python -m pip install -e ".[dev,runner_patchtst]"` |
+| `tide` | missing `darts` | `python -m pip install -e ".[dev,runner_tide]"` |
+| `nhits` | missing `neuralforecast` | `python -m pip install -e ".[dev,runner_nhits]"` |
+| `nbeatsx` | missing `neuralforecast` | `python -m pip install -e ".[dev,runner_nbeatsx]"` |
+
+### Runnable fallback command matrix
+
+```bash
+# 0) Start daemon
+tollama serve
+
+# 1) Environment-limited fallback (always works; no daemon/model execution)
+PYTHONPATH=src python benchmarks/cross_model_tsfm.py \
+  --template-only \
+  --output-dir benchmarks/reports/cross_model_baseline
+
+# 2) Live benchmark (best effort; writes result.json/result.md)
+PYTHONPATH=src python benchmarks/cross_model_tsfm.py \
+  --base-url http://127.0.0.1:11435 \
+  --output-dir artifacts/benchmarks/cross_model
+
+# 3) After installing missing extras, rerun quickly without pull preflight
+PYTHONPATH=src python benchmarks/cross_model_tsfm.py \
+  --skip-pull \
+  --base-url http://127.0.0.1:11435 \
+  --output-dir artifacts/benchmarks/cross_model
+```
+
 ## Baseline artifact in repository
 
 A baseline template artifact is committed at:
