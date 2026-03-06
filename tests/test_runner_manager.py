@@ -130,6 +130,25 @@ def _lag_llama_payload() -> dict[str, object]:
         ],
         "options": {},
     }
+
+
+def _nhits_payload() -> dict[str, object]:
+    return {
+        "model": "nhits",
+        "horizon": 2,
+        "quantiles": [0.1, 0.9],
+        "series": [
+            {
+                "id": "s1",
+                "freq": "D",
+                "timestamps": ["2025-01-01", "2025-01-02"],
+                "target": [10.0, 12.0],
+            }
+        ],
+        "options": {},
+    }
+
+
 def test_daemon_routes_torch_family_to_torch_runner_command_override(monkeypatch, tmp_path) -> None:
     paths = TollamaPaths(base_dir=tmp_path / ".tollama")
     monkeypatch.setenv("TOLLAMA_HOME", str(paths.base_dir))
@@ -377,9 +396,56 @@ def test_missing_patchtst_runner_command_returns_install_hint(monkeypatch, tmp_p
     assert "runner_patchtst" in detail
     assert "pip install -e" in detail
 
+
+def test_daemon_routes_nhits_family_to_runner_command_override(monkeypatch, tmp_path) -> None:
+    paths = TollamaPaths(base_dir=tmp_path / ".tollama")
+    monkeypatch.setenv("TOLLAMA_HOME", str(paths.base_dir))
+    install_from_registry("nhits", accept_license=False, paths=paths)
+
+    manager = RunnerManager(
+        runner_commands={"nhits": ("tollama-runner-mock",)},
+    )
+    with TestClient(create_app(runner_manager=manager)) as client:
+        response = client.post("/v1/forecast", json=_nhits_payload())
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["model"] == "nhits"
+    assert body["forecasts"][0]["id"] == "s1"
+    assert body["forecasts"][0]["mean"] == [12.0, 12.0]
+
+
+def test_missing_nhits_runner_command_returns_install_hint(monkeypatch, tmp_path) -> None:
+    paths = TollamaPaths(base_dir=tmp_path / ".tollama")
+    monkeypatch.setenv("TOLLAMA_HOME", str(paths.base_dir))
+    install_from_registry("nhits", accept_license=False, paths=paths)
+
+    manager = RunnerManager(
+        runner_commands={"nhits": ("tollama-runner-nhits-missing",)},
+    )
+    with TestClient(create_app(runner_manager=manager)) as client:
+        response = client.post("/v1/forecast", json=_nhits_payload())
+
+    assert response.status_code == 503
+    detail = response.json()["detail"]
+    assert "runner-nhits" in detail
+    assert "pip install -e" in detail
+
+
 def test_runner_manager_list_families_includes_expected_defaults() -> None:
     manager = RunnerManager()
-    assert manager.list_families() == ["mock", "torch", "timesfm", "uni2ts", "sundial", "toto", "lag_llama", "patchtst", "tide"]
+    assert manager.list_families() == [
+        "mock",
+        "torch",
+        "timesfm",
+        "uni2ts",
+        "sundial",
+        "toto",
+        "lag_llama",
+        "patchtst",
+        "tide",
+        "nhits",
+    ]
 
 
 def test_runner_manager_get_all_statuses_does_not_start_missing_supervisors(monkeypatch) -> None:
@@ -415,7 +481,18 @@ def test_runner_manager_get_all_statuses_does_not_start_missing_supervisors(monk
     by_family = {item["family"]: item for item in statuses}
 
     assert fake.calls == 1
-    assert set(by_family) == {"mock", "torch", "timesfm", "uni2ts", "sundial", "toto", "lag_llama", "patchtst", "tide"}
+    assert set(by_family) == {
+        "mock",
+        "torch",
+        "timesfm",
+        "uni2ts",
+        "sundial",
+        "toto",
+        "lag_llama",
+        "patchtst",
+        "tide",
+        "nhits",
+    }
     assert by_family["mock"]["running"] is True
     assert by_family["torch"]["command"] == [
         sys.executable,
@@ -459,6 +536,12 @@ def test_runner_manager_get_all_statuses_does_not_start_missing_supervisors(monk
         "tollama.runners.tide_runner.main",
     ]
     assert by_family["tide"]["running"] is False
+    assert by_family["nhits"]["command"] == [
+        sys.executable,
+        "-m",
+        "tollama.runners.nhits_runner.main",
+    ]
+    assert by_family["nhits"]["running"] is False
 
 
 def test_runner_manager_reports_lag_llama_default_command(monkeypatch) -> None:

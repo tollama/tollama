@@ -41,6 +41,7 @@ Additional docs:
 | `sundial-base-128m` | `sundial` | `thuml/sundial-base-128m` | `main` | `apache-2.0` | No | `runner_sundial` |
 | `toto-open-base-1.0` | `toto` | `Datadog/Toto-Open-Base-1.0` | `main` | `apache-2.0` | No | `runner_toto` |
 | `patchtst` | `patchtst` | `ibm-granite/granite-timeseries-patchtst` | `main` | `apache-2.0` | No | `runner_patchtst` |
+| `nhits` | `nhits` | `cchallu/nhits-air-passengers` | `main` | `apache-2.0` | No | `runner_nhits` |
 
 > [!NOTE]
 > `timesfm` models may take several minutes to compile on the first run. The default timeout has been increased to 5 minutes to accommodate this, but slower machines may require even more time.
@@ -50,6 +51,8 @@ Toto supports target + past numeric covariates; known-future/static/categorical 
 
 > [!IMPORTANT]
 > `patchtst` is a **Phase-2 baseline integration**: it is discoverable/pullable and now executes canonical target-only forecasts via the dedicated runner family. Quantiles are returned when the backend exposes them; otherwise the runner returns mean-only forecasts with a warning. If dependencies are missing, the runner returns `DEPENDENCY_MISSING` with the install command `python -m pip install -e ".[dev,runner_patchtst]"`.
+>
+> `nhits` is currently a **Phase-1 placeholder integration**: it is discoverable/pullable and routes to a dedicated runner family, but forecast execution intentionally returns `DEPENDENCY_MISSING`/`NOT_IMPLEMENTED` with guidance until full N-HiTS inference support lands.
 
 ## Requirements
 
@@ -89,6 +92,7 @@ Optional extras:
 | `runner_sundial` | Sundial runner dependencies | `transformers`, `torch`, `numpy`, `pandas`, `huggingface_hub` |
 | `runner_toto` | Toto runner dependencies | `toto-ts`, `torch`, `numpy`, `pandas` |
 | `runner_patchtst` | PatchTST runner dependencies | `transformers` |
+| `runner_nhits` | N-HiTS runner dependencies | `neuralforecast`, `pytorch-lightning`, `torch` |
 
 ## One-Time Environment Setup (Default: Per-Family Runtime Isolation)
 
@@ -112,7 +116,7 @@ With the default `daemon.auto_bootstrap=true`, family runtimes are created lazil
 If you prefer single-environment mode (legacy), install all runner extras in the same `.venv`:
 
 ```bash
-python -m pip install -e ".[dev,runner_torch,runner_timesfm,runner_uni2ts,runner_sundial,runner_toto,runner_patchtst]"
+python -m pip install -e ".[dev,runner_torch,runner_timesfm,runner_uni2ts,runner_sundial,runner_toto,runner_patchtst,runner_nhits]"
 ```
 
 ## Single-Environment Checklist (Legacy)
@@ -134,7 +138,7 @@ Use this checklist to avoid mixed Conda/system/venv runners:
 python3.11 -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip setuptools wheel
-python -m pip install -e ".[dev,runner_torch,runner_timesfm,runner_uni2ts,runner_sundial,runner_toto,runner_patchtst]"
+python -m pip install -e ".[dev,runner_torch,runner_timesfm,runner_uni2ts,runner_sundial,runner_toto,runner_patchtst,runner_nhits]"
 
 which python
 which tollama

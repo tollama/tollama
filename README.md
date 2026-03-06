@@ -92,7 +92,7 @@ AI agents can **invoke TSFMs as tools the moment they need a forecast.**
 ├──────┬──────┬──────┬──────┬──────┬──────┬──────────────┤
 │      │ stdio JSON-lines protocol      │              │
 │      ▼      ▼      ▼      ▼      ▼      ▼              │
-│ torch timesfm uni2ts sundial toto lag_llama patchtst tide mock │
+│ torch timesfm uni2ts sundial toto lag_llama patchtst tide nhits mock │
 │   (Chronos, Granite, Lag-Llama)                        │
 │   Independent venv per family — zero dependency clash   │
 └────────────────────────────────────────────────────────┘

@@ -31,6 +31,7 @@ def test_registry_loads_required_model_specs() -> None:
         "granite-ttm-r2",
         "patchtst",
         "tide",
+        "nhits",
     } <= set(registry)
 
     mock = registry["mock"]
@@ -149,6 +150,19 @@ def test_registry_loads_required_model_specs() -> None:
         "install_extra": "runner_tide",
         "install_command": 'python -m pip install -e ".[dev,runner_tide]"',
         "notes": "TiDE runner supports deterministic forecasts and best-effort requested quantiles when runtime probabilistic outputs are available. When quantiles cannot be produced, responses explicitly fall back to mean-only forecasts with warnings.",
+    }
+
+    nhits = registry["nhits"]
+    assert nhits.family == "nhits"
+    assert nhits.source.repo_id == "cchallu/nhits-air-passengers"
+    assert nhits.source.revision == "main"
+    assert nhits.metadata == {
+        "implementation": "nhits",
+        "status": "phase1_placeholder",
+        "support_level": "experimental",
+        "install_extra": "runner_nhits",
+        "install_command": 'python -m pip install -e ".[dev,runner_nhits]"',
+        "notes": "N-HiTS is registered for discovery and routing. Phase-1 runner is a capability-gated placeholder and returns explicit DEPENDENCY_MISSING or NOT_IMPLEMENTED guidance until full inference support lands.",
     }
 
     lag_llama = registry["lag-llama"]
