@@ -15,5 +15,9 @@ class AdapterInputError(ValueError):
     """Raised when request input is invalid for the N-HiTS adapter."""
 
 
+class AdapterRuntimeError(RuntimeError):
+    """Raised when runtime inference fails after request validation."""
+
+
 class UnsupportedModelError(ValueError):
     """Raised when model metadata/source is incompatible with N-HiTS adapter."""

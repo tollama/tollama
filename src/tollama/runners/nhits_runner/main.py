@@ -22,10 +22,10 @@ from tollama.core.schemas import ForecastRequest
 from tollama.runners.runtime_telemetry import enrich_forecast_response
 
 from .adapter import NhitsAdapter
-from .errors import AdapterInputError, DependencyMissingError, UnsupportedModelError
+from .errors import AdapterInputError, AdapterRuntimeError, DependencyMissingError, UnsupportedModelError
 
 RUNNER_NAME = "tollama-nhits"
-RUNNER_VERSION = "0.2.0"
+RUNNER_VERSION = "0.3.0"
 UNKNOWN_REQUEST_ID = "unknown"
 CAPABILITIES = ("hello", "forecast", "unload")
 _SUPPORTED_FAMILIES = ["nhits"]
@@ -86,7 +86,7 @@ def _handle_hello(request: ProtocolRequest) -> ProtocolResponse:
             "version": RUNNER_VERSION,
             "capabilities": list(CAPABILITIES),
             "supported_families": _SUPPORTED_FAMILIES,
-            "status": "phase2_inference",
+            "status": "phase3_hardened",
         },
     )
 
@@ -143,8 +143,10 @@ def _handle_forecast(request: ProtocolRequest, adapter: NhitsAdapter) -> Protoco
         return _error_response(request.id, code="MODEL_UNSUPPORTED", message=str(exc))
     except AdapterInputError as exc:
         return _error_response(request.id, code="BAD_REQUEST", message=str(exc))
-    except ValueError as exc:
+    except AdapterRuntimeError as exc:
         return _error_response(request.id, code="FORECAST_ERROR", message=str(exc))
+    except ValueError as exc:
+        return _error_response(request.id, code="BAD_REQUEST", message=str(exc))
 
     response = enrich_forecast_response(
         response=response,

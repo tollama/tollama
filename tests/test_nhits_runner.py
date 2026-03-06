@@ -6,7 +6,7 @@ import json
 from typing import Any
 
 from tollama.core.schemas import ForecastResponse, SeriesForecast
-from tollama.runners.nhits_runner.errors import DependencyMissingError
+from tollama.runners.nhits_runner.errors import AdapterRuntimeError, DependencyMissingError
 from tollama.runners.nhits_runner.main import handle_request_line
 
 
@@ -66,6 +66,19 @@ class _MissingDependencyAdapter(_CapturingAdapter):
         )
 
 
+class _RuntimeErrorAdapter(_CapturingAdapter):
+    def forecast(
+        self,
+        request,
+        *,
+        model_local_dir: str | None = None,
+        model_source: dict[str, object] | None = None,
+        model_metadata: dict[str, object] | None = None,
+    ) -> ForecastResponse:
+        del request, model_local_dir, model_source, model_metadata
+        raise AdapterRuntimeError("N-HiTS runtime forecast failed: boom")
+
+
 def _valid_forecast_params() -> dict[str, Any]:
     return {
         "model": "nhits",
@@ -90,7 +103,7 @@ def test_nhits_runner_hello_reports_supported_family_and_status() -> None:
     )
     payload = response.model_dump(mode="json", exclude_none=True)
     assert payload["result"]["supported_families"] == ["nhits"]
-    assert payload["result"]["status"] == "phase2_inference"
+    assert payload["result"]["status"] == "phase3_hardened"
 
 
 def test_nhits_runner_forecast_returns_dependency_missing_error() -> None:
@@ -135,6 +148,22 @@ def test_nhits_runner_forecast_smoke_wires_request_and_response() -> None:
     assert call["model_local_dir"] == "/tmp/nhits"
     assert call["model_source"] == {"repo_id": "cchallu/nhits-air-passengers", "revision": "main"}
     assert call["model_metadata"] == {"implementation": "nhits"}
+
+
+def test_nhits_runner_forecast_maps_runtime_error_to_forecast_error() -> None:
+    response = handle_request_line(
+        json.dumps(
+            {
+                "id": "req-rt",
+                "method": "forecast",
+                "params": _valid_forecast_params(),
+            },
+        ),
+        _RuntimeErrorAdapter(),
+    )
+    payload = response.model_dump(mode="json", exclude_none=True)
+    assert payload["error"]["code"] == "FORECAST_ERROR"
+    assert "runtime forecast failed" in payload["error"]["message"]
 
 
 def test_nhits_runner_unload_calls_adapter() -> None:
