@@ -37,7 +37,11 @@ class _FakeDatetime:
 
 class _FakePandas:
     @staticmethod
-    def to_datetime(values: list[str], utc: bool = True, errors: str = "raise") -> list[_FakeDatetime]:
+    def to_datetime(
+        values: list[str],
+        utc: bool = True,
+        errors: str = "raise",
+    ) -> list[_FakeDatetime]:
         del utc, errors
         return [_FakeDatetime(values[0])]
 
@@ -63,7 +67,13 @@ class _FakeModel:
 
     def generate(self, **kwargs: Any) -> dict[str, list[float]]:
         self.calls.append(kwargs)
-        return {"mean": [10.0, 11.0, 12.0], "quantiles": {"0.1": [9.0, 10.0, 11.0], "0.9": [11.0, 12.0, 13.0]}}
+        return {
+            "mean": [10.0, 11.0, 12.0],
+            "quantiles": {
+                "0.1": [9.0, 10.0, 11.0],
+                "0.9": [11.0, 12.0, 13.0],
+            },
+        }
 
 
 def _request() -> ForecastRequest:
@@ -97,7 +107,11 @@ def test_patchtst_adapter_forecast_smoke_multi_series(monkeypatch) -> None:
     monkeypatch.setattr(
         adapter,
         "_resolve_dependencies",
-        lambda: type("D", (), {"torch": _FakeTorch(), "pandas": _FakePandas(), "model_loader_cls": _FakeModel})(),
+        lambda: type(
+            "D",
+            (),
+            {"torch": _FakeTorch(), "pandas": _FakePandas(), "model_loader_cls": _FakeModel},
+        )(),
     )
 
     response = adapter.forecast(_request())
@@ -117,7 +131,11 @@ def test_patchtst_adapter_rejects_invalid_frequency(monkeypatch) -> None:
     monkeypatch.setattr(
         adapter,
         "_resolve_dependencies",
-        lambda: type("D", (), {"torch": _FakeTorch(), "pandas": _FakePandas(), "model_loader_cls": _FakeModel})(),
+        lambda: type(
+            "D",
+            (),
+            {"torch": _FakeTorch(), "pandas": _FakePandas(), "model_loader_cls": _FakeModel},
+        )(),
     )
     req = _request()
     req.series[0].freq = "BAD"
@@ -145,7 +163,11 @@ def test_patchtst_adapter_reuses_cached_model_for_repeated_requests(monkeypatch)
     monkeypatch.setattr(
         adapter,
         "_resolve_dependencies",
-        lambda: type("D", (), {"torch": _FakeTorch(), "pandas": _FakePandas(), "model_loader_cls": _SlowFakeModel})(),
+        lambda: type(
+            "D",
+            (),
+            {"torch": _FakeTorch(), "pandas": _FakePandas(), "model_loader_cls": _SlowFakeModel},
+        )(),
     )
 
     req = _request()
@@ -176,7 +198,11 @@ def test_patchtst_adapter_allows_disabling_cache_per_request(monkeypatch) -> Non
     monkeypatch.setattr(
         adapter,
         "_resolve_dependencies",
-        lambda: type("D", (), {"torch": _FakeTorch(), "pandas": _FakePandas(), "model_loader_cls": _CountingModel})(),
+        lambda: type(
+            "D",
+            (),
+            {"torch": _FakeTorch(), "pandas": _FakePandas(), "model_loader_cls": _CountingModel},
+        )(),
     )
 
     req = _request()
@@ -193,7 +219,11 @@ def test_patchtst_adapter_enforces_context_length_guardrail(monkeypatch) -> None
     monkeypatch.setattr(
         adapter,
         "_resolve_dependencies",
-        lambda: type("D", (), {"torch": _FakeTorch(), "pandas": _FakePandas(), "model_loader_cls": _FakeModel})(),
+        lambda: type(
+            "D",
+            (),
+            {"torch": _FakeTorch(), "pandas": _FakePandas(), "model_loader_cls": _FakeModel},
+        )(),
     )
     req = _request()
     req.options["context_length"] = 16
@@ -211,7 +241,11 @@ def test_patchtst_adapter_enforces_series_count_guardrail(monkeypatch) -> None:
     monkeypatch.setattr(
         adapter,
         "_resolve_dependencies",
-        lambda: type("D", (), {"torch": _FakeTorch(), "pandas": _FakePandas(), "model_loader_cls": _FakeModel})(),
+        lambda: type(
+            "D",
+            (),
+            {"torch": _FakeTorch(), "pandas": _FakePandas(), "model_loader_cls": _FakeModel},
+        )(),
     )
 
     try:
