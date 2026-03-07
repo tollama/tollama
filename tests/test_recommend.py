@@ -46,7 +46,7 @@ def test_recommend_models_excludes_restricted_license_by_default() -> None:
         has_past_covariates=True,
         has_future_covariates=True,
         covariates_type="numeric",
-        top_k=10,
+        top_k=50,
     )
 
     excluded_models = {item["model"]: item["reasons"] for item in payload["excluded"]}
@@ -61,7 +61,7 @@ def test_recommend_models_allows_restricted_license_when_enabled() -> None:
     payload = recommend_models(
         horizon=24,
         allow_restricted_license=True,
-        top_k=10,
+        top_k=50,
     )
 
     recommended_models = [item["model"] for item in payload["recommendations"]]
