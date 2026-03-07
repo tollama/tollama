@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import sys
 
+import pytest
 from fastapi.testclient import TestClient
 
 from tollama.core.storage import TollamaPaths, install_from_registry
 from tollama.daemon.app import create_app
 from tollama.daemon.runner_manager import RunnerManager
+from tollama.daemon.supervisor import RunnerUnavailableError
 
 
 def _chronos_payload() -> dict[str, object]:
@@ -165,6 +167,21 @@ def _nhits_payload() -> dict[str, object]:
         ],
         "options": {},
     }
+
+
+def test_runner_manager_reports_unsupported_family_with_stable_error_message() -> None:
+    manager = RunnerManager(runner_commands={})
+
+    with pytest.raises(
+        RunnerUnavailableError,
+        match="runner family 'unknown-family' is not supported",
+    ):
+        manager.call(
+            family="unknown-family",
+            method="forecast",
+            params={},
+            timeout=1.0,
+        )
 
 
 def test_daemon_routes_torch_family_to_torch_runner_command_override(monkeypatch, tmp_path) -> None:

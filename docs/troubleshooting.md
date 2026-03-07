@@ -297,6 +297,29 @@ Notes:
 - Prefer `runtime update`/`install --reinstall` over manual venv deletion.
 - If rebuild keeps failing, capture stderr logs and run `tollama doctor` before opening an issue.
 
+## 15) CI triage: dependency-gated vs regression failures
+
+Symptoms:
+- Real-data/runner checks fail in CI, but failures look environment-sensitive.
+- You need to decide whether to block merge or classify as expected gating.
+
+Classification guide:
+- `DEPENDENCY_MISSING` → treat as **dependency-gated** (expected when optional deps are absent).
+- `runner family '<family>' is not supported` → treat as **regression** (must be fixed before merge).
+- Daemon readiness should probe `/v1/health` first, with `/api/health` only as compatibility fallback.
+
+Quick checks:
+```bash
+# Health probe contract
+curl -sf http://127.0.0.1:11435/v1/health >/dev/null || curl -sf http://127.0.0.1:11435/api/health >/dev/null
+
+# Find dependency-gated outcomes in logs
+grep -R "DEPENDENCY_MISSING" artifacts/ -n || true
+
+# Find unsupported-family regressions in logs
+grep -R "runner family .* is not supported" artifacts/ -n || true
+```
+
 ---
 
 ## Quick Triage Commands
