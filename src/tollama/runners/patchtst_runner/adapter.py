@@ -287,7 +287,11 @@ def _forecast_one_series(
         horizon=horizon,
     )
     mean = _extract_mean(outputs, horizon=horizon)
-    quantiles = _extract_quantiles(outputs, requested_quantiles=requested_quantiles, horizon=horizon)
+    quantiles = _extract_quantiles(
+        outputs,
+        requested_quantiles=requested_quantiles,
+        horizon=horizon,
+    )
     return mean, quantiles
 
 
@@ -430,7 +434,10 @@ def _flatten_forecast_vector(value: Any) -> list[float]:
 
 def _cut_to_horizon(values: list[float], *, horizon: int, label: str) -> list[float]:
     if len(values) < horizon:
-        raise AdapterInputError(f"{label} output is shorter than requested horizon ({len(values)} < {horizon})")
+        raise AdapterInputError(
+            f"{label} output is shorter than requested horizon "
+            f"({len(values)} < {horizon})",
+        )
     return values[:horizon]
 
 
@@ -460,7 +467,8 @@ def build_covariate_warnings(series_list: list[SeriesInput]) -> list[str]:
     for series in series_list:
         if series.past_covariates or series.future_covariates or series.static_covariates:
             return [
-                "PatchTST runner currently ignores covariates and static features; using target-only history",
+                "PatchTST runner currently ignores covariates and static features; "
+                "using target-only history",
             ]
     return []
 

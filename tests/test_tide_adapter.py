@@ -92,11 +92,18 @@ def _deps() -> Any:
     return type(
         "D",
         (),
-        {"np": object(), "pd": _FakePandas(), "time_series_cls": _FakeTimeSeries, "tide_model_cls": object},
+        {
+            "np": object(),
+            "pd": _FakePandas(),
+            "time_series_cls": _FakeTimeSeries,
+            "tide_model_cls": object,
+        },
     )()
 
 
-def test_tide_adapter_returns_quantiles_when_runtime_supports_probabilistic_output(monkeypatch) -> None:
+def test_tide_adapter_returns_quantiles_when_runtime_supports_probabilistic_output(
+    monkeypatch,
+) -> None:
     adapter = TideAdapter()
     monkeypatch.setattr(adapter, "_resolve_dependencies", _deps)
     monkeypatch.setattr(adapter, "_get_or_load_model", lambda **kwargs: _FakeModelWithQuantiles())

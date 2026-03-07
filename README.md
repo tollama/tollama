@@ -537,6 +537,11 @@ tollama config set pull.https_proxy http://proxy:3128
 tollama config set pull.hf_home /mnt/fastcache/hf
 tollama config set pull.offline true
 
+# benchmark-driven routing defaults for auto-forecast
+tollama config set routing.default lag-llama
+tollama config set routing.fast_path nhits
+tollama config set routing.high_accuracy nbeatsx
+
 # no pull flags needed; daemon applies config defaults
 tollama pull chronos2
 ```

@@ -95,6 +95,106 @@ def test_daemon_auto_forecast_falls_back_for_missing_explicit_model(monkeypatch,
     assert body["response"]["model"] == "mock"
 
 
+def test_daemon_auto_forecast_mode_uses_configured_routing_default(monkeypatch, tmp_path) -> None:
+    paths = TollamaPaths(base_dir=tmp_path / ".tollama")
+    monkeypatch.setenv("TOLLAMA_HOME", str(paths.base_dir))
+    install_from_registry("mock", accept_license=True, paths=paths)
+
+    paths.config_path.parent.mkdir(parents=True, exist_ok=True)
+    paths.config_path.write_text(
+        (
+            "{"
+            '"version":1,'
+            '"pull":{},'
+            '"daemon":{},'
+            '"auth":{},'
+            '"routing":{"default":"mock","fast_path":"mock","high_accuracy":"mock"}'
+            "}"
+        ),
+        encoding="utf-8",
+    )
+
+    payload = _auto_payload()
+    payload["mode"] = "fast_path"
+
+    with TestClient(create_app()) as client:
+        response = client.post("/api/auto-forecast", json=payload)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["selection"]["chosen_model"] == "mock"
+    assert body["selection"]["fallback_used"] is False
+    assert "configured routing model" in body["selection"]["rationale"][0]
+
+
+def test_daemon_auto_forecast_mode_falls_back_when_configured_model_not_installed(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    paths = TollamaPaths(base_dir=tmp_path / ".tollama")
+    monkeypatch.setenv("TOLLAMA_HOME", str(paths.base_dir))
+    install_from_registry("mock", accept_license=True, paths=paths)
+
+    paths.config_path.parent.mkdir(parents=True, exist_ok=True)
+    paths.config_path.write_text(
+        (
+            "{"
+            '"version":1,'
+            '"pull":{},'
+            '"daemon":{},'
+            '"auth":{},'
+            '"routing":{"default":"chronos2","fast_path":"chronos2","high_accuracy":"chronos2"}'
+            "}"
+        ),
+        encoding="utf-8",
+    )
+
+    payload = _auto_payload()
+    payload["mode"] = "high_accuracy"
+
+    with TestClient(create_app()) as client:
+        response = client.post("/api/auto-forecast", json=payload)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["selection"]["fallback_used"] is True
+    assert body["selection"]["chosen_model"] == "mock"
+    assert any("not installed" in item for item in body["selection"]["rationale"])
+
+
+def test_daemon_auto_forecast_explicit_model_overrides_mode_default(monkeypatch, tmp_path) -> None:
+    paths = TollamaPaths(base_dir=tmp_path / ".tollama")
+    monkeypatch.setenv("TOLLAMA_HOME", str(paths.base_dir))
+    install_from_registry("mock", accept_license=True, paths=paths)
+    install_from_registry("chronos2", accept_license=True, paths=paths)
+
+    paths.config_path.parent.mkdir(parents=True, exist_ok=True)
+    paths.config_path.write_text(
+        (
+            "{"
+            '"version":1,'
+            '"pull":{},'
+            '"daemon":{},'
+            '"auth":{},'
+            '"routing":{"default":"chronos2","fast_path":"chronos2","high_accuracy":"chronos2"}'
+            "}"
+        ),
+        encoding="utf-8",
+    )
+
+    payload = _auto_payload()
+    payload["model"] = "mock"
+    payload["mode"] = "fast_path"
+
+    with TestClient(create_app()) as client:
+        response = client.post("/api/auto-forecast", json=payload)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["selection"]["chosen_model"] == "mock"
+    assert body["response"]["model"] == "mock"
+
+
 def test_daemon_auto_forecast_falls_back_when_explicit_model_runner_fails(
     monkeypatch,
     tmp_path,

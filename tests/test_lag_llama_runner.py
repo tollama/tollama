@@ -182,7 +182,10 @@ def test_lag_llama_runner_forecast_smoke_wires_request_and_response() -> None:
     adapter = _CapturingAdapter()
     params = _valid_forecast_params()
     params["model_local_dir"] = " /tmp/lag-llama "
-    params["model_source"] = {"repo_id": "time-series-foundation-models/Lag-Llama", "revision": "main"}
+    params["model_source"] = {
+        "repo_id": "time-series-foundation-models/Lag-Llama",
+        "revision": "main",
+    }
     params["model_metadata"] = {"implementation": "lag_llama"}
     params["ignored"] = {"should": "not_break"}
 

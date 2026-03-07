@@ -5,7 +5,6 @@ from __future__ import annotations
 import pytest
 
 import tollama.runners.lag_llama_runner.adapter as lag_adapter
-
 from tollama.runners.lag_llama_runner.adapter import (
     build_covariate_warnings,
     build_pandas_dataset,
@@ -55,8 +54,19 @@ def test_build_quantile_payload_requires_quantile_method() -> None:
 
 
 class _EstimatorV1:
-    def __init__(self, ckpt_path: str, prediction_length: int, num_parallel_samples: int, **kwargs: object) -> None:
-        self.args = {"ckpt_path": ckpt_path, "prediction_length": prediction_length, "num_parallel_samples": num_parallel_samples, "kwargs": kwargs}
+    def __init__(
+        self,
+        ckpt_path: str,
+        prediction_length: int,
+        num_parallel_samples: int,
+        **kwargs: object,
+    ) -> None:
+        self.args = {
+            "ckpt_path": ckpt_path,
+            "prediction_length": prediction_length,
+            "num_parallel_samples": num_parallel_samples,
+            "kwargs": kwargs,
+        }
 
 
 def test_create_lag_llama_estimator_uses_num_parallel_samples_fallback() -> None:
@@ -72,7 +82,9 @@ def test_create_lag_llama_estimator_uses_num_parallel_samples_fallback() -> None
     assert estimator.args["ckpt_path"] == "/tmp/model.ckpt"
 
 
-def test_create_lag_llama_estimator_applies_checkpoint_architecture(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_create_lag_llama_estimator_applies_checkpoint_architecture(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setattr(
         lag_adapter,
         "load_checkpoint_hparams",

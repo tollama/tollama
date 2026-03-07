@@ -2094,6 +2094,20 @@ def _record_usage(
         return
 
 
+def _configured_routing_model_for_mode(*, app: FastAPI, mode: str) -> str | None:
+    try:
+        config: TollamaConfig = app.state.config_provider.get()
+    except ConfigFileError:
+        return None
+
+    routing_defaults = config.routing
+    if mode == "fast_path":
+        return routing_defaults.fast_path
+    if mode == "high_accuracy":
+        return routing_defaults.high_accuracy
+    return routing_defaults.default
+
+
 def _execute_auto_forecast(
     app: FastAPI,
     *,
@@ -2117,6 +2131,52 @@ def _execute_auto_forecast(
     fallback_used = False
     fallback_rationale: list[str] = []
     blocked_models: set[str] = set()
+
+    configured_mode_model = _configured_routing_model_for_mode(app=app, mode=payload.mode)
+    if payload.model is None and configured_mode_model is not None:
+        configured_manifest = installed_by_name.get(configured_mode_model)
+        if configured_manifest is None:
+            fallback_used = True
+            fallback_rationale.append(
+                "configured routing model "
+                f"{configured_mode_model!r} for mode {payload.mode!r} is not installed; "
+                "using auto-selection fallback",
+            )
+        else:
+            configured_request = _auto_payload_to_forecast_payload(
+                payload=payload,
+                model=configured_mode_model,
+                default_timeout=AUTO_FORECAST_MEMBER_TIMEOUT_SECONDS,
+            )
+            try:
+                configured_response = _execute_forecast(
+                    app,
+                    payload=configured_request,
+                    request=request,
+                )
+            except HTTPException as exc:
+                fallback_used = True
+                blocked_models.add(configured_mode_model)
+                fallback_rationale.append(
+                    "configured routing model "
+                    f"{configured_mode_model!r} for mode {payload.mode!r} failed "
+                    f"({exc.status_code}): {_compare_error_message(exc)}; "
+                    "using auto-selection fallback",
+                )
+            else:
+                return AutoForecastResponse(
+                    strategy=payload.strategy,
+                    selection=_manual_auto_selection_info(
+                        payload=payload,
+                        model=configured_mode_model,
+                        manifest=configured_manifest,
+                        rationale_message=(
+                            "configured routing model "
+                            f"{configured_mode_model!r} selected for mode {payload.mode!r}"
+                        ),
+                    ),
+                    response=configured_response,
+                )
 
     if payload.model is not None:
         explicit_model = payload.model
@@ -2531,6 +2591,7 @@ def _manual_auto_selection_info(
     payload: AutoForecastRequest,
     model: str,
     manifest: dict[str, Any],
+    rationale_message: str = "explicit model override applied",
 ) -> AutoSelectionInfo:
     family = _manifest_family_or_500(manifest, model)
     return AutoSelectionInfo(
@@ -2543,10 +2604,10 @@ def _manual_auto_selection_info(
                 family=family,
                 rank=1,
                 score=0.0,
-                reasons=["explicit model override applied"],
+                reasons=[rationale_message],
             )
         ],
-        rationale=["explicit model override applied"],
+        rationale=[rationale_message],
         fallback_used=False,
     )
 

@@ -33,6 +33,7 @@ TrendDirection = Literal["up", "down", "flat"]
 ConfidenceLevel = Literal["high", "medium", "low", "unknown"]
 VolatilityChange = Literal["lower", "stable", "higher", "unknown"]
 AutoForecastStrategy = Literal["auto", "fastest", "best_accuracy", "ensemble"]
+RoutingMode = Literal["default", "fast_path", "high_accuracy"]
 EnsembleMethod = Literal["mean", "median"]
 GenerateMethod = Literal["statistical"]
 ProgressiveStageStrategy = Literal["fastest", "best_accuracy", "explicit"]
@@ -277,6 +278,7 @@ class AutoForecastRequest(CanonicalModel):
     model: NonEmptyStr | None = None
     allow_fallback: StrictBool = False
     strategy: AutoForecastStrategy = "auto"
+    mode: RoutingMode = "default"
     ensemble_top_k: StrictInt = Field(default=3, ge=2, le=8)
     ensemble_method: EnsembleMethod = "mean"
     horizon: PositiveInt

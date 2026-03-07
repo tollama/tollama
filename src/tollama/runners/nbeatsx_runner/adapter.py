@@ -92,7 +92,11 @@ class NbeatsxAdapter:
         predictor = deps.neuralforecast_cls(models=[model], freq=resolved_freq)
 
         try:
-            _fit_predictor(predictor=predictor, train_df=covariate_payload.train_df, static_df=covariate_payload.static_df)
+            _fit_predictor(
+                predictor=predictor,
+                train_df=covariate_payload.train_df,
+                static_df=covariate_payload.static_df,
+            )
             prediction = _predict(
                 predictor=predictor,
                 horizon=request.horizon,
@@ -101,7 +105,10 @@ class NbeatsxAdapter:
         except Exception as exc:  # noqa: BLE001
             raise AdapterInputError(f"N-BEATSx forecast failed: {exc}") from exc
 
-        mean_by_id, quantiles_by_id = _prediction_to_outputs(prediction, requested_quantiles=list(request.quantiles))
+        mean_by_id, quantiles_by_id = _prediction_to_outputs(
+            prediction,
+            requested_quantiles=list(request.quantiles),
+        )
 
         forecasts: list[SeriesForecast] = []
         quantile_fallback = False
@@ -114,7 +121,11 @@ class NbeatsxAdapter:
 
             quantiles = quantiles_by_id.get(series.id)
             if request.quantiles and not quantiles:
-                quantiles = _calibrated_quantile_fallback(series=series, mean=mean, requested_quantiles=list(request.quantiles))
+                quantiles = _calibrated_quantile_fallback(
+                    series=series,
+                    mean=mean,
+                    requested_quantiles=list(request.quantiles),
+                )
                 quantile_fallback = True
 
             forecasts.append(
@@ -229,7 +240,9 @@ def _build_covariate_frames(
         future_covariates = series.future_covariates or {}
         static_covariates = series.static_covariates or {}
 
-        for index, (timestamp, value) in enumerate(zip(series.timestamps, series.target, strict=True)):
+        for index, (timestamp, value) in enumerate(
+            zip(series.timestamps, series.target, strict=True),
+        ):
             row: dict[str, Any] = {
                 "unique_id": series.id,
                 "ds": timestamp,
@@ -249,7 +262,11 @@ def _build_covariate_frames(
                     )
                     continue
                 try:
-                    row[name] = _coerce_numeric_covariate(series_values[index], series_id=series.id, name=name)
+                    row[name] = _coerce_numeric_covariate(
+                        series_values[index],
+                        series_id=series.id,
+                        name=name,
+                    )
                 except AdapterInputError:
                     if strict:
                         raise
@@ -258,7 +275,8 @@ def _build_covariate_frames(
                         warnings=warnings,
                         seen=warning_seen,
                         message=(
-                            f"N-BEATSx dropped non-numeric past covariate {name!r} for series {series.id!r}; "
+                            "N-BEATSx dropped non-numeric past covariate "
+                            f"{name!r} for series {series.id!r}; "
                             "using zero-fill in best_effort mode"
                         ),
                     )
@@ -281,7 +299,11 @@ def _build_covariate_frames(
                         ),
                     )
                 try:
-                    row[name] = _coerce_numeric_covariate(value_at_step, series_id=series.id, name=name)
+                    row[name] = _coerce_numeric_covariate(
+                        value_at_step,
+                        series_id=series.id,
+                        name=name,
+                    )
                 except AdapterInputError:
                     if strict:
                         raise
@@ -316,14 +338,19 @@ def _build_covariate_frames(
                         warnings=warnings,
                         seen=warning_seen,
                         message=(
-                            f"N-BEATSx missing known-future covariate {name!r} for series {series.id!r}; "
+                            "N-BEATSx missing known-future covariate "
+                            f"{name!r} for series {series.id!r}; "
                             "using last observed value"
                         ),
                     )
                 else:
                     value = values[step]
                 try:
-                    futr_row[name] = _coerce_numeric_covariate(value, series_id=series.id, name=name)
+                    futr_row[name] = _coerce_numeric_covariate(
+                        value,
+                        series_id=series.id,
+                        name=name,
+                    )
                 except AdapterInputError:
                     if strict:
                         raise
@@ -356,8 +383,8 @@ def _build_covariate_frames(
                     warnings=warnings,
                     seen=warning_seen,
                     message=(
-                        f"N-BEATSx dropped non-numeric static covariate {name!r} for series {series.id!r} "
-                        "in best_effort mode"
+                        "N-BEATSx dropped non-numeric static covariate "
+                        f"{name!r} for series {series.id!r} in best_effort mode"
                     ),
                 )
         if has_static:
@@ -374,7 +401,9 @@ def _build_covariate_frames(
         try:
             futr_df["ds"] = pd_module.to_datetime(futr_df["ds"], utc=True, errors="raise")
         except Exception as exc:  # noqa: BLE001
-            raise AdapterInputError(f"invalid future timestamps for nbeatsx request: {exc}") from exc
+            raise AdapterInputError(
+                f"invalid future timestamps for nbeatsx request: {exc}",
+            ) from exc
 
     static_df = pd_module.DataFrame(static_rows) if static_rows else None
 
@@ -458,7 +487,10 @@ def _prediction_to_outputs(
 
     quantile_column_map: dict[str, float] = {}
     if rows:
-        quantile_column_map = _resolve_quantile_columns(rows[0], requested_quantiles=requested_quantiles)
+        quantile_column_map = _resolve_quantile_columns(
+            rows[0],
+            requested_quantiles=requested_quantiles,
+        )
 
     for row in rows:
         if not isinstance(row, dict):
@@ -495,7 +527,11 @@ def _prediction_rows(prediction: Any) -> list[dict[str, Any]]:
     return [row for row in rows if isinstance(row, dict)]
 
 
-def _resolve_quantile_columns(row: dict[str, Any], *, requested_quantiles: list[float]) -> dict[str, float]:
+def _resolve_quantile_columns(
+    row: dict[str, Any],
+    *,
+    requested_quantiles: list[float],
+) -> dict[str, float]:
     if not requested_quantiles:
         return {}
 
@@ -621,7 +657,8 @@ def _build_limitations_warnings(
 
     if request.quantiles and quantile_fallback:
         warnings.append(
-            "N-BEATSx used calibrated quantile fallback around mean forecasts because backend quantile outputs were unavailable",
+            "N-BEATSx used calibrated quantile fallback around mean forecasts "
+            "because backend quantile outputs were unavailable",
         )
 
     warnings.extend(covariate_warnings)
@@ -637,7 +674,13 @@ def _build_limitations_warnings(
     return warnings
 
 
-def _future_timestamps(*, series: SeriesInput, horizon: int, pd_module: Any, resolved_freq: str) -> list[str]:
+def _future_timestamps(
+    *,
+    series: SeriesInput,
+    horizon: int,
+    pd_module: Any,
+    resolved_freq: str,
+) -> list[str]:
     try:
         parsed = pd_module.to_datetime([series.timestamps[-1]], utc=True, errors="raise")
         generated = pd_module.date_range(start=parsed[0], periods=horizon + 1, freq=resolved_freq)
@@ -646,8 +689,19 @@ def _future_timestamps(*, series: SeriesInput, horizon: int, pd_module: Any, res
     return [_to_iso_timestamp(value) for value in generated[1:]]
 
 
-def _future_start_timestamp(*, series: SeriesInput, horizon: int, pd_module: Any, resolved_freq: str) -> str:
-    return _future_timestamps(series=series, horizon=horizon, pd_module=pd_module, resolved_freq=resolved_freq)[0]
+def _future_start_timestamp(
+    *,
+    series: SeriesInput,
+    horizon: int,
+    pd_module: Any,
+    resolved_freq: str,
+) -> str:
+    return _future_timestamps(
+        series=series,
+        horizon=horizon,
+        pd_module=pd_module,
+        resolved_freq=resolved_freq,
+    )[0]
 
 
 def _resolve_shared_frequency(*, request: ForecastRequest, pd_module: Any) -> str:
@@ -741,7 +795,11 @@ def _resolve_runtime_config(
 ) -> _RuntimeConfig:
     defaults = _NBEATSX_MODELS.get(model_name, {})
     repo_id = _dict_str(model_source, "repo_id") or _string_or_none(defaults.get("repo_id"))
-    revision = _dict_str(model_source, "revision") or _string_or_none(defaults.get("revision")) or "main"
+    revision = (
+        _dict_str(model_source, "revision")
+        or _string_or_none(defaults.get("revision"))
+        or "main"
+    )
     implementation = (
         _dict_str(model_metadata, "implementation")
         or _string_or_none(defaults.get("implementation"))

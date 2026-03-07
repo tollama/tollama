@@ -1,7 +1,9 @@
 """Per-family virtual environment bootstrap for runner dependency isolation.
 
-Each runner family (torch, timesfm, uni2ts, sundial, toto, lag_llama, patchtst, tide, nhits, nbeatsx) can be installed
-into its own virtualenv under ``~/.tollama/runtimes/<family>/venv/``.  This
+Each runner family (
+    torch, timesfm, uni2ts, sundial, toto, lag_llama, patchtst, tide, nhits, nbeatsx
+) can be installed into its own virtualenv under ``~/.tollama/runtimes/<family>/venv/``.
+This
 keeps heavyweight and potentially conflicting ML dependencies from interfering
 with one another.
 

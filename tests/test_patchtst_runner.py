@@ -61,7 +61,7 @@ class _MissingDependencyAdapter(_CapturingAdapter):
         del request, model_local_dir, model_source, model_metadata
         raise DependencyMissingError(
             "missing optional patchtst runner dependencies (transformers); "
-            "install them with `pip install -e \".[dev,runner_patchtst]\"`",
+            'install them with `pip install -e ".[dev,runner_patchtst]"`',
         )
 
 
@@ -171,7 +171,10 @@ def test_patchtst_runner_forecast_smoke_wires_request_and_response() -> None:
     adapter = _CapturingAdapter()
     params = _valid_forecast_params()
     params["model_local_dir"] = " /tmp/patchtst "
-    params["model_source"] = {"repo_id": "ibm-granite/granite-timeseries-patchtst", "revision": "main"}
+    params["model_source"] = {
+        "repo_id": "ibm-granite/granite-timeseries-patchtst",
+        "revision": "main",
+    }
     params["model_metadata"] = {"implementation": "patchtst"}
 
     response = handle_request_line(
