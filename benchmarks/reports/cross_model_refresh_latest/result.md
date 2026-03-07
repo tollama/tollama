@@ -1,0 +1,43 @@
+# Cross-Model TSFM Benchmark Report
+
+- run_id: `20260307T062446Z`
+- generated_at: `2026-03-07T06:24:51+00:00`
+- base_url: `http://127.0.0.1:11435`
+- models: lag-llama, patchtst, nhits, nbeatsx, tide
+- datasets: seasonal_daily, trend_weekly, intermittent_daily
+- split: context=96, horizon=24
+- repeats per run: 1
+
+## Per-run results
+
+| model | dataset | status | error class | sMAPE | MASE | p50 latency (ms) | p95 latency (ms) | error |
+|---|---|---|---|---:|---:|---:|---:|---|
+| lag-llama | seasonal_daily | fail | DEPENDENCY_GATED | - | - | - | - | forecast with model 'lag-llama' failed with HTTP 503: missing optional lag-llama runner dependencies (gluonts, lag-llama, lag_llama); install them with `pip install -e ".[dev,runner_lag_llama]"` (code=DEPENDENCY_MISSING) |
+| lag-llama | trend_weekly | fail | DEPENDENCY_GATED | - | - | - | - | forecast with model 'lag-llama' failed with HTTP 503: missing optional lag-llama runner dependencies (gluonts, lag-llama, lag_llama); install them with `pip install -e ".[dev,runner_lag_llama]"` (code=DEPENDENCY_MISSING) |
+| lag-llama | intermittent_daily | fail | DEPENDENCY_GATED | - | - | - | - | forecast with model 'lag-llama' failed with HTTP 503: missing optional lag-llama runner dependencies (gluonts, lag-llama, lag_llama); install them with `pip install -e ".[dev,runner_lag_llama]"` (code=DEPENDENCY_MISSING) |
+| patchtst | seasonal_daily | fail | DEPENDENCY_GATED | - | - | - | - | forecast with model 'patchtst' failed with HTTP 503: missing optional patchtst runner dependencies (torch, transformers); install them with `pip install -e ".[dev,runner_patchtst]"` (code=DEPENDENCY_MISSING) |
+| patchtst | trend_weekly | fail | DEPENDENCY_GATED | - | - | - | - | forecast with model 'patchtst' failed with HTTP 503: missing optional patchtst runner dependencies (torch, transformers); install them with `pip install -e ".[dev,runner_patchtst]"` (code=DEPENDENCY_MISSING) |
+| patchtst | intermittent_daily | fail | DEPENDENCY_GATED | - | - | - | - | forecast with model 'patchtst' failed with HTTP 503: missing optional patchtst runner dependencies (torch, transformers); install them with `pip install -e ".[dev,runner_patchtst]"` (code=DEPENDENCY_MISSING) |
+| nhits | seasonal_daily | fail | DEPENDENCY_GATED | - | - | - | - | forecast with model 'nhits' failed with HTTP 503: missing optional nhits runner dependencies (neuralforecast); install them with `pip install -e ".[dev,runner_nhits]"` (code=DEPENDENCY_MISSING) |
+| nhits | trend_weekly | fail | DEPENDENCY_GATED | - | - | - | - | forecast with model 'nhits' failed with HTTP 503: missing optional nhits runner dependencies (neuralforecast); install them with `pip install -e ".[dev,runner_nhits]"` (code=DEPENDENCY_MISSING) |
+| nhits | intermittent_daily | fail | DEPENDENCY_GATED | - | - | - | - | forecast with model 'nhits' failed with HTTP 503: missing optional nhits runner dependencies (neuralforecast); install them with `pip install -e ".[dev,runner_nhits]"` (code=DEPENDENCY_MISSING) |
+| nbeatsx | seasonal_daily | fail | DEPENDENCY_GATED | - | - | - | - | forecast with model 'nbeatsx' failed with HTTP 503: missing optional nbeatsx runner dependencies (neuralforecast); install them with `pip install -e ".[dev,runner_nbeatsx]"` (code=DEPENDENCY_MISSING) |
+| nbeatsx | trend_weekly | fail | DEPENDENCY_GATED | - | - | - | - | forecast with model 'nbeatsx' failed with HTTP 503: missing optional nbeatsx runner dependencies (neuralforecast); install them with `pip install -e ".[dev,runner_nbeatsx]"` (code=DEPENDENCY_MISSING) |
+| nbeatsx | intermittent_daily | fail | DEPENDENCY_GATED | - | - | - | - | forecast with model 'nbeatsx' failed with HTTP 503: missing optional nbeatsx runner dependencies (neuralforecast); install them with `pip install -e ".[dev,runner_nbeatsx]"` (code=DEPENDENCY_MISSING) |
+| tide | seasonal_daily | fail | DEPENDENCY_GATED | - | - | - | - | forecast with model 'tide' failed with HTTP 503: missing optional tide runner dependencies (darts); install them with `pip install -e ".[dev,runner_tide]"` (code=DEPENDENCY_MISSING) |
+| tide | trend_weekly | fail | DEPENDENCY_GATED | - | - | - | - | forecast with model 'tide' failed with HTTP 503: missing optional tide runner dependencies (darts); install them with `pip install -e ".[dev,runner_tide]"` (code=DEPENDENCY_MISSING) |
+| tide | intermittent_daily | fail | DEPENDENCY_GATED | - | - | - | - | forecast with model 'tide' failed with HTTP 503: missing optional tide runner dependencies (darts); install them with `pip install -e ".[dev,runner_tide]"` (code=DEPENDENCY_MISSING) |
+
+## Failure classification summary
+
+- DEPENDENCY_GATED: 15
+
+## Routing recommendation
+
+- default: `None`
+- fast_path: `None`
+- high_accuracy: `None`
+- policy: no successful benchmark runs
+
+### Caveats
+- all model runs failed; keep existing routing unchanged
