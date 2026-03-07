@@ -113,6 +113,7 @@ A refresh run was executed with failure classification enabled and saved at:
 Result summary:
 - All evaluated runs were classified as `DEPENDENCY_GATED` in this environment.
 - No `UNSUPPORTED_FAMILY_REGRESSION` was observed.
+- A follow-up refresh (`repeats=3`) produced the same classification outcome.
 - Routing defaults remain unchanged until a dependency-complete environment yields
   successful comparative runs.
 
