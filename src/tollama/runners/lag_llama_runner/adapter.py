@@ -147,7 +147,8 @@ class LagLlamaAdapter:
         forecasts = list(predictor.predict(dataset))
         if len(forecasts) != len(ordered_series):
             raise AdapterInputError(
-                "Lag-Llama predictor returned a different number of series forecasts than requested",
+                "Lag-Llama predictor returned a different number "
+                "of series forecasts than requested",
             )
 
         payloads: list[SeriesForecast] = []
@@ -320,7 +321,10 @@ def create_lag_llama_estimator(
     resolved_context_length = ckpt_context_length or context_length
 
     ckpt_max_context_length = _int_or_none(model_kwargs.get("max_context_length"))
-    resolved_max_context_length = max(context_length, ckpt_max_context_length or resolved_context_length)
+    resolved_max_context_length = max(
+        context_length,
+        ckpt_max_context_length or resolved_context_length,
+    )
 
     architecture_overrides: dict[str, Any] = {
         "context_length": resolved_context_length,
@@ -331,14 +335,24 @@ def create_lag_llama_estimator(
         "n_head": _int_or_none(model_kwargs.get("n_head")),
         "scaling": _string_or_none(model_kwargs.get("scaling")),
         "rope_scaling": model_kwargs.get("rope_scaling"),
-        "time_feat": model_kwargs.get("time_feat") if isinstance(model_kwargs.get("time_feat"), bool) else None,
-        "dropout": float(model_kwargs.get("dropout")) if isinstance(model_kwargs.get("dropout"), (int, float)) else None,
+        "time_feat": (
+            model_kwargs.get("time_feat")
+            if isinstance(model_kwargs.get("time_feat"), bool)
+            else None
+        ),
+        "dropout": (
+            float(model_kwargs.get("dropout"))
+            if isinstance(model_kwargs.get("dropout"), (int, float))
+            else None
+        ),
         "lags_seq": list(model_kwargs.get("lags_seq"))
         if isinstance(model_kwargs.get("lags_seq"), list)
         and all(isinstance(item, str) for item in model_kwargs.get("lags_seq"))
         else None,
     }
-    architecture_overrides = {key: value for key, value in architecture_overrides.items() if value is not None}
+    architecture_overrides = {
+        key: value for key, value in architecture_overrides.items() if value is not None
+    }
 
     base_variants = (
         {
@@ -562,7 +576,8 @@ def build_covariate_warnings(series_list: Sequence[SeriesInput]) -> list[str]:
     for series in series_list:
         if series.past_covariates or series.future_covariates or series.static_covariates:
             return [
-                "Lag-Llama runner ignores covariates and static features; using target-only history",
+                "Lag-Llama runner ignores covariates and static features; "
+                "using target-only history",
             ]
     return []
 
