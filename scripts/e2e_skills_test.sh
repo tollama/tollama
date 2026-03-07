@@ -55,13 +55,16 @@ echo "Daemon PID: $DAEMON_PID"
 echo "Waiting for daemon to be ready on port $DAEMON_PORT..."
 MAX_RETRIES=30
 for ((i=1; i<=MAX_RETRIES; i++)); do
-    if curl -s "http://$DAEMON_HOST:$DAEMON_PORT/v1/health" >/dev/null || \
-       curl -s "http://$DAEMON_HOST:$DAEMON_PORT/api/health" >/dev/null; then
-        echo -e "${GREEN}Daemon is ready!${NC}"
+    if curl -sf "http://$DAEMON_HOST:$DAEMON_PORT/v1/health" >/dev/null; then
+        echo -e "${GREEN}Daemon is ready via /v1/health.${NC}"
+        break
+    fi
+    if curl -sf "http://$DAEMON_HOST:$DAEMON_PORT/api/health" >/dev/null; then
+        echo -e "${GREEN}Daemon is ready via /api/health fallback.${NC}"
         break
     fi
     if [[ $i -eq $MAX_RETRIES ]]; then
-        echo -e "${RED}Timeout waiting for daemon.${NC}"
+        echo -e "${RED}Timeout waiting for daemon readiness on /v1/health (fallback /api/health).${NC}"
         exit 1
     fi
     sleep 1
