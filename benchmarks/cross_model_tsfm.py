@@ -47,9 +47,9 @@ class ModelRun:
     dataset: str
     status: str
     error: str | None
-    error_classification: str | None
     quality: dict[str, float]
     latency_ms: dict[str, float]
+    error_classification: str | None = None
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
