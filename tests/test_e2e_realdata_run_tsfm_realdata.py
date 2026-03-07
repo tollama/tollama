@@ -20,6 +20,13 @@ _MODULE_SPEC.loader.exec_module(_MODULE)
 
 _call_forecast_with_retry = _MODULE._call_forecast_with_retry
 _status_for_data_issue = _MODULE._status_for_data_issue
+_sanitize_artifact_filename = _MODULE._sanitize_artifact_filename
+
+
+def test_sanitize_artifact_filename_replaces_forbidden_characters() -> None:
+    assert _sanitize_artifact_filename("m4_daily:D182") == "m4_daily_D182"
+    assert _sanitize_artifact_filename('a"b<c>d|e*f?') == "a_b_c_d_e_f_"
+    assert _sanitize_artifact_filename("\n\r") == "series"
 
 
 def test_status_for_data_issue_skips_hf_only_in_optional_profile() -> None:

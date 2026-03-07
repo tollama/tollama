@@ -317,8 +317,9 @@ def main(argv: list[str] | None = None) -> int:
                     )
                     entries.append(entry)
 
+                    safe_series_id = _sanitize_artifact_filename(str(series["id"]))
                     _write_json(
-                        raw_dir / model / dataset_name / scenario / f"{series['id']}.json",
+                        raw_dir / model / dataset_name / scenario / f"{safe_series_id}.json",
                         {
                             "request": payload,
                             "response": response_payload,
@@ -326,6 +327,8 @@ def main(argv: list[str] | None = None) -> int:
                             "exception": exception_detail,
                             "retry_count": retry_count,
                             "entry": entry,
+                            "series_id": series["id"],
+                            "series_id_sanitized": safe_series_id,
                         },
                     )
 
@@ -584,6 +587,14 @@ def _write_infra_failure(
     )
     print(detail)
     return 2
+
+
+def _sanitize_artifact_filename(value: str) -> str:
+    sanitized = value
+    for char in ('"', ':', '<', '>', '|', '*', '?', '\\r', '\\n'):
+        sanitized = sanitized.replace(char, "_")
+    sanitized = sanitized.strip()
+    return sanitized or "series"
 
 
 def _write_json(path: Path, payload: dict[str, Any]) -> None:
