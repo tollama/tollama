@@ -66,17 +66,27 @@ AI agents can **invoke TSFMs as tools the moment they need a forecast.**
 
 ## Supported Models
 
-| Model | Provider | Covariates |
-|-------|----------|:----------:|
-| Chronos-2 | Amazon | Past + Future |
-| Granite TTM R2 | IBM | Past + Future |
-| TimesFM 2.5-200M | Google | Past + Future |
-| Moirai 2.0-R Small | Salesforce | Past + Future |
-| Sundial Base 128M | THUML | Target only |
-| Toto Open Base 1.0 | Datadog | Past only |
-| Lag-Llama | TSFM Community | Target only |
-| PatchTST (Phase-2 baseline) | IBM Granite | Target-only point forecast (quantiles optional) |
-| TiDE (Phase-3 probabilistic) | Unit8 | Deterministic forecasts with best-effort quantile output + explicit mean-only fallback |
+Tollama ships **11 models**: 7 time series foundation models (TSFMs) and 4 neural baselines.
+**All 11 models share the exact same interface** — `tollama run`, `POST /api/forecast`, Python SDK, MCP tools — no extra configuration or training steps required regardless of model type.
+
+| Model | Provider | Type | Covariates |
+|-------|----------|:----:|:----------:|
+| Chronos-2 | Amazon | TSFM | Past + Future |
+| Granite TTM R2 | IBM | TSFM | Past + Future |
+| TimesFM 2.5-200M | Google | TSFM | Past + Future |
+| Moirai 2.0-R Small | Salesforce | TSFM | Past + Future |
+| Sundial Base 128M | THUML | TSFM | Target only |
+| Toto Open Base 1.0 | Datadog | TSFM | Past only |
+| Lag-Llama | TSFM Community | TSFM | Target only |
+| PatchTST | IBM Granite | Neural Baseline | Target only |
+| TiDE | Unit8 / Darts | Neural Baseline | Past + Future |
+| N-HiTS | Nixtla / NeuralForecast | Neural Baseline | Target only |
+| N-BEATSx | Nixtla / NeuralForecast | Neural Baseline | Target only |
+
+> **TSFM vs Neural Baseline — what's the difference?**
+>
+> - **TSFM (Time Series Foundation Model)**: Pre-trained on large, diverse time series corpora (billions of data points across multiple domains). Supports **zero-shot forecasting** — produces predictions on completely unseen data without per-dataset fine-tuning.
+> - **Neural Baseline**: Deep learning architectures that are **not** pre-trained on large diverse corpora. Tollama includes them as reference baselines for model comparison and routing benchmarks. Behind the scenes, PatchTST and TiDE load pre-trained weights for direct inference, while N-HiTS and N-BEATSx auto-fit on the provided input data then predict — all transparently within a single forecast call.
 
 ## Overview Architecture
 
@@ -92,8 +102,8 @@ AI agents can **invoke TSFMs as tools the moment they need a forecast.**
 ├──────┬──────┬──────┬──────┬──────┬──────┬──────────────┤
 │      │ stdio JSON-lines protocol      │              │
 │      ▼      ▼      ▼      ▼      ▼      ▼              │
-│ torch timesfm uni2ts sundial toto lag_llama patchtst tide nhits mock │
-│   (Chronos, Granite, Lag-Llama)                        │
+│ torch timesfm uni2ts sundial toto lag_llama patchtst tide nhits nbeatsx mock │
+│   7 TSFMs + 4 neural baselines — 11 models total       │
 │   Independent venv per family — zero dependency clash   │
 └────────────────────────────────────────────────────────┘
 ```
@@ -368,7 +378,7 @@ ruff check .
 pytest -q
 ```
 
-## Real-Data E2E (6 TSFM Models)
+## Real-Data E2E (7 TSFMs + 4 Neural Baselines)
 
 Run the real-data gate + benchmark harness locally:
 
