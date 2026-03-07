@@ -21,7 +21,7 @@ import json
 import math
 import statistics
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from time import perf_counter
 from typing import Any
@@ -249,6 +249,16 @@ def _classify_run_error(error: str) -> str:
     return "EXECUTION_ERROR"
 
 
+def _build_timestamps(*, freq: str, count: int) -> list[str]:
+    start = datetime(2024, 1, 1, tzinfo=UTC)
+    normalized = freq.strip().upper()
+    if normalized.startswith("W"):
+        step = timedelta(weeks=1)
+    else:
+        step = timedelta(days=1)
+    return [(start + i * step).date().isoformat() for i in range(count)]
+
+
 def _run_single(
     *,
     client: TollamaClient,
@@ -264,7 +274,7 @@ def _run_single(
             {
                 "id": f"{series.dataset}-s1",
                 "freq": series.freq,
-                "timestamps": [str(i + 1) for i in range(len(series.context))],
+                "timestamps": _build_timestamps(freq=series.freq, count=len(series.context)),
                 "target": series.context,
             }
         ],
