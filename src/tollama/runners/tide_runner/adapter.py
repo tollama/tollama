@@ -46,7 +46,11 @@ class TideAdapter:
         if model_name is None:
             self._model_cache.clear()
             return
-        self._model_cache = {key: value for key, value in self._model_cache.items() if key[0] != model_name}
+        self._model_cache = {
+            key: value
+            for key, value in self._model_cache.items()
+            if key[0] != model_name
+        }
 
     def forecast(
         self,
@@ -70,7 +74,11 @@ class TideAdapter:
         quantile_fallback = False
 
         for series in request.series:
-            target_series = _build_target_series(series=series, pd_module=deps.pd, ts_cls=deps.time_series_cls)
+            target_series = _build_target_series(
+                series=series,
+                pd_module=deps.pd,
+                ts_cls=deps.time_series_cls,
+            )
             mean, quantiles = _forecast_one_series(
                 model=model,
                 target_series=target_series,
@@ -85,7 +93,11 @@ class TideAdapter:
                 SeriesForecast(
                     id=series.id,
                     freq=series.freq,
-                    start_timestamp=_future_start_timestamp(series=series, horizon=request.horizon, pd_module=deps.pd),
+                    start_timestamp=_future_start_timestamp(
+                        series=series,
+                        horizon=request.horizon,
+                        pd_module=deps.pd,
+                    ),
                     mean=mean,
                     quantiles=quantiles,
                 ),
@@ -93,7 +105,8 @@ class TideAdapter:
 
         if quantile_fallback:
             warnings.append(
-                "TiDE runtime did not expose quantile outputs for requested levels; returning mean forecasts only",
+                "TiDE runtime did not expose quantile outputs for requested levels; "
+                "returning mean forecasts only",
             )
 
         return ForecastResponse(
@@ -164,20 +177,41 @@ class TideAdapter:
                 f"({joined}); install them with `pip install -e \".[dev,runner_tide]\"`",
             )
 
-        deps = _Dependencies(np=np, pd=pd, time_series_cls=time_series_cls, tide_model_cls=tide_model_cls)
+        deps = _Dependencies(
+            np=np,
+            pd=pd,
+            time_series_cls=time_series_cls,
+            tide_model_cls=tide_model_cls,
+        )
         self._dependencies = deps
         return deps
 
 
-def _forecast_one_series(*, model: Any, target_series: Any, horizon: int, requested_quantiles: list[float], quantile_samples: int) -> tuple[list[float], dict[str, list[float]] | None]:
+def _forecast_one_series(
+    *,
+    model: Any,
+    target_series: Any,
+    horizon: int,
+    requested_quantiles: list[float],
+    quantile_samples: int,
+) -> tuple[list[float], dict[str, list[float]] | None]:
     mean_prediction = _predict(model=model, series=target_series, horizon=horizon, num_samples=1)
     mean = _timeseries_to_vector(mean_prediction, label="mean", horizon=horizon)
 
     if not requested_quantiles:
         return mean, None
 
-    probabilistic_prediction = _predict(model=model, series=target_series, horizon=horizon, num_samples=quantile_samples)
-    quantiles = _extract_quantiles(probabilistic_prediction, requested_quantiles=requested_quantiles, horizon=horizon)
+    probabilistic_prediction = _predict(
+        model=model,
+        series=target_series,
+        horizon=horizon,
+        num_samples=quantile_samples,
+    )
+    quantiles = _extract_quantiles(
+        probabilistic_prediction,
+        requested_quantiles=requested_quantiles,
+        horizon=horizon,
+    )
     return mean, quantiles
 
 
@@ -190,7 +224,12 @@ def _predict(*, model: Any, series: Any, horizon: int, num_samples: int) -> Any:
         raise AdapterInputError(f"TiDE prediction failed: {exc}") from exc
 
 
-def _extract_quantiles(prediction: Any, *, requested_quantiles: list[float], horizon: int) -> dict[str, list[float]] | None:
+def _extract_quantiles(
+    prediction: Any,
+    *,
+    requested_quantiles: list[float],
+    horizon: int,
+) -> dict[str, list[float]] | None:
     quantile_ts_fn = getattr(prediction, "quantile_timeseries", None)
     if not callable(quantile_ts_fn):
         return None
@@ -202,7 +241,11 @@ def _extract_quantiles(prediction: Any, *, requested_quantiles: list[float], hor
             quantile_series = quantile_ts_fn(q)
         except Exception:
             return None
-        payload[format(q, "g")] = _timeseries_to_vector(quantile_series, label=f"quantile {format(q, 'g')}", horizon=horizon)
+        payload[format(q, "g")] = _timeseries_to_vector(
+            quantile_series,
+            label=f"quantile {format(q, 'g')}",
+            horizon=horizon,
+        )
     return payload
 
 
@@ -239,7 +282,10 @@ def _timeseries_to_vector(series: Any, *, label: str, horizon: int) -> list[floa
         raise AdapterInputError(f"TiDE {label} output has unexpected shape")
 
     if len(flattened) < horizon:
-        raise AdapterInputError(f"TiDE {label} output is shorter than requested horizon ({len(flattened)} < {horizon})")
+        raise AdapterInputError(
+            f"TiDE {label} output is shorter than requested horizon "
+            f"({len(flattened)} < {horizon})",
+        )
     return flattened[:horizon]
 
 
@@ -255,9 +301,15 @@ def _build_target_series(*, series: SeriesInput, pd_module: Any, ts_cls: Any) ->
         raise AdapterInputError(f"invalid timestamps for series {series.id!r}: {exc}") from exc
 
     try:
-        return ts_cls.from_times_and_values(index, [float(v) for v in series.target], freq=series.freq)
+        return ts_cls.from_times_and_values(
+            index,
+            [float(v) for v in series.target],
+            freq=series.freq,
+        )
     except Exception as exc:  # noqa: BLE001
-        raise AdapterInputError(f"failed to build TiDE target series for {series.id!r}: {exc}") from exc
+        raise AdapterInputError(
+            f"failed to build TiDE target series for {series.id!r}: {exc}",
+        ) from exc
 
 
 def _future_start_timestamp(*, series: SeriesInput, horizon: int, pd_module: Any) -> str:
@@ -288,16 +340,34 @@ def _resolve_quantile_samples(raw: Any) -> int:
     return raw
 
 
-def _resolve_runtime_config(*, model_name: str, model_source: dict[str, Any] | None, model_metadata: dict[str, Any] | None) -> _RuntimeConfig:
+def _resolve_runtime_config(
+    *,
+    model_name: str,
+    model_source: dict[str, Any] | None,
+    model_metadata: dict[str, Any] | None,
+) -> _RuntimeConfig:
     defaults = _TIDE_MODELS.get(model_name, {})
     repo_id = _dict_str(model_source, "repo_id") or _string_or_none(defaults.get("repo_id"))
-    revision = _dict_str(model_source, "revision") or _string_or_none(defaults.get("revision")) or "main"
-    implementation = _dict_str(model_metadata, "implementation") or _string_or_none(defaults.get("implementation")) or "tide"
+    revision = (
+        _dict_str(model_source, "revision")
+        or _string_or_none(defaults.get("revision"))
+        or "main"
+    )
+    implementation = (
+        _dict_str(model_metadata, "implementation")
+        or _string_or_none(defaults.get("implementation"))
+        or "tide"
+    )
 
     if repo_id is None:
         raise UnsupportedModelError(f"unsupported tide model {model_name!r}; missing repo_id")
 
-    return _RuntimeConfig(model_name=model_name, repo_id=repo_id, revision=revision, implementation=implementation)
+    return _RuntimeConfig(
+        model_name=model_name,
+        repo_id=repo_id,
+        revision=revision,
+        implementation=implementation,
+    )
 
 
 def _existing_local_model_path(model_local_dir: str | None) -> str | None:

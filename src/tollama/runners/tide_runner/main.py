@@ -151,7 +151,10 @@ def _handle_forecast(request: ProtocolRequest, adapter: TideAdapter) -> Protocol
         runner_name=RUNNER_NAME,
         inference_ms=inference_ms,
     )
-    return ProtocolResponse(id=request.id, result=response.model_dump(mode="json", exclude_none=True))
+    return ProtocolResponse(
+        id=request.id,
+        result=response.model_dump(mode="json", exclude_none=True),
+    )
 
 
 def handle_request_line(line: str | bytes, adapter: TideAdapter) -> ProtocolResponse:
