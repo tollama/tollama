@@ -22,7 +22,12 @@ from tollama.core.schemas import ForecastRequest
 from tollama.runners.runtime_telemetry import enrich_forecast_response
 
 from .adapter import NhitsAdapter
-from .errors import AdapterInputError, AdapterRuntimeError, DependencyMissingError, UnsupportedModelError
+from .errors import (
+    AdapterInputError,
+    AdapterRuntimeError,
+    DependencyMissingError,
+    UnsupportedModelError,
+)
 
 RUNNER_NAME = "tollama-nhits"
 RUNNER_VERSION = "0.4.0"
@@ -153,7 +158,10 @@ def _handle_forecast(request: ProtocolRequest, adapter: NhitsAdapter) -> Protoco
         runner_name=RUNNER_NAME,
         inference_ms=inference_ms,
     )
-    return ProtocolResponse(id=request.id, result=response.model_dump(mode="json", exclude_none=True))
+    return ProtocolResponse(
+        id=request.id,
+        result=response.model_dump(mode="json", exclude_none=True),
+    )
 
 
 def handle_request_line(line: str | bytes, adapter: NhitsAdapter) -> ProtocolResponse:
