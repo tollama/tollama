@@ -47,6 +47,7 @@ class ModelRun:
     dataset: str
     status: str
     error: str | None
+    error_classification: str | None
     quality: dict[str, float]
     latency_ms: dict[str, float]
 
@@ -237,6 +238,17 @@ def _recommend_routing(runs: list[ModelRun]) -> dict[str, Any]:
     }
 
 
+def _classify_run_error(error: str) -> str:
+    text = error.lower()
+    if "dependency_missing" in text:
+        return "DEPENDENCY_GATED"
+    if "no module named" in text or "not installed" in text:
+        return "DEPENDENCY_GATED"
+    if "runner family" in text and "is not supported" in text:
+        return "UNSUPPORTED_FAMILY_REGRESSION"
+    return "EXECUTION_ERROR"
+
+
 def _run_single(
     *,
     client: TollamaClient,
@@ -291,15 +303,18 @@ def _run_single(
             dataset=series.dataset,
             status="pass",
             error=None,
+            error_classification=None,
             quality=quality,
             latency_ms=latency,
         )
     except Exception as exc:  # noqa: BLE001
+        error = str(exc)
         return ModelRun(
             model=model,
             dataset=series.dataset,
             status="fail",
-            error=str(exc),
+            error=error,
+            error_classification=_classify_run_error(error),
             quality={},
             latency_ms={},
         )
@@ -335,14 +350,15 @@ def _markdown_report(payload: dict[str, Any]) -> str:
         "",
         "## Per-run results",
         "",
-        "| model | dataset | status | sMAPE | MASE | p50 latency (ms) | p95 latency (ms) | error |",
-        "|---|---|---|---:|---:|---:|---:|---|",
+        "| model | dataset | status | error class | sMAPE | MASE | "
+        "p50 latency (ms) | p95 latency (ms) | error |",
+        "|---|---|---|---|---:|---:|---:|---:|---|",
     ]
     for row in payload["runs"]:
         q = row.get("quality", {})
         latency = row.get("latency_ms", {})
         row_template = (
-            "| {model} | {dataset} | {status} | {smape} | {mase} | "
+            "| {model} | {dataset} | {status} | {error_class} | {smape} | {mase} | "
             "{p50} | {p95} | {error} |"
         )
         lines.append(
@@ -350,6 +366,7 @@ def _markdown_report(payload: dict[str, Any]) -> str:
                 model=row["model"],
                 dataset=row["dataset"],
                 status=row["status"],
+                error_class=row.get("error_classification") or "-",
                 smape=q.get("smape", "-"),
                 mase=q.get("mase", "-"),
                 p50=latency.get("p50", "-"),
@@ -357,6 +374,18 @@ def _markdown_report(payload: dict[str, Any]) -> str:
                 error=(row.get("error") or "").replace("|", "/"),
             )
         )
+
+    failure_counts: dict[str, int] = {}
+    for row in payload["runs"]:
+        if row.get("status") != "fail":
+            continue
+        key = str(row.get("error_classification") or "EXECUTION_ERROR")
+        failure_counts[key] = failure_counts.get(key, 0) + 1
+
+    if failure_counts:
+        lines.extend(["", "## Failure classification summary", ""])
+        for key, value in sorted(failure_counts.items()):
+            lines.append(f"- {key}: {value}")
 
     routing = payload["routing_recommendation"]
     lines.extend(
@@ -404,8 +433,8 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.template_only:
         template_payload = {
-            "run_id": run_id,
-            "generated_at": datetime.now(UTC).replace(microsecond=0).isoformat(),
+            "run_id": "<template-run-id>",
+            "generated_at": "<template-generated-at>",
             "protocol": protocol,
             "runs": [],
             "routing_recommendation": {
@@ -474,6 +503,7 @@ def main(argv: list[str] | None = None) -> int:
                 "dataset": run.dataset,
                 "status": run.status,
                 "error": run.error,
+                "error_classification": run.error_classification,
                 "quality": run.quality,
                 "latency_ms": run.latency_ms,
             }
