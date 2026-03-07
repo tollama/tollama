@@ -313,10 +313,16 @@ def _resolve_install_spec(extra: str) -> str:
        currently-running tollama install is non-editable),
     2) editable-install ``direct_url.json`` metadata,
     3) published package name from PyPI.
+
+    NOTE: pip normalizes extra names in metadata (`_` -> `-`). Keep internal
+    names unchanged for user-facing messages, but normalize when building the
+    install target.
     """
+    normalized_extra = extra.replace("_", "-")
+
     local_root = _resolve_local_project_root()
     if local_root is not None:
-        return f"{local_root}[{extra}]"
+        return f"{local_root}[{normalized_extra}]"
 
     # Try to detect an editable / local install by inspecting our own package path.
     try:
@@ -330,11 +336,11 @@ def _resolve_install_spec(extra: str) -> str:
             url: str = direct_url.get("url", "")
             if url.startswith("file://"):
                 project_root = url[len("file://"):]
-                return f"{project_root}[{extra}]"
+                return f"{project_root}[{normalized_extra}]"
     except Exception:
         pass
 
-    return f"tollama[{extra}]"
+    return f"tollama[{normalized_extra}]"
 
 
 def _resolve_local_project_root() -> str | None:

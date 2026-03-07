@@ -349,7 +349,7 @@ def test_resolve_install_spec_prefers_local_project_root() -> None:
     with patch("tollama.core.runtime_bootstrap._resolve_local_project_root") as mock_local:
         mock_local.return_value = "/tmp/tollama-local"
         spec = _resolve_install_spec("runner_lag_llama")
-    assert spec == "/tmp/tollama-local[runner_lag_llama]"
+    assert spec == "/tmp/tollama-local[runner-lag-llama]"
 
 
 def test_resolve_install_spec_uses_direct_url_when_no_local_root() -> None:
@@ -363,4 +363,4 @@ def test_resolve_install_spec_uses_direct_url_when_no_local_root() -> None:
         mock_local.return_value = None
         spec = _resolve_install_spec("runner_torch")
 
-    assert spec == "/opt/tollama-src[runner_torch]"
+    assert spec == "/opt/tollama-src[runner-torch]"
