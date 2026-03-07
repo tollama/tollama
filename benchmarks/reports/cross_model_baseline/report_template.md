@@ -1,7 +1,7 @@
 # Cross-Model TSFM Benchmark Report
 
-- run_id: `20260306T141042Z`
-- generated_at: `2026-03-06T14:10:42+00:00`
+- run_id: `<template-run-id>`
+- generated_at: `<template-generated-at>`
 - base_url: `http://127.0.0.1:11435`
 - models: lag-llama, patchtst, tide, nhits, nbeatsx
 - datasets: seasonal_daily, trend_weekly, intermittent_daily
@@ -10,8 +10,8 @@
 
 ## Per-run results
 
-| model | dataset | status | sMAPE | MASE | p50 latency (ms) | p95 latency (ms) | error |
-|---|---|---|---:|---:|---:|---:|---|
+| model | dataset | status | error class | sMAPE | MASE | p50 latency (ms) | p95 latency (ms) | error |
+|---|---|---|---|---:|---:|---:|---:|---|
 
 ## Routing recommendation
 

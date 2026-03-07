@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-03-06T14:10:42+00:00",
+  "generated_at": "<template-generated-at>",
   "protocol": {
     "base_url": "http://127.0.0.1:11435",
     "context_length": 96,
@@ -39,6 +39,6 @@
     "high_accuracy": "<to-be-filled>",
     "policy": "Populate after benchmark execution."
   },
-  "run_id": "20260306T141042Z",
+  "run_id": "<template-run-id>",
   "runs": []
 }

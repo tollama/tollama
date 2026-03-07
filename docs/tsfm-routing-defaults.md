@@ -98,6 +98,10 @@ configured routing defaults.
 - First-run latency can be inflated by model/runtime bootstrap and cache misses.
 - If model dependencies are missing, use template artifacts and mark recommendation
   as provisional.
+- In real benchmark output, interpret failure classes as:
+  - `DEPENDENCY_GATED`: expected environment/dependency limitation
+  - `UNSUPPORTED_FAMILY_REGRESSION`: implementation regression requiring code fix
+  - `EXECUTION_ERROR`: other runtime/transport failures to triage
 
 ## Baseline artifact in repository
 
