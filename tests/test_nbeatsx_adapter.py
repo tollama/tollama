@@ -63,7 +63,11 @@ class _FakeNF:
     def fit(self, train_df: _FakeDataFrame, static_df: _FakeDataFrame | None = None) -> None:
         self.fit_calls.append({"train_df": train_df, "static_df": static_df})
 
-    def predict(self, h: int | None = None, futr_df: _FakeDataFrame | None = None) -> _FakeDataFrame:
+    def predict(
+        self,
+        h: int | None = None,
+        futr_df: _FakeDataFrame | None = None,
+    ) -> _FakeDataFrame:
         self.predict_calls.append({"h": h, "futr_df": futr_df})
         return _FakeDataFrame(
             [
