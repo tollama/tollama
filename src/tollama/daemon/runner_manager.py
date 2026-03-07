@@ -191,7 +191,7 @@ class RunnerManager:
 
         message = str(error)
         lowered = message.lower()
-        missing_command = "no such file or directory" in lowered or "not found" in lowered
+        missing_command = "no such file or directory" in lowered or "[errno 2]" in lowered
         if not missing_command:
             return error
 
