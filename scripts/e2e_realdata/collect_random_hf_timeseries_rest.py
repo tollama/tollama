@@ -23,7 +23,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
-from urllib.parse import quote
+from urllib.parse import parse_qs, quote, urlparse
 from urllib.request import Request, urlopen
 
 try:
@@ -45,7 +45,7 @@ DEFAULT_MIN_RATIO = 0.90
 MAX_RAW_BYTES = 1_000_000
 MAX_TEXT_SOURCE_BYTES = 20 * 1024 * 1024
 HEAD_TIMEOUT_SECONDS = 8
-MAX_SOURCE_FILES_PER_DATASET = 200
+MAX_SOURCE_FILES_PER_DATASET = 20
 HTTP_TIMEOUT_SECONDS = 45
 DEFAULT_HTTP_PAGE_SIZE = 250
 DEFAULT_LIST_ATTEMPTS = 20_000
@@ -88,6 +88,27 @@ TIMESTAMP_NAME_HINTS = (
 
 TEXT_EXTENSIONS = {"json", "jsonl", "csv", "tsv"}
 BINARY_EXTENSIONS = {"parquet", "arrow"}
+
+NON_PAYLOAD_HINTS = (
+    "assets/",
+    "asset/",
+    "/asset/",
+    "/assets/",
+    "README",
+    "readme",
+    "license",
+    "dataset_info",
+    "dataset_infos",
+    "dataset_info.json",
+    "dataset_infos.json",
+    "README.md",
+    "README.txt",
+    "configs/",
+    "config.",
+    "pyproject.",
+    "requirements.",
+    "limits.json",
+)
 
 TARGET_NAME_HINTS = (
     "target",
@@ -596,6 +617,40 @@ def get_json(url: str) -> Any:
         return _get_json_via_curl(url, exc)
 
 
+def get_json_with_headers(url: str) -> tuple[Any, dict[str, str]]:
+    try:
+        req = Request(url, headers={"User-Agent": USER_AGENT})
+        with urlopen(req, timeout=HTTP_TIMEOUT_SECONDS) as response:
+            if response.status >= 400:
+                raise RuntimeError(f"request failed status={response.status}: {url}")
+            payload = json.loads(response.read().decode("utf-8"))
+            headers = {key: value for key, value in response.headers.items()}
+            return payload, headers
+    except Exception as exc:
+        payload = _get_json_via_curl(url, exc)
+        return payload, {}
+
+
+def parse_next_cursor(headers: dict[str, str]) -> str | None:
+    link = headers.get("Link")
+    if not link:
+        return None
+
+    for part in link.split(","):
+        if 'rel="next"' not in part:
+            continue
+        start = part.find("<")
+        end = part.find(">", start + 1)
+        if start == -1 or end == -1:
+            continue
+        href = part[start + 1 : end]
+        query = parse_qs(urlparse(href).query)
+        cursor_values = query.get("cursor")
+        if cursor_values:
+            return cursor_values[0]
+    return None
+
+
 def _run_curl(
     args: list[str],
     *,
@@ -728,11 +783,24 @@ def is_supported_data_file_with_options(path: str, *, allow_binary: bool) -> boo
     return bool(allow_binary and ext in BINARY_EXTENSIONS)
 
 
-def dataset_listing_url(filter_query: str, page_size: int, offset: int) -> str:
+def is_likely_payload_path(path: str) -> bool:
+    lower_path = path.lower()
+    if any(hint in lower_path for hint in NON_PAYLOAD_HINTS):
+        return False
+    return True
+
+
+def dataset_listing_url(
+    filter_query: str,
+    page_size: int,
+    cursor: str | None,
+) -> str:
     query = (
         f"{HF_LIST_URL}?filter={quote(filter_query, safe=':')}"
-        f"&limit={page_size}&offset={offset}&full=true"
+        f"&limit={page_size}&full=true"
     )
+    if cursor is not None:
+        query = f"{query}&cursor={quote(cursor, safe='')}"
     return query
 
 
@@ -756,10 +824,13 @@ def iter_dataset_ids(
 ) -> list[str]:
     ids: list[str] = []
     seen = set[str]()
-    offset = 0
+    cursor: str | None = None
+    page_count = 0
 
     while len(ids) < max_ids:
-        payload = get_json(dataset_listing_url(filter_query, page_size, offset))
+        payload, headers = get_json_with_headers(
+            dataset_listing_url(filter_query, page_size, cursor=cursor)
+        )
         if not isinstance(payload, list) or not payload:
             break
         new_found = 0
@@ -775,7 +846,13 @@ def iter_dataset_ids(
 
         if new_found == 0:
             break
-        offset += page_size
+        page_count += 1
+        cursor = parse_next_cursor(headers)
+        if not cursor:
+            break
+
+        if page_count >= (max_ids // page_size + 1):
+            break
 
     rng = random.Random(seed)
     rng.shuffle(ids)
@@ -819,6 +896,8 @@ def parse_dataset_info(
                         split = item.get("split", "train")
                         if not isinstance(path, str) or not path.strip():
                             continue
+                        if not is_likely_payload_path(path):
+                            continue
                         if not is_supported_data_file_with_options(path, allow_binary=allow_binary):
                             continue
                         if len(source_files) >= MAX_SOURCE_FILES_PER_DATASET:
@@ -833,6 +912,8 @@ def parse_dataset_info(
                 continue
             path = sibling.get("rfilename")
             if not isinstance(path, str) or not path.strip():
+                continue
+            if not is_likely_payload_path(path):
                 continue
             if not is_supported_data_file_with_options(path, allow_binary=allow_binary):
                 continue

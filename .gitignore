@@ -34,6 +34,7 @@ htmlcov/
 # Development scratch scripts
 reproduce_*.py
 check_*.py
+load_models*.py
 
 # Test Data and Artifacts
 .test_daemon.log
