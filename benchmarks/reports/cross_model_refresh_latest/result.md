@@ -1,12 +1,12 @@
 # Cross-Model TSFM Benchmark Report
 
-- run_id: `20260307T062446Z`
-- generated_at: `2026-03-07T06:24:51+00:00`
+- run_id: `20260307T070334Z`
+- generated_at: `2026-03-07T07:03:38+00:00`
 - base_url: `http://127.0.0.1:11435`
-- models: lag-llama, patchtst, nhits, nbeatsx, tide
+- models: lag-llama, patchtst, nhits, nbeatsx
 - datasets: seasonal_daily, trend_weekly, intermittent_daily
 - split: context=96, horizon=24
-- repeats per run: 1
+- repeats per run: 3
 
 ## Per-run results
 
@@ -24,13 +24,10 @@
 | nbeatsx | seasonal_daily | fail | DEPENDENCY_GATED | - | - | - | - | forecast with model 'nbeatsx' failed with HTTP 503: missing optional nbeatsx runner dependencies (neuralforecast); install them with `pip install -e ".[dev,runner_nbeatsx]"` (code=DEPENDENCY_MISSING) |
 | nbeatsx | trend_weekly | fail | DEPENDENCY_GATED | - | - | - | - | forecast with model 'nbeatsx' failed with HTTP 503: missing optional nbeatsx runner dependencies (neuralforecast); install them with `pip install -e ".[dev,runner_nbeatsx]"` (code=DEPENDENCY_MISSING) |
 | nbeatsx | intermittent_daily | fail | DEPENDENCY_GATED | - | - | - | - | forecast with model 'nbeatsx' failed with HTTP 503: missing optional nbeatsx runner dependencies (neuralforecast); install them with `pip install -e ".[dev,runner_nbeatsx]"` (code=DEPENDENCY_MISSING) |
-| tide | seasonal_daily | fail | DEPENDENCY_GATED | - | - | - | - | forecast with model 'tide' failed with HTTP 503: missing optional tide runner dependencies (darts); install them with `pip install -e ".[dev,runner_tide]"` (code=DEPENDENCY_MISSING) |
-| tide | trend_weekly | fail | DEPENDENCY_GATED | - | - | - | - | forecast with model 'tide' failed with HTTP 503: missing optional tide runner dependencies (darts); install them with `pip install -e ".[dev,runner_tide]"` (code=DEPENDENCY_MISSING) |
-| tide | intermittent_daily | fail | DEPENDENCY_GATED | - | - | - | - | forecast with model 'tide' failed with HTTP 503: missing optional tide runner dependencies (darts); install them with `pip install -e ".[dev,runner_tide]"` (code=DEPENDENCY_MISSING) |
 
 ## Failure classification summary
 
-- DEPENDENCY_GATED: 15
+- DEPENDENCY_GATED: 12
 
 ## Routing recommendation
 
