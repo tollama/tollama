@@ -184,6 +184,30 @@ def test_runner_manager_reports_unsupported_family_with_stable_error_message() -
         )
 
 
+def test_runner_manager_rewrites_missing_executable_error_with_install_hint() -> None:
+    manager = RunnerManager(runner_commands={"patchtst": ("/missing/python", "-m", "x")})
+    rewritten = manager._rewrite_runner_unavailable_error(
+        family="patchtst",
+        error=RunnerUnavailableError("failed to start runner: [Errno 2] No such file or directory"),
+    )
+
+    assert "runner command '/missing/python' is not installed" in str(rewritten)
+    assert "runner_patchtst" in str(rewritten)
+
+
+def test_runner_manager_does_not_rewrite_module_not_found_error() -> None:
+    manager = RunnerManager(runner_commands={"patchtst": ("/bin/python", "-m", "x")})
+    original = RunnerUnavailableError(
+        "runner exited with code 1: ModuleNotFoundError: No module named 'torch'"
+    )
+    rewritten = manager._rewrite_runner_unavailable_error(
+        family="patchtst",
+        error=original,
+    )
+
+    assert str(rewritten) == str(original)
+
+
 def test_daemon_routes_torch_family_to_torch_runner_command_override(monkeypatch, tmp_path) -> None:
     paths = TollamaPaths(base_dir=tmp_path / ".tollama")
     monkeypatch.setenv("TOLLAMA_HOME", str(paths.base_dir))
