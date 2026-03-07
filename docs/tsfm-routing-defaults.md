@@ -103,6 +103,19 @@ configured routing defaults.
   - `UNSUPPORTED_FAMILY_REGRESSION`: implementation regression requiring code fix
   - `EXECUTION_ERROR`: other runtime/transport failures to triage
 
+## Latest refresh snapshot (2026-03-07)
+
+A refresh run was executed with failure classification enabled and saved at:
+
+- `benchmarks/reports/cross_model_refresh_latest/result.json`
+- `benchmarks/reports/cross_model_refresh_latest/result.md`
+
+Result summary:
+- All evaluated runs were classified as `DEPENDENCY_GATED` in this environment.
+- No `UNSUPPORTED_FAMILY_REGRESSION` was observed.
+- Routing defaults remain unchanged until a dependency-complete environment yields
+  successful comparative runs.
+
 ## Baseline artifact in repository
 
 A baseline template artifact is committed at:
