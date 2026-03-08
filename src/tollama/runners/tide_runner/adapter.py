@@ -404,11 +404,22 @@ def _build_target_series(*, series: SeriesInput, pd_module: Any, np_module: Any,
         raise AdapterInputError(f"invalid timestamps for series {series.id!r}: {exc}") from exc
 
     try:
-        values = np_module.asarray([float(v) for v in series.target], dtype=np_module.float32)
+        frame = pd_module.DataFrame(
+            {"target": [float(v) for v in series.target]},
+            index=index,
+            dtype="float32",
+        )
+        try:
+            frame = frame.resample(series.freq).asfreq()
+            frame["target"] = frame["target"].fillna(0.0)
+        except Exception:
+            pass
         return ts_cls.from_times_and_values(
-            index,
-            values,
+            frame.index,
+            frame["target"].values,
             freq=series.freq,
+            fill_missing_dates=True,
+            fillna_value=0.0,
         )
     except Exception as exc:  # noqa: BLE001
         raise AdapterInputError(

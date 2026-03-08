@@ -279,6 +279,14 @@ def _forecast_one_series(
 
     history = [float(value) for value in series.target]
     window = history[-context_length:] if context_length < len(history) else history
+
+    pad_len = context_length - len(window)
+    if pad_len > 0:
+        window = [0.0] * pad_len + window
+        mask_list = [0] * pad_len + [1] * (context_length - pad_len)
+    else:
+        mask_list = [1] * context_length
+
     # HF PatchTST expects [batch, sequence_length, channels]. Some checkpoints
     # define channels > 1 in config, so we align input channels accordingly.
     input_channels = _resolve_input_channels(model)
@@ -286,10 +294,15 @@ def _forecast_one_series(
         [[[value for _ in range(input_channels)] for value in window]],
         dtype=torch_module.float32,
     )
+    mask = torch_module.tensor(
+        [[[m for _ in range(input_channels)] for m in mask_list]],
+        dtype=torch_module.float32,
+    )
 
     outputs = _invoke_forecast(
         model=model,
         tensor=tensor,
+        mask=mask,
         horizon=horizon,
     )
     mean = _extract_mean(outputs, horizon=horizon)
@@ -301,8 +314,13 @@ def _forecast_one_series(
     return mean, quantiles
 
 
-def _invoke_forecast(*, model: Any, tensor: Any, horizon: int) -> Any:
+def _invoke_forecast(*, model: Any, tensor: Any, mask: Any, horizon: int) -> Any:
     call_variants = (
+        {"past_values": tensor, "past_observed_mask": mask, "prediction_length": horizon},
+        {"past_values": tensor, "past_observed_mask": mask},
+        {"past_target": tensor, "past_observed_mask": mask, "prediction_length": horizon},
+        {"past_target": tensor, "past_observed_mask": mask},
+        {"inputs": tensor, "past_observed_mask": mask},
         {"past_values": tensor, "prediction_length": horizon},
         {"past_values": tensor},
         {"past_target": tensor, "prediction_length": horizon},
@@ -408,11 +426,17 @@ def _flatten_forecast_vector(value: Any) -> list[float]:
         value = value.cpu()
     if hasattr(value, "numpy"):
         value = value.numpy()
+    if hasattr(value, "shape") and len(value.shape) >= 2:
+        import numpy as np
+        value = np.squeeze(value)
+        if len(value.shape) >= 2:
+            value = value[:, 0]
+
     if hasattr(value, "tolist"):
         value = value.tolist()
 
     while isinstance(value, list) and value and isinstance(value[0], list):
-        value = value[-1]
+        value = value[0]
 
     if isinstance(value, tuple):
         value = list(value)

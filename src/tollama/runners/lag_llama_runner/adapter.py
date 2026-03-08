@@ -312,6 +312,17 @@ def create_lag_llama_estimator(
     context_length: int,
     num_samples: int,
 ) -> Any:
+    try:
+        import torch
+        # PyTorch 2.6 defaults weights_only=True which breaks LagLlama
+        _original_load = torch.load
+        def _patched_load(*args, **kwargs):
+            kwargs["weights_only"] = False
+            return _original_load(*args, **kwargs)
+        torch.load = _patched_load
+    except Exception:
+        pass
+
     checkpoint_hparams = load_checkpoint_hparams(ckpt_path)
     model_kwargs = checkpoint_hparams.get("model_kwargs", {})
 
@@ -418,7 +429,14 @@ def load_checkpoint_hparams(ckpt_path: str) -> dict[str, Any]:
         return {}
 
     try:
-        checkpoint = torch.load(ckpt_path, map_location="cpu")
+        from gluonts.torch.distributions.studentT import StudentTOutput
+        if hasattr(torch.serialization, "add_safe_globals"):
+            torch.serialization.add_safe_globals([StudentTOutput])
+    except Exception:
+        pass
+
+    try:
+        checkpoint = torch.load(ckpt_path, map_location="cpu", weights_only=False)
     except Exception:  # noqa: BLE001
         return {}
     if not isinstance(checkpoint, dict):
@@ -485,6 +503,11 @@ def build_pandas_dataset(
             index=timestamps,
             dtype="float32",
         )
+        try:
+            frame = frame.resample(dataset_freq).asfreq()
+            frame["target"] = frame["target"].fillna(0.0)
+        except Exception:
+            pass
         key = _unique_column_name(series.id, index, frames)
         frames[key] = frame
 
