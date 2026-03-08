@@ -392,7 +392,13 @@ def _timeseries_to_vector(series: Any, *, label: str, horizon: int) -> list[floa
     return flattened[:horizon]
 
 
-def _build_target_series(*, series: SeriesInput, pd_module: Any, np_module: Any, ts_cls: Any) -> Any:
+def _build_target_series(
+    *,
+    series: SeriesInput,
+    pd_module: Any,
+    np_module: Any,
+    ts_cls: Any,
+) -> Any:
     if len(series.timestamps) != len(series.target):
         raise AdapterInputError(f"series {series.id!r} timestamps and target lengths must match")
     if len(series.target) < 2:
