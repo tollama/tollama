@@ -35,6 +35,11 @@ graph TD
         UNI2TS[uni2ts<br/>Moirai]
         SUNDIAL[sundial<br/>Sundial]
         TOTO[toto<br/>Toto]
+        LAG_LLAMA[lag_llama<br/>Lag-Llama]
+        PATCHTST[patchtst<br/>PatchTST]
+        TIDE[tide<br/>TiDE]
+        NHITS[nhits<br/>N-HiTS]
+        NBEATSX[nbeatsx<br/>N-BEATSx]
     end
 
     subgraph Core ["Shared Core"]
@@ -62,6 +67,11 @@ graph TD
     SUPER --> UNI2TS
     SUPER --> SUNDIAL
     SUPER --> TOTO
+    SUPER --> LAG_LLAMA
+    SUPER --> PATCHTST
+    SUPER --> TIDE
+    SUPER --> NHITS
+    SUPER --> NBEATSX
 
     ROUTES --> SCHEMAS
     SUPER --> SCHEMAS

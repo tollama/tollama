@@ -35,12 +35,14 @@ Additional docs:
 | Model name | Family | Hugging Face repo | Revision | License | `--accept-license` required | Runner extra |
 |---|---|---|---|---|---|---|
 | `chronos2` | `torch` | `amazon/chronos-2` | `main` | `apache-2.0` | No | `runner_torch` |
-| `granite-ttm-r2` | `torch` | `ibm-granite/granite-timeseries-ttm-r2` | `90-30-ft-l1-r2.1` | `apache-2.0` | No | `runner_torch` |
+| `granite-ttm-r2` | `torch` | `ibm-granite/granite-timeseries-ttm-r2` | `512-96-ft-l1-r2.1` | `apache-2.0` | No | `runner_torch` |
 | `timesfm-2.5-200m` | `timesfm` | `google/timesfm-2.5-200m-pytorch` | `main` | `apache-2.0` | No | `runner_timesfm` |
 | `moirai-2.0-R-small` | `uni2ts` | `Salesforce/moirai-2.0-R-small` | `main` | `cc-by-nc-4.0` | Yes | `runner_uni2ts` |
 | `sundial-base-128m` | `sundial` | `thuml/sundial-base-128m` | `main` | `apache-2.0` | No | `runner_sundial` |
 | `toto-open-base-1.0` | `toto` | `Datadog/Toto-Open-Base-1.0` | `main` | `apache-2.0` | No | `runner_toto` |
+| `lag-llama` | `lag_llama` | `time-series-foundation-models/Lag-Llama` | `main` | `apache-2.0` | No | `runner_lag_llama` |
 | `patchtst` | `patchtst` | `ibm-granite/granite-timeseries-patchtst` | `main` | `apache-2.0` | No | `runner_patchtst` |
+| `tide` | `tide` | `tollama/tide-runner` (local source manifest) | `main` | `apache-2.0` | No | `runner_tide` |
 | `nhits` | `nhits` | `tollama/nhits-runner` (local source manifest) | `main` | `apache-2.0` | No | `runner_nhits` |
 | `nbeatsx` | `nbeatsx` | `tollama/nbeatsx-runner` (local source manifest) | `main` | `apache-2.0` | No | `runner_nbeatsx` |
 
@@ -108,7 +110,9 @@ Optional extras:
 | `runner_uni2ts` | Uni2TS/Moirai runner dependencies | `uni2ts`, `numpy`, `pandas`, `huggingface_hub`, `gluonts` |
 | `runner_sundial` | Sundial runner dependencies | `transformers`, `torch`, `numpy`, `pandas`, `huggingface_hub` |
 | `runner_toto` | Toto runner dependencies | `toto-ts`, `torch`, `numpy`, `pandas` |
-| `runner_patchtst` | PatchTST runner dependencies | `transformers` |
+| `runner_lag_llama` | Lag-Llama runner dependencies | `lag-llama`, `gluonts`, `lightning`, `huggingface_hub`, `numpy`, `pandas`, `wandb` |
+| `runner_patchtst` | PatchTST runner dependencies | `transformers`, `torch` |
+| `runner_tide` | TiDE runner dependencies | `u8darts`, `torch` |
 | `runner_nhits` | N-HiTS runner dependencies | `neuralforecast`, `pytorch-lightning`, `torch` |
 | `runner_nbeatsx` | N-BEATSx runner dependencies | `neuralforecast`, `pytorch-lightning`, `torch` |
 
@@ -134,7 +138,7 @@ With the default `daemon.auto_bootstrap=true`, family runtimes are created lazil
 If you prefer single-environment mode (legacy), install all runner extras in the same `.venv`:
 
 ```bash
-python -m pip install -e ".[dev,runner_torch,runner_timesfm,runner_uni2ts,runner_sundial,runner_toto,runner_patchtst,runner_nhits,runner_nbeatsx]"
+python -m pip install -e ".[dev,runner_torch,runner_timesfm,runner_uni2ts,runner_sundial,runner_toto,runner_lag_llama,runner_patchtst,runner_tide,runner_nhits,runner_nbeatsx]"
 ```
 
 ## Single-Environment Checklist (Legacy)
@@ -156,7 +160,7 @@ Use this checklist to avoid mixed Conda/system/venv runners:
 python3.11 -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip setuptools wheel
-python -m pip install -e ".[dev,runner_torch,runner_timesfm,runner_uni2ts,runner_sundial,runner_toto,runner_patchtst,runner_nhits,runner_nbeatsx]"
+python -m pip install -e ".[dev,runner_torch,runner_timesfm,runner_uni2ts,runner_sundial,runner_toto,runner_lag_llama,runner_patchtst,runner_tide,runner_nhits,runner_nbeatsx]"
 
 which python
 which tollama
@@ -270,7 +274,17 @@ Families with explicit `runner_commands` entries skip auto-bootstrap.
 │   └── ...
 ├── sundial/
 │   └── ...
-└── toto/
+├── toto/
+│   └── ...
+├── lag_llama/
+│   └── ...
+├── patchtst/
+│   └── ...
+├── tide/
+│   └── ...
+├── nhits/
+│   └── ...
+└── nbeatsx/
     └── ...
 ```
 
@@ -394,7 +408,7 @@ export TOLLAMA_HF_TOKEN=hf_xxx
 Pull models that do not require explicit acceptance:
 
 ```bash
-for model in chronos2 granite-ttm-r2 timesfm-2.5-200m sundial-base-128m toto-open-base-1.0; do
+for model in chronos2 granite-ttm-r2 timesfm-2.5-200m sundial-base-128m toto-open-base-1.0 lag-llama patchtst tide nhits nbeatsx; do
   tollama pull "$model" --no-stream
 done
 ```
@@ -410,7 +424,7 @@ Single command block version:
 ```bash
 set -euo pipefail
 
-for model in chronos2 granite-ttm-r2 timesfm-2.5-200m sundial-base-128m toto-open-base-1.0; do
+for model in chronos2 granite-ttm-r2 timesfm-2.5-200m sundial-base-128m toto-open-base-1.0 lag-llama patchtst tide nhits nbeatsx; do
   tollama pull "$model" --no-stream
 done
 
@@ -435,7 +449,7 @@ Verify all expected model directories exist:
 
 ```bash
 BASE="${TOLLAMA_HOME:-$HOME/.tollama}/models"
-for model in chronos2 granite-ttm-r2 timesfm-2.5-200m moirai-2.0-R-small sundial-base-128m toto-open-base-1.0; do
+for model in chronos2 granite-ttm-r2 timesfm-2.5-200m moirai-2.0-R-small sundial-base-128m toto-open-base-1.0 lag-llama patchtst tide nhits nbeatsx; do
   test -f "$BASE/$model/manifest.json" && echo "ok: $model" || echo "missing: $model"
 done
 ```
@@ -451,6 +465,11 @@ tollama run timesfm-2.5-200m --input examples/timesfm_2p5_request.json --no-stre
 tollama run moirai-2.0-R-small --input examples/moirai_2p0_request.json --no-stream
 tollama run sundial-base-128m --input examples/sundial_request.json --no-stream
 tollama run toto-open-base-1.0 --input examples/toto_request.json --no-stream
+tollama run lag-llama --input examples/lag_llama_request.json --no-stream
+tollama run patchtst --input examples/request.json --no-stream
+tollama run tide --input examples/request.json --no-stream
+tollama run nhits --input examples/request.json --no-stream
+tollama run nbeatsx --input examples/request.json --no-stream
 ```
 
 ## Real-Data E2E Matrix (Kaggle + Open Data)
@@ -589,7 +608,7 @@ tollama ps
 
 ## Integration Test Status
 
-All six model families have passing integration tests across Python 3.11–3.13. The CI badge
+All eleven model families have integration tests across Python 3.11–3.13. The CI badge
 at the top of the README reflects the current state. To run integration tests locally against
 real model weights (requires models pulled and internet access):
 
@@ -602,6 +621,9 @@ TOLLAMA_RUN_INTEGRATION_TESTS=1 TOLLAMA_TOTO_INTEGRATION_CPU=1 pytest -q -rs \
   tests/test_sundial_integration.py \
   tests/test_toto_integration.py
 ```
+
+Baseline model families (lag-llama, patchtst, tide, nhits, nbeatsx) have dedicated adapter
+and runner tests; run `scripts/run_all_models_e2e_local.sh` for full-model E2E coverage.
 
 See `docs/releases/v0.1.0.md` for per-family compatibility notes and known limitations.
 

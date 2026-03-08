@@ -33,8 +33,8 @@ For each `series[i]`:
 - Mixed numeric + string in one covariate array is rejected.
 - Known-future covariates are keys present in both `past_covariates` and `future_covariates`.
 - Past-only covariates are keys present only in `past_covariates`.
-- Static covariates are currently normalized/filtered in daemon compatibility checks,
-  but no active runner advertises `static_covariates=true` yet.
+- Static covariates are normalized/filtered in daemon compatibility checks.
+  TiDE advertises `static_covariates=true`; other runners do not yet support static covariates.
 
 ## Covariates Mode
 
@@ -105,6 +105,41 @@ TimesFM knobs live under `parameters.timesfm`:
 - In `best_effort`, unsupported covariates are ignored and surfaced as warnings.
 - In `strict`, unsupported covariate usage is rejected with HTTP 400.
 
+### Lag-Llama (lag_llama runner)
+
+- Lag-Llama is target-only in this runner implementation.
+- `past_covariates`, `future_covariates`, and `static_covariates` are unsupported.
+- In `best_effort`, unsupported covariates are ignored and surfaced as warnings.
+- In `strict`, covariate usage is rejected with HTTP 400.
+
+### PatchTST (patchtst runner)
+
+- PatchTST is target-only in this runner implementation.
+- `past_covariates`, `future_covariates`, and `static_covariates` are unsupported.
+- In `best_effort`, unsupported covariates are ignored and surfaced as warnings.
+- In `strict`, covariate usage is rejected with HTTP 400.
+
+### TiDE (tide runner)
+
+- TiDE supports past numeric and future numeric covariates, as well as static covariates.
+- Categorical covariates are unsupported.
+- In `best_effort`, unsupported covariates (categorical) are ignored and surfaced as warnings.
+- In `strict`, unsupported covariate usage is rejected with HTTP 400.
+
+### N-HiTS (nhits runner)
+
+- N-HiTS is target-only per registry capabilities.
+- Numeric covariates/static features are handled in practical best-effort mode.
+- In `best_effort`, non-numeric values are dropped/zero-filled with warnings.
+- In `strict`, non-numeric values raise `BAD_REQUEST`.
+
+### N-BEATSx (nbeatsx runner)
+
+- N-BEATSx is target-only per registry capabilities.
+- Numeric covariates/static features are handled in practical best-effort mode.
+- In `best_effort`, non-numeric values are dropped/zero-filled with warnings.
+- In `strict`, non-numeric values raise `BAD_REQUEST`.
+
 ## Capability Visibility
 
 Covariate compatibility is exposed in:
@@ -123,6 +158,10 @@ Covariate compatibility is exposed in:
 | Sundial | No | No | No | No | Planned |
 | Toto Open Base 1.0 | Yes | No | No | No | Planned |
 | Lag-Llama | No | No | No | No | Planned |
+| PatchTST | No | No | No | No | No |
+| TiDE | Yes | No | Yes | No | Yes |
+| N-HiTS | No | No | No | No | No |
+| N-BEATSx | No | No | No | No | No |
 
 ## API Example (curl)
 

@@ -146,6 +146,10 @@ Compatibility snapshot:
 | Sundial | No | No | No | No |
 | Toto Open Base 1.0 | Yes | No | No | No |
 | Lag-Llama | No | No | No | No |
+| PatchTST | No | No | No | No |
+| TiDE | Yes | No | Yes | No |
+| N-HiTS | No | No | No | No |
+| N-BEATSx | No | No | No | No |
 
 TimesFM XReg knobs are available at `parameters.timesfm`:
 `xreg_mode`, `ridge`, `force_on_cpu`.
