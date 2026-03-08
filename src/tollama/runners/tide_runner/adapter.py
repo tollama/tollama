@@ -77,10 +77,19 @@ class TideAdapter:
             target_series = _build_target_series(
                 series=series,
                 pd_module=deps.pd,
+                np_module=deps.np,
                 ts_cls=deps.time_series_cls,
             )
-            mean, quantiles = _forecast_one_series(
+            model_for_series = _prepare_model_for_series(
                 model=model,
+                tide_model_cls=deps.tide_model_cls,
+                series_length=len(series.target),
+                horizon=request.horizon,
+                options=request.options,
+                target_series=target_series,
+            )
+            mean, quantiles = _forecast_one_series(
+                model=model_for_series,
                 target_series=target_series,
                 horizon=request.horizon,
                 requested_quantiles=list(request.quantiles),
@@ -130,14 +139,23 @@ class TideAdapter:
         if cached is not None:
             return cached
 
-        kwargs = {"model_name": model_ref}
-        try:
-            model = deps.tide_model_cls.load(**kwargs)
-        except Exception:
+        model = None
+        if hasattr(deps.tide_model_cls, "load"):
+            try:
+                model = deps.tide_model_cls.load(model_ref)
+            except Exception:
+                model = None
+
+        if model is None and hasattr(deps.tide_model_cls, "from_pretrained"):
             try:
                 model = deps.tide_model_cls.from_pretrained(model_ref)
-            except Exception as exc:  # noqa: BLE001
-                raise AdapterInputError(f"failed to load TiDE model {model_ref!r}: {exc}") from exc
+            except Exception:
+                model = None
+
+        # Local TiDE integration can run without a serialized checkpoint.
+        # In that case we keep the class and build+fit per-series at runtime.
+        if model is None:
+            model = deps.tide_model_cls
 
         self._model_cache[key] = model
         return model
@@ -185,6 +203,91 @@ class TideAdapter:
         )
         self._dependencies = deps
         return deps
+
+
+def _prepare_model_for_series(
+    *,
+    model: Any,
+    tide_model_cls: Any,
+    series_length: int,
+    horizon: int,
+    options: dict[str, Any],
+    target_series: Any,
+) -> Any:
+    if isinstance(model, type):
+        model = _build_runtime_tide_model(
+            tide_model_cls=tide_model_cls,
+            series_length=series_length,
+            horizon=horizon,
+            options=options,
+        )
+
+    fit_fn = getattr(model, "fit", None)
+    if callable(fit_fn):
+        try:
+            fit_fn(series=target_series, verbose=False)
+        except TypeError:
+            try:
+                fit_fn(target_series, verbose=False)
+            except TypeError:
+                fit_fn(target_series)
+        except Exception as exc:  # noqa: BLE001
+            raise AdapterInputError(f"TiDE fit failed: {exc}") from exc
+
+    return model
+
+
+def _build_runtime_tide_model(
+    *,
+    tide_model_cls: Any,
+    series_length: int,
+    horizon: int,
+    options: dict[str, Any],
+) -> Any:
+    input_chunk_length = _resolve_positive_int_option(
+        options.get("context_length"),
+        default=min(64, max(2, series_length - 1)),
+        field_name="context_length",
+    )
+    if input_chunk_length >= series_length:
+        input_chunk_length = max(2, series_length - 1)
+
+    output_chunk_length = _resolve_positive_int_option(
+        options.get("output_chunk_length"),
+        default=max(1, min(horizon, 32)),
+        field_name="output_chunk_length",
+    )
+
+    n_epochs = _resolve_positive_int_option(
+        options.get("tide_epochs"),
+        default=1,
+        field_name="tide_epochs",
+    )
+
+    trial_kwargs = {
+        "input_chunk_length": input_chunk_length,
+        "output_chunk_length": output_chunk_length,
+        "n_epochs": n_epochs,
+        "random_state": 42,
+    }
+    try:
+        return tide_model_cls(**trial_kwargs)
+    except TypeError:
+        try:
+            return tide_model_cls(
+                input_chunk_length=input_chunk_length,
+                output_chunk_length=output_chunk_length,
+            )
+        except Exception as exc:  # noqa: BLE001
+            raise AdapterInputError(f"failed to initialize TiDE model: {exc}") from exc
+
+
+def _resolve_positive_int_option(raw: Any, *, default: int, field_name: str) -> int:
+    if raw is None:
+        return default
+    if isinstance(raw, bool) or not isinstance(raw, int) or raw <= 0:
+        raise AdapterInputError(f"{field_name} option must be a positive integer")
+    return raw
 
 
 def _forecast_one_series(
@@ -289,7 +392,7 @@ def _timeseries_to_vector(series: Any, *, label: str, horizon: int) -> list[floa
     return flattened[:horizon]
 
 
-def _build_target_series(*, series: SeriesInput, pd_module: Any, ts_cls: Any) -> Any:
+def _build_target_series(*, series: SeriesInput, pd_module: Any, np_module: Any, ts_cls: Any) -> Any:
     if len(series.timestamps) != len(series.target):
         raise AdapterInputError(f"series {series.id!r} timestamps and target lengths must match")
     if len(series.target) < 2:
@@ -301,9 +404,10 @@ def _build_target_series(*, series: SeriesInput, pd_module: Any, ts_cls: Any) ->
         raise AdapterInputError(f"invalid timestamps for series {series.id!r}: {exc}") from exc
 
     try:
+        values = np_module.asarray([float(v) for v in series.target], dtype=np_module.float32)
         return ts_cls.from_times_and_values(
             index,
-            [float(v) for v in series.target],
+            values,
             freq=series.freq,
         )
     except Exception as exc:  # noqa: BLE001

@@ -212,6 +212,19 @@ tollama runtime remove torch
 tollama runtime remove --all
 ```
 
+### Full-model E2E smoke
+
+Run the repository helper to execute pull+forecast smoke tests across all
+currently registered models with model-appropriate payloads:
+
+```bash
+scripts/run_all_models_e2e_local.sh
+```
+
+This helper auto-generates long-context payloads for families that require
+substantial history windows (for example, Granite TTM / PatchTST / TiDE /
+N-HiTS / N-BEATSx) and uses a PatchTST-compatible horizon in the request.
+
 ### Configuration
 
 Control bootstrap behavior via `~/.tollama/config.json`:

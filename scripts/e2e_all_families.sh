@@ -8,7 +8,7 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 echo -e "${BLUE}========================================${NC}"
-echo -e "${BLUE}  Tollama E2E Tests - Per-Family Suite  ${NC}"
+echo -e "${BLUE}  Tollama E2E Tests - Family + Full Suite${NC}"
 echo -e "${BLUE}========================================${NC}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -22,6 +22,7 @@ declare -a TESTS=(
     "e2e_uni2ts_test.sh"
     "e2e_sundial_test.sh"
     "e2e_toto_test.sh"
+    "run_all_models_e2e_local.sh"
 )
 
 # Run each test

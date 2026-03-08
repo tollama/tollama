@@ -56,11 +56,37 @@ else
 fi
 
 echo "Step 2: Running granite-ttm-r2 prediction..."
-INPUT_FILE="examples/granite_ttm_request.json"
-if [ ! -f "$INPUT_FILE" ]; then
-    echo -e "${RED}Error: $INPUT_FILE not found.${NC}"
-    exit 1
-fi
+
+# Granite TTM requires long history (context_length=512). Build a dedicated
+# payload to keep this E2E deterministic even if example fixtures are shorter.
+INPUT_FILE="/tmp/tollama_granite_compat_request.json"
+python3 - <<'PY'
+import json
+from datetime import date, timedelta
+
+start = date(2024, 1, 1)
+n = 520
+timestamps = [(start + timedelta(days=i)).isoformat() for i in range(n)]
+target = [100.0 + 0.1 * i + ((i % 7) - 3) * 0.2 for i in range(n)]
+
+payload = {
+    "model": "granite-ttm-r2",
+    "horizon": 12,
+    "quantiles": [],
+    "series": [
+        {
+            "id": "series-001",
+            "freq": "D",
+            "timestamps": timestamps,
+            "target": target,
+        }
+    ],
+    "options": {},
+}
+
+with open("/tmp/tollama_granite_compat_request.json", "w", encoding="utf-8") as f:
+    json.dump(payload, f)
+PY
 
 tollama run granite-ttm-r2 --input "$INPUT_FILE" --no-stream
 if [ $? -eq 0 ]; then

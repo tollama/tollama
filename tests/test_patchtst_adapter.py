@@ -126,6 +126,30 @@ def test_patchtst_adapter_forecast_smoke_multi_series(monkeypatch) -> None:
     assert "ignores covariates" in response.warnings[0]
 
 
+def test_patchtst_adapter_builds_3d_input_tensor(monkeypatch) -> None:
+    adapter = PatchTSTAdapter()
+    monkeypatch.setattr(
+        adapter,
+        "_resolve_dependencies",
+        lambda: type(
+            "D",
+            (),
+            {"torch": _FakeTorch(), "pandas": _FakePandas(), "model_loader_cls": _FakeModel},
+        )(),
+    )
+
+    req = _request()
+    req.series = [req.series[0]]
+    req.options["context_length"] = 3
+    adapter.forecast(req)
+
+    model = adapter._model_cache[("patchtst", "ibm-granite/granite-timeseries-patchtst", "main")]
+    payload = model.calls[0]["past_values"].values
+    assert len(payload) == 1
+    assert len(payload[0]) == 3
+    assert len(payload[0][0]) == 1
+
+
 def test_patchtst_adapter_rejects_invalid_frequency(monkeypatch) -> None:
     adapter = PatchTSTAdapter()
     monkeypatch.setattr(

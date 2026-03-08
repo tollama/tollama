@@ -41,6 +41,15 @@ class _FakeTimeSeries:
         return [[value] for value in self._values]
 
 
+class _FakeNumpy:
+    float32 = "float32"
+
+    @staticmethod
+    def asarray(values: list[float], dtype: Any = None) -> list[float]:
+        del dtype
+        return values
+
+
 class _FakePrediction:
     def __init__(self, mean: list[float], quantiles: dict[float, list[float]] | None) -> None:
         self._mean = mean
@@ -69,6 +78,20 @@ class _FakeModelNoQuantiles:
         return _FakePrediction([10.0, 11.0], None)
 
 
+class _FakeRuntimeTideModel:
+    def __init__(self, **kwargs: Any) -> None:
+        self.kwargs = kwargs
+        self.fit_calls = 0
+
+    def fit(self, series: Any, verbose: bool = False) -> None:
+        del series, verbose
+        self.fit_calls += 1
+
+    def predict(self, n: int, series: Any, num_samples: int) -> _FakePrediction:
+        del n, series, num_samples
+        return _FakePrediction([10.0, 11.0], {0.1: [9.0, 10.0], 0.9: [11.0, 12.0]})
+
+
 def _request() -> ForecastRequest:
     return ForecastRequest.model_validate(
         {
@@ -93,7 +116,7 @@ def _deps() -> Any:
         "D",
         (),
         {
-            "np": object(),
+            "np": _FakeNumpy(),
             "pd": _FakePandas(),
             "time_series_cls": _FakeTimeSeries,
             "tide_model_cls": object,
@@ -126,3 +149,27 @@ def test_tide_adapter_falls_back_to_mean_only_when_quantiles_unavailable(monkeyp
     assert response.forecasts[0].quantiles is None
     assert response.warnings is not None
     assert "did not expose quantile outputs" in response.warnings[0]
+
+
+def test_tide_adapter_runtime_model_fallback_builds_and_fits(monkeypatch) -> None:
+    adapter = TideAdapter()
+    monkeypatch.setattr(
+        adapter,
+        "_resolve_dependencies",
+        lambda: type(
+            "D",
+            (),
+            {
+                "np": _FakeNumpy(),
+                "pd": _FakePandas(),
+                "time_series_cls": _FakeTimeSeries,
+                "tide_model_cls": _FakeRuntimeTideModel,
+            },
+        )(),
+    )
+    monkeypatch.setattr(adapter, "_get_or_load_model", lambda **kwargs: _FakeRuntimeTideModel)
+
+    response = adapter.forecast(_request())
+
+    assert response.forecasts[0].mean == [10.0, 11.0]
+    assert response.forecasts[0].quantiles == {"0.1": [9.0, 10.0], "0.9": [11.0, 12.0]}

@@ -48,3 +48,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   - deterministic mean forecasts with best-effort quantile extraction
   - explicit warning-based mean-only fallback when quantile outputs are unavailable
   - regression tests for quantile success/fallback and runner wiring
+- Full-model local E2E helper: `scripts/run_all_models_e2e_local.sh`
+  - executes pull + forecast smoke coverage across all currently registered models
+  - auto-generates long-context payloads for long-history families
+  - uses PatchTST-specific horizon payload for stable smoke coverage
+
+### Fixed
+
+- PatchTST runner adapter:
+  - aligned forecast tensor input shape to model expectations (`[batch, seq, channels]`)
+  - added model-config channel detection to avoid input-channel mismatch errors
+- TiDE runner adapter:
+  - added robust model loading fallback when pretrained checkpoint API is unavailable
+  - added runtime fit path fallback for local class-based TiDE execution
+  - normalized TiDE input values to float32 to avoid MPS float64 conversion failures
+- E2E suite stability:
+  - `scripts/e2e_all_families.sh` now includes full-model smoke helper execution

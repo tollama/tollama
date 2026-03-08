@@ -378,6 +378,30 @@ ruff check .
 pytest -q
 ```
 
+## Local Model E2E (All Registered Models)
+
+Use the local helper script to run pull + forecast smoke checks across all
+registered models with model-appropriate payloads:
+
+```bash
+export PATH="$PWD/.venv_langchain_e2e/bin:$PATH"
+scripts/run_all_models_e2e_local.sh
+```
+
+Notes:
+
+- The helper auto-generates long-context payloads for families that need long
+  history windows (for example Granite TTM, TiDE, N-HiTS, N-BEATSx).
+- PatchTST is executed with a dedicated compatible payload/horizon in this
+  smoke flow.
+
+For the per-family suite plus full-model smoke in one command:
+
+```bash
+export PATH="$PWD/.venv_langchain_e2e/bin:$PATH"
+bash scripts/e2e_all_families.sh
+```
+
 ## Real-Data E2E (7 TSFMs + 4 Neural Baselines)
 
 Run the real-data gate + benchmark harness locally:

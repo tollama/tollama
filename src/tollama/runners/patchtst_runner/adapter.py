@@ -279,7 +279,13 @@ def _forecast_one_series(
 
     history = [float(value) for value in series.target]
     window = history[-context_length:] if context_length < len(history) else history
-    tensor = torch_module.tensor([window], dtype=torch_module.float32)
+    # HF PatchTST expects [batch, sequence_length, channels]. Some checkpoints
+    # define channels > 1 in config, so we align input channels accordingly.
+    input_channels = _resolve_input_channels(model)
+    tensor = torch_module.tensor(
+        [[[value for _ in range(input_channels)] for value in window]],
+        dtype=torch_module.float32,
+    )
 
     outputs = _invoke_forecast(
         model=model,
@@ -447,6 +453,25 @@ def _extract_attr_or_key(payload: Any, key: str) -> Any | None:
     if isinstance(payload, dict):
         return payload.get(key)
     return getattr(payload, key, None)
+
+
+def _resolve_input_channels(model: Any) -> int:
+    config = getattr(model, "config", None)
+    if config is None:
+        return 1
+
+    for field in ("num_input_channels", "input_channels", "num_channels", "enc_in"):
+        value = getattr(config, field, None)
+        if isinstance(value, int) and value > 0:
+            return value
+
+    if isinstance(config, dict):
+        for field in ("num_input_channels", "input_channels", "num_channels", "enc_in"):
+            value = config.get(field)
+            if isinstance(value, int) and value > 0:
+                return value
+
+    return 1
 
 
 def _future_start_timestamp(*, series: SeriesInput, horizon: int, pandas_module: Any) -> str:

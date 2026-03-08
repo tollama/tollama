@@ -41,3 +41,4 @@ load_models*.py
 artifacts/realdata/
 data/raw/
 hf_data/ 
+/lightning_logs
