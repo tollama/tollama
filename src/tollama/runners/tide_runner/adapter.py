@@ -410,27 +410,56 @@ def _build_target_series(
         raise AdapterInputError(f"invalid timestamps for series {series.id!r}: {exc}") from exc
 
     try:
-        frame = pd_module.DataFrame(
-            {"target": [float(v) for v in series.target]},
-            index=index,
-            dtype="float32",
-        )
-        try:
-            frame = frame.resample(series.freq).asfreq()
-            frame["target"] = frame["target"].fillna(0.0)
-        except Exception:
-            pass
-        return ts_cls.from_times_and_values(
-            frame.index,
-            frame["target"].values,
+        values = [float(v) for v in series.target]
+        times = index
+
+        dataframe_cls = getattr(pd_module, "DataFrame", None)
+        if callable(dataframe_cls):
+            frame = dataframe_cls({"target": values}, index=index, dtype="float32")
+            try:
+                frame = frame.resample(series.freq).asfreq()
+                frame["target"] = frame["target"].fillna(0.0)
+            except Exception:
+                pass
+            times = frame.index
+            values = frame["target"].values
+
+        return _timeseries_from_values(
+            ts_cls=ts_cls,
+            times=times,
+            values=values,
             freq=series.freq,
-            fill_missing_dates=True,
-            fillna_value=0.0,
+            np_module=np_module,
         )
     except Exception as exc:  # noqa: BLE001
         raise AdapterInputError(
             f"failed to build TiDE target series for {series.id!r}: {exc}",
         ) from exc
+
+
+def _timeseries_from_values(
+    *,
+    ts_cls: Any,
+    times: Any,
+    values: Any,
+    freq: str,
+    np_module: Any,
+) -> Any:
+    try:
+        numpy_values = np_module.asarray(values, dtype=getattr(np_module, "float32", None))
+    except Exception:
+        numpy_values = values
+
+    try:
+        return ts_cls.from_times_and_values(
+            times,
+            numpy_values,
+            freq=freq,
+            fill_missing_dates=True,
+            fillna_value=0.0,
+        )
+    except TypeError:
+        return ts_cls.from_times_and_values(times, numpy_values, freq=freq)
 
 
 def _future_start_timestamp(*, series: SeriesInput, horizon: int, pd_module: Any) -> str:

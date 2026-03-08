@@ -38,6 +38,7 @@ load_models*.py
 
 # Test Data and Artifacts
 .test_daemon.log
+.daemon.log
 artifacts/realdata/
 data/raw/
 hf_data/ 

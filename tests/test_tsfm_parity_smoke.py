@@ -15,6 +15,8 @@ from tollama.daemon.runner_manager import RunnerManager
 
 
 def _request_payload(model: str) -> dict[str, object]:
+    timestamps = [f"2025-01-{day:02d}" for day in range(1, 17)]
+    target = [float(day) for day in range(1, 17)]
     return {
         "model": model,
         "horizon": 2,
@@ -23,8 +25,8 @@ def _request_payload(model: str) -> dict[str, object]:
             {
                 "id": "s1",
                 "freq": "D",
-                "timestamps": ["2025-01-01", "2025-01-02"],
-                "target": [1.0, 2.0],
+                "timestamps": timestamps,
+                "target": target,
             }
         ],
         "options": {},
