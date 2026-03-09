@@ -149,6 +149,10 @@ runner_nbeatsx = [
   "scipy>=1.10,<2.0",
   "torch>=2.2",
 ]
+preprocess = [
+  "scipy>=1.11,<2.0",
+  "numpy>=1.26,<3.0",
+]
 tui = [
   "textual>=0.47,<9.0",
 ]
