@@ -113,7 +113,7 @@ Tollama ships **11 models**: 7 time series foundation models (TSFMs) and 4 neura
 | Item | Current Status | Goal |
 |------|:--------------:|------|
 | **Auto model comparison / selection** | ✅ Basic impl | Advanced best-model routing based on data characteristics |
-| **Auto data preprocessing** | ❌ Not implemented | Missing value interpolation, resampling, outlier removal handled by the platform |
+| **Auto data preprocessing** | ✅ Basic impl | Spline interpolation, smoothing, train-fit scaling, windowing via `tollama.preprocess` |
 | **Fine-tuning / ensemble** | ⚠️ Ensemble only | Add domain-adaptation fine-tuning workflow |
 | **Local + cloud execution** | ⚠️ Dockerfile exists, local-centric | K8s manifests, docker-compose, cloud deployment guide |
 
@@ -239,6 +239,53 @@ print(comparison.summary)
 - `POST /v1/forecast` and `POST /api/forecast` now accept `data_url` + optional `ingest` options.
 - `POST /api/forecast/upload` accepts multipart upload (`payload` JSON + `file`) and runs forecast.
 - `POST /api/ingest/upload` accepts multipart upload and returns normalized `series` payloads.
+
+## Preprocessing Pipeline
+
+Built-in time-series preprocessing with schema validation, spline interpolation, smoothing,
+leakage-safe train-fit scaling, and sliding window generation.
+
+Install optional dependency:
+
+```bash
+python -m pip install -e ".[preprocess]"
+```
+
+Standalone usage (no daemon required):
+
+```python
+import numpy as np
+from tollama.preprocess import run_pipeline, PreprocessConfig
+
+x = np.arange(200, dtype=float)
+y = np.sin(x * 0.05) * 10 + np.random.randn(200) * 0.5
+
+result = run_pipeline(x, y, config=PreprocessConfig(lookback=12, horizon=6))
+print(result.X.shape, result.y.shape)  # [batch, 12, 1], [batch, 6]
+```
+
+With `SeriesInput` integration:
+
+```python
+from tollama.preprocess.bridge import preprocess_series_input
+
+result = preprocess_series_input(series_input, config=PreprocessConfig(horizon=7))
+```
+
+Pipeline stages:
+
+| Stage | Description |
+|-------|-------------|
+| **Validate** | Monotonic timestamps, missing ratio, max gap, non-constant target |
+| **Interpolate** | Spline-based NaN filling (cubic/linear fallback) |
+| **Smooth** | Savitzky-Golay filter or P-spline passthrough |
+| **Scale** | Train-fit only (standard or min-max) to prevent data leakage |
+| **Window** | Sliding windows `[batch, lookback, features]` + `[batch, horizon]` |
+
+Individual components (`SplinePreprocessor`, `StandardScaler1D`, `MinMaxScaler1D`,
+`make_windows`, `chronological_split`, etc.) are also usable independently.
+
+Implementation: `src/tollama/preprocess/`.
 
 ## Real-Time Streams
 
@@ -1005,6 +1052,7 @@ bash scripts/install_mcp.sh --dry-run --base-url "http://127.0.0.1:11435"
 - `tollama.sdk`: High-level Python convenience facade (`Tollama`, `TollamaForecastResult`).
 - `tollama.client`: Shared HTTP client abstraction for CLI/MCP integrations.
 - `tollama.mcp`: MCP tool server for Claude Code/native MCP clients.
+- `tollama.preprocess`: Reusable time-series preprocessing pipeline (validation, spline interpolation, smoothing, scaling, windowing).
 
 ### Daemon <-> Runner Protocol
 
@@ -1034,6 +1082,7 @@ bash scripts/install_mcp.sh --dry-run --base-url "http://127.0.0.1:11435"
 │       ├── core/
 │       ├── daemon/
 │       ├── mcp/
+│       ├── preprocess/
 │       ├── runners/
 │       └── sdk.py
 ├── examples/
