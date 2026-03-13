@@ -127,7 +127,7 @@ runner_lag_llama = [
   "wandb==0.25.0",
 ]
 runner_patchtst = [
-  "numpy>=1.26,<2.0",
+  "numpy>=1.26,<3.0",
   "torch>=2.2,<2.4",
   "transformers>=4.40.1,<4.48",
 ]
@@ -137,14 +137,14 @@ runner_tide = [
 ]
 runner_nhits = [
   "neuralforecast>=1.7.0",
-  "numpy>=1.26,<2.0",
+  "numpy>=1.26,<3.0",
   "pytorch-lightning>=2.0,<3.0",
   "scipy>=1.10,<2.0",
   "torch>=2.2",
 ]
 runner_nbeatsx = [
   "neuralforecast>=1.7.0",
-  "numpy>=1.26,<2.0",
+  "numpy>=1.26,<3.0",
   "pytorch-lightning>=2.0,<3.0",
   "scipy>=1.10,<2.0",
   "torch>=2.2",
