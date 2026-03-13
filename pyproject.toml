@@ -82,7 +82,7 @@ notebooks = [
   "plotly>=5.22,<7.0",
 ]
 ingest = [
-  "pyarrow>=15.0,<20.0",
+  "pyarrow>=15.0,<24.0",
 ]
 runner_torch = [
   "chronos-forecasting>=2.0",
