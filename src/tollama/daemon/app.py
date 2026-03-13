@@ -1075,6 +1075,9 @@ def create_app(*, runner_manager: RunnerManager | None = None) -> FastAPI:
         )
     )
 
+    from tollama.xai.api import router as xai_router
+    app.include_router(xai_router)
+
     @app.get(
         "/v1/health",
         response_model=HealthResponse,
