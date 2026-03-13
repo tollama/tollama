@@ -47,6 +47,11 @@ from tollama.a2a import A2AOperationHandlers, A2AServer
 from tollama.core.auto_select import AutoSelection, select_auto_models
 from tollama.core.config import ConfigFileError, TollamaConfig, load_config
 from tollama.core.counterfactual import generate_counterfactual
+from tollama.core.decision_explainability import build_decision_explanation
+from tollama.core.decision_schemas import (
+    DecisionExplanationRequest,
+    DecisionExplanationResponse,
+)
 from tollama.core.ensemble import EnsembleError, merge_forecast_responses
 from tollama.core.env_override import set_env_temporarily
 from tollama.core.explainability import generate_explanation
@@ -1529,6 +1534,25 @@ def create_app(*, runner_manager: RunnerManager | None = None) -> FastAPI:
     )
     def report(payload: ReportRequest, request: Request) -> ForecastReport:
         return _execute_report(app, payload=payload, request=request)
+
+    @app.post(
+        "/api/explain-decision",
+        response_model=DecisionExplanationResponse,
+        tags=["analysis"],
+        summary="Decision explanation facade",
+        description=(
+            "Package model-selection evidence, signal trust, and decision-policy "
+            "context into one structured v3.8 trust-layer explanation."
+        ),
+    )
+    def explain_decision(payload: DecisionExplanationRequest) -> DecisionExplanationResponse:
+        return build_decision_explanation(
+            request=payload.request,
+            response=payload.response,
+            selection=payload.selection,
+            signal_trust=payload.signal_trust,
+            policy=payload.policy,
+        )
 
     @app.post(
         "/api/auto-forecast",
