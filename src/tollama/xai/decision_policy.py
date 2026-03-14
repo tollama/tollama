@@ -33,6 +33,7 @@ class DecisionPolicyExplainer:
         self,
         forecast_result: dict[str, Any],
         policy_config: dict[str, Any],
+        trust_result: Optional[dict[str, Any]] = None,
     ) -> dict[str, Any]:
         """
         Generate decision policy explanation.
@@ -48,6 +49,10 @@ class DecisionPolicyExplainer:
               - escalation_rules: list of rule dicts
               - allowed_actions: list of str
               - audit_required: bool
+              - trust_threshold: float (default 0.5)
+        trust_result : dict, optional
+            Trust intelligence metadata from the trust pipeline bridge.
+            Expected structure: {"trust_intelligence": {"trust_score": ..., ...}}
 
         Returns
         -------
@@ -82,6 +87,69 @@ class DecisionPolicyExplainer:
                 f"Confidence below auto-execution threshold. "
                 f"Human review required with evidence package."
             )
+
+        # ── Trust Intelligence Gates ──
+        trust_score = None
+        risk_category = None
+        trust_blocked = False
+        constraint_violations_count = 0
+
+        if trust_result is not None:
+            ti = trust_result.get("trust_intelligence", {})
+            trust_score = ti.get("trust_score")
+            components = ti.get("components", {})
+            risk_category = components.get("risk_category")
+            violations = ti.get("violations", [])
+
+            # Gate A: Trust Score Hard Gate
+            if trust_score is not None:
+                trust_threshold = policy_config.get("trust_threshold", 0.5)
+                if trust_score < trust_threshold:
+                    policy_rules_applied.append(
+                        f"BLOCK: trust_score {trust_score:.2f} "
+                        f"< trust_threshold {trust_threshold:.2f}"
+                    )
+                    auto_executed = False
+                    escalation_triggered = True
+                    trust_blocked = True
+                    escalation_reason = (
+                        f"Trust score {trust_score:.2f} below threshold "
+                        f"{trust_threshold:.2f}. "
+                    )
+                else:
+                    policy_rules_applied.append(
+                        f"PASS: trust_score {trust_score:.2f} "
+                        f">= trust_threshold {trust_threshold:.2f}"
+                    )
+
+            # Gate B: Constraint Violations Block
+            critical_violations = [
+                v for v in violations if v.get("severity") == "critical"
+            ]
+            constraint_violations_count = len(critical_violations)
+            if critical_violations:
+                names = ", ".join(v.get("name", "unknown") for v in critical_violations)
+                policy_rules_applied.append(
+                    f"BLOCK: {len(critical_violations)} critical "
+                    f"constraint violation(s): {names}"
+                )
+                auto_executed = False
+                escalation_triggered = True
+                trust_blocked = True
+                escalation_reason += (
+                    f"{len(critical_violations)} critical constraint "
+                    f"violation(s). "
+                )
+
+            # Gate C: Risk Category Escalation
+            if risk_category == "RED":
+                policy_rules_applied.append("BLOCK: risk_category RED")
+                auto_executed = False
+                escalation_triggered = True
+                trust_blocked = True
+                escalation_reason += "Risk category RED. "
+            elif risk_category == "YELLOW":
+                policy_rules_applied.append("WARN: risk_category YELLOW")
 
         # Rule: value threshold
         value_threshold = policy_config.get("require_approval_above")
@@ -138,6 +206,10 @@ class DecisionPolicyExplainer:
             "escalation_triggered": escalation_triggered,
             "escalation_reason": escalation_reason.strip(),
             "audit_required": audit_required,
+            "trust_score": trust_score,
+            "risk_category": risk_category,
+            "trust_blocked": trust_blocked,
+            "constraint_violations_count": constraint_violations_count,
             "governance_note": (
                 "Phase 2a: All decisions support human override. "
                 "Full approval workflow in Phase 5."

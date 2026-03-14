@@ -15,7 +15,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass, field, asdict
 from datetime import datetime, timezone
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -57,6 +57,10 @@ class DecisionPolicyExplanation:
     policy_rules_applied: list[str] = field(default_factory=list)
     escalation_triggered: bool = False
     escalation_reason: str = ""
+    trust_score: Optional[float] = None
+    risk_category: Optional[str] = None
+    trust_blocked: bool = False
+    constraint_violations_count: int = 0
 
 
 @dataclass
@@ -70,6 +74,7 @@ class DecisionExplanation:
     decision_policy_explanation: DecisionPolicyExplanation = field(
         default_factory=DecisionPolicyExplanation
     )
+    trust_intelligence_explanation: Optional[dict[str, Any]] = None
     metadata: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
@@ -126,6 +131,7 @@ class ExplanationEngine:
         policy_config: Optional[dict[str, Any]] = None,
         time_series_data: Optional[Any] = None,
         explain_options: Optional[dict[str, Any]] = None,
+        predict_fn: Optional[Callable] = None,
     ) -> DecisionExplanation:
         """
         End-to-end decision explanation.
@@ -147,6 +153,11 @@ class ExplanationEngine:
             Raw time series for decomposition and feature attribution
         explain_options : dict, optional
             Control explanation depth: {"decompose": True, "attribution": True, ...}
+        predict_fn : callable, optional
+            Model prediction function for faithful SHAP attribution.
+            Signature: (features_array: np.ndarray) -> np.ndarray.
+            When provided, SHAP computes attributions using the actual model
+            instead of a surrogate.
 
         Returns
         -------
@@ -176,24 +187,8 @@ class ExplanationEngine:
             include_attribution=options.get("attribution", False),
         )
 
-        # ── Phase 3: Decision Policy Explanation ──
-        explanation.decision_policy_explanation = self._explain_decision_policy(
-            forecast_result=forecast_result,
-            policy_config=policy_config,
-        )
-
-        explanation.metadata = {
-            "engine_version": "0.1.0",
-            "phase": "2a",
-            "explanation_type": "facade",
-            "note": (
-                "Phase 2a explanation is evidence repackaging, "
-                "not deep interpretability. Phase 3+ adds richer "
-                "feature attribution and decomposition."
-            ),
-        }
-
-        # ── v3.0: Trust Intelligence Pipeline ──
+        # ── Trust Intelligence Pipeline (before decisioning) ──
+        ti_metadata = None
         if self.trust_intelligence is not None:
             from tollama.xai.trust_intelligence_bridge import run_trust_pipeline
 
@@ -206,9 +201,43 @@ class ExplanationEngine:
                 prediction_probability=prediction_prob,
                 features=ti_features,
                 context=ti_context,
+                predict_fn=predict_fn,
             )
-            if ti_metadata:
-                explanation.metadata.update(ti_metadata)
+
+        # ── Decision Policy Explanation (trust-aware) ──
+        explanation.decision_policy_explanation = self._explain_decision_policy(
+            forecast_result=forecast_result,
+            policy_config=policy_config,
+            trust_metadata=ti_metadata,
+        )
+
+        # ── Trust Intelligence Explanation (first-class section) ──
+        if ti_metadata and "trust_intelligence" in ti_metadata:
+            ti = ti_metadata["trust_intelligence"]
+            explanation.trust_intelligence_explanation = {
+                "trust_score": ti.get("trust_score"),
+                "calibration_status": ti.get("calibration_status"),
+                "risk_category": ti.get("components", {}).get("risk_category"),
+                "constraint_satisfied": ti.get("components", {}).get("constraint_satisfied"),
+                "top_features": ti.get("shap_top_features", []),
+                "violations": ti.get("violations", []),
+                "meta_metrics": ti.get("meta_metrics", {}),
+            }
+
+        explanation.metadata = {
+            "engine_version": "0.1.0",
+            "phase": "2a",
+            "explanation_type": "facade",
+            "note": (
+                "Phase 2a explanation is evidence repackaging, "
+                "not deep interpretability. Phase 3+ adds richer "
+                "feature attribution and decomposition."
+            ),
+        }
+
+        # Backward-compatible: trust results also in metadata
+        if ti_metadata:
+            explanation.metadata.update(ti_metadata)
 
         logger.info(
             "Generated decision explanation %s", explanation.explanation_id
@@ -302,12 +331,15 @@ class ExplanationEngine:
         self,
         forecast_result: dict[str, Any],
         policy_config: Optional[dict[str, Any]],
+        trust_metadata: Optional[dict[str, Any]] = None,
     ) -> DecisionPolicyExplanation:
         """Assemble decision-policy explanation: why this action was recommended."""
         dpe = DecisionPolicyExplanation()
 
         if policy_config and self.decision_policy:
-            dp = self.decision_policy.explain(forecast_result, policy_config)
+            dp = self.decision_policy.explain(
+                forecast_result, policy_config, trust_result=trust_metadata
+            )
             dpe.auto_executed = dp.get("auto_executed", False)
             dpe.confidence = dp.get("confidence", 0.0)
             dpe.threshold = dp.get("threshold", 0.0)
@@ -316,6 +348,10 @@ class ExplanationEngine:
             dpe.policy_rules_applied = dp.get("policy_rules_applied", [])
             dpe.escalation_triggered = dp.get("escalation_triggered", False)
             dpe.escalation_reason = dp.get("escalation_reason", "")
+            dpe.trust_score = dp.get("trust_score")
+            dpe.risk_category = dp.get("risk_category")
+            dpe.trust_blocked = dp.get("trust_blocked", False)
+            dpe.constraint_violations_count = dp.get("constraint_violations_count", 0)
         elif policy_config:
             # Simple threshold-based explanation
             confidence = forecast_result.get("confidence", 0.0)

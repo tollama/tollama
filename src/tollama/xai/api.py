@@ -47,6 +47,12 @@ class ExplainDecisionRequest(BaseModel):
         default_factory=lambda: {"decompose": True, "attribution": False},
         description="Control explanation depth",
     )
+    trust_features: Optional[dict[str, float]] = Field(
+        None, description="Features for SHAP attribution in trust pipeline"
+    )
+    trust_context: Optional[dict[str, Any]] = Field(
+        None, description="Context for constraint verification in trust pipeline"
+    )
 
 
 class ExplainDecisionResponse(BaseModel):
@@ -57,6 +63,7 @@ class ExplainDecisionResponse(BaseModel):
     input_explanation: dict[str, Any]
     plan_explanation: dict[str, Any]
     decision_policy_explanation: dict[str, Any]
+    trust_intelligence_explanation: Optional[dict[str, Any]] = None
     metadata: dict[str, Any]
 
 
@@ -137,6 +144,13 @@ async def explain_decision(request: ExplainDecisionRequest):
     from tollama.xai.trust_breakdown import TrustBreakdown
     from tollama.xai.decision_policy import DecisionPolicyExplainer
 
+    trust_pipeline = None
+    try:
+        from trust_intelligence.pipeline.trust_pipeline import TrustIntelligencePipeline
+        trust_pipeline = TrustIntelligencePipeline()
+    except ImportError:
+        pass
+
     engine = ExplanationEngine(
         model_selection_explainer=ModelSelectionExplainer(),
         forecast_decomposer=ForecastDecomposer(),
@@ -144,7 +158,14 @@ async def explain_decision(request: ExplainDecisionRequest):
         scenario_rationale=ScenarioRationale(),
         trust_breakdown=TrustBreakdown(),
         decision_policy_explainer=DecisionPolicyExplainer(),
+        trust_intelligence_pipeline=trust_pipeline,
     )
+
+    explain_options = request.explain_options or {}
+    if request.trust_features:
+        explain_options["trust_intelligence_features"] = request.trust_features
+    if request.trust_context:
+        explain_options["trust_intelligence_context"] = request.trust_context
 
     result = engine.explain_decision(
         forecast_result=request.forecast_result,
@@ -152,7 +173,7 @@ async def explain_decision(request: ExplainDecisionRequest):
         calibration_result=request.calibration_result,
         policy_config=request.policy_config,
         time_series_data=request.time_series_data,
-        explain_options=request.explain_options,
+        explain_options=explain_options,
     )
 
     return result.to_dict()

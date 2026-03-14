@@ -7,7 +7,7 @@ data structures and DecisionExplanation schemas.
 from __future__ import annotations
 
 import logging
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -80,6 +80,7 @@ def run_trust_pipeline(
     prediction_probability: float,
     features: Optional[dict[str, float]] = None,
     context: Optional[dict[str, Any]] = None,
+    predict_fn: Optional[Callable] = None,
 ) -> Optional[dict[str, Any]]:
     """Run the trust intelligence pipeline and return metadata.
 
@@ -91,6 +92,10 @@ def run_trust_pipeline(
     prediction_probability : float
     features : dict, optional
     context : dict, optional
+    predict_fn : callable, optional
+        Model prediction function for faithful SHAP attribution.
+        Signature: (features_array: np.ndarray) -> np.ndarray.
+        When None, SHAP falls back to a built-in surrogate predictor.
 
     Returns
     -------
@@ -105,6 +110,7 @@ def run_trust_pipeline(
             prediction_probability=prediction_probability,
             features=features,
             context=context,
+            predict_fn=predict_fn,
         )
         return pipeline_result_to_metadata(result)
     except Exception:

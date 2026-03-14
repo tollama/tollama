@@ -257,20 +257,42 @@ class ModelCardGenerator:
                 ],
             }
 
-        return {
-            "status": "Explanation available",
-            "explanation_type": explanation_result.get("metadata", {}).get(
-                "explanation_type", "facade"
+        metadata = explanation_result.get("metadata", {})
+        has_trust_intelligence = "trust_intelligence" in metadata
+
+        methods_used = [
+            "Model Selection Explanation",
+            "Trust Score Breakdown",
+            "Forecast Decomposition",
+            "Scenario Rationale",
+            "Decision Policy Explanation",
+        ]
+        if has_trust_intelligence:
+            methods_used.extend([
+                "Trust Intelligence Pipeline (L1-L5)",
+                "SHAP Feature Attribution",
+                "Z3 Constraint Verification",
+                "Trust-Gated Decisioning",
+            ])
+
+        result = {
+            "status": (
+                "Trust-intelligence integrated explanation available"
+                if has_trust_intelligence
+                else "Explanation available"
             ),
-            "methods_used": [
-                "Model Selection Explanation",
-                "Trust Score Breakdown",
-                "Forecast Decomposition",
-                "Scenario Rationale",
-                "Decision Policy Explanation",
-            ],
+            "explanation_type": metadata.get("explanation_type", "facade"),
+            "methods_used": methods_used,
             "explanation_coverage": "100% of forecast outputs",
         }
+        if has_trust_intelligence:
+            ti = metadata["trust_intelligence"]
+            result["trust_intelligence_status"] = {
+                "trust_score": ti.get("trust_score"),
+                "risk_category": ti.get("components", {}).get("risk_category"),
+                "constraint_satisfied": ti.get("components", {}).get("constraint_satisfied"),
+            }
+        return result
 
     def _ethical_considerations(self, model_info: dict[str, Any]) -> dict[str, Any]:
         return {
@@ -295,7 +317,10 @@ class ModelCardGenerator:
         if not governance_info:
             return {
                 "status": "Phase 2a governance framework",
-                "audit_trail": "Decision audit trail in development (Phase 5)",
+                "audit_trail": (
+                    "Chain-of-Trust audit trail available via trust-intelligence pipeline; "
+                    "decision-level audit trail integration in progress"
+                ),
                 "approval_workflow": "Human-in-the-loop approval supported",
                 "compliance_frameworks": [
                     "EU AI Act (transparency obligations)",
