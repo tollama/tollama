@@ -1,11 +1,12 @@
 """
 tollama.xai.api — XAI API Endpoints for Tollama Core
 
-v3.8 Phase 2a: Explanation endpoints
-Phase 4: /api/explain-decision 정식 출시
+v3.8 Phase 2b: Trust-gated explanation endpoints.
+Trust Intelligence Pipeline (when installed) is wired into decisioning:
+trust score, constraint violations, and risk category gate auto-execution.
 
 Endpoints:
-  POST /api/explain-decision     — End-to-end decision explanation
+  POST /api/explain-decision     — End-to-end decision explanation (trust-aware)
   POST /api/forecast             — (extended) ?explain=true parameter
   POST /api/model-card           — Generate EU AI Act model card
   POST /api/trust-breakdown      — Trust Score breakdown
@@ -123,9 +124,9 @@ class DecisionReportRequest(BaseModel):
     response_model=ExplainDecisionResponse,
     summary="Generate end-to-end decision explanation",
     description=(
-        "Assembles evidence from eval, calibration, and policy layers "
-        "into a unified Decision Explanation. "
-        "Phase 2a: Explanation facade (evidence repackaging). "
+        "Assembles evidence from eval, calibration, policy, and trust-intelligence "
+        "layers into a unified Decision Explanation. "
+        "Phase 2b: Trust-gated decisioning with L1-L5 pipeline integration. "
         "Phase 4: Full explanation API."
     ),
 )

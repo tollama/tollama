@@ -1,9 +1,9 @@
 """
 tollama.xai.decision_policy — Decision Policy Explanation
 
-v3.8: "왜 이 승인/자동화 정책이 권고되었는가"
-Confidence threshold, policy rule, override 가능 여부를 보여주고,
-최종 액션이 아니라 정책 판단의 이유를 설명.
+v3.8: Trust-gated decision policy.
+Confidence threshold, trust score, constraint violations, risk category,
+policy rule, override 가능 여부를 평가하여 정책 판단의 이유를 설명.
 """
 
 from __future__ import annotations
@@ -16,8 +16,13 @@ class DecisionPolicyExplainer:
     Explains decision policy outcomes: why was auto-execution recommended,
     or why was human approval requested?
 
-    v3.8 principle: "Human-in-the-Loop First"
-    초기 상용화의 hero story는 full autonomy가 아니라
+    v3.8: Trust-gated decisioning.
+    Three trust gates enforce safety before auto-execution:
+      Gate A — Trust Score: blocks if trust_score < threshold
+      Gate B — Constraint Violations: blocks on critical violations
+      Gate C — Risk Category: blocks on RED, warns on YELLOW
+
+    Principle: "Human-in-the-Loop First"
     추천 → 설명 → 승인 → 실행 구조.
     """
 
@@ -66,7 +71,7 @@ class DecisionPolicyExplainer:
 
         # Evaluate policy
         auto_executed = confidence >= threshold
-        human_override = True  # Always true in Phase 2a
+        human_override = True  # Always true — human can override any decision
 
         # Check escalation rules
         escalation_triggered = False
@@ -211,8 +216,8 @@ class DecisionPolicyExplainer:
             "trust_blocked": trust_blocked,
             "constraint_violations_count": constraint_violations_count,
             "governance_note": (
-                "Phase 2a: All decisions support human override. "
-                "Full approval workflow in Phase 5."
+                "Phase 2b: Trust-gated decisioning with human override. "
+                "Trust score, constraints, and risk category enforce safety gates."
             ),
         }
 

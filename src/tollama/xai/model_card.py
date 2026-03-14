@@ -1,8 +1,9 @@
 """
 tollama.xai.model_card — EU AI Act Model Card Generator
 
-v3.8 Phase 5 target: EU AI Act Model Card 자동 생성.
-Phase 2a에서 기본 구조 시작, Phase 5에서 완전 자동화.
+v3.8: EU AI Act Model Card 자동 생성.
+Phase 2b: Trust-intelligence 통합 시 trust score, risk category, constraint status 포함.
+Phase 5에서 완전 자동화.
 
 References:
   - EU AI Act (Regulation 2024/1689)

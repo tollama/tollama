@@ -1,11 +1,14 @@
 """
 tollama.xai.engine — Central Explanation Engine
 
-v3.8: "XAI는 처음부터 별도의 마법 같은 엔진이 아니라,
-기존 증거를 구조화하여 의사결정에 연결하는 인터페이스 레이어로 시작합니다."
+v3.8: Trust-integrated XAI engine.
 
-Phase 2a: Explanation Facade — 기존 eval/calibration/policy output을
-decision-ready format으로 조립
+Phase 2b (현재): Trust-Gated Decisioning
+  - Trust Intelligence Pipeline (L1-L5) runs before decisioning
+  - Trust score, constraint violations, and risk category gate auto-execution
+  - SHAP attributions use real model predict_fn when available
+  - Trust results surfaced as first-class explanation section
+
 Phase 3+: Feature Attribution Layer 완성, richer decomposition
 Phase 4: /api/explain-decision 정식 출시
 """
@@ -89,12 +92,13 @@ class ExplanationEngine:
     """
     Central orchestrator for Tollama XAI.
 
-    Phase 2a (현재): Explanation Facade
-    - 기존 eval 결과, Trust Score 분해, counterfactual을
-      "Model Selection Explanation", "Trust Score Breakdown",
-      "Scenario Rationale"로 제품화
-    - 새로운 ML 추론이 아니라, existing evidence를
-      decision-ready format으로 조립
+    Phase 2b (현재): Trust-Gated Decisioning
+    - Trust Intelligence Pipeline (L1-L5) 통합
+    - Trust score, constraint violations, risk category가
+      auto-execution 결정을 제어
+    - SHAP attributions에 실제 모델 predict_fn 전달 가능
+    - Existing eval/calibration/policy evidence를
+      trust-aware decision-ready format으로 조립
 
     Phase 3+: Feature Attribution Layer
     - Temporal Feature Importance
@@ -224,14 +228,19 @@ class ExplanationEngine:
                 "meta_metrics": ti.get("meta_metrics", {}),
             }
 
+        has_trust = ti_metadata is not None and "trust_intelligence" in (ti_metadata or {})
         explanation.metadata = {
-            "engine_version": "0.1.0",
-            "phase": "2a",
-            "explanation_type": "facade",
+            "engine_version": "0.2.0",
+            "phase": "2b" if has_trust else "2a",
+            "explanation_type": "trust_gated" if has_trust else "facade",
             "note": (
+                "Phase 2b: trust-gated decisioning with L1-L5 pipeline integration. "
+                "Trust score, constraint violations, and risk category control "
+                "auto-execution decisions."
+            ) if has_trust else (
                 "Phase 2a explanation is evidence repackaging, "
-                "not deep interpretability. Phase 3+ adds richer "
-                "feature attribution and decomposition."
+                "not deep interpretability. Install trust-intelligence "
+                "for trust-gated decisioning."
             ),
         }
 
