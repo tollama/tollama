@@ -108,6 +108,7 @@ class ExplanationEngine:
         scenario_rationale=None,
         trust_breakdown=None,
         decision_policy_explainer=None,
+        trust_intelligence_pipeline=None,
     ):
         self.model_selection = model_selection_explainer
         self.forecast_decomposer = forecast_decomposer
@@ -115,6 +116,7 @@ class ExplanationEngine:
         self.scenario_rationale = scenario_rationale
         self.trust_breakdown = trust_breakdown
         self.decision_policy = decision_policy_explainer
+        self.trust_intelligence = trust_intelligence_pipeline
 
     def explain_decision(
         self,
@@ -190,6 +192,23 @@ class ExplanationEngine:
                 "feature attribution and decomposition."
             ),
         }
+
+        # ── v3.0: Trust Intelligence Pipeline ──
+        if self.trust_intelligence is not None:
+            from tollama.xai.trust_intelligence_bridge import run_trust_pipeline
+
+            prediction_prob = forecast_result.get("confidence", 0.5)
+            ti_features = options.get("trust_intelligence_features")
+            ti_context = options.get("trust_intelligence_context")
+
+            ti_metadata = run_trust_pipeline(
+                self.trust_intelligence,
+                prediction_probability=prediction_prob,
+                features=ti_features,
+                context=ti_context,
+            )
+            if ti_metadata:
+                explanation.metadata.update(ti_metadata)
 
         logger.info(
             "Generated decision explanation %s", explanation.explanation_id

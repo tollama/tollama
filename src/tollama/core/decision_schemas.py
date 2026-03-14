@@ -126,7 +126,24 @@ class DecisionExplanationRequest(CanonicalModel):
     policy: DecisionPolicyInput | None = None
 
 
+class TrustIntelligenceEvidence(CanonicalModel):
+    """v3.0 Trust Intelligence Pipeline evidence (optional)."""
+
+    trust_score: StrictFloat = Field(ge=0.0, le=1.0)
+    calibration_status: NonEmptyStr
+    weights: dict[str, float] = Field(default_factory=dict)
+    components: dict[str, float] = Field(default_factory=dict)
+    risk_category: NonEmptyStr = "GREEN"
+    constraint_satisfied: StrictBool = True
+    shap_top_features: list[dict[str, JsonValue]] = Field(default_factory=list)
+    violations: list[dict[str, JsonValue]] = Field(default_factory=list)
+    ece: StrictFloat = 0.0
+    ocr: StrictFloat = 0.0
+    pipeline_version: NonEmptyStr = "3.0"
+
+
 class DecisionExplanationResponse(CanonicalModel):
     input_explanation: InputExplanation
     plan_explanation: PlanExplanation
     decision_policy: DecisionPolicyExplanation
+    trust_intelligence: TrustIntelligenceEvidence | None = None
