@@ -590,3 +590,31 @@ async def cache_stats():
         enable_history=False,
     )
     return router_instance.cache_stats()
+
+
+class CacheTTLRequest(BaseModel):
+    """Request body for /api/xai/cache/ttl"""
+    ttl: float = Field(
+        ..., ge=0.0,
+        description="New cache TTL in seconds. 0 disables caching.",
+    )
+
+
+@router.put(
+    "/cache/ttl",
+    summary="Configure cache TTL",
+    description="Update the trust result cache TTL. Set to 0 to disable caching.",
+)
+async def set_cache_ttl(request: CacheTTLRequest):
+    """PUT /api/xai/cache/ttl"""
+    from tollama.xai.trust_router import build_default_trust_router
+
+    router_instance = build_default_trust_router(
+        enable_calibration=False,
+        enable_history=False,
+    )
+    old_ttl = router_instance.set_cache_ttl(request.ttl)
+    return {
+        "previous_ttl": old_ttl,
+        "new_ttl": request.ttl,
+    }

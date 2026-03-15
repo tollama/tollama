@@ -68,6 +68,7 @@ class TrustRouter:
         auto_persist_every: int = 10,
         cache_ttl: float = 0.0,
         history_tracker: Any | None = None,
+        history_path: Path | None = None,
     ):
         self.registry = registry
         self.primary_order = primary_order or self.DEFAULT_PRIMARY_ORDER
@@ -78,6 +79,7 @@ class TrustRouter:
         self._cache_ttl = cache_ttl
         self._cache: dict[str, tuple[float, NormalizedTrustResult]] = {}
         self.history_tracker = history_tracker
+        self._history_path = history_path
         self._cache_hits = 0
         self._cache_misses = 0
 
@@ -123,6 +125,14 @@ class TrustRouter:
         count = len(self._cache)
         self._cache.clear()
         return count
+
+    def set_cache_ttl(self, ttl: float) -> float:
+        """Update cache TTL. Returns previous TTL value."""
+        old = self._cache_ttl
+        self._cache_ttl = max(ttl, 0.0)
+        if self._cache_ttl <= 0:
+            self._cache.clear()
+        return old
 
     def cache_stats(self) -> dict[str, Any]:
         """Return cache hit/miss statistics."""
@@ -207,6 +217,15 @@ class TrustRouter:
         except OSError:
             _log.warning("Failed to persist calibration data", exc_info=True)
 
+    def persist_history(self) -> None:
+        """Manually persist trust history data to disk."""
+        if self.history_tracker is None or self._history_path is None:
+            return
+        try:
+            self.history_tracker.save(self._history_path)
+        except OSError:
+            _log.warning("Failed to persist history data", exc_info=True)
+
     async def analyze_async(
         self,
         *,
@@ -250,16 +269,13 @@ class TrustRouter:
             _log.debug("Failed to record trust history", exc_info=True)
 
     def _maybe_auto_persist(self) -> None:
-        """Persist calibration data every N analyze calls."""
-        if (
-            self.calibration_tracker is None
-            or self._calibration_path is None
-            or self._auto_persist_every <= 0
-        ):
+        """Persist calibration and history data every N analyze calls."""
+        if self._auto_persist_every <= 0:
             return
         self._analyze_count += 1
         if self._analyze_count % self._auto_persist_every == 0:
             self.persist_calibration()
+            self.persist_history()
 
 
 _RISK_ORDER = {"GREEN": 0, "YELLOW": 1, "RED": 2}
@@ -371,11 +387,13 @@ def build_default_trust_router(
             calibration_tracker = CalibrationTracker()
 
     history_tracker = None
+    history_path = None
     if enable_history:
         from tollama.xai.trust_history import TrustHistoryTracker, default_history_path
 
+        history_path = default_history_path()
         try:
-            history_tracker = TrustHistoryTracker.load(default_history_path())
+            history_tracker = TrustHistoryTracker.load(history_path)
         except Exception:  # noqa: BLE001
             _log.warning("Failed to load trust history, starting fresh", exc_info=True)
             history_tracker = TrustHistoryTracker()
@@ -395,6 +413,7 @@ def build_default_trust_router(
         calibration_tracker=calibration_tracker,
         calibration_path=calibration_path,
         history_tracker=history_tracker,
+        history_path=history_path,
     )
     financial_agent._trust_router = router
     return router

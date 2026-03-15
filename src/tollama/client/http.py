@@ -1057,6 +1057,82 @@ class AsyncTollamaClient:
                 detail=str(exc),
             ) from exc
 
+    # ──── XAI methods ────
+
+    async def explain_decision(
+        self, payload: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Submit an explain-decision request to the XAI endpoint."""
+        return await self._request_json(
+            "POST",
+            "/api/xai/explain-decision",
+            json_payload=payload,
+            action="explain decision",
+        )
+
+    async def trust_breakdown(
+        self, payload: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Submit a trust-breakdown request to the XAI endpoint."""
+        return await self._request_json(
+            "POST",
+            "/api/xai/trust-breakdown",
+            json_payload=payload,
+            action="trust breakdown",
+        )
+
+    async def model_card(
+        self, payload: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Submit a model-card generation request to the XAI endpoint."""
+        return await self._request_json(
+            "POST",
+            "/api/xai/model-card",
+            json_payload=payload,
+            action="generate model card",
+        )
+
+    async def record_outcome(
+        self, payload: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Submit a prediction-outcome pair for calibration learning."""
+        return await self._request_json(
+            "POST",
+            "/api/xai/record-outcome",
+            json_payload=payload,
+            action="record outcome",
+        )
+
+    async def dashboard_history(
+        self, payload: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Fetch trust score history and trends."""
+        return await self._request_json(
+            "POST",
+            "/api/xai/dashboard/history",
+            json_payload=payload,
+            action="trust history",
+        )
+
+    async def connectors_health(
+        self, payload: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Check connector availability and health."""
+        return await self._request_json(
+            "POST",
+            "/api/xai/connectors/health",
+            json_payload=payload,
+            action="connectors health",
+        )
+
+    async def cache_stats(self) -> dict[str, Any]:
+        """Fetch trust cache hit/miss statistics."""
+        return await self._request_json(
+            "GET",
+            "/api/xai/cache/stats",
+            action="cache stats",
+        )
+
     async def list_tags(self) -> dict[str, Any]:
         """Fetch installed model tags from the daemon."""
         return await self._request_json("GET", "/api/tags", action="list model tags")
