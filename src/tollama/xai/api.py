@@ -145,6 +145,56 @@ class DashboardTrustRequest(BaseModel):
     )
 
 
+class RecordOutcomeRequest(BaseModel):
+    """Request body for /api/xai/record-outcome"""
+    agent_name: str = Field(
+        ..., min_length=1,
+        description="Trust agent name that produced the prediction.",
+    )
+    domain: str = Field(
+        ..., min_length=1,
+        description="Domain of the prediction.",
+    )
+    predicted_score: float = Field(
+        ..., ge=0.0, le=1.0,
+        description="Trust score predicted by the agent.",
+    )
+    actual_outcome: float = Field(
+        ..., ge=0.0, le=1.0,
+        description="Actual outcome observed (0=bad, 1=perfect).",
+    )
+    component_scores: Optional[dict[str, float]] = Field(
+        default_factory=dict,
+        description="Per-component scores for calibration learning.",
+    )
+
+
+class TrustHistoryRequest(BaseModel):
+    """Request body for /api/xai/dashboard/history"""
+    domains: Optional[list[str]] = Field(
+        None,
+        description="Filter to specific domains. Omit for all.",
+    )
+    limit: int = Field(
+        default=50,
+        ge=1,
+        le=500,
+        description="Maximum number of history records per domain.",
+    )
+    include_stats: bool = Field(
+        default=True,
+        description="Include aggregated stats and trend.",
+    )
+
+
+class ConnectorHealthRequest(BaseModel):
+    """Request body for /api/xai/connectors/health"""
+    domains: Optional[list[str]] = Field(
+        None,
+        description="Filter to specific domains. Omit for all.",
+    )
+
+
 # ──────────────────────────────────────────────────────────────
 # Endpoints
 # ──────────────────────────────────────────────────────────────
@@ -200,8 +250,10 @@ async def explain_decision(request: ExplainDecisionRequest):
     if request.trust_context:
         explain_options["trust_intelligence_context"] = request.trust_context
 
-    try:
-        result = engine.explain_decision(
+    import asyncio
+
+    def _run_explain():
+        return engine.explain_decision(
             forecast_result=request.forecast_result,
             eval_result=request.eval_result,
             calibration_result=request.calibration_result,
@@ -212,6 +264,10 @@ async def explain_decision(request: ExplainDecisionRequest):
             trust_context=request.trust_context,
             trust_payload=request.trust_payload,
         )
+
+    try:
+        loop = asyncio.get_event_loop()
+        result = await loop.run_in_executor(None, _run_explain)
     except ValidationError as exc:
         raise HTTPException(status_code=422, detail=exc.errors()) from exc
 
@@ -372,3 +428,126 @@ async def dashboard_trust(request: DashboardTrustRequest):
         "calibration": calibration_stats,
         "domains": sorted(domains),
     }
+
+
+# ──────────────────────────────────────────────────────────────
+# Calibration Feedback
+# ──────────────────────────────────────────────────────────────
+
+
+@router.post(
+    "/record-outcome",
+    summary="Record a prediction-outcome pair for calibration",
+    description=(
+        "Feeds an actual outcome back into the CalibrationTracker "
+        "so trust agents can learn and self-correct over time."
+    ),
+)
+async def record_outcome(request: RecordOutcomeRequest):
+    """POST /api/xai/record-outcome"""
+    from tollama.xai.trust_router import build_default_trust_router
+
+    router_instance = build_default_trust_router(enable_calibration=True)
+    router_instance.record_outcome(
+        agent_name=request.agent_name,
+        domain=request.domain,
+        predicted_score=request.predicted_score,
+        actual_outcome=request.actual_outcome,
+        component_scores=request.component_scores or {},
+    )
+    router_instance.persist_calibration()
+
+    stats = None
+    if router_instance.calibration_tracker:
+        s = router_instance.calibration_tracker.get_calibration_stats(
+            request.agent_name,
+        )
+        stats = s.model_dump(mode="json")
+
+    return {
+        "status": "recorded",
+        "agent_name": request.agent_name,
+        "calibration_stats": stats,
+    }
+
+
+# ──────────────────────────────────────────────────────────────
+# Trust History & Trends
+# ──────────────────────────────────────────────────────────────
+
+
+@router.post(
+    "/dashboard/history",
+    summary="Trust score history and trends",
+    description=(
+        "Returns trust score history per domain with trend analysis. "
+        "Suitable for dashboard time-series charts."
+    ),
+)
+async def dashboard_history(request: TrustHistoryRequest):
+    """POST /api/xai/dashboard/history"""
+    from tollama.xai.trust_history import TrustHistoryTracker, default_history_path
+
+    path = default_history_path()
+    tracker = TrustHistoryTracker.load(path)
+
+    all_domains = tracker.domains or [
+        "prediction_market", "financial_market", "supply_chain",
+        "news", "geopolitical", "regulatory",
+    ]
+    domains = request.domains or all_domains
+
+    result: dict[str, Any] = {"domains": {}}
+    for domain in domains:
+        entry: dict[str, Any] = {
+            "history": [
+                r.model_dump(mode="json")
+                for r in tracker.get_history(domain, limit=request.limit)
+            ],
+        }
+        if request.include_stats:
+            entry["stats"] = tracker.get_stats(domain).model_dump(mode="json")
+        result["domains"][domain] = entry
+
+    return result
+
+
+# ──────────────────────────────────────────────────────────────
+# Connector Health
+# ──────────────────────────────────────────────────────────────
+
+
+@router.post(
+    "/connectors/health",
+    summary="Check connector availability",
+    description="Returns health status for registered data connectors.",
+)
+async def connectors_health(request: ConnectorHealthRequest):
+    """POST /api/xai/connectors/health"""
+    from tollama.xai.connectors.helpers import (
+        build_default_connector_registry,
+    )
+
+    registry = build_default_connector_registry()
+    all_domains = {
+        "financial_market", "news", "supply_chain",
+        "geopolitical", "regulatory",
+    }
+    domains = set(request.domains) if request.domains else all_domains
+
+    results = []
+    for connector in registry.connectors:
+        if connector.domain not in domains:
+            continue
+        status = "available"
+        try:
+            connector.supports("__health_check__", {})
+        except Exception:  # noqa: BLE001
+            status = "error"
+        results.append({
+            "connector_name": connector.connector_name,
+            "domain": connector.domain,
+            "status": status,
+        })
+
+    return {"connectors": results}

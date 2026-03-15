@@ -4,7 +4,10 @@ tollama.xai.trust_router — Registry and router for domain trust agents.
 
 from __future__ import annotations
 
+import hashlib
+import json
 import logging
+import time
 from pathlib import Path
 from typing import Any
 
@@ -63,6 +66,7 @@ class TrustRouter:
         calibration_tracker: Any | None = None,
         calibration_path: Path | None = None,
         auto_persist_every: int = 10,
+        cache_ttl: float = 0.0,
     ):
         self.registry = registry
         self.primary_order = primary_order or self.DEFAULT_PRIMARY_ORDER
@@ -70,6 +74,8 @@ class TrustRouter:
         self._calibration_path = calibration_path
         self._auto_persist_every = auto_persist_every
         self._analyze_count = 0
+        self._cache_ttl = cache_ttl
+        self._cache: dict[str, tuple[float, NormalizedTrustResult]] = {}
 
     def select_agent(self, context: dict[str, Any]) -> TrustAgent | None:
         matches = self.registry.resolve(context)
@@ -85,16 +91,50 @@ class TrustRouter:
 
         return sorted(matches, key=lambda agent: getattr(agent, "priority", 100))[0]
 
+    @staticmethod
+    def _cache_key(context: dict[str, Any], payload: dict[str, Any]) -> str:
+        """Deterministic hash for a context+payload pair."""
+        raw = json.dumps({"c": context, "p": payload}, sort_keys=True)
+        return hashlib.sha256(raw.encode()).hexdigest()
+
+    def _get_cached(self, key: str) -> NormalizedTrustResult | None:
+        """Return cached result if within TTL, else None."""
+        if self._cache_ttl <= 0:
+            return None
+        entry = self._cache.get(key)
+        if entry is None:
+            return None
+        ts, result = entry
+        if time.monotonic() - ts > self._cache_ttl:
+            del self._cache[key]
+            return None
+        return result
+
+    def _put_cache(self, key: str, result: NormalizedTrustResult) -> None:
+        if self._cache_ttl > 0:
+            self._cache[key] = (time.monotonic(), result)
+
+    def clear_cache(self) -> int:
+        """Clear all cached trust results. Returns number of entries removed."""
+        count = len(self._cache)
+        self._cache.clear()
+        return count
+
     def analyze(
         self,
         *,
         context: dict[str, Any],
         payload: dict[str, Any],
     ) -> NormalizedTrustResult | None:
+        cache_key = self._cache_key(context, payload)
+        cached = self._get_cached(cache_key)
+        if cached is not None:
+            return cached
         agent = self.select_agent(context)
         if agent is None:
             return None
         result = coerce_normalized_trust_result(agent.analyze(payload))
+        self._put_cache(cache_key, result)
         self._maybe_auto_persist()
         return result
 
@@ -147,6 +187,33 @@ class TrustRouter:
             self.calibration_tracker.save(self._calibration_path)
         except OSError:
             _log.warning("Failed to persist calibration data", exc_info=True)
+
+    async def analyze_async(
+        self,
+        *,
+        context: dict[str, Any],
+        payload: dict[str, Any],
+    ) -> NormalizedTrustResult | None:
+        """Async wrapper — runs sync agent analysis in a thread executor."""
+        import asyncio
+
+        return await asyncio.get_event_loop().run_in_executor(
+            None, lambda: self.analyze(context=context, payload=payload),
+        )
+
+    async def analyze_multi_async(
+        self,
+        *,
+        context: dict[str, Any],
+        payload: dict[str, Any],
+    ) -> NormalizedTrustResult | None:
+        """Async wrapper — runs sync multi-agent analysis in a thread executor."""
+        import asyncio
+
+        return await asyncio.get_event_loop().run_in_executor(
+            None,
+            lambda: self.analyze_multi(context=context, payload=payload),
+        )
 
     def _maybe_auto_persist(self) -> None:
         """Persist calibration data every N analyze calls."""
