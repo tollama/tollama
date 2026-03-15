@@ -886,3 +886,90 @@ def test_engine_multi_agent_mode():
     assert result.trust_intelligence_explanation is not None
     assert result.trust_intelligence_explanation["trust_score"] is not None
     assert result.decision_policy_explanation.risk_category == "YELLOW"
+
+
+# ── Quick Fixes ───────────────────────────────────────────────────────────
+
+
+def test_supply_chain_data_latency_seconds_backward_compat():
+    from tollama.xai.trust_contract import coerce_supply_chain_payload
+
+    payload = coerce_supply_chain_payload(
+        {
+            "network_id": "NET-BC",
+            "data_latency_seconds": 300.0,
+        }
+    )
+
+    # 300s / 3600s ceiling → 1.0 - 0.0833 ≈ 0.917
+    assert abs(payload.data_freshness - (1.0 - 300.0 / 3600.0)) < 0.01
+
+
+def test_supply_chain_data_latency_seconds_high_value():
+    from tollama.xai.trust_contract import coerce_supply_chain_payload
+
+    payload = coerce_supply_chain_payload(
+        {
+            "shipment_id": "SHP-BC",
+            "data_latency_seconds": 7200.0,
+        }
+    )
+
+    # 7200s > 3600s ceiling → clipped to 0.0
+    assert payload.data_freshness == 0.0
+
+
+def test_supply_chain_data_freshness_takes_precedence_without_latency():
+    from tollama.xai.trust_contract import coerce_supply_chain_payload
+
+    payload = coerce_supply_chain_payload(
+        {
+            "network_id": "NET-NL",
+            "data_freshness": 0.9,
+        }
+    )
+
+    assert payload.data_freshness == 0.9
+    assert payload.data_latency_seconds is None
+
+
+def test_engine_trust_payload_empty_dict_not_ignored():
+    from tollama.xai.decision_policy import DecisionPolicyExplainer
+    from tollama.xai.engine import ExplanationEngine
+    from tollama.xai.trust_breakdown import TrustBreakdown
+    from tollama.xai.trust_contract import NormalizedTrustResult
+    from tollama.xai.trust_router import TrustAgentRegistry, TrustRouter
+
+    class StubAgent:
+        agent_name = "stub"
+        domain = "stub_domain"
+        priority = 10
+
+        def supports(self, ctx):
+            return ctx.get("domain") == "stub_domain"
+
+        def analyze(self, p):
+            return NormalizedTrustResult(
+                agent_name="stub", domain="stub_domain", trust_score=0.70,
+            )
+
+    registry = TrustAgentRegistry()
+    registry.register(StubAgent())
+    router = TrustRouter(registry)
+
+    engine = ExplanationEngine(
+        trust_breakdown=TrustBreakdown(),
+        decision_policy_explainer=DecisionPolicyExplainer(),
+        trust_router=router,
+    )
+
+    # Empty dict {} should NOT be treated as None
+    result = engine.explain_decision(
+        forecast_result={"confidence": 0.90},
+        trust_context={"domain": "stub_domain"},
+        trust_payload={},
+        policy_config={"auto_execute_threshold": 0.85, "trust_threshold": 0.5},
+    )
+
+    assert result.trust_intelligence_explanation is not None
+    assert result.trust_intelligence_explanation["trust_score"] == 0.70

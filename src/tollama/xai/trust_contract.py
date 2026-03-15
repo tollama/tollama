@@ -179,6 +179,7 @@ class SupplyChainTrustPayload(BaseModel):
         default=0.5,
         validation_alias=AliasChoices("data_freshness", "freshness_score", "data_latency"),
     )
+    data_latency_seconds: float | None = Field(default=None, ge=0.0)
 
     @field_validator(
         "lead_time_reliability",
@@ -191,6 +192,13 @@ class SupplyChainTrustPayload(BaseModel):
     @classmethod
     def _clip_unit_fields(cls, value: Any) -> float:
         return _clip_unit(value, default=0.5)
+
+    def model_post_init(self, __context: Any) -> None:
+        """Convert data_latency_seconds to data_freshness if provided."""
+        if self.data_latency_seconds is not None:
+            ceiling = 3600.0
+            converted = max(0.0, min(1.0, 1.0 - (self.data_latency_seconds / ceiling)))
+            object.__setattr__(self, "data_freshness", converted)
 
 
 @runtime_checkable

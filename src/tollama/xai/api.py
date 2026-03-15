@@ -55,10 +55,20 @@ class ExplainDecisionRequest(BaseModel):
         None, description="Features for SHAP attribution in trust pipeline"
     )
     trust_context: Optional[dict[str, Any]] = Field(
-        None, description="Context for constraint verification in trust pipeline"
+        None,
+        description=(
+            "Context for trust agent routing. Keys: 'domain' (prediction_market|"
+            "financial_market|supply_chain|news), 'source_type' (optional refinement), "
+            "'mode' ('single' default or 'multi' for multi-agent aggregation)."
+        ),
     )
     trust_payload: Optional[dict[str, Any]] = Field(
-        None, description="Payload routed through the default trust-agent registry"
+        None,
+        description=(
+            "Payload routed through the default trust-agent registry. "
+            "Schema depends on domain: financial_market requires 'instrument_id', "
+            "news requires 'story_id', supply_chain requires 'network_id'."
+        ),
     )
 
 

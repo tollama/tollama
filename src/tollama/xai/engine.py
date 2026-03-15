@@ -333,7 +333,7 @@ class ExplanationEngine:
         if trust_context:
             context.update(trust_context)
 
-        payload = trust_payload or explain_options.get("trust_payload")
+        payload = trust_payload if trust_payload is not None else explain_options.get("trust_payload")
         if payload is None and calibration_result is not None:
             payload = calibration_result
             if "domain" not in context:
