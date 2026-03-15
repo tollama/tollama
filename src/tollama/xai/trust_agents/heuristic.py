@@ -10,12 +10,14 @@ from tollama.xai.trust_contract import (
     FinancialTrustPayload,
     NewsTrustPayload,
     NormalizedTrustResult,
+    SupplyChainTrustPayload,
     TrustAudit,
     TrustComponent,
     TrustEvidence,
     TrustViolation,
     coerce_financial_payload,
     coerce_news_payload,
+    coerce_supply_chain_payload,
 )
 
 
@@ -346,6 +348,9 @@ class FinancialMarketTrustAgent:
     domain = "financial_market"
     priority = 20
 
+    def __init__(self, trust_router: Any | None = None):
+        self._trust_router = trust_router
+
     def supports(self, context: dict[str, Any]) -> bool:
         domain = str(context.get("domain", ""))
         source_type = str(context.get("source_type", ""))
@@ -361,6 +366,34 @@ class FinancialMarketTrustAgent:
         normalized = coerce_financial_payload(payload)
         components = _financial_component_breakdown(normalized)
         violations = _financial_violations(normalized)
+        evidence_attrs: dict[str, Any] = {
+            "news_signal_ref": normalized.news_signal_ref,
+        }
+
+        if normalized.news_signal_ref and self._trust_router is not None:
+            news_result = self._resolve_news_signal(normalized.news_signal_ref)
+            if news_result is not None:
+                components["news_signal"] = TrustComponent(
+                    score=news_result.trust_score,
+                    weight=0.10,
+                    value=news_result.trust_score,
+                    assessment="higher_is_better",
+                    rationale=f"News signal trust from '{normalized.news_signal_ref}'.",
+                )
+                for v in news_result.violations:
+                    if v.severity == "critical":
+                        violations.append(
+                            TrustViolation(
+                                name=f"news_{v.name}",
+                                severity="critical",
+                                type=f"news_{v.type or 'unknown'}",
+                                detail=f"From news signal: {v.detail}",
+                            )
+                        )
+                evidence_attrs["news_trust_score"] = news_result.trust_score
+                evidence_attrs["news_risk_category"] = news_result.risk_category
+                evidence_attrs["news_violations_count"] = len(news_result.violations)
+
         return _build_result(
             agent_name=self.agent_name,
             domain=self.domain,
@@ -369,14 +402,162 @@ class FinancialMarketTrustAgent:
             why_trusted=_financial_why_trusted(normalized, violations),
             source_type="financial_market",
             source_id=normalized.instrument_id,
-            evidence_attributes={
-                "news_signal_ref": normalized.news_signal_ref,
-            },
+            evidence_attributes=evidence_attrs,
         )
+
+    def _resolve_news_signal(
+        self, signal_ref: str,
+    ) -> NormalizedTrustResult | None:
+        """Run the news agent with the signal reference as story_id."""
+        try:
+            return self._trust_router.analyze(
+                context={"domain": "news", "source_type": "news"},
+                payload={"story_id": signal_ref},
+            )
+        except Exception:
+            return None
+
+
+def _supply_chain_component_breakdown(
+    payload: SupplyChainTrustPayload,
+) -> dict[str, TrustComponent]:
+    return {
+        "lead_time_reliability": TrustComponent(
+            score=payload.lead_time_reliability,
+            weight=0.30,
+            value=payload.lead_time_reliability,
+            assessment="higher_is_better",
+            rationale="Higher lead-time reliability indicates a dependable supply chain.",
+        ),
+        "inventory_visibility": TrustComponent(
+            score=payload.inventory_visibility,
+            weight=0.25,
+            value=payload.inventory_visibility,
+            assessment="higher_is_better",
+            rationale="Better inventory visibility reduces uncertainty in stock levels.",
+        ),
+        "disruption_risk": TrustComponent(
+            score=1.0 - payload.disruption_risk,
+            weight=0.20,
+            value=payload.disruption_risk,
+            assessment="lower_is_better",
+            rationale="Lower disruption risk improves trust in supply continuity.",
+        ),
+        "sensor_quality": TrustComponent(
+            score=payload.sensor_quality,
+            weight=0.15,
+            value=payload.sensor_quality,
+            assessment="higher_is_better",
+            rationale="Higher sensor quality improves data reliability.",
+        ),
+        "data_freshness": TrustComponent(
+            score=payload.data_freshness,
+            weight=0.10,
+            value=payload.data_freshness,
+            assessment="higher_is_better",
+            rationale="Fresh supply-chain data reduces stale-signal risk.",
+        ),
+    }
+
+
+def _supply_chain_violations(
+    payload: SupplyChainTrustPayload,
+) -> list[TrustViolation]:
+    violations: list[TrustViolation] = []
+    if payload.disruption_risk >= 0.8:
+        violations.append(
+            TrustViolation(
+                name="disruption_risk_extreme",
+                severity="critical",
+                type="disruption",
+                detail="Disruption risk is too high for automated decisioning.",
+            )
+        )
+    elif payload.disruption_risk >= 0.6:
+        violations.append(
+            TrustViolation(
+                name="disruption_risk_elevated",
+                severity="warning",
+                type="disruption",
+                detail="Disruption risk is elevated and should be monitored.",
+            )
+        )
+
+    if payload.lead_time_reliability <= 0.2:
+        violations.append(
+            TrustViolation(
+                name="lead_time_unreliable",
+                severity="critical",
+                type="reliability",
+                detail="Lead-time reliability is too low for trusted planning.",
+            )
+        )
+    elif payload.lead_time_reliability <= 0.4:
+        violations.append(
+            TrustViolation(
+                name="lead_time_degraded",
+                severity="warning",
+                type="reliability",
+                detail="Lead-time reliability is degraded.",
+            )
+        )
+
+    if payload.sensor_quality <= 0.15:
+        violations.append(
+            TrustViolation(
+                name="sensor_quality_critical",
+                severity="critical",
+                type="data_quality",
+                detail="Sensor quality is critically low.",
+            )
+        )
+    elif payload.sensor_quality <= 0.3:
+        violations.append(
+            TrustViolation(
+                name="sensor_quality_low",
+                severity="warning",
+                type="data_quality",
+                detail="Sensor quality is below acceptable threshold.",
+            )
+        )
+
+    if payload.data_freshness <= 0.10:
+        violations.append(
+            TrustViolation(
+                name="supply_data_stale",
+                severity="critical",
+                type="freshness",
+                detail="Supply-chain data is stale for trusted scoring.",
+            )
+        )
+    elif payload.data_freshness <= 0.25:
+        violations.append(
+            TrustViolation(
+                name="supply_data_aging",
+                severity="warning",
+                type="freshness",
+                detail="Supply-chain data freshness is deteriorating.",
+            )
+        )
+    return violations
+
+
+def _supply_chain_why_trusted(
+    payload: SupplyChainTrustPayload,
+    violations: list[TrustViolation],
+) -> str:
+    base = (
+        f"Lead-time={payload.lead_time_reliability:.2f}, visibility={payload.inventory_visibility:.2f}, "
+        f"disruption={payload.disruption_risk:.2f}, sensor={payload.sensor_quality:.2f}, "
+        f"freshness={payload.data_freshness:.2f}."
+    )
+    if not violations:
+        return f"Supply-chain signal is decision-ready. {base}"
+    return f"Supply-chain signal requires caution. {base}"
 
 
 class SupplyChainTrustAgent:
-    """Baseline trust agent for supply chain and logistics domains."""
+    """Schema-aware trust agent for supply chain and logistics domains."""
 
     agent_name = "supply_chain"
     domain = "supply_chain"
@@ -388,48 +569,17 @@ class SupplyChainTrustAgent:
         return domain == self.domain or source_type in {"supply_chain", "logistics"}
 
     def analyze(self, payload: dict[str, Any]) -> NormalizedTrustResult:
-        components = {
-            "lead_time_reliability": TrustComponent(
-                score=_clip_unit(payload.get("lead_time_reliability", 0.5)),
-                weight=0.30,
-                value=payload.get("lead_time_reliability"),
-                assessment="higher_is_better",
-            ),
-            "inventory_visibility": TrustComponent(
-                score=_clip_unit(payload.get("inventory_visibility", 0.5)),
-                weight=0.25,
-                value=payload.get("inventory_visibility"),
-                assessment="higher_is_better",
-            ),
-            "disruption_risk": TrustComponent(
-                score=_invert_ratio(payload.get("disruption_risk", 0.5), 1.0),
-                weight=0.20,
-                value=payload.get("disruption_risk"),
-                assessment="lower_is_better",
-            ),
-            "sensor_quality": TrustComponent(
-                score=_clip_unit(payload.get("sensor_quality", 0.5)),
-                weight=0.15,
-                value=payload.get("sensor_quality"),
-                assessment="higher_is_better",
-            ),
-            "data_freshness": TrustComponent(
-                score=_invert_ratio(payload.get("data_latency_seconds", 300.0), 3600.0),
-                weight=0.10,
-                value=payload.get("data_latency_seconds"),
-                assessment="lower_is_better",
-            ),
-        }
+        normalized = coerce_supply_chain_payload(payload)
+        components = _supply_chain_component_breakdown(normalized)
+        violations = _supply_chain_violations(normalized)
         return _build_result(
             agent_name=self.agent_name,
             domain=self.domain,
             component_breakdown=components,
-            why_trusted=(
-                "Supply-chain trust is derived from lead-time reliability, inventory "
-                "visibility, disruption risk, sensor quality, and data freshness."
-            ),
+            violations=violations,
+            why_trusted=_supply_chain_why_trusted(normalized, violations),
             source_type="supply_chain",
-            source_id=str(payload.get("network_id", payload.get("shipment_id", "supply_chain"))),
+            source_id=normalized.network_id,
         )
 
 

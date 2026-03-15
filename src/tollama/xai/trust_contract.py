@@ -158,6 +158,41 @@ class NewsTrustPayload(BaseModel):
         return _clip_unit(value, default=0.5)
 
 
+class SupplyChainTrustPayload(BaseModel):
+    """Normalized payload for supply chain trust analysis."""
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+        str_strip_whitespace=True,
+    )
+
+    network_id: str = Field(
+        min_length=1,
+        validation_alias=AliasChoices("network_id", "shipment_id"),
+    )
+    lead_time_reliability: float = Field(default=0.5)
+    inventory_visibility: float = Field(default=0.5)
+    disruption_risk: float = Field(default=0.5)
+    sensor_quality: float = Field(default=0.5)
+    data_freshness: float = Field(
+        default=0.5,
+        validation_alias=AliasChoices("data_freshness", "freshness_score", "data_latency"),
+    )
+
+    @field_validator(
+        "lead_time_reliability",
+        "inventory_visibility",
+        "disruption_risk",
+        "sensor_quality",
+        "data_freshness",
+        mode="before",
+    )
+    @classmethod
+    def _clip_unit_fields(cls, value: Any) -> float:
+        return _clip_unit(value, default=0.5)
+
+
 @runtime_checkable
 class TrustAgent(Protocol):
     """Protocol for in-repo domain trust agents."""
@@ -196,6 +231,15 @@ def coerce_news_payload(
     if isinstance(value, NewsTrustPayload):
         return value
     return NewsTrustPayload.model_validate(value)
+
+
+def coerce_supply_chain_payload(
+    value: SupplyChainTrustPayload | dict[str, Any],
+) -> SupplyChainTrustPayload:
+    """Validate and normalize a supply chain trust payload."""
+    if isinstance(value, SupplyChainTrustPayload):
+        return value
+    return SupplyChainTrustPayload.model_validate(value)
 
 
 def normalized_result_to_legacy_metadata(
@@ -281,6 +325,7 @@ __all__ = [
     "FinancialTrustPayload",
     "NewsTrustPayload",
     "NormalizedTrustResult",
+    "SupplyChainTrustPayload",
     "TrustAgent",
     "TrustAudit",
     "TrustComponent",
@@ -289,6 +334,7 @@ __all__ = [
     "coerce_financial_payload",
     "coerce_news_payload",
     "coerce_normalized_trust_result",
+    "coerce_supply_chain_payload",
     "normalized_result_to_breakdown",
     "normalized_result_to_legacy_metadata",
 ]

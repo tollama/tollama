@@ -344,6 +344,9 @@ class ExplanationEngine:
         if payload is None:
             return None
 
+        mode = context.get("mode", "single")
+        if mode == "multi":
+            return self.trust_router.analyze_multi(context=context, payload=payload)
         return self.trust_router.analyze(context=context, payload=payload)
 
     def _explain_plan(

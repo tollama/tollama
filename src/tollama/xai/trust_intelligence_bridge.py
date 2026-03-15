@@ -16,7 +16,7 @@ try:
     from trust_intelligence.schemas import PipelineResult
 
     HAS_TRUST_INTELLIGENCE = True
-except ImportError:
+except Exception:
     HAS_TRUST_INTELLIGENCE = False
 
 
