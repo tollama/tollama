@@ -57,7 +57,20 @@ class DataConnector(Protocol):
     def fetch(self, identifier: str, context: dict[str, Any]) -> ConnectorResult: ...
 
 
+@runtime_checkable
+class AsyncDataConnector(Protocol):
+    """Async protocol for external data feed connectors."""
+
+    connector_name: str
+    domain: str
+
+    def supports(self, identifier: str, context: dict[str, Any]) -> bool: ...
+
+    async def fetch(self, identifier: str, context: dict[str, Any]) -> ConnectorResult: ...
+
+
 __all__ = [
+    "AsyncDataConnector",
     "ConnectorError",
     "ConnectorFetchError",
     "ConnectorResult",

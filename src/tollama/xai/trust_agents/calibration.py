@@ -4,9 +4,11 @@ tollama.xai.trust_agents.calibration — Learned calibration tracker for trust a
 
 from __future__ import annotations
 
+import json
 import math
 from collections import deque
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 from pydantic import BaseModel, Field
@@ -106,6 +108,30 @@ class CalibrationTracker:
         """Return agent names with recorded data."""
         return list(self._records.keys())
 
+    def save(self, path: Path) -> None:
+        """Persist all records to a JSON file using atomic write."""
+        payload: dict[str, list[dict[str, Any]]] = {}
+        for agent_name, records in self._records.items():
+            payload[agent_name] = [r.model_dump(mode="json") for r in records]
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp_path = path.with_name(f"{path.name}.tmp")
+        tmp_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+        tmp_path.replace(path)
+
+    @classmethod
+    def load(cls, path: Path, window_size: int = 100) -> CalibrationTracker:
+        """Load tracker from a JSON file. Returns empty tracker if file missing."""
+        tracker = cls(window_size=window_size)
+        if not path.is_file():
+            return tracker
+        data = json.loads(path.read_text())
+        for agent_name, record_dicts in data.items():
+            dq: deque[CalibrationRecord] = deque(maxlen=window_size)
+            for rd in record_dicts[-window_size:]:
+                dq.append(CalibrationRecord.model_validate(rd))
+            tracker._records[agent_name] = dq
+        return tracker
+
     @staticmethod
     def _compute_adjustments(records: list[CalibrationRecord]) -> dict[str, float]:
         """Compute per-component weight adjustment factors.
@@ -168,8 +194,16 @@ def _pearson_correlation(x: list[float], y: list[float]) -> float:
     return cov / denom
 
 
+def default_calibration_path() -> Path:
+    """Return the default filesystem path for calibration persistence."""
+    from tollama.core.storage import TollamaPaths
+
+    return TollamaPaths.default().base_dir / "xai" / "calibration.json"
+
+
 __all__ = [
     "CalibrationRecord",
     "CalibrationStats",
     "CalibrationTracker",
+    "default_calibration_path",
 ]

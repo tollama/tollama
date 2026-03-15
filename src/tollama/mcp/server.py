@@ -21,6 +21,9 @@ from .tools import (
     tollama_counterfactual as _tollama_counterfactual,
 )
 from .tools import (
+    tollama_explain as _tollama_explain,
+)
+from .tools import (
     tollama_forecast as _tollama_forecast,
 )
 from .tools import (
@@ -28,6 +31,9 @@ from .tools import (
 )
 from .tools import (
     tollama_health as _tollama_health,
+)
+from .tools import (
+    tollama_model_card as _tollama_model_card,
 )
 from .tools import (
     tollama_models as _tollama_models,
@@ -49,6 +55,9 @@ from .tools import (
 )
 from .tools import (
     tollama_show as _tollama_show,
+)
+from .tools import (
+    tollama_trust_score as _tollama_trust_score,
 )
 from .tools import (
     tollama_what_if as _tollama_what_if,
@@ -439,6 +448,70 @@ def create_server() -> Any:
                 allow_restricted_license=allow_restricted_license,
                 top_k=top_k,
             )
+        except MCPToolError as exc:
+            _raise_mcp_tool_error(exc)
+
+    @server.tool(
+        name="tollama_explain",
+        description=(
+            "Run the XAI explanation engine to generate a trust-aware decision explanation "
+            "from forecast results, eval outputs, and calibration data. "
+            "Required input: request.forecast_result. "
+            "Optional: request.eval_result, request.calibration_result, request.trust_result, "
+            "request.policy_config, request.time_series_data, request.explain_options, "
+            "request.trust_context, request.trust_payload. "
+            'Example: tollama_explain({"request":{"forecast_result":{"model":"mock",'
+            '"forecasts":[{"id":"s1","mean":[1.0,2.0]}]}}}).'
+        ),
+    )
+    def tollama_explain(
+        request: dict[str, Any],
+        base_url: str | None = None,
+        timeout: float | None = None,
+    ) -> dict[str, Any]:
+        try:
+            return _tollama_explain(request=request, base_url=base_url, timeout=timeout)
+        except MCPToolError as exc:
+            _raise_mcp_tool_error(exc)
+
+    @server.tool(
+        name="tollama_trust_score",
+        description=(
+            "Decompose a trust score into component-level explanations. "
+            "Required inputs: request.trust_score and request.metrics. "
+            "Optional: request.source (default 'polymarket'), request.signals. "
+            'Example: tollama_trust_score({"request":{"trust_score":0.75,'
+            '"metrics":{"brier_score":0.15,"log_loss":0.3,"ece":0.05}}}).'
+        ),
+    )
+    def tollama_trust_score(
+        request: dict[str, Any],
+        base_url: str | None = None,
+        timeout: float | None = None,
+    ) -> dict[str, Any]:
+        try:
+            return _tollama_trust_score(request=request, base_url=base_url, timeout=timeout)
+        except MCPToolError as exc:
+            _raise_mcp_tool_error(exc)
+
+    @server.tool(
+        name="tollama_model_card",
+        description=(
+            "Generate an EU AI Act compliant model card from model information. "
+            "Required input: request.model_info. "
+            "Optional: request.eval_result, request.explanation_result, "
+            "request.governance_info, request.format ('json' or 'markdown'). "
+            'Example: tollama_model_card({"request":{"model_info":{"name":"mock",'
+            '"version":"1.0","description":"Test model"}}}).'
+        ),
+    )
+    def tollama_model_card(
+        request: dict[str, Any],
+        base_url: str | None = None,
+        timeout: float | None = None,
+    ) -> dict[str, Any]:
+        try:
+            return _tollama_model_card(request=request, base_url=base_url, timeout=timeout)
         except MCPToolError as exc:
             _raise_mcp_tool_error(exc)
 

@@ -233,6 +233,7 @@ into a unified Decision Explanation.
 | Field | Type | Default | Description |
 |---|---|---|---|
 | `narrative` | boolean | `false` | When `true`, includes a natural-language forecast narrative in the response |
+| `explain` | boolean | `false` | When `true`, runs the XAI explanation engine and includes trust-aware decision explanation in the response |
 
 #### `IngestOptions`
 

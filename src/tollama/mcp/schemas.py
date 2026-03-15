@@ -106,3 +106,21 @@ class RecommendToolInput(MCPInputBase):
     covariates_type: Literal["numeric", "categorical"] = "numeric"
     allow_restricted_license: StrictBool = False
     top_k: StrictInt = Field(default=3, ge=1, le=20)
+
+
+class ExplainToolInput(MCPInputBase):
+    request: dict[str, Any]
+    base_url: StrictStr | None = None
+    timeout: StrictFloat | None = Field(default=None, gt=0)
+
+
+class TrustScoreToolInput(MCPInputBase):
+    request: dict[str, Any]
+    base_url: StrictStr | None = None
+    timeout: StrictFloat | None = Field(default=None, gt=0)
+
+
+class ModelCardToolInput(MCPInputBase):
+    request: dict[str, Any]
+    base_url: StrictStr | None = None
+    timeout: StrictFloat | None = Field(default=None, gt=0)

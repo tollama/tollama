@@ -33,9 +33,11 @@ from .schemas import (
     AutoForecastToolInput,
     CompareToolInput,
     CounterfactualToolInput,
+    ExplainToolInput,
     ForecastToolInput,
     GenerateToolInput,
     HealthToolInput,
+    ModelCardToolInput,
     ModelsToolInput,
     PipelineToolInput,
     PullToolInput,
@@ -43,6 +45,7 @@ from .schemas import (
     ReportToolInput,
     ScenarioTreeToolInput,
     ShowToolInput,
+    TrustScoreToolInput,
     WhatIfToolInput,
 )
 
@@ -469,3 +472,60 @@ def tollama_recommend(
         )
     except ValueError as exc:
         _raise_invalid_request(str(exc))
+
+
+def tollama_explain(
+    *,
+    request: dict[str, Any],
+    base_url: str | None = None,
+    timeout: float | None = None,
+) -> dict[str, Any]:
+    """Run XAI explain-decision and return explanation payload."""
+    try:
+        args = ExplainToolInput(request=request, base_url=base_url, timeout=timeout)
+    except ValidationError as exc:
+        _raise_invalid_request(str(exc))
+
+    client = _make_client(base_url=args.base_url, timeout=args.timeout)
+    try:
+        return client.explain_decision(args.request)
+    except TollamaClientError as exc:
+        _raise_from_client_error(exc)
+
+
+def tollama_trust_score(
+    *,
+    request: dict[str, Any],
+    base_url: str | None = None,
+    timeout: float | None = None,
+) -> dict[str, Any]:
+    """Run XAI trust-breakdown and return trust score decomposition."""
+    try:
+        args = TrustScoreToolInput(request=request, base_url=base_url, timeout=timeout)
+    except ValidationError as exc:
+        _raise_invalid_request(str(exc))
+
+    client = _make_client(base_url=args.base_url, timeout=args.timeout)
+    try:
+        return client.trust_breakdown(args.request)
+    except TollamaClientError as exc:
+        _raise_from_client_error(exc)
+
+
+def tollama_model_card(
+    *,
+    request: dict[str, Any],
+    base_url: str | None = None,
+    timeout: float | None = None,
+) -> dict[str, Any]:
+    """Generate EU AI Act model card via XAI endpoint."""
+    try:
+        args = ModelCardToolInput(request=request, base_url=base_url, timeout=timeout)
+    except ValidationError as exc:
+        _raise_invalid_request(str(exc))
+
+    client = _make_client(base_url=args.base_url, timeout=args.timeout)
+    try:
+        return client.model_card(args.request)
+    except TollamaClientError as exc:
+        _raise_from_client_error(exc)

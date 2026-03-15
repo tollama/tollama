@@ -8,11 +8,19 @@ from tollama.xai.connectors.helpers import (
     build_default_connector_registry,
 )
 from tollama.xai.connectors.live import (
+    AsyncHttpFinancialConnector,
+    AsyncHttpGeopoliticalConnector,
+    AsyncHttpNewsConnector,
+    AsyncHttpRegulatoryConnector,
+    AsyncHttpSupplyChainConnector,
     HttpFinancialConnector,
+    HttpGeopoliticalConnector,
     HttpNewsConnector,
+    HttpRegulatoryConnector,
     HttpSupplyChainConnector,
 )
 from tollama.xai.connectors.protocol import (
+    AsyncDataConnector,
     ConnectorError,
     ConnectorFetchError,
     ConnectorResult,
@@ -29,13 +37,21 @@ from tollama.xai.connectors.stubs import (
 
 __all__ = [
     "AssemblyResult",
+    "AsyncDataConnector",
+    "AsyncHttpFinancialConnector",
+    "AsyncHttpGeopoliticalConnector",
+    "AsyncHttpNewsConnector",
+    "AsyncHttpRegulatoryConnector",
+    "AsyncHttpSupplyChainConnector",
     "ConnectorError",
     "ConnectorFetchError",
     "ConnectorRegistry",
     "ConnectorResult",
     "DataConnector",
     "HttpFinancialConnector",
+    "HttpGeopoliticalConnector",
     "HttpNewsConnector",
+    "HttpRegulatoryConnector",
     "HttpSupplyChainConnector",
     "MockFinancialConnector",
     "MockGeopoliticalConnector",

@@ -128,6 +128,7 @@ class ResponseOptions(CanonicalModel):
     """Optional response enrichments for deterministic payload extension."""
 
     narrative: StrictBool = False
+    explain: StrictBool = False
 
 
 class IngestOptions(CanonicalModel):

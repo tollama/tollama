@@ -60,6 +60,9 @@ Exposed tools:
 - `tollama_pull`
 - `tollama_show`
 - `tollama_recommend`
+- `tollama_explain`
+- `tollama_trust_score`
+- `tollama_model_card`
 
 Error categories (exit-code aligned):
 - `INVALID_REQUEST` (`2`)

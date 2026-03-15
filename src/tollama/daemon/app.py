@@ -1770,6 +1770,41 @@ def create_app(*, runner_manager: RunnerManager | None = None) -> FastAPI:
     return app
 
 
+def _generate_xai_explanation(
+    payload: Any,
+    response: Any,
+) -> dict[str, Any] | None:
+    """Run XAI explanation engine on a forecast result. Returns None on failure."""
+    from tollama.xai.engine import ExplanationEngine
+    from tollama.xai.model_selection import ModelSelectionExplainer
+    from tollama.xai.forecast_decompose import ForecastDecomposer
+    from tollama.xai.feature_attribution import TemporalFeatureAttribution
+    from tollama.xai.scenario_rationale import ScenarioRationale
+    from tollama.xai.trust_breakdown import TrustBreakdown
+    from tollama.xai.decision_policy import DecisionPolicyExplainer
+    from tollama.xai.trust_router import build_default_trust_router
+
+    engine = ExplanationEngine(
+        model_selection_explainer=ModelSelectionExplainer(),
+        forecast_decomposer=ForecastDecomposer(),
+        feature_attribution=TemporalFeatureAttribution(),
+        scenario_rationale=ScenarioRationale(),
+        trust_breakdown=TrustBreakdown(),
+        decision_policy_explainer=DecisionPolicyExplainer(),
+        trust_router=build_default_trust_router(),
+    )
+    forecast_dict = response.model_dump(mode="json", exclude_none=True)
+    time_series_data = None
+    if payload.series:
+        time_series_data = [float(v) for v in payload.series[0].target]
+    result = engine.explain_decision(
+        forecast_result=forecast_dict,
+        time_series_data=time_series_data,
+        explain_options={"decompose": True, "attribution": False},
+    )
+    return result.to_dict()
+
+
 def _execute_forecast(
     app: FastAPI,
     *,
@@ -1914,6 +1949,14 @@ def _execute_forecast(
         narrative = build_forecast_narrative(request=forecast_payload, response=response)
         if narrative is not None:
             response = response.model_copy(update={"narrative": narrative})
+
+    if forecast_payload.response_options.explain:
+        try:
+            xai_explanation = _generate_xai_explanation(forecast_payload, response)
+            if xai_explanation is not None:
+                response = response.model_copy(update={"explanation": xai_explanation})
+        except Exception:  # noqa: BLE001 — XAI failure should not break forecast
+            pass
 
     merged_warnings = _merge_warnings(response.warnings, [*request_warnings, *metrics_warnings])
     if merged_warnings:

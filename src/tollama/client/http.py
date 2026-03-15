@@ -658,6 +658,35 @@ class TollamaClient:
             )
         return response
 
+    # ──── XAI methods ────
+
+    def explain_decision(self, payload: dict[str, Any]) -> dict[str, Any]:
+        """Submit an explain-decision request to the XAI endpoint."""
+        return self._request_json(
+            "POST",
+            "/api/xai/explain-decision",
+            json_payload=payload,
+            action="explain decision",
+        )
+
+    def trust_breakdown(self, payload: dict[str, Any]) -> dict[str, Any]:
+        """Submit a trust-breakdown request to the XAI endpoint."""
+        return self._request_json(
+            "POST",
+            "/api/xai/trust-breakdown",
+            json_payload=payload,
+            action="trust breakdown",
+        )
+
+    def model_card(self, payload: dict[str, Any]) -> dict[str, Any]:
+        """Submit a model-card generation request to the XAI endpoint."""
+        return self._request_json(
+            "POST",
+            "/api/xai/model-card",
+            json_payload=payload,
+            action="generate model card",
+        )
+
     def _request_headers(self) -> dict[str, str] | None:
         if self._api_key is None:
             return None
