@@ -7,7 +7,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any, Protocol, runtime_checkable
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator
 
 
 def _utc_now_iso() -> str:
@@ -76,6 +76,88 @@ class NormalizedTrustResult(BaseModel):
     audit: TrustAudit = Field(default_factory=TrustAudit)
 
 
+class FinancialTrustPayload(BaseModel):
+    """Normalized payload for financial market trust analysis."""
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+        str_strip_whitespace=True,
+    )
+
+    instrument_id: str = Field(
+        min_length=1,
+        validation_alias=AliasChoices("instrument_id", "symbol"),
+    )
+    liquidity_depth: float = Field(default=0.5)
+    bid_ask_spread_bps: float = Field(
+        default=50.0,
+        ge=0.0,
+        validation_alias=AliasChoices("bid_ask_spread_bps", "spread_bps"),
+    )
+    realized_volatility: float = Field(
+        default=0.3,
+        ge=0.0,
+        validation_alias=AliasChoices("realized_volatility", "volatility_regime"),
+    )
+    execution_risk: float = Field(
+        default=0.5,
+        validation_alias=AliasChoices("execution_risk", "slippage_risk"),
+    )
+    data_freshness: float = Field(
+        default=0.5,
+        validation_alias=AliasChoices("data_freshness", "freshness_score"),
+    )
+    news_signal_ref: str | None = None
+
+    @field_validator("liquidity_depth", "execution_risk", "data_freshness", mode="before")
+    @classmethod
+    def _clip_unit_fields(cls, value: Any) -> float:
+        return _clip_unit(value, default=0.5)
+
+
+class NewsTrustPayload(BaseModel):
+    """Normalized payload for news trust analysis."""
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+        str_strip_whitespace=True,
+    )
+
+    story_id: str = Field(
+        min_length=1,
+        validation_alias=AliasChoices("story_id", "headline"),
+    )
+    source_credibility: float = Field(default=0.5)
+    corroboration: float = Field(
+        default=0.5,
+        validation_alias=AliasChoices("corroboration", "source_agreement"),
+    )
+    contradiction_score: float = Field(default=0.5)
+    propagation_delay_seconds: float = Field(default=300.0, ge=0.0)
+    freshness_score: float = Field(default=0.5)
+    novelty: float | None = None
+
+    @field_validator(
+        "source_credibility",
+        "corroboration",
+        "contradiction_score",
+        "freshness_score",
+        mode="before",
+    )
+    @classmethod
+    def _clip_news_unit_fields(cls, value: Any) -> float:
+        return _clip_unit(value, default=0.5)
+
+    @field_validator("novelty", mode="before")
+    @classmethod
+    def _clip_optional_novelty(cls, value: Any) -> float | None:
+        if value is None:
+            return None
+        return _clip_unit(value, default=0.5)
+
+
 @runtime_checkable
 class TrustAgent(Protocol):
     """Protocol for in-repo domain trust agents."""
@@ -96,6 +178,24 @@ def coerce_normalized_trust_result(
     if isinstance(value, NormalizedTrustResult):
         return value
     return NormalizedTrustResult.model_validate(value)
+
+
+def coerce_financial_payload(
+    value: FinancialTrustPayload | dict[str, Any],
+) -> FinancialTrustPayload:
+    """Validate and normalize a financial trust payload."""
+    if isinstance(value, FinancialTrustPayload):
+        return value
+    return FinancialTrustPayload.model_validate(value)
+
+
+def coerce_news_payload(
+    value: NewsTrustPayload | dict[str, Any],
+) -> NewsTrustPayload:
+    """Validate and normalize a news trust payload."""
+    if isinstance(value, NewsTrustPayload):
+        return value
+    return NewsTrustPayload.model_validate(value)
 
 
 def normalized_result_to_legacy_metadata(
@@ -165,13 +265,29 @@ def _derive_calibration_status(score: float) -> str:
     return "poorly_calibrated"
 
 
+def _clip_unit(value: Any, default: float) -> float:
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return default
+    if number <= 0.0:
+        return 0.0
+    if number >= 1.0:
+        return 1.0
+    return number
+
+
 __all__ = [
+    "FinancialTrustPayload",
+    "NewsTrustPayload",
     "NormalizedTrustResult",
     "TrustAgent",
     "TrustAudit",
     "TrustComponent",
     "TrustEvidence",
     "TrustViolation",
+    "coerce_financial_payload",
+    "coerce_news_payload",
     "coerce_normalized_trust_result",
     "normalized_result_to_breakdown",
     "normalized_result_to_legacy_metadata",

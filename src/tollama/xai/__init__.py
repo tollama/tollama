@@ -26,6 +26,8 @@ __all__ = [
     "ScenarioRationale",
     "TrustBreakdown",
     "DecisionPolicyExplainer",
+    "FinancialTrustPayload",
+    "NewsTrustPayload",
     "NormalizedTrustResult",
     "TrustAgentRegistry",
     "TrustRouter",
@@ -41,7 +43,11 @@ try:
     from tollama.xai.scenario_rationale import ScenarioRationale
     from tollama.xai.trust_breakdown import TrustBreakdown
     from tollama.xai.decision_policy import DecisionPolicyExplainer
-    from tollama.xai.trust_contract import NormalizedTrustResult
+    from tollama.xai.trust_contract import (
+        FinancialTrustPayload,
+        NewsTrustPayload,
+        NormalizedTrustResult,
+    )
     from tollama.xai.trust_router import TrustAgentRegistry, TrustRouter
     from tollama.xai.model_card import ModelCardGenerator
     from tollama.xai.report_generator import DecisionReportBuilder
@@ -53,7 +59,11 @@ except ImportError:
     from xai.scenario_rationale import ScenarioRationale
     from xai.trust_breakdown import TrustBreakdown
     from xai.decision_policy import DecisionPolicyExplainer
-    from xai.trust_contract import NormalizedTrustResult
+    from xai.trust_contract import (
+        FinancialTrustPayload,
+        NewsTrustPayload,
+        NormalizedTrustResult,
+    )
     from xai.trust_router import TrustAgentRegistry, TrustRouter
     from xai.model_card import ModelCardGenerator
     from xai.report_generator import DecisionReportBuilder

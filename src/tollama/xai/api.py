@@ -17,8 +17,8 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
-from fastapi import APIRouter, Query
-from pydantic import BaseModel, Field
+from fastapi import APIRouter, HTTPException, Query
+from pydantic import BaseModel, Field, ValidationError
 
 router = APIRouter(prefix="/api/xai", tags=["xai"])
 
@@ -176,17 +176,20 @@ async def explain_decision(request: ExplainDecisionRequest):
     if request.trust_context:
         explain_options["trust_intelligence_context"] = request.trust_context
 
-    result = engine.explain_decision(
-        forecast_result=request.forecast_result,
-        eval_result=request.eval_result,
-        calibration_result=request.calibration_result,
-        trust_result=request.trust_result,
-        policy_config=request.policy_config,
-        time_series_data=request.time_series_data,
-        explain_options=explain_options,
-        trust_context=request.trust_context,
-        trust_payload=request.trust_payload,
-    )
+    try:
+        result = engine.explain_decision(
+            forecast_result=request.forecast_result,
+            eval_result=request.eval_result,
+            calibration_result=request.calibration_result,
+            trust_result=request.trust_result,
+            policy_config=request.policy_config,
+            time_series_data=request.time_series_data,
+            explain_options=explain_options,
+            trust_context=request.trust_context,
+            trust_payload=request.trust_payload,
+        )
+    except ValidationError as exc:
+        raise HTTPException(status_code=422, detail=exc.errors()) from exc
 
     return result.to_dict()
 
