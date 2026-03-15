@@ -225,6 +225,11 @@ external data feeds into the trust pipeline. The `ConnectorRegistry` resolves
 connectors by domain, and the `PayloadAssembler` converts connector output into
 trust-router-ready payloads.
 
+Both sync (`DataConnector`) and async (`AsyncDataConnector`) protocols are
+supported. The `ConnectorRegistry` / `AsyncConnectorRegistry` resolve connectors
+by domain, and the `PayloadAssembler` / `AsyncPayloadAssembler` convert connector
+output into trust-router-ready payloads.
+
 Available connectors:
 
 | Connector | Domain | Type |
@@ -237,6 +242,13 @@ Available connectors:
 | `HttpFinancialConnector` | financial_market | Live HTTP |
 | `HttpNewsConnector` | news | Live HTTP |
 | `HttpSupplyChainConnector` | supply_chain | Live HTTP |
+| `HttpGeopoliticalConnector` | geopolitical | Live HTTP |
+| `HttpRegulatoryConnector` | regulatory | Live HTTP |
+| `AsyncHttpFinancialConnector` | financial_market | Async HTTP |
+| `AsyncHttpNewsConnector` | news | Async HTTP |
+| `AsyncHttpSupplyChainConnector` | supply_chain | Async HTTP |
+| `AsyncHttpGeopoliticalConnector` | geopolitical | Async HTTP |
+| `AsyncHttpRegulatoryConnector` | regulatory | Async HTTP |
 
 ### Calibration
 
@@ -245,3 +257,18 @@ per agent. After accumulating enough observations (≥5), it computes per-compon
 weight adjustment factors in [0.5, 1.5] based on Pearson correlation with
 prediction residuals. Trust agents can optionally consume these adjustments to
 self-correct over time.
+
+Calibration data is persisted to `~/.tollama/xai/calibration.json` using atomic
+writes. The `TrustRouter` auto-loads calibration data on startup and auto-persists
+every 10 analyze calls. Use `tollama xai calibration` to inspect calibration stats.
+
+### CLI XAI Commands
+
+The `tollama xai` subcommand group exposes XAI functionality from the CLI:
+
+| Command | Description |
+|---------|-------------|
+| `tollama xai explain-decision --input <file>` | Run explanation engine on a forecast result |
+| `tollama xai trust-score --input <file>` | Compute trust score breakdown |
+| `tollama xai model-card --input <file>` | Generate EU AI Act model card |
+| `tollama xai calibration [agent]` | Show calibration stats for trust agents |

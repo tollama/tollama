@@ -2,9 +2,15 @@
 tollama.xai.connectors — External data feed connector protocol, stubs, and live connectors.
 """
 
-from tollama.xai.connectors.assembler import AssemblyResult, PayloadAssembler
+from tollama.xai.connectors.assembler import (
+    AssemblyResult,
+    AsyncPayloadAssembler,
+    PayloadAssembler,
+)
 from tollama.xai.connectors.helpers import (
     build_default_assembler,
+    build_default_async_assembler,
+    build_default_async_connector_registry,
     build_default_connector_registry,
 )
 from tollama.xai.connectors.live import (
@@ -26,7 +32,7 @@ from tollama.xai.connectors.protocol import (
     ConnectorResult,
     DataConnector,
 )
-from tollama.xai.connectors.registry import ConnectorRegistry
+from tollama.xai.connectors.registry import AsyncConnectorRegistry, ConnectorRegistry
 from tollama.xai.connectors.stubs import (
     MockFinancialConnector,
     MockGeopoliticalConnector,
@@ -37,12 +43,14 @@ from tollama.xai.connectors.stubs import (
 
 __all__ = [
     "AssemblyResult",
+    "AsyncConnectorRegistry",
     "AsyncDataConnector",
     "AsyncHttpFinancialConnector",
     "AsyncHttpGeopoliticalConnector",
     "AsyncHttpNewsConnector",
     "AsyncHttpRegulatoryConnector",
     "AsyncHttpSupplyChainConnector",
+    "AsyncPayloadAssembler",
     "ConnectorError",
     "ConnectorFetchError",
     "ConnectorRegistry",
@@ -60,5 +68,7 @@ __all__ = [
     "MockSupplyChainConnector",
     "PayloadAssembler",
     "build_default_assembler",
+    "build_default_async_assembler",
+    "build_default_async_connector_registry",
     "build_default_connector_registry",
 ]

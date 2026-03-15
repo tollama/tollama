@@ -4,6 +4,8 @@ tollama.xai.trust_router — Registry and router for domain trust agents.
 
 from __future__ import annotations
 
+import logging
+from pathlib import Path
 from typing import Any
 
 from tollama.xai.trust_contract import (
@@ -15,6 +17,8 @@ from tollama.xai.trust_contract import (
     TrustViolation,
     coerce_normalized_trust_result,
 )
+
+_log = logging.getLogger(__name__)
 
 
 class TrustAgentRegistry:
@@ -56,9 +60,16 @@ class TrustRouter:
         self,
         registry: TrustAgentRegistry,
         primary_order: dict[str, list[str]] | None = None,
+        calibration_tracker: Any | None = None,
+        calibration_path: Path | None = None,
+        auto_persist_every: int = 10,
     ):
         self.registry = registry
         self.primary_order = primary_order or self.DEFAULT_PRIMARY_ORDER
+        self.calibration_tracker = calibration_tracker
+        self._calibration_path = calibration_path
+        self._auto_persist_every = auto_persist_every
+        self._analyze_count = 0
 
     def select_agent(self, context: dict[str, Any]) -> TrustAgent | None:
         matches = self.registry.resolve(context)
@@ -83,7 +94,9 @@ class TrustRouter:
         agent = self.select_agent(context)
         if agent is None:
             return None
-        return coerce_normalized_trust_result(agent.analyze(payload))
+        result = coerce_normalized_trust_result(agent.analyze(payload))
+        self._maybe_auto_persist()
+        return result
 
     def analyze_multi(
         self,
@@ -97,10 +110,55 @@ class TrustRouter:
             return None
         agents = sorted(matches, key=lambda a: getattr(a, "priority", 100))
         results = [coerce_normalized_trust_result(a.analyze(payload)) for a in agents]
+        self._maybe_auto_persist()
         if len(results) == 1:
             return results[0]
         priorities = [getattr(a, "priority", 100) for a in agents]
         return _aggregate_trust_results(results, priorities)
+
+    def record_outcome(
+        self,
+        agent_name: str,
+        domain: str,
+        predicted_score: float,
+        actual_outcome: float,
+        component_scores: dict[str, float] | None = None,
+    ) -> None:
+        """Record a prediction-outcome pair for calibration learning.
+
+        Auto-persists to disk after every ``auto_persist_every`` calls.
+        """
+        if self.calibration_tracker is None:
+            return
+        self.calibration_tracker.record(
+            agent_name=agent_name,
+            domain=domain,
+            predicted_score=predicted_score,
+            actual_outcome=actual_outcome,
+            component_scores=component_scores or {},
+        )
+        self._maybe_auto_persist()
+
+    def persist_calibration(self) -> None:
+        """Manually persist calibration data to disk."""
+        if self.calibration_tracker is None or self._calibration_path is None:
+            return
+        try:
+            self.calibration_tracker.save(self._calibration_path)
+        except OSError:
+            _log.warning("Failed to persist calibration data", exc_info=True)
+
+    def _maybe_auto_persist(self) -> None:
+        """Persist calibration data every N analyze calls."""
+        if (
+            self.calibration_tracker is None
+            or self._calibration_path is None
+            or self._auto_persist_every <= 0
+        ):
+            return
+        self._analyze_count += 1
+        if self._analyze_count % self._auto_persist_every == 0:
+            self.persist_calibration()
 
 
 _RISK_ORDER = {"GREEN": 0, "YELLOW": 1, "RED": 2}
@@ -177,9 +235,14 @@ def _aggregate_trust_results(
     )
 
 
-def build_default_trust_router() -> TrustRouter:
-    """Build the default in-repo trust agent router."""
+def build_default_trust_router(*, enable_calibration: bool = True) -> TrustRouter:
+    """Build the default in-repo trust agent router.
+
+    When *enable_calibration* is True (default), loads persisted calibration
+    data from disk and auto-persists every 10 analyze calls.
+    """
     from tollama.xai.trust_agents import (
+        CalibrationTracker,
         FinancialMarketTrustAgent,
         GeopoliticalTrustAgent,
         MarketCalibrationTrustAgent,
@@ -187,6 +250,17 @@ def build_default_trust_router() -> TrustRouter:
         RegulatoryTrustAgent,
         SupplyChainTrustAgent,
     )
+    from tollama.xai.trust_agents.calibration import default_calibration_path
+
+    calibration_tracker = None
+    calibration_path = None
+    if enable_calibration:
+        calibration_path = default_calibration_path()
+        try:
+            calibration_tracker = CalibrationTracker.load(calibration_path)
+        except Exception:  # noqa: BLE001
+            _log.warning("Failed to load calibration data, starting fresh", exc_info=True)
+            calibration_tracker = CalibrationTracker()
 
     registry = TrustAgentRegistry()
     registry.register(MarketCalibrationTrustAgent())
@@ -196,7 +270,11 @@ def build_default_trust_router() -> TrustRouter:
     registry.register(NewsTrustAgent())
     registry.register(GeopoliticalTrustAgent())
     registry.register(RegulatoryTrustAgent())
-    router = TrustRouter(registry)
+    router = TrustRouter(
+        registry,
+        calibration_tracker=calibration_tracker,
+        calibration_path=calibration_path,
+    )
     financial_agent._trust_router = router
     return router
 

@@ -133,6 +133,18 @@ class DecisionReportRequest(BaseModel):
     format: str = Field(default="json", description="Output format: json, markdown")
 
 
+class DashboardTrustRequest(BaseModel):
+    """Request body for /api/dashboard/trust"""
+    domains: Optional[list[str]] = Field(
+        None,
+        description="Filter to specific domains. Omit for all.",
+    )
+    include_calibration: bool = Field(
+        default=True,
+        description="Include calibration stats in response.",
+    )
+
+
 # ──────────────────────────────────────────────────────────────
 # Endpoints
 # ──────────────────────────────────────────────────────────────
@@ -288,3 +300,75 @@ async def generate_decision_report(request: DecisionReportRequest):
     if request.format == "markdown":
         return {"format": "markdown", "content": builder.to_markdown(report)}
     return report
+
+
+# ──────────────────────────────────────────────────────────────
+# Dashboard Endpoints
+# ──────────────────────────────────────────────────────────────
+
+
+@router.get(
+    "/dashboard/agents",
+    summary="List registered trust agents",
+    description="Returns all trust agents with their domain and priority.",
+)
+async def dashboard_agents():
+    """GET /api/xai/dashboard/agents"""
+    from tollama.xai.trust_router import build_default_trust_router
+
+    router_instance = build_default_trust_router(enable_calibration=False)
+    agents = []
+    for agent in router_instance.registry.agents:
+        agents.append({
+            "agent_name": agent.agent_name,
+            "domain": agent.domain,
+            "priority": getattr(agent, "priority", 100),
+        })
+    return {"agents": agents}
+
+
+@router.post(
+    "/dashboard/trust",
+    summary="Trust dashboard summary",
+    description=(
+        "Returns trust agent overview with optional calibration stats. "
+        "Suitable for dashboard rendering."
+    ),
+)
+async def dashboard_trust(request: DashboardTrustRequest):
+    """POST /api/xai/dashboard/trust"""
+    from tollama.xai.trust_router import build_default_trust_router
+
+    router_instance = build_default_trust_router(
+        enable_calibration=request.include_calibration,
+    )
+
+    all_domains = {
+        "prediction_market", "financial_market", "supply_chain",
+        "news", "geopolitical", "regulatory",
+    }
+    domains = set(request.domains) if request.domains else all_domains
+
+    agent_summaries = []
+    for agent in router_instance.registry.agents:
+        if agent.domain not in domains:
+            continue
+        summary: dict[str, Any] = {
+            "agent_name": agent.agent_name,
+            "domain": agent.domain,
+            "priority": getattr(agent, "priority", 100),
+        }
+        agent_summaries.append(summary)
+
+    calibration_stats = []
+    if request.include_calibration and router_instance.calibration_tracker:
+        tracker = router_instance.calibration_tracker
+        for name in tracker.agents:
+            stats = tracker.get_calibration_stats(name)
+            calibration_stats.append(stats.model_dump(mode="json"))
+
+    return {
+        "agents": agent_summaries,
+        "calibration": calibration_stats,
+        "domains": sorted(domains),
+    }

@@ -49,10 +49,12 @@ app = typer.Typer(help="Ollama-style command-line interface for tollama.")
 config_app = typer.Typer(help="Manage local tollama defaults in ~/.tollama/config.json.")
 runtime_app = typer.Typer(help="Manage per-family isolated runner environments.")
 modelfile_app = typer.Typer(help="Manage TSModelfile forecast profiles.")
+xai_app = typer.Typer(help="XAI explainability, trust scoring, and model card generation.")
 app.add_typer(config_app, name="config")
 app.add_typer(runtime_app, name="runtime")
 app.add_typer(modelfile_app, name="modelfile")
 app.add_typer(dev_app, name="dev")
+app.add_typer(xai_app, name="xai")
 
 _CONFIG_KEY_PATHS: dict[str, tuple[str, str]] = {
     key: cast(tuple[str, str], tuple(key.split(".", maxsplit=1)))
@@ -2324,6 +2326,140 @@ def _dashboard_url(base_url: str) -> str:
     if not normalized:
         normalized = DEFAULT_BASE_URL
     return f"{normalized}/dashboard"
+
+
+# ──────────────────────────────────────────────────────────────
+# XAI Sub-commands
+# ──────────────────────────────────────────────────────────────
+
+
+@xai_app.command("explain-decision")
+def xai_explain_decision(
+    input_path: Path = typer.Option(
+        ...,
+        "--input",
+        exists=True,
+        file_okay=True,
+        dir_okay=False,
+        help="JSON file containing the explain-decision request payload.",
+    ),
+    base_url: str = typer.Option(
+        DEFAULT_BASE_URL,
+        help="Daemon base URL.",
+    ),
+    timeout: float = typer.Option(
+        _RUN_TIMEOUT_SECONDS,
+        min=0.1,
+        help="HTTP timeout in seconds.",
+    ),
+) -> None:
+    """Run the XAI explanation engine on a forecast result."""
+    payload = json.loads(input_path.read_text())
+    client = _make_client(base_url=base_url, timeout=timeout)
+    try:
+        result = client.explain_decision(payload)
+    except RuntimeError as exc:
+        _exit_with_runtime_error(exc)
+    typer.echo(json.dumps(result, indent=2, sort_keys=True))
+
+
+@xai_app.command("trust-score")
+def xai_trust_score(
+    input_path: Path = typer.Option(
+        ...,
+        "--input",
+        exists=True,
+        file_okay=True,
+        dir_okay=False,
+        help="JSON file containing the trust-breakdown request payload.",
+    ),
+    base_url: str = typer.Option(
+        DEFAULT_BASE_URL,
+        help="Daemon base URL.",
+    ),
+    timeout: float = typer.Option(
+        _RUN_TIMEOUT_SECONDS,
+        min=0.1,
+        help="HTTP timeout in seconds.",
+    ),
+) -> None:
+    """Compute a trust score breakdown for a decision payload."""
+    payload = json.loads(input_path.read_text())
+    client = _make_client(base_url=base_url, timeout=timeout)
+    try:
+        result = client.trust_breakdown(payload)
+    except RuntimeError as exc:
+        _exit_with_runtime_error(exc)
+    typer.echo(json.dumps(result, indent=2, sort_keys=True))
+
+
+@xai_app.command("model-card")
+def xai_model_card(
+    input_path: Path = typer.Option(
+        ...,
+        "--input",
+        exists=True,
+        file_okay=True,
+        dir_okay=False,
+        help="JSON file containing the model-card request payload.",
+    ),
+    markdown: bool = typer.Option(
+        False,
+        "--markdown",
+        help="Request markdown format output.",
+    ),
+    base_url: str = typer.Option(
+        DEFAULT_BASE_URL,
+        help="Daemon base URL.",
+    ),
+    timeout: float = typer.Option(
+        _RUN_TIMEOUT_SECONDS,
+        min=0.1,
+        help="HTTP timeout in seconds.",
+    ),
+) -> None:
+    """Generate an EU AI Act model card."""
+    payload = json.loads(input_path.read_text())
+    if markdown:
+        payload.setdefault("format", "markdown")
+    client = _make_client(base_url=base_url, timeout=timeout)
+    try:
+        result = client.model_card(payload)
+    except RuntimeError as exc:
+        _exit_with_runtime_error(exc)
+    content = result.get("content") if markdown else None
+    if content:
+        typer.echo(content)
+    else:
+        typer.echo(json.dumps(result, indent=2, sort_keys=True))
+
+
+@xai_app.command("calibration")
+def xai_calibration(
+    agent: str | None = typer.Argument(
+        None,
+        help="Agent name to show calibration stats for. Omit to list all agents.",
+    ),
+) -> None:
+    """Show calibration stats for trust agents."""
+    from tollama.xai.trust_agents.calibration import CalibrationTracker, default_calibration_path
+
+    cal_path = default_calibration_path()
+    if not cal_path.is_file():
+        typer.echo("No calibration data found.")
+        raise typer.Exit(code=0)
+
+    tracker = CalibrationTracker.load(cal_path)
+    if agent:
+        stats = tracker.get_calibration_stats(agent)
+        typer.echo(json.dumps(stats.model_dump(mode="json"), indent=2, sort_keys=True))
+    else:
+        if not tracker.agents:
+            typer.echo("No calibration data recorded yet.")
+            raise typer.Exit(code=0)
+        for name in tracker.agents:
+            stats = tracker.get_calibration_stats(name)
+            typer.echo(json.dumps(stats.model_dump(mode="json"), indent=2, sort_keys=True))
 
 
 def main() -> None:
