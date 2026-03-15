@@ -167,9 +167,9 @@ class TestPayloadAssembler:
     def test_raises_on_unknown_domain(self):
         assembler = build_default_assembler()
         with pytest.raises(ConnectorFetchError) as exc_info:
-            assembler.assemble("geopolitical", "region-1")
+            assembler.assemble("unknown_domain", "region-1")
         assert exc_info.value.error.error_type == "not_found"
-        assert exc_info.value.error.domain == "geopolitical"
+        assert exc_info.value.error.domain == "unknown_domain"
 
 
 # ── End-to-end ────────────────────────────────────────────────────────

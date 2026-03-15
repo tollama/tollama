@@ -90,8 +90,64 @@ class MockSupplyChainConnector:
         )
 
 
+class MockGeopoliticalConnector:
+    """Mock connector producing GeopoliticalTrustPayload-compatible data."""
+
+    connector_name = "mock_geopolitical"
+    domain = "geopolitical"
+
+    def supports(self, identifier: str, context: dict[str, Any]) -> bool:
+        return True
+
+    def fetch(self, identifier: str, context: dict[str, Any]) -> ConnectorResult:
+        return ConnectorResult(
+            domain=self.domain,
+            payload={
+                "region_id": identifier,
+                "political_stability": 0.7,
+                "sanctions_exposure": 0.2,
+                "conflict_proximity": 0.15,
+                "regulatory_alignment": 0.8,
+                "data_freshness": 0.85,
+            },
+            source_id=identifier,
+            source_type="country_risk",
+            freshness_seconds=600.0,
+            metadata={"connector": "mock_geopolitical", "version": "0.1.0"},
+        )
+
+
+class MockRegulatoryConnector:
+    """Mock connector producing RegulatoryTrustPayload-compatible data."""
+
+    connector_name = "mock_regulatory"
+    domain = "regulatory"
+
+    def supports(self, identifier: str, context: dict[str, Any]) -> bool:
+        return True
+
+    def fetch(self, identifier: str, context: dict[str, Any]) -> ConnectorResult:
+        return ConnectorResult(
+            domain=self.domain,
+            payload={
+                "jurisdiction_id": identifier,
+                "compliance_score": 0.85,
+                "enforcement_risk": 0.2,
+                "reporting_quality": 0.75,
+                "audit_recency": 0.8,
+                "data_freshness": 0.7,
+            },
+            source_id=identifier,
+            source_type="compliance",
+            freshness_seconds=3600.0,
+            metadata={"connector": "mock_regulatory", "version": "0.1.0"},
+        )
+
+
 __all__ = [
     "MockFinancialConnector",
+    "MockGeopoliticalConnector",
     "MockNewsConnector",
+    "MockRegulatoryConnector",
     "MockSupplyChainConnector",
 ]

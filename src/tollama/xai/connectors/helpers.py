@@ -8,7 +8,9 @@ from tollama.xai.connectors.assembler import PayloadAssembler
 from tollama.xai.connectors.registry import ConnectorRegistry
 from tollama.xai.connectors.stubs import (
     MockFinancialConnector,
+    MockGeopoliticalConnector,
     MockNewsConnector,
+    MockRegulatoryConnector,
     MockSupplyChainConnector,
 )
 
@@ -19,6 +21,8 @@ def build_default_connector_registry() -> ConnectorRegistry:
     registry.register(MockFinancialConnector())
     registry.register(MockNewsConnector())
     registry.register(MockSupplyChainConnector())
+    registry.register(MockGeopoliticalConnector())
+    registry.register(MockRegulatoryConnector())
     return registry
 
 

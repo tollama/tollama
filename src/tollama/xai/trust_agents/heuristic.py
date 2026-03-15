@@ -8,15 +8,19 @@ from typing import Any
 
 from tollama.xai.trust_contract import (
     FinancialTrustPayload,
+    GeopoliticalTrustPayload,
     NewsTrustPayload,
     NormalizedTrustResult,
+    RegulatoryTrustPayload,
     SupplyChainTrustPayload,
     TrustAudit,
     TrustComponent,
     TrustEvidence,
     TrustViolation,
     coerce_financial_payload,
+    coerce_geopolitical_payload,
     coerce_news_payload,
+    coerce_regulatory_payload,
     coerce_supply_chain_payload,
 )
 
@@ -87,7 +91,21 @@ def _build_result(
     source_type: str,
     source_id: str,
     evidence_attributes: dict[str, Any] | None = None,
+    calibration_tracker: Any | None = None,
 ) -> NormalizedTrustResult:
+    if calibration_tracker is not None:
+        adjustments = calibration_tracker.get_weight_adjustments(agent_name)
+        if adjustments:
+            component_breakdown = {
+                name: TrustComponent(
+                    score=comp.score,
+                    weight=comp.weight * adjustments.get(name, 1.0),
+                    value=comp.value,
+                    assessment=comp.assessment,
+                    rationale=comp.rationale,
+                )
+                for name, comp in component_breakdown.items()
+            }
     total_weight = sum(component.weight for component in component_breakdown.values()) or 1.0
     trust_score = sum(
         component.score * component.weight for component in component_breakdown.values()
@@ -610,4 +628,342 @@ class NewsTrustAgent:
             evidence_attributes={
                 "novelty": normalized.novelty,
             },
+        )
+
+
+def _geopolitical_component_breakdown(
+    payload: GeopoliticalTrustPayload,
+) -> dict[str, TrustComponent]:
+    return {
+        "political_stability": TrustComponent(
+            score=payload.political_stability,
+            weight=0.30,
+            value=payload.political_stability,
+            assessment="higher_is_better",
+            rationale="Higher political stability indicates a more predictable environment.",
+        ),
+        "sanctions_exposure": TrustComponent(
+            score=1.0 - payload.sanctions_exposure,
+            weight=0.25,
+            value=payload.sanctions_exposure,
+            assessment="lower_is_better",
+            rationale="Lower sanctions exposure reduces compliance and operational risk.",
+        ),
+        "conflict_proximity": TrustComponent(
+            score=1.0 - payload.conflict_proximity,
+            weight=0.20,
+            value=payload.conflict_proximity,
+            assessment="lower_is_better",
+            rationale="Distance from conflict zones improves operational trust.",
+        ),
+        "regulatory_alignment": TrustComponent(
+            score=payload.regulatory_alignment,
+            weight=0.15,
+            value=payload.regulatory_alignment,
+            assessment="higher_is_better",
+            rationale="Higher regulatory alignment reduces cross-border risk.",
+        ),
+        "data_freshness": TrustComponent(
+            score=payload.data_freshness,
+            weight=0.10,
+            value=payload.data_freshness,
+            assessment="higher_is_better",
+            rationale="Fresh geopolitical data reduces stale-signal risk.",
+        ),
+    }
+
+
+def _geopolitical_violations(
+    payload: GeopoliticalTrustPayload,
+) -> list[TrustViolation]:
+    violations: list[TrustViolation] = []
+    if payload.sanctions_exposure >= 0.8:
+        violations.append(
+            TrustViolation(
+                name="sanctions_exposure_extreme",
+                severity="critical",
+                type="sanctions",
+                detail="Sanctions exposure is too high for automated decisioning.",
+            )
+        )
+    elif payload.sanctions_exposure >= 0.6:
+        violations.append(
+            TrustViolation(
+                name="sanctions_exposure_elevated",
+                severity="warning",
+                type="sanctions",
+                detail="Sanctions exposure is elevated and should be reviewed.",
+            )
+        )
+
+    if payload.conflict_proximity >= 0.8:
+        violations.append(
+            TrustViolation(
+                name="conflict_proximity_extreme",
+                severity="critical",
+                type="conflict",
+                detail="Conflict proximity is too high for trusted operations.",
+            )
+        )
+    elif payload.conflict_proximity >= 0.6:
+        violations.append(
+            TrustViolation(
+                name="conflict_proximity_elevated",
+                severity="warning",
+                type="conflict",
+                detail="Conflict proximity is elevated.",
+            )
+        )
+
+    if payload.political_stability <= 0.2:
+        violations.append(
+            TrustViolation(
+                name="political_stability_critical",
+                severity="critical",
+                type="stability",
+                detail="Political stability is critically low.",
+            )
+        )
+    elif payload.political_stability <= 0.4:
+        violations.append(
+            TrustViolation(
+                name="political_stability_low",
+                severity="warning",
+                type="stability",
+                detail="Political stability is below acceptable threshold.",
+            )
+        )
+
+    if payload.data_freshness <= 0.10:
+        violations.append(
+            TrustViolation(
+                name="geo_data_stale",
+                severity="critical",
+                type="freshness",
+                detail="Geopolitical data is stale for trusted scoring.",
+            )
+        )
+    elif payload.data_freshness <= 0.25:
+        violations.append(
+            TrustViolation(
+                name="geo_data_aging",
+                severity="warning",
+                type="freshness",
+                detail="Geopolitical data freshness is deteriorating.",
+            )
+        )
+    return violations
+
+
+def _geopolitical_why_trusted(
+    payload: GeopoliticalTrustPayload,
+    violations: list[TrustViolation],
+) -> str:
+    base = (
+        f"Stability={payload.political_stability:.2f}, sanctions={payload.sanctions_exposure:.2f}, "
+        f"conflict={payload.conflict_proximity:.2f}, alignment={payload.regulatory_alignment:.2f}, "
+        f"freshness={payload.data_freshness:.2f}."
+    )
+    if not violations:
+        return f"Geopolitical signal is decision-ready. {base}"
+    return f"Geopolitical signal requires caution. {base}"
+
+
+class GeopoliticalTrustAgent:
+    """Schema-aware trust agent for geopolitical risk domains."""
+
+    agent_name = "geopolitical"
+    domain = "geopolitical"
+    priority = 50
+
+    def supports(self, context: dict[str, Any]) -> bool:
+        domain = str(context.get("domain", ""))
+        source_type = str(context.get("source_type", ""))
+        return domain == self.domain or source_type in {
+            "geopolitical",
+            "country_risk",
+            "sanctions",
+        }
+
+    def analyze(self, payload: dict[str, Any]) -> NormalizedTrustResult:
+        normalized = coerce_geopolitical_payload(payload)
+        components = _geopolitical_component_breakdown(normalized)
+        violations = _geopolitical_violations(normalized)
+        return _build_result(
+            agent_name=self.agent_name,
+            domain=self.domain,
+            component_breakdown=components,
+            violations=violations,
+            why_trusted=_geopolitical_why_trusted(normalized, violations),
+            source_type="geopolitical",
+            source_id=normalized.region_id,
+        )
+
+
+def _regulatory_component_breakdown(
+    payload: RegulatoryTrustPayload,
+) -> dict[str, TrustComponent]:
+    return {
+        "compliance_score": TrustComponent(
+            score=payload.compliance_score,
+            weight=0.30,
+            value=payload.compliance_score,
+            assessment="higher_is_better",
+            rationale="Higher compliance score indicates better regulatory adherence.",
+        ),
+        "enforcement_risk": TrustComponent(
+            score=1.0 - payload.enforcement_risk,
+            weight=0.25,
+            value=payload.enforcement_risk,
+            assessment="lower_is_better",
+            rationale="Lower enforcement risk reduces regulatory exposure.",
+        ),
+        "reporting_quality": TrustComponent(
+            score=payload.reporting_quality,
+            weight=0.20,
+            value=payload.reporting_quality,
+            assessment="higher_is_better",
+            rationale="Higher reporting quality improves transparency trust.",
+        ),
+        "audit_recency": TrustComponent(
+            score=payload.audit_recency,
+            weight=0.15,
+            value=payload.audit_recency,
+            assessment="higher_is_better",
+            rationale="Recent audits provide more current assurance.",
+        ),
+        "data_freshness": TrustComponent(
+            score=payload.data_freshness,
+            weight=0.10,
+            value=payload.data_freshness,
+            assessment="higher_is_better",
+            rationale="Fresh regulatory data reduces stale-signal risk.",
+        ),
+    }
+
+
+def _regulatory_violations(
+    payload: RegulatoryTrustPayload,
+) -> list[TrustViolation]:
+    violations: list[TrustViolation] = []
+    if payload.compliance_score <= 0.2:
+        violations.append(
+            TrustViolation(
+                name="compliance_critical",
+                severity="critical",
+                type="compliance",
+                detail="Compliance score is critically low for trusted operations.",
+            )
+        )
+    elif payload.compliance_score <= 0.4:
+        violations.append(
+            TrustViolation(
+                name="compliance_low",
+                severity="warning",
+                type="compliance",
+                detail="Compliance score is below acceptable threshold.",
+            )
+        )
+
+    if payload.enforcement_risk >= 0.8:
+        violations.append(
+            TrustViolation(
+                name="enforcement_risk_extreme",
+                severity="critical",
+                type="enforcement",
+                detail="Enforcement risk is too high for automated decisioning.",
+            )
+        )
+    elif payload.enforcement_risk >= 0.6:
+        violations.append(
+            TrustViolation(
+                name="enforcement_risk_elevated",
+                severity="warning",
+                type="enforcement",
+                detail="Enforcement risk is elevated and should be reviewed.",
+            )
+        )
+
+    if payload.reporting_quality <= 0.2:
+        violations.append(
+            TrustViolation(
+                name="reporting_quality_critical",
+                severity="critical",
+                type="reporting",
+                detail="Reporting quality is critically low.",
+            )
+        )
+    elif payload.reporting_quality <= 0.4:
+        violations.append(
+            TrustViolation(
+                name="reporting_quality_low",
+                severity="warning",
+                type="reporting",
+                detail="Reporting quality is below acceptable threshold.",
+            )
+        )
+
+    if payload.audit_recency <= 0.1:
+        violations.append(
+            TrustViolation(
+                name="audit_recency_stale",
+                severity="critical",
+                type="audit",
+                detail="Audit recency is critically low.",
+            )
+        )
+    elif payload.audit_recency <= 0.25:
+        violations.append(
+            TrustViolation(
+                name="audit_recency_aging",
+                severity="warning",
+                type="audit",
+                detail="Audit recency is deteriorating.",
+            )
+        )
+    return violations
+
+
+def _regulatory_why_trusted(
+    payload: RegulatoryTrustPayload,
+    violations: list[TrustViolation],
+) -> str:
+    base = (
+        f"Compliance={payload.compliance_score:.2f}, enforcement={payload.enforcement_risk:.2f}, "
+        f"reporting={payload.reporting_quality:.2f}, audit={payload.audit_recency:.2f}, "
+        f"freshness={payload.data_freshness:.2f}."
+    )
+    if not violations:
+        return f"Regulatory signal is decision-ready. {base}"
+    return f"Regulatory signal requires caution. {base}"
+
+
+class RegulatoryTrustAgent:
+    """Schema-aware trust agent for regulatory and compliance domains."""
+
+    agent_name = "regulatory"
+    domain = "regulatory"
+    priority = 60
+
+    def supports(self, context: dict[str, Any]) -> bool:
+        domain = str(context.get("domain", ""))
+        source_type = str(context.get("source_type", ""))
+        return domain == self.domain or source_type in {
+            "regulatory",
+            "compliance",
+            "legal",
+        }
+
+    def analyze(self, payload: dict[str, Any]) -> NormalizedTrustResult:
+        normalized = coerce_regulatory_payload(payload)
+        components = _regulatory_component_breakdown(normalized)
+        violations = _regulatory_violations(normalized)
+        return _build_result(
+            agent_name=self.agent_name,
+            domain=self.domain,
+            component_breakdown=components,
+            violations=violations,
+            why_trusted=_regulatory_why_trusted(normalized, violations),
+            source_type="regulatory",
+            source_id=normalized.jurisdiction_id,
         )

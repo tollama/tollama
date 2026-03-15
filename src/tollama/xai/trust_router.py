@@ -48,6 +48,8 @@ class TrustRouter:
         "financial_market": ["financial_market"],
         "supply_chain": ["supply_chain"],
         "news": ["news"],
+        "geopolitical": ["geopolitical"],
+        "regulatory": ["regulatory"],
     }
 
     def __init__(
@@ -179,8 +181,10 @@ def build_default_trust_router() -> TrustRouter:
     """Build the default in-repo trust agent router."""
     from tollama.xai.trust_agents import (
         FinancialMarketTrustAgent,
+        GeopoliticalTrustAgent,
         MarketCalibrationTrustAgent,
         NewsTrustAgent,
+        RegulatoryTrustAgent,
         SupplyChainTrustAgent,
     )
 
@@ -190,6 +194,8 @@ def build_default_trust_router() -> TrustRouter:
     registry.register(financial_agent)
     registry.register(SupplyChainTrustAgent())
     registry.register(NewsTrustAgent())
+    registry.register(GeopoliticalTrustAgent())
+    registry.register(RegulatoryTrustAgent())
     router = TrustRouter(registry)
     financial_agent._trust_router = router
     return router

@@ -201,6 +201,76 @@ class SupplyChainTrustPayload(BaseModel):
             object.__setattr__(self, "data_freshness", converted)
 
 
+class GeopoliticalTrustPayload(BaseModel):
+    """Normalized payload for geopolitical trust analysis."""
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+        str_strip_whitespace=True,
+    )
+
+    region_id: str = Field(
+        min_length=1,
+        validation_alias=AliasChoices("region_id", "country_code", "geo_zone"),
+    )
+    political_stability: float = Field(default=0.5)
+    sanctions_exposure: float = Field(default=0.5)
+    conflict_proximity: float = Field(default=0.5)
+    regulatory_alignment: float = Field(default=0.5)
+    data_freshness: float = Field(
+        default=0.5,
+        validation_alias=AliasChoices("data_freshness", "freshness_score"),
+    )
+
+    @field_validator(
+        "political_stability",
+        "sanctions_exposure",
+        "conflict_proximity",
+        "regulatory_alignment",
+        "data_freshness",
+        mode="before",
+    )
+    @classmethod
+    def _clip_unit_fields(cls, value: Any) -> float:
+        return _clip_unit(value, default=0.5)
+
+
+class RegulatoryTrustPayload(BaseModel):
+    """Normalized payload for regulatory trust analysis."""
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+        str_strip_whitespace=True,
+    )
+
+    jurisdiction_id: str = Field(
+        min_length=1,
+        validation_alias=AliasChoices("jurisdiction_id", "regulation_id", "compliance_scope"),
+    )
+    compliance_score: float = Field(default=0.5)
+    enforcement_risk: float = Field(default=0.5)
+    reporting_quality: float = Field(default=0.5)
+    audit_recency: float = Field(default=0.5)
+    data_freshness: float = Field(
+        default=0.5,
+        validation_alias=AliasChoices("data_freshness", "freshness_score"),
+    )
+
+    @field_validator(
+        "compliance_score",
+        "enforcement_risk",
+        "reporting_quality",
+        "audit_recency",
+        "data_freshness",
+        mode="before",
+    )
+    @classmethod
+    def _clip_unit_fields(cls, value: Any) -> float:
+        return _clip_unit(value, default=0.5)
+
+
 @runtime_checkable
 class TrustAgent(Protocol):
     """Protocol for in-repo domain trust agents."""
@@ -248,6 +318,24 @@ def coerce_supply_chain_payload(
     if isinstance(value, SupplyChainTrustPayload):
         return value
     return SupplyChainTrustPayload.model_validate(value)
+
+
+def coerce_geopolitical_payload(
+    value: GeopoliticalTrustPayload | dict[str, Any],
+) -> GeopoliticalTrustPayload:
+    """Validate and normalize a geopolitical trust payload."""
+    if isinstance(value, GeopoliticalTrustPayload):
+        return value
+    return GeopoliticalTrustPayload.model_validate(value)
+
+
+def coerce_regulatory_payload(
+    value: RegulatoryTrustPayload | dict[str, Any],
+) -> RegulatoryTrustPayload:
+    """Validate and normalize a regulatory trust payload."""
+    if isinstance(value, RegulatoryTrustPayload):
+        return value
+    return RegulatoryTrustPayload.model_validate(value)
 
 
 def normalized_result_to_legacy_metadata(
@@ -331,8 +419,10 @@ def _clip_unit(value: Any, default: float) -> float:
 
 __all__ = [
     "FinancialTrustPayload",
+    "GeopoliticalTrustPayload",
     "NewsTrustPayload",
     "NormalizedTrustResult",
+    "RegulatoryTrustPayload",
     "SupplyChainTrustPayload",
     "TrustAgent",
     "TrustAudit",
@@ -340,8 +430,10 @@ __all__ = [
     "TrustEvidence",
     "TrustViolation",
     "coerce_financial_payload",
+    "coerce_geopolitical_payload",
     "coerce_news_payload",
     "coerce_normalized_trust_result",
+    "coerce_regulatory_payload",
     "coerce_supply_chain_payload",
     "normalized_result_to_breakdown",
     "normalized_result_to_legacy_metadata",
