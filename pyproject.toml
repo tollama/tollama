@@ -120,7 +120,7 @@ runner_toto = [
 runner_lag_llama = [
   "lag-llama @ git+https://github.com/time-series-foundation-models/lag-llama.git",
   "gluonts>=0.14.0,<0.16.0",
-  "lightning>=2.0,<2.2",
+  "lightning>=2.0,<2.7",
   "huggingface_hub>=0.20,<2.0",
   "numpy>=1.26,<3.0",
   "pandas>=2.0,<3.0",
