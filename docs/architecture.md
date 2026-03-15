@@ -50,6 +50,13 @@ graph TD
         CONFIG[Configuration]
     end
 
+    subgraph XAI ["XAI Layer"]
+        ENGINE[Explanation Engine]
+        TRUST[Trust Router<br/>+ Domain Agents]
+        CONNECTORS[Data Connectors<br/>Live + Mock]
+        CALIBRATION[Calibration Tracker]
+    end
+
     CLI --> ROUTES
     SDK --> ROUTES
     MCP --> ROUTES
@@ -74,6 +81,11 @@ graph TD
     SUPER --> NHITS
     SUPER --> NBEATSX
 
+    ROUTES --> ENGINE
+    ENGINE --> TRUST
+    TRUST --> CONNECTORS
+    TRUST --> CALIBRATION
+
     ROUTES --> SCHEMAS
     SUPER --> SCHEMAS
     ROUTES --> REGISTRY
@@ -93,6 +105,7 @@ graph TD
 | **MCP** | `src/tollama/mcp/` | MCP server and tool handlers |
 | **SDK** | `src/tollama/sdk.py` | High-level Python API with workflow chaining |
 | **Skills** | `src/tollama/skill/` | Agent framework wrappers |
+| **XAI** | `src/tollama/xai/` | Explainability, trust scoring, decision policy, connectors |
 
 ## Key Boundaries
 
@@ -101,6 +114,8 @@ graph TD
 - **Core is the shared contract layer.** All request/response types live here.
 - **Each runner family is independently installable** via optional extras
   (`runner_torch`, `runner_timesfm`, etc.).
+- **XAI layer is post-inference.** It consumes forecast results and produces
+  explanations, trust scores, and decision reports — it never touches model inference.
 
 ---
 
@@ -169,3 +184,64 @@ The full spec lives in `src/tollama/core/protocol.py`.
 **Implementing a new runner:** Spawn a process that reads JSON-line requests from
 stdin and writes JSON-line responses to stdout, implementing the six methods above.
 Use `tollama dev scaffold <family>` to generate the boilerplate.
+
+---
+
+## XAI Trust Agent Architecture
+
+The XAI layer (`src/tollama/xai/`) provides explainability, trust scoring, and
+decision policy evaluation for forecast-driven decisions. It operates entirely
+post-inference.
+
+### Components
+
+| Component | Module | Purpose |
+|-----------|--------|---------|
+| Explanation Engine | `xai/engine.py` | Orchestrates all XAI sub-components into a unified explanation |
+| Trust Router | `xai/trust_router.py` | Routes payloads to domain-specific trust agents, supports multi-agent aggregation |
+| Trust Agents | `xai/trust_agents/` | Domain-specific trust scoring (heuristic + MCA) |
+| Data Connectors | `xai/connectors/` | External data feed protocol with live HTTP and mock stub implementations |
+| Calibration Tracker | `xai/trust_agents/calibration.py` | Learned weight adjustments from outcome feedback |
+| Decision Policy | `xai/decision_policy.py` | Applies policy rules to trust-scored results |
+| Forecast Decompose | `xai/forecast_decompose.py` | Trend/seasonal/residual decomposition |
+| Feature Attribution | `xai/feature_attribution.py` | Temporal SHAP-style feature importance |
+| Model Card | `xai/model_card.py` | EU AI Act model card generation |
+
+### Trust Agent Domains
+
+| Domain | Agent | Source Types | Key Metrics |
+|--------|-------|-------------|-------------|
+| `prediction_market` | MarketCalibrationTrustAgent | polymarket, metaculus, manifold | brier_score, log_loss, ECE |
+| `financial_market` | FinancialMarketTrustAgent | financial, equity, derivatives | volatility, liquidity, data_freshness |
+| `news` | NewsTrustAgent | news, media, social_media | source_credibility, corroboration, recency |
+| `supply_chain` | SupplyChainTrustAgent | supply_chain, logistics, inventory | supplier_reliability, lead_time_variance, data_freshness |
+| `geopolitical` | GeopoliticalTrustAgent | geopolitical, country_risk, sanctions | political_stability, sanctions_exposure, conflict_proximity |
+| `regulatory` | RegulatoryTrustAgent | regulatory, compliance, legal | compliance_score, enforcement_risk, reporting_quality |
+
+### Data Connector Protocol
+
+Connectors implement the `DataConnector` runtime-checkable protocol to bridge
+external data feeds into the trust pipeline. The `ConnectorRegistry` resolves
+connectors by domain, and the `PayloadAssembler` converts connector output into
+trust-router-ready payloads.
+
+Available connectors:
+
+| Connector | Domain | Type |
+|-----------|--------|------|
+| `MockFinancialConnector` | financial_market | Stub |
+| `MockNewsConnector` | news | Stub |
+| `MockSupplyChainConnector` | supply_chain | Stub |
+| `MockGeopoliticalConnector` | geopolitical | Stub |
+| `MockRegulatoryConnector` | regulatory | Stub |
+| `HttpFinancialConnector` | financial_market | Live HTTP |
+| `HttpNewsConnector` | news | Live HTTP |
+| `HttpSupplyChainConnector` | supply_chain | Live HTTP |
+
+### Calibration
+
+The `CalibrationTracker` maintains a sliding window of prediction-outcome pairs
+per agent. After accumulating enough observations (≥5), it computes per-component
+weight adjustment factors in [0.5, 1.5] based on Pearson correlation with
+prediction residuals. Trust agents can optionally consume these adjustments to
+self-correct over time.

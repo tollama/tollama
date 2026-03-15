@@ -58,7 +58,8 @@ class ExplainDecisionRequest(BaseModel):
         None,
         description=(
             "Context for trust agent routing. Keys: 'domain' (prediction_market|"
-            "financial_market|supply_chain|news), 'source_type' (optional refinement), "
+            "financial_market|supply_chain|news|geopolitical|regulatory), "
+            "'source_type' (optional refinement), "
             "'mode' ('single' default or 'multi' for multi-agent aggregation)."
         ),
     )
@@ -67,7 +68,8 @@ class ExplainDecisionRequest(BaseModel):
         description=(
             "Payload routed through the default trust-agent registry. "
             "Schema depends on domain: financial_market requires 'instrument_id', "
-            "news requires 'story_id', supply_chain requires 'network_id'."
+            "news requires 'story_id', supply_chain requires 'network_id', "
+            "geopolitical requires 'region_id', regulatory requires 'jurisdiction_id'."
         ),
     )
 

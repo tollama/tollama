@@ -92,6 +92,16 @@ Authorization: Bearer <api-key>
 | POST | `/api/report` | Composite report (analysis + recommendation + forecast) |
 | POST | `/api/pipeline` | End-to-end autonomous pipeline |
 
+### XAI (Explainability & Trust)
+
+| Method | Path | Purpose |
+|---|---|---|
+| POST | `/api/xai/explain-decision` | End-to-end decision explanation (trust-aware) |
+| POST | `/api/xai/trust-breakdown` | Trust Score component breakdown |
+| POST | `/api/xai/forecast-decompose` | Trend/seasonal/residual decomposition |
+| POST | `/api/xai/model-card` | Generate EU AI Act model card |
+| POST | `/api/xai/decision-report` | Build structured decision or explanation report |
+
 ### A2A
 
 | Method | Path | Purpose |
@@ -99,6 +109,74 @@ Authorization: Bearer <api-key>
 | GET | `/.well-known/agent-card.json` | A2A discovery card |
 | GET | `/.well-known/agent.json` | Legacy alias (not in OpenAPI schema) |
 | POST | `/a2a` | A2A JSON-RPC endpoint |
+
+---
+
+## XAI Endpoint Schemas
+
+### `POST /api/xai/explain-decision`
+
+Assembles evidence from eval, calibration, policy, and trust-intelligence layers
+into a unified Decision Explanation.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `forecast_result` | object | yes | Output from tollama forecast endpoint |
+| `eval_result` | object | no | Output from tollama-eval |
+| `calibration_result` | object | no | Output from Market Calibration Agent |
+| `trust_result` | object | no | Normalized output from a domain trust agent |
+| `policy_config` | object | no | Decision policy configuration |
+| `time_series_data` | array of float | no | Raw time series for decomposition |
+| `explain_options` | object | no | Control explanation depth (`decompose`, `attribution`) |
+| `trust_features` | object | no | Features for SHAP attribution in trust pipeline |
+| `trust_context` | object | no | Trust agent routing context (`domain`, `source_type`, `mode`) |
+| `trust_payload` | object | no | Payload routed through the trust-agent registry |
+
+**Supported `trust_context.domain` values:** `prediction_market`, `financial_market`, `supply_chain`, `news`, `geopolitical`, `regulatory`
+
+**Domain-specific `trust_payload` requirements:**
+- `financial_market`: requires `instrument_id`
+- `news`: requires `story_id`
+- `supply_chain`: requires `network_id`
+- `geopolitical`: requires `region_id`
+- `regulatory`: requires `jurisdiction_id`
+
+### `POST /api/xai/trust-breakdown`
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `trust_score` | float | yes | Overall trust score |
+| `metrics` | object | yes | Calibration metrics (brier_score, log_loss, ece, ...) |
+| `source` | string | no | Signal source name (default: `polymarket`) |
+| `signals` | array of object | no | Multiple signals |
+
+### `POST /api/xai/forecast-decompose`
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `data` | array of float | yes | Time series values |
+| `period` | integer | no | Seasonal period (auto-detect if null) |
+| `method` | string | no | Decomposition method (default: `stl`) |
+
+### `POST /api/xai/model-card`
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `model_info` | object | yes | Model identity information |
+| `eval_result` | object | no | Evaluation results |
+| `explanation_result` | object | no | Explanation results |
+| `governance_info` | object | no | Governance metadata |
+| `format` | string | no | Output format: `json` or `markdown` (default: `json`) |
+
+### `POST /api/xai/decision-report`
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `explanation` | object | yes | Output from `/api/xai/explain-decision` |
+| `forecast_result` | object | no | Original forecast result |
+| `report_config` | object | no | Report customization (title, audience, format) |
+| `report_type` | string | no | `decision` or `explanation` (default: `decision`) |
+| `format` | string | no | Output format: `json` or `markdown` (default: `json`) |
 
 ---
 
