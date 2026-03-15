@@ -10,6 +10,8 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
+from tollama.xai.trust_contract import normalized_result_to_breakdown
+
 
 class TrustBreakdown:
     """
@@ -106,6 +108,9 @@ class TrustBreakdown:
             - why_trusted: {signal_name: natural language explanation}
             - recommendations: list of improvement suggestions
         """
+        if self._is_normalized_trust_result(calibration_result):
+            return normalized_result_to_breakdown(calibration_result)
+
         trust_scores = {}
         breakdowns = {}
         why_trusted = {}
@@ -153,6 +158,10 @@ class TrustBreakdown:
                 "low": self.LOW_TRUST,
             },
         }
+
+    def _is_normalized_trust_result(self, payload: dict[str, Any]) -> bool:
+        required = {"agent_name", "domain", "trust_score", "component_breakdown", "why_trusted"}
+        return required.issubset(payload.keys())
 
     def _decompose_trust_score(
         self, metrics: dict[str, float]

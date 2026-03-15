@@ -1,4 +1,4 @@
-"""Typer-based CLI for serving and querying tollama."""
+"""Typer-based CLI for the tollama forecast decision trust layer."""
 
 from __future__ import annotations
 

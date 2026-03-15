@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [0.1.0] - Unreleased
 
+### Changed
+
+- Repositioned tollama as a "forecast decision trust layer" aligned with v4.0 strategy
+- Updated model count from 11 to 12 (includes mock runner) across all documentation
+- Updated endpoint count from 42 to 43+ across all documentation
+- Upgraded development status from Alpha to Beta (pyproject.toml classifier)
+- Updated A2A agent card, CLI, and architecture docs to reflect trust layer positioning
+
 ### Added
 
 - Daemon (`tollamad`) with FastAPI-based HTTP API surface

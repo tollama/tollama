@@ -357,7 +357,7 @@ tollama-mcp              # 또는 python -m tollama.mcp
 ```
 ┌──────────────────────────────────────────────────────────────┐
 │                        사용자 접점                             │
-│  CLI (27 cmds)  /  SDK (16 methods)  /  HTTP (42 endpoints)  │
+│  CLI (27 cmds)  /  SDK (16 methods)  /  HTTP (43+ endpoints) │
 │  Web Dashboard (Alpine.js + HTMX + Chart.js)                 │
 │  TUI Dashboard (Textual)                                     │
 ├──────────────────────────────────────────────────────────────┤

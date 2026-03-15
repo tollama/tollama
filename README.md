@@ -4,7 +4,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
 
-> A unified TSFM platform to run, compare, and serve time series foundation models from a single interface
+> Forecast decision trust layer — run, compare, and explain time series foundation model predictions for enterprise decisions
 
 ---
 
@@ -12,12 +12,12 @@
 
 TSFMs are emerging as general-purpose models — just like LLMs — enabling time series forecasting without domain-specific custom models. But **actually using them is still painful.**
 
-| Problem | Reality |
-|---------|--------|
+| Problem                 | Reality                                                                                               |
+| ----------------------- | ----------------------------------------------------------------------------------------------------- |
 | Fragmented installation | Chronos requires a specific PyTorch version, TimesFM has its own package, Uni2TS requires Python 3.11 |
-| Non-unified APIs | Each model has different input formats, prediction methods, and covariate handling |
-| Dependency conflicts | Installing two models simultaneously causes package version collisions |
-| Integration friction | Using TSFMs as tools in AI agents or services requires writing per-model wrappers |
+| Non-unified APIs        | Each model has different input formats, prediction methods, and covariate handling                    |
+| Dependency conflicts    | Installing two models simultaneously causes package version collisions                                |
+| Integration friction    | Using TSFMs as tools in AI agents or services requires writing per-model wrappers                     |
 
 ## Goal
 
@@ -45,46 +45,46 @@ best = t.auto_forecast(series=my_data, horizon=30, strategy="ensemble")
 flow = t.workflow(my_data).analyze().auto_forecast(horizon=30).what_if(scenarios)
 ```
 
-| Interface | Description |
-|-----------|------------|
-| **HTTP API** | 42 endpoints — forecast, analysis, comparison, what-if, report |
-| **Python SDK** | `Tollama` class with 16 methods, DataFrame conversion, chained workflow |
-| **CLI** | `tollama pull` → `tollama run` — Ollama-style workflow |
-| **Dashboard** | Web (Chart.js) + TUI (Textual) — model monitoring, forecast visualization |
+| Interface      | Description                                                               |
+| -------------- | ------------------------------------------------------------------------- |
+| **HTTP API**   | 43+ endpoints — forecast, analysis, comparison, what-if, report           |
+| **Python SDK** | `Tollama` class with 16 methods, DataFrame conversion, chained workflow   |
+| **CLI**        | `tollama pull` → `tollama run` — Ollama-style workflow                    |
+| **Dashboard**  | Web (Chart.js) + TUI (Textual) — model monitoring, forecast visualization |
 
 ## Value for AI Agents — MCP, A2A, Skills
 
 AI agents can **invoke TSFMs as tools the moment they need a forecast.**
 
-| Integration | Description |
-|------------|------------|
-| **MCP Server** | 15 tools — forecast, analyze, compare, what-if, report, etc. |
-| **A2A Protocol** | JSON-RPC based agent-to-agent communication with task queue |
-| **LangChain** | 13 natively integrated tools |
-| **CrewAI / AutoGen / Smolagents** | Per-framework adapters |
-| **OpenClaw Skill** | OpenAI tool schema + shell scripts |
+| Integration                       | Description                                                  |
+| --------------------------------- | ------------------------------------------------------------ |
+| **MCP Server**                    | 15 tools — forecast, analyze, compare, what-if, report, etc. |
+| **A2A Protocol**                  | JSON-RPC based agent-to-agent communication with task queue  |
+| **LangChain**                     | 13 natively integrated tools                                 |
+| **CrewAI / AutoGen / Smolagents** | Per-framework adapters                                       |
+| **OpenClaw Skill**                | OpenAI tool schema + shell scripts                           |
 
 ## Supported Models
 
 Tollama ships **11 models**: 7 time series foundation models (TSFMs) and 4 neural baselines.
 **All 11 models share the exact same interface** — `tollama run`, `POST /api/forecast`, Python SDK, MCP tools — no extra configuration or training steps required regardless of model type.
 
-| Model | Provider | Type | Covariates |
-|-------|----------|:----:|:----------:|
-| Chronos-2 | Amazon | TSFM | Past + Future |
-| Granite TTM R2 | IBM | TSFM | Past + Future |
-| TimesFM 2.5-200M | Google | TSFM | Past + Future |
-| Moirai 2.0-R Small | Salesforce | TSFM | Past + Future |
-| Sundial Base 128M | THUML | TSFM | Target only |
-| Toto Open Base 1.0 | Datadog | TSFM | Past only |
-| Lag-Llama | TSFM Community | TSFM | Target only |
-| PatchTST | IBM Granite | Neural Baseline | Target only |
-| TiDE | Unit8 / Darts | Neural Baseline | Past + Future |
-| N-HiTS | Nixtla / NeuralForecast | Neural Baseline | Target only |
-| N-BEATSx | Nixtla / NeuralForecast | Neural Baseline | Target only |
+| Model              | Provider                | Type            | Covariates    |
+| ------------------ | ----------------------- |:---------------:|:-------------:|
+| Chronos-2          | Amazon                  | TSFM            | Past + Future |
+| Granite TTM R2     | IBM                     | TSFM            | Past + Future |
+| TimesFM 2.5-200M   | Google                  | TSFM            | Past + Future |
+| Moirai 2.0-R Small | Salesforce              | TSFM            | Past + Future |
+| Sundial Base 128M  | THUML                   | TSFM            | Target only   |
+| Toto Open Base 1.0 | Datadog                 | TSFM            | Past only     |
+| Lag-Llama          | TSFM Community          | TSFM            | Target only   |
+| PatchTST           | IBM Granite             | Neural Baseline | Target only   |
+| TiDE               | Unit8 / Darts           | Neural Baseline | Past + Future |
+| N-HiTS             | Nixtla / NeuralForecast | Neural Baseline | Target only   |
+| N-BEATSx           | Nixtla / NeuralForecast | Neural Baseline | Target only   |
 
 > **TSFM vs Neural Baseline — what's the difference?**
->
+> 
 > - **TSFM (Time Series Foundation Model)**: Pre-trained on large, diverse time series corpora (billions of data points across multiple domains). Supports **zero-shot forecasting** — produces predictions on completely unseen data without per-dataset fine-tuning.
 > - **Neural Baseline**: Deep learning architectures that are **not** pre-trained on large diverse corpora. Tollama includes them as reference baselines for model comparison and routing benchmarks. Behind the scenes, PatchTST and TiDE load pre-trained weights for direct inference, while N-HiTS and N-BEATSx auto-fit on the provided input data then predict — all transparently within a single forecast call.
 
@@ -110,12 +110,12 @@ Tollama ships **11 models**: 7 time series foundation models (TSFMs) and 4 neura
 
 ## Roadmap
 
-| Item | Current Status | Goal |
-|------|:--------------:|------|
-| **Auto model comparison / selection** | ✅ Basic impl | Advanced best-model routing based on data characteristics |
-| **Auto data preprocessing** | ✅ Basic impl | Spline interpolation, smoothing, train-fit scaling, windowing via `tollama.preprocess` |
-| **Fine-tuning / ensemble** | ⚠️ Ensemble only | Add domain-adaptation fine-tuning workflow |
-| **Local + cloud execution** | ⚠️ Dockerfile exists, local-centric | K8s manifests, docker-compose, cloud deployment guide |
+| Item                                  | Current Status                      | Goal                                                                                   |
+| ------------------------------------- |:-----------------------------------:| -------------------------------------------------------------------------------------- |
+| **Auto model comparison / selection** | ✅ Basic impl                        | Advanced best-model routing based on data characteristics                              |
+| **Auto data preprocessing**           | ✅ Basic impl                        | Spline interpolation, smoothing, train-fit scaling, windowing via `tollama.preprocess` |
+| **Fine-tuning / ensemble**            | ⚠️ Ensemble only                    | Add domain-adaptation fine-tuning workflow                                             |
+| **Local + cloud execution**           | ⚠️ Dockerfile exists, local-centric | K8s manifests, docker-compose, cloud deployment guide                                  |
 
 ---
 
@@ -274,13 +274,13 @@ result = preprocess_series_input(series_input, config=PreprocessConfig(horizon=7
 
 Pipeline stages:
 
-| Stage | Description |
-|-------|-------------|
-| **Validate** | Monotonic timestamps, missing ratio, max gap, non-constant target |
-| **Interpolate** | Spline-based NaN filling (cubic/linear fallback) |
-| **Smooth** | Savitzky-Golay filter or P-spline passthrough |
-| **Scale** | Train-fit only (standard or min-max) to prevent data leakage |
-| **Window** | Sliding windows `[batch, lookback, features]` + `[batch, horizon]` |
+| Stage           | Description                                                        |
+| --------------- | ------------------------------------------------------------------ |
+| **Validate**    | Monotonic timestamps, missing ratio, max gap, non-constant target  |
+| **Interpolate** | Spline-based NaN filling (cubic/linear fallback)                   |
+| **Smooth**      | Savitzky-Golay filter or P-spline passthrough                      |
+| **Scale**       | Train-fit only (standard or min-max) to prevent data leakage       |
+| **Window**      | Sliding windows `[batch, lookback, features]` + `[batch, horizon]` |
 
 Individual components (`SplinePreprocessor`, `StandardScaler1D`, `MinMaxScaler1D`,
 `make_windows`, `chronological_split`, etc.) are also usable independently.
@@ -638,6 +638,7 @@ from installed models. You can also add `--interactive` to choose from discovere
 
 `GET /api/info` returns one fast diagnostics payload for server-side integrations.
 It includes:
+
 - daemon metadata (`version`, `started_at`, `uptime_seconds`, `host_binding`)
 - local paths and config presence (`tollama_home`, `config_path`, `config_exists`)
 - redacted config and safe env subset
@@ -821,17 +822,17 @@ Runbooks for end-to-end operator workflows:
 
 ### Script contracts (current)
 
-| Script | Primary behavior | CLI path | HTTP path / endpoints |
-|---|---|---|---|
-| `tollama-forecast.sh` | non-stream forecast JSON output | `tollama show` + optional `tollama pull --no-stream` + `tollama run --no-stream` | `POST /api/show`, optional `POST /api/pull`, `POST /api/forecast`, fallback `POST /v1/forecast` on `/api/forecast` `404` |
-| `tollama-models.sh installed` | installed models list | `tollama list --json` | `GET /api/tags` |
-| `tollama-models.sh loaded` | loaded models list | `tollama ps --json` | `GET /api/ps` |
-| `tollama-models.sh show` | model detail | `tollama show` | `POST /api/show` |
-| `tollama-models.sh pull` | pull/install model | `tollama pull --no-stream` | `POST /api/pull` |
-| `tollama-models.sh rm` | remove model | `tollama rm` | `DELETE /api/delete` |
-| `tollama-models.sh available` | available model list | `tollama info --json --remote` + local extract | `GET /api/info` + local extract |
-| `tollama-models.sh info` | daemon info section output | `tollama info --json --remote` + section extract | `GET /api/info` + section extract |
-| `tollama-health.sh` | daemon health payload | n/a (curl path only) | `GET /v1/health`, `GET /api/version`, optional `GET /api/info` (`--runtimes`) |
+| Script                        | Primary behavior                | CLI path                                                                         | HTTP path / endpoints                                                                                                    |
+| ----------------------------- | ------------------------------- | -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `tollama-forecast.sh`         | non-stream forecast JSON output | `tollama show` + optional `tollama pull --no-stream` + `tollama run --no-stream` | `POST /api/show`, optional `POST /api/pull`, `POST /api/forecast`, fallback `POST /v1/forecast` on `/api/forecast` `404` |
+| `tollama-models.sh installed` | installed models list           | `tollama list --json`                                                            | `GET /api/tags`                                                                                                          |
+| `tollama-models.sh loaded`    | loaded models list              | `tollama ps --json`                                                              | `GET /api/ps`                                                                                                            |
+| `tollama-models.sh show`      | model detail                    | `tollama show`                                                                   | `POST /api/show`                                                                                                         |
+| `tollama-models.sh pull`      | pull/install model              | `tollama pull --no-stream`                                                       | `POST /api/pull`                                                                                                         |
+| `tollama-models.sh rm`        | remove model                    | `tollama rm`                                                                     | `DELETE /api/delete`                                                                                                     |
+| `tollama-models.sh available` | available model list            | `tollama info --json --remote` + local extract                                   | `GET /api/info` + local extract                                                                                          |
+| `tollama-models.sh info`      | daemon info section output      | `tollama info --json --remote` + section extract                                 | `GET /api/info` + section extract                                                                                        |
+| `tollama-health.sh`           | daemon health payload           | n/a (curl path only)                                                             | `GET /v1/health`, `GET /api/version`, optional `GET /api/info` (`--runtimes`)                                            |
 
 ### Install (Managed skills, recommended)
 
@@ -878,6 +879,7 @@ openclaw skills list --eligible | rg tollama-forecast
 ### Breaking change: skill exit code contract v2
 
 OpenClaw `tollama-forecast` scripts now share this exit code contract:
+
 - `0`: success
 - `2`: invalid input/request
 - `3`: daemon unreachable/health failure
@@ -975,25 +977,26 @@ bash scripts/install_mcp.sh --base-url "http://127.0.0.1:11435"
 
 ### Tool contracts (current)
 
-| Tool | Backend endpoint(s) | Key args | Return shape |
-|---|---|---|---|
-| `tollama_health` | `GET /v1/health`, `GET /api/version` | `base_url?`, `timeout?` | `{healthy, health, version}` |
-| `tollama_models` | `GET /api/tags` or `/api/ps` or `/api/info` | `mode=installed\|loaded\|available`, `base_url?`, `timeout?` | `{mode, items}` |
-| `tollama_forecast` | `POST /api/forecast` (non-stream) | `request`, `base_url?`, `timeout?` | canonical `ForecastResponse` JSON |
-| `tollama_auto_forecast` | `POST /api/auto-forecast` | `request`, `base_url?`, `timeout?` | canonical `AutoForecastResponse` JSON |
-| `tollama_analyze` | `POST /api/analyze` | `request`, `base_url?`, `timeout?` | canonical `AnalyzeResponse` JSON |
-| `tollama_generate` | `POST /api/generate` | `request`, `base_url?`, `timeout?` | canonical `GenerateResponse` JSON |
-| `tollama_counterfactual` | `POST /api/counterfactual` | `request`, `base_url?`, `timeout?` | canonical `CounterfactualResponse` JSON |
-| `tollama_scenario_tree` | `POST /api/scenario-tree` | `request`, `base_url?`, `timeout?` | canonical `ScenarioTreeResponse` JSON |
-| `tollama_report` | `POST /api/report` | `request`, `base_url?`, `timeout?` | canonical `ForecastReport` JSON |
-| `tollama_what_if` | `POST /api/what-if` | `request`, `base_url?`, `timeout?` | canonical `WhatIfResponse` JSON |
-| `tollama_pipeline` | `POST /api/pipeline` | `request`, `base_url?`, `timeout?` | canonical `PipelineResponse` JSON |
-| `tollama_compare` | `POST /api/compare` | `request`, `base_url?`, `timeout?` | canonical `CompareResponse` JSON |
-| `tollama_recommend` | registry metadata + capabilities | `horizon`, covariate flags, `top_k`, `allow_restricted_license` | ranked recommendation payload |
-| `tollama_pull` | `POST /api/pull` (non-stream) | `model`, `accept_license?`, `base_url?`, `timeout?` | daemon pull result JSON |
-| `tollama_show` | `POST /api/show` | `model`, `base_url?`, `timeout?` | daemon show payload JSON |
+| Tool                     | Backend endpoint(s)                         | Key args                                                        | Return shape                            |
+| ------------------------ | ------------------------------------------- | --------------------------------------------------------------- | --------------------------------------- |
+| `tollama_health`         | `GET /v1/health`, `GET /api/version`        | `base_url?`, `timeout?`                                         | `{healthy, health, version}`            |
+| `tollama_models`         | `GET /api/tags` or `/api/ps` or `/api/info` | `mode=installed\|loaded\|available`, `base_url?`, `timeout?`    | `{mode, items}`                         |
+| `tollama_forecast`       | `POST /api/forecast` (non-stream)           | `request`, `base_url?`, `timeout?`                              | canonical `ForecastResponse` JSON       |
+| `tollama_auto_forecast`  | `POST /api/auto-forecast`                   | `request`, `base_url?`, `timeout?`                              | canonical `AutoForecastResponse` JSON   |
+| `tollama_analyze`        | `POST /api/analyze`                         | `request`, `base_url?`, `timeout?`                              | canonical `AnalyzeResponse` JSON        |
+| `tollama_generate`       | `POST /api/generate`                        | `request`, `base_url?`, `timeout?`                              | canonical `GenerateResponse` JSON       |
+| `tollama_counterfactual` | `POST /api/counterfactual`                  | `request`, `base_url?`, `timeout?`                              | canonical `CounterfactualResponse` JSON |
+| `tollama_scenario_tree`  | `POST /api/scenario-tree`                   | `request`, `base_url?`, `timeout?`                              | canonical `ScenarioTreeResponse` JSON   |
+| `tollama_report`         | `POST /api/report`                          | `request`, `base_url?`, `timeout?`                              | canonical `ForecastReport` JSON         |
+| `tollama_what_if`        | `POST /api/what-if`                         | `request`, `base_url?`, `timeout?`                              | canonical `WhatIfResponse` JSON         |
+| `tollama_pipeline`       | `POST /api/pipeline`                        | `request`, `base_url?`, `timeout?`                              | canonical `PipelineResponse` JSON       |
+| `tollama_compare`        | `POST /api/compare`                         | `request`, `base_url?`, `timeout?`                              | canonical `CompareResponse` JSON        |
+| `tollama_recommend`      | registry metadata + capabilities            | `horizon`, covariate flags, `top_k`, `allow_restricted_license` | ranked recommendation payload           |
+| `tollama_pull`           | `POST /api/pull` (non-stream)               | `model`, `accept_license?`, `base_url?`, `timeout?`             | daemon pull result JSON                 |
+| `tollama_show`           | `POST /api/show`                            | `model`, `base_url?`, `timeout?`                                | daemon show payload JSON                |
 
 Notes:
+
 - `tollama_forecast` validates `request` with `ForecastRequest` before HTTP call.
 - `tollama_auto_forecast` validates `request` with `AutoForecastRequest` before HTTP call.
 - `tollama_analyze` validates `request` with `AnalyzeRequest` before HTTP call.
@@ -1012,14 +1015,14 @@ Notes:
 
 MCP tools map client/daemon failures to a stable category + exit-code-aligned payload:
 
-| Category | Exit code |
-|---|---|
-| `INVALID_REQUEST` | `2` |
-| `DAEMON_UNREACHABLE` | `3` |
-| `MODEL_MISSING` | `4` |
-| `LICENSE_REQUIRED` / `PERMISSION_DENIED` | `5` |
-| `TIMEOUT` | `6` |
-| `INTERNAL_ERROR` | `10` |
+| Category                                 | Exit code |
+| ---------------------------------------- | --------- |
+| `INVALID_REQUEST`                        | `2`       |
+| `DAEMON_UNREACHABLE`                     | `3`       |
+| `MODEL_MISSING`                          | `4`       |
+| `LICENSE_REQUIRED` / `PERMISSION_DENIED` | `5`       |
+| `TIMEOUT`                                | `6`       |
+| `INTERNAL_ERROR`                         | `10`      |
 
 MCP server emits tool failures as:
 

@@ -138,7 +138,7 @@ def build_agent_card(context: AgentCardContext) -> dict[str, object]:
 
     return {
         "name": "tollama",
-        "description": "Local-first time-series forecasting specialist",
+        "description": "Forecast decision trust layer — explainable predictive intelligence for enterprise decisions",
         "supportedInterfaces": [
             {
                 "url": context.interface_url,

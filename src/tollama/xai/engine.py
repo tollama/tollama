@@ -20,6 +20,11 @@ from dataclasses import dataclass, field, asdict
 from datetime import datetime, timezone
 from typing import Any, Callable, Optional
 
+from tollama.xai.trust_contract import (
+    coerce_normalized_trust_result,
+    normalized_result_to_legacy_metadata,
+)
+
 logger = logging.getLogger(__name__)
 
 
@@ -32,7 +37,7 @@ class InputExplanation:
     """Input 단계 설명: 왜 이 신호를 반영했는가"""
     signals_used: list[str] = field(default_factory=list)
     trust_scores: dict[str, float] = field(default_factory=dict)
-    trust_breakdowns: dict[str, dict[str, float]] = field(default_factory=dict)
+    trust_breakdowns: dict[str, dict[str, Any]] = field(default_factory=dict)
     why_trusted: dict[str, str] = field(default_factory=dict)
     data_quality: dict[str, Any] = field(default_factory=dict)
 
@@ -118,6 +123,7 @@ class ExplanationEngine:
         trust_breakdown=None,
         decision_policy_explainer=None,
         trust_intelligence_pipeline=None,
+        trust_router=None,
     ):
         self.model_selection = model_selection_explainer
         self.forecast_decomposer = forecast_decomposer
@@ -126,15 +132,19 @@ class ExplanationEngine:
         self.trust_breakdown = trust_breakdown
         self.decision_policy = decision_policy_explainer
         self.trust_intelligence = trust_intelligence_pipeline
+        self.trust_router = trust_router
 
     def explain_decision(
         self,
         forecast_result: dict[str, Any],
         eval_result: Optional[dict[str, Any]] = None,
         calibration_result: Optional[dict[str, Any]] = None,
+        trust_result: Optional[dict[str, Any]] = None,
         policy_config: Optional[dict[str, Any]] = None,
         time_series_data: Optional[Any] = None,
         explain_options: Optional[dict[str, Any]] = None,
+        trust_context: Optional[dict[str, Any]] = None,
+        trust_payload: Optional[dict[str, Any]] = None,
         predict_fn: Optional[Callable] = None,
     ) -> DecisionExplanation:
         """
@@ -151,6 +161,8 @@ class ExplanationEngine:
             Output from tollama-eval (CV results, model rankings, metrics)
         calibration_result : dict, optional
             Output from Market Calibration Agent (trust scores, calibration metrics)
+        trust_result : dict, optional
+            Normalized trust result from a domain trust agent.
         policy_config : dict, optional
             Decision policy configuration (thresholds, rules, approval config)
         time_series_data : array-like, optional
@@ -171,6 +183,13 @@ class ExplanationEngine:
         import uuid
 
         options = explain_options or {}
+        resolved_trust_result = self._resolve_trust_result(
+            calibration_result=calibration_result,
+            trust_result=trust_result,
+            trust_context=trust_context,
+            trust_payload=trust_payload,
+            explain_options=options,
+        )
         explanation = DecisionExplanation(
             explanation_id=str(uuid.uuid4()),
             timestamp=datetime.now(timezone.utc).isoformat(),
@@ -180,6 +199,7 @@ class ExplanationEngine:
         explanation.input_explanation = self._explain_input(
             forecast_result=forecast_result,
             calibration_result=calibration_result,
+            trust_result=resolved_trust_result.model_dump() if resolved_trust_result else None,
         )
 
         # ── Phase 2: Plan Explanation (Model Selection + Decomposition) ──
@@ -192,8 +212,12 @@ class ExplanationEngine:
         )
 
         # ── Trust Intelligence Pipeline (before decisioning) ──
-        ti_metadata = None
-        if self.trust_intelligence is not None:
+        ti_metadata = (
+            normalized_result_to_legacy_metadata(resolved_trust_result)
+            if resolved_trust_result is not None
+            else None
+        )
+        if ti_metadata is None and self.trust_intelligence is not None:
             from tollama.xai.trust_intelligence_bridge import run_trust_pipeline
 
             prediction_prob = forecast_result.get("confidence", 0.5)
@@ -257,6 +281,7 @@ class ExplanationEngine:
         self,
         forecast_result: dict[str, Any],
         calibration_result: Optional[dict[str, Any]],
+        trust_result: Optional[dict[str, Any]] = None,
     ) -> InputExplanation:
         """Assemble input-stage explanation: why these signals were used."""
         ie = InputExplanation()
@@ -265,7 +290,12 @@ class ExplanationEngine:
         ie.signals_used = forecast_result.get("signals_used", ["internal_ts"])
 
         # Trust Score breakdown from calibration
-        if calibration_result and self.trust_breakdown:
+        if trust_result and self.trust_breakdown:
+            breakdown = self.trust_breakdown.explain(trust_result)
+            ie.trust_scores = breakdown.get("trust_scores", {})
+            ie.trust_breakdowns = breakdown.get("breakdowns", {})
+            ie.why_trusted = breakdown.get("why_trusted", {})
+        elif calibration_result and self.trust_breakdown:
             breakdown = self.trust_breakdown.explain(calibration_result)
             ie.trust_scores = breakdown.get("trust_scores", {})
             ie.trust_breakdowns = breakdown.get("breakdowns", {})
@@ -283,6 +313,38 @@ class ExplanationEngine:
         ie.data_quality = forecast_result.get("data_quality", {})
 
         return ie
+
+    def _resolve_trust_result(
+        self,
+        *,
+        calibration_result: Optional[dict[str, Any]],
+        trust_result: Optional[dict[str, Any]],
+        trust_context: Optional[dict[str, Any]],
+        trust_payload: Optional[dict[str, Any]],
+        explain_options: dict[str, Any],
+    ):
+        if trust_result is not None:
+            return coerce_normalized_trust_result(trust_result)
+
+        if self.trust_router is None:
+            return None
+
+        context = dict(explain_options.get("trust_context", {}))
+        if trust_context:
+            context.update(trust_context)
+
+        payload = trust_payload or explain_options.get("trust_payload")
+        if payload is None and calibration_result is not None:
+            payload = calibration_result
+            if "domain" not in context:
+                context["domain"] = "prediction_market"
+            if "source_type" not in context:
+                context["source_type"] = "prediction_market"
+
+        if payload is None:
+            return None
+
+        return self.trust_router.analyze(context=context, payload=payload)
 
     def _explain_plan(
         self,

@@ -43,7 +43,7 @@ flow = t.workflow(my_data).analyze().auto_forecast(horizon=30).what_if(scenarios
 
 | 제공 인터페이스 | 설명 |
 |---------------|------|
-| **HTTP API** | 42개 엔드포인트 — 예측, 분석, 비교, What-if, 리포트 |
+| **HTTP API** | 43개 이상 엔드포인트 — 예측, 분석, 비교, What-if, 리포트 |
 | **Python SDK** | `Tollama` 클래스 16개 메서드, DataFrame 변환, 체이닝 workflow |
 | **CLI** | `tollama pull` → `tollama run` — Ollama 스타일 워크플로우 |
 | **Dashboard** | 웹(Chart.js) + TUI(Textual) — 모델 모니터링, 예측 시각화 |

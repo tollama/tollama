@@ -2,7 +2,7 @@
 
 ## Project Context
 
-Tollama is a local-first time-series forecasting daemon with Ollama-compatible APIs.
+Tollama is a forecast decision trust layer — evaluation, calibration, and explanation for forecast-driven enterprise decisions. Ollama-compatible APIs.
 
 Core layers:
 - `src/tollama/daemon`: HTTP API surface and runner lifecycle

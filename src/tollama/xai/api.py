@@ -38,6 +38,9 @@ class ExplainDecisionRequest(BaseModel):
     calibration_result: Optional[dict[str, Any]] = Field(
         None, description="Output from Market Calibration Agent"
     )
+    trust_result: Optional[dict[str, Any]] = Field(
+        None, description="Normalized output from a domain trust agent"
+    )
     policy_config: Optional[dict[str, Any]] = Field(
         None, description="Decision policy configuration"
     )
@@ -53,6 +56,9 @@ class ExplainDecisionRequest(BaseModel):
     )
     trust_context: Optional[dict[str, Any]] = Field(
         None, description="Context for constraint verification in trust pipeline"
+    )
+    trust_payload: Optional[dict[str, Any]] = Field(
+        None, description="Payload routed through the default trust-agent registry"
     )
 
 
@@ -144,6 +150,7 @@ async def explain_decision(request: ExplainDecisionRequest):
     from tollama.xai.scenario_rationale import ScenarioRationale
     from tollama.xai.trust_breakdown import TrustBreakdown
     from tollama.xai.decision_policy import DecisionPolicyExplainer
+    from tollama.xai.trust_router import build_default_trust_router
 
     trust_pipeline = None
     try:
@@ -160,6 +167,7 @@ async def explain_decision(request: ExplainDecisionRequest):
         trust_breakdown=TrustBreakdown(),
         decision_policy_explainer=DecisionPolicyExplainer(),
         trust_intelligence_pipeline=trust_pipeline,
+        trust_router=build_default_trust_router(),
     )
 
     explain_options = request.explain_options or {}
@@ -172,9 +180,12 @@ async def explain_decision(request: ExplainDecisionRequest):
         forecast_result=request.forecast_result,
         eval_result=request.eval_result,
         calibration_result=request.calibration_result,
+        trust_result=request.trust_result,
         policy_config=request.policy_config,
         time_series_data=request.time_series_data,
         explain_options=explain_options,
+        trust_context=request.trust_context,
+        trust_payload=request.trust_payload,
     )
 
     return result.to_dict()

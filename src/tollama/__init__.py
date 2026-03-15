@@ -1,4 +1,4 @@
-"""tollama package."""
+"""tollama — forecast decision trust layer for enterprise AI agents."""
 
 from typing import Any
 

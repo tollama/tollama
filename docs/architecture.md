@@ -2,10 +2,11 @@
 
 ## Overview
 
-tollama is a local-first time-series forecasting daemon with an Ollama-compatible
-API surface. It uses a worker-per-model-family architecture where the daemon
-manages HTTP routing and supervision while isolated runner processes handle
-model inference.
+tollama is a forecast decision trust layer — an evaluation, calibration, and
+explanation engine for forecast-driven enterprise decisions. It uses a
+worker-per-model-family architecture with an Ollama-compatible API surface
+where the daemon manages HTTP routing and supervision while isolated runner
+processes handle model inference.
 
 ## System Diagram
 

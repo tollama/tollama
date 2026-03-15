@@ -43,7 +43,7 @@ flow = t.workflow(my_data).analyze().auto_forecast(horizon=30).what_if(scenarios
 
 | Interface | Description |
 |-----------|------------|
-| **HTTP API** | 42 endpoints — forecast, analysis, comparison, what-if, report |
+| **HTTP API** | 43+ endpoints — forecast, analysis, comparison, what-if, report |
 | **Python SDK** | `Tollama` class with 16 methods, DataFrame conversion, chained workflow |
 | **CLI** | `tollama pull` → `tollama run` — Ollama-style workflow |
 | **Dashboard** | Web (Chart.js) + TUI (Textual) — model monitoring, forecast visualization |
