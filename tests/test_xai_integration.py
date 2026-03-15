@@ -153,3 +153,111 @@ class TestDecisionReport:
         body = response.json()
         assert body["format"] == "markdown"
         assert "content" in body
+
+
+# ──────────────────────────────────────────────────────────────
+# /api/xai/record-outcome
+# ──────────────────────────────────────────────────────────────
+
+
+class TestRecordOutcome:
+    def test_returns_200_with_valid_input(self, client: TestClient) -> None:
+        payload = {
+            "agent_name": "financial_market",
+            "domain": "financial_market",
+            "predicted_score": 0.8,
+            "actual_outcome": 0.75,
+        }
+        response = client.post("/api/xai/record-outcome", json=payload)
+        assert response.status_code == 200
+        body = response.json()
+        assert body["status"] == "recorded"
+        assert body["agent_name"] == "financial_market"
+
+    def test_returns_error_on_missing_fields(self, client: TestClient) -> None:
+        response = client.post("/api/xai/record-outcome", json={})
+        assert response.status_code in (400, 422)
+
+    def test_returns_calibration_stats(self, client: TestClient) -> None:
+        payload = {
+            "agent_name": "news",
+            "domain": "news",
+            "predicted_score": 0.6,
+            "actual_outcome": 0.65,
+            "component_scores": {"freshness": 0.7, "source_diversity": 0.5},
+        }
+        response = client.post("/api/xai/record-outcome", json=payload)
+        assert response.status_code == 200
+        body = response.json()
+        assert "calibration_stats" in body
+
+
+# ──────────────────────────────────────────────────────────────
+# /api/xai/dashboard/history
+# ──────────────────────────────────────────────────────────────
+
+
+class TestDashboardHistory:
+    def test_returns_200_with_defaults(self, client: TestClient) -> None:
+        response = client.post("/api/xai/dashboard/history", json={})
+        assert response.status_code == 200
+        body = response.json()
+        assert "domains" in body
+
+    def test_with_domain_filter(self, client: TestClient) -> None:
+        payload = {"domains": ["financial_market"], "limit": 10}
+        response = client.post("/api/xai/dashboard/history", json=payload)
+        assert response.status_code == 200
+        body = response.json()
+        assert "financial_market" in body["domains"]
+
+    def test_with_stats_disabled(self, client: TestClient) -> None:
+        payload = {"include_stats": False}
+        response = client.post("/api/xai/dashboard/history", json=payload)
+        assert response.status_code == 200
+
+
+# ──────────────────────────────────────────────────────────────
+# /api/xai/connectors/health
+# ──────────────────────────────────────────────────────────────
+
+
+class TestConnectorsHealth:
+    def test_returns_200_with_defaults(self, client: TestClient) -> None:
+        response = client.post("/api/xai/connectors/health", json={})
+        assert response.status_code == 200
+        body = response.json()
+        assert "connectors" in body
+        assert isinstance(body["connectors"], list)
+
+    def test_with_domain_filter(self, client: TestClient) -> None:
+        payload = {"domains": ["financial_market"]}
+        response = client.post("/api/xai/connectors/health", json=payload)
+        assert response.status_code == 200
+        body = response.json()
+        for conn in body["connectors"]:
+            assert conn["domain"] == "financial_market"
+
+
+# ──────────────────────────────────────────────────────────────
+# /api/xai/cache/stats
+# ──────────────────────────────────────────────────────────────
+
+
+class TestCacheStats:
+    def test_returns_200(self, client: TestClient) -> None:
+        response = client.get("/api/xai/cache/stats")
+        assert response.status_code == 200
+        body = response.json()
+        assert "hits" in body
+        assert "misses" in body
+        assert "hit_rate" in body
+        assert "cached_entries" in body
+        assert "ttl" in body
+
+    def test_fresh_cache_has_zero_hits(self, client: TestClient) -> None:
+        response = client.get("/api/xai/cache/stats")
+        body = response.json()
+        assert body["hits"] == 0
+        assert body["misses"] == 0
+        assert body["hit_rate"] == 0.0

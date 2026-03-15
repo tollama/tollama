@@ -15,9 +15,9 @@ Endpoints:
 
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field, ValidationError
 
 router = APIRouter(prefix="/api/xai", tags=["xai"])
@@ -32,29 +32,29 @@ class ExplainDecisionRequest(BaseModel):
     forecast_result: dict[str, Any] = Field(
         ..., description="Output from tollama forecast endpoint"
     )
-    eval_result: Optional[dict[str, Any]] = Field(
+    eval_result: dict[str, Any] | None = Field(
         None, description="Output from tollama-eval"
     )
-    calibration_result: Optional[dict[str, Any]] = Field(
+    calibration_result: dict[str, Any] | None = Field(
         None, description="Output from Market Calibration Agent"
     )
-    trust_result: Optional[dict[str, Any]] = Field(
+    trust_result: dict[str, Any] | None = Field(
         None, description="Normalized output from a domain trust agent"
     )
-    policy_config: Optional[dict[str, Any]] = Field(
+    policy_config: dict[str, Any] | None = Field(
         None, description="Decision policy configuration"
     )
-    time_series_data: Optional[list[float]] = Field(
+    time_series_data: list[float] | None = Field(
         None, description="Raw time series for decomposition"
     )
-    explain_options: Optional[dict[str, Any]] = Field(
+    explain_options: dict[str, Any] | None = Field(
         default_factory=lambda: {"decompose": True, "attribution": False},
         description="Control explanation depth",
     )
-    trust_features: Optional[dict[str, float]] = Field(
+    trust_features: dict[str, float] | None = Field(
         None, description="Features for SHAP attribution in trust pipeline"
     )
-    trust_context: Optional[dict[str, Any]] = Field(
+    trust_context: dict[str, Any] | None = Field(
         None,
         description=(
             "Context for trust agent routing. Keys: 'domain' (prediction_market|"
@@ -63,7 +63,7 @@ class ExplainDecisionRequest(BaseModel):
             "'mode' ('single' default or 'multi' for multi-agent aggregation)."
         ),
     )
-    trust_payload: Optional[dict[str, Any]] = Field(
+    trust_payload: dict[str, Any] | None = Field(
         None,
         description=(
             "Payload routed through the default trust-agent registry. "
@@ -76,14 +76,24 @@ class ExplainDecisionRequest(BaseModel):
 
 class ExplainDecisionResponse(BaseModel):
     """Response from /api/explain-decision"""
-    explanation_id: str
-    timestamp: str
-    version: str
-    input_explanation: dict[str, Any]
-    plan_explanation: dict[str, Any]
-    decision_policy_explanation: dict[str, Any]
-    trust_intelligence_explanation: Optional[dict[str, Any]] = None
-    metadata: dict[str, Any]
+    explanation_id: str = Field(..., description="Unique identifier for this explanation")
+    timestamp: str = Field(..., description="ISO timestamp when explanation was generated")
+    version: str = Field(..., description="Explanation schema version")
+    input_explanation: dict[str, Any] = Field(
+        ..., description="Input-stage explanation: signals used and trust rationale"
+    )
+    plan_explanation: dict[str, Any] = Field(
+        ..., description="Plan-stage explanation: model selection and forecast decomposition"
+    )
+    decision_policy_explanation: dict[str, Any] = Field(
+        ..., description="Decision policy explanation: auto-execution and escalation reasoning"
+    )
+    trust_intelligence_explanation: dict[str, Any] | None = Field(
+        None, description="Trust Intelligence Pipeline evidence (optional)"
+    )
+    metadata: dict[str, Any] = Field(
+        ..., description="Additional metadata about the explanation"
+    )
 
 
 class TrustBreakdownRequest(BaseModel):
@@ -93,7 +103,7 @@ class TrustBreakdownRequest(BaseModel):
         ..., description="Calibration metrics (brier_score, log_loss, ece, ...)"
     )
     source: str = Field(default="polymarket", description="Signal source name")
-    signals: Optional[list[dict[str, Any]]] = Field(
+    signals: list[dict[str, Any]] | None = Field(
         None, description="Multiple signals"
     )
 
@@ -101,7 +111,7 @@ class TrustBreakdownRequest(BaseModel):
 class ForecastDecomposeRequest(BaseModel):
     """Request body for /api/forecast-decompose"""
     data: list[float] = Field(..., description="Time series values")
-    period: Optional[int] = Field(None, description="Seasonal period (auto-detect if None)")
+    period: int | None = Field(None, description="Seasonal period (auto-detect if None)")
     method: str = Field(default="stl", description="Decomposition method")
 
 
@@ -110,9 +120,15 @@ class ModelCardRequest(BaseModel):
     model_info: dict[str, Any] = Field(
         ..., description="Model identity information"
     )
-    eval_result: Optional[dict[str, Any]] = None
-    explanation_result: Optional[dict[str, Any]] = None
-    governance_info: Optional[dict[str, Any]] = None
+    eval_result: dict[str, Any] | None = Field(
+        None, description="Evaluation results to include in card"
+    )
+    explanation_result: dict[str, Any] | None = Field(
+        None, description="Explanation output to include in card"
+    )
+    governance_info: dict[str, Any] | None = Field(
+        None, description="Governance and compliance information"
+    )
     format: str = Field(default="json", description="Output format: json or markdown")
 
 
@@ -121,8 +137,10 @@ class DecisionReportRequest(BaseModel):
     explanation: dict[str, Any] = Field(
         ..., description="Output from /api/explain-decision"
     )
-    forecast_result: Optional[dict[str, Any]] = None
-    report_config: Optional[dict[str, Any]] = Field(
+    forecast_result: dict[str, Any] | None = Field(
+        None, description="Forecast result to include in report"
+    )
+    report_config: dict[str, Any] | None = Field(
         default_factory=dict,
         description="Report customization (title, audience, format)",
     )
@@ -135,7 +153,7 @@ class DecisionReportRequest(BaseModel):
 
 class DashboardTrustRequest(BaseModel):
     """Request body for /api/dashboard/trust"""
-    domains: Optional[list[str]] = Field(
+    domains: list[str] | None = Field(
         None,
         description="Filter to specific domains. Omit for all.",
     )
@@ -163,7 +181,7 @@ class RecordOutcomeRequest(BaseModel):
         ..., ge=0.0, le=1.0,
         description="Actual outcome observed (0=bad, 1=perfect).",
     )
-    component_scores: Optional[dict[str, float]] = Field(
+    component_scores: dict[str, float] | None = Field(
         default_factory=dict,
         description="Per-component scores for calibration learning.",
     )
@@ -171,7 +189,7 @@ class RecordOutcomeRequest(BaseModel):
 
 class TrustHistoryRequest(BaseModel):
     """Request body for /api/xai/dashboard/history"""
-    domains: Optional[list[str]] = Field(
+    domains: list[str] | None = Field(
         None,
         description="Filter to specific domains. Omit for all.",
     )
@@ -189,7 +207,7 @@ class TrustHistoryRequest(BaseModel):
 
 class ConnectorHealthRequest(BaseModel):
     """Request body for /api/xai/connectors/health"""
-    domains: Optional[list[str]] = Field(
+    domains: list[str] | None = Field(
         None,
         description="Filter to specific domains. Omit for all.",
     )
@@ -217,13 +235,13 @@ async def explain_decision(request: ExplainDecisionRequest):
     v3.8 Target — 핵심 XAI 엔드포인트
     Input → Plan → Decision Policy 전 단계 evidence-backed explanation.
     """
+    from tollama.xai.decision_policy import DecisionPolicyExplainer
     from tollama.xai.engine import ExplanationEngine
-    from tollama.xai.model_selection import ModelSelectionExplainer
-    from tollama.xai.forecast_decompose import ForecastDecomposer
     from tollama.xai.feature_attribution import TemporalFeatureAttribution
+    from tollama.xai.forecast_decompose import ForecastDecomposer
+    from tollama.xai.model_selection import ModelSelectionExplainer
     from tollama.xai.scenario_rationale import ScenarioRationale
     from tollama.xai.trust_breakdown import TrustBreakdown
-    from tollama.xai.decision_policy import DecisionPolicyExplainer
     from tollama.xai.trust_router import build_default_trust_router
 
     trust_pipeline = None
@@ -551,3 +569,24 @@ async def connectors_health(request: ConnectorHealthRequest):
         })
 
     return {"connectors": results}
+
+
+# ──────────────────────────────────────────────────────────────
+# Cache Stats
+# ──────────────────────────────────────────────────────────────
+
+
+@router.get(
+    "/cache/stats",
+    summary="Trust cache metrics",
+    description="Returns trust result cache hit/miss statistics and TTL configuration.",
+)
+async def cache_stats():
+    """GET /api/xai/cache/stats"""
+    from tollama.xai.trust_router import build_default_trust_router
+
+    router_instance = build_default_trust_router(
+        enable_calibration=False,
+        enable_history=False,
+    )
+    return router_instance.cache_stats()

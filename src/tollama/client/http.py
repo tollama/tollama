@@ -687,6 +687,41 @@ class TollamaClient:
             action="generate model card",
         )
 
+    def record_outcome(self, payload: dict[str, Any]) -> dict[str, Any]:
+        """Submit a prediction-outcome pair for calibration learning."""
+        return self._request_json(
+            "POST",
+            "/api/xai/record-outcome",
+            json_payload=payload,
+            action="record outcome",
+        )
+
+    def dashboard_history(self, payload: dict[str, Any]) -> dict[str, Any]:
+        """Fetch trust score history and trends."""
+        return self._request_json(
+            "POST",
+            "/api/xai/dashboard/history",
+            json_payload=payload,
+            action="trust history",
+        )
+
+    def connectors_health(self, payload: dict[str, Any]) -> dict[str, Any]:
+        """Check connector availability and health."""
+        return self._request_json(
+            "POST",
+            "/api/xai/connectors/health",
+            json_payload=payload,
+            action="connectors health",
+        )
+
+    def cache_stats(self) -> dict[str, Any]:
+        """Fetch trust cache hit/miss statistics."""
+        return self._request_json(
+            "GET",
+            "/api/xai/cache/stats",
+            action="cache stats",
+        )
+
     def _request_headers(self) -> dict[str, str] | None:
         if self._api_key is None:
             return None

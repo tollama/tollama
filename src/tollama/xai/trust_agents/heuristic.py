@@ -366,8 +366,13 @@ class FinancialMarketTrustAgent:
     domain = "financial_market"
     priority = 20
 
-    def __init__(self, trust_router: Any | None = None):
+    def __init__(
+        self,
+        trust_router: Any | None = None,
+        calibration_tracker: Any | None = None,
+    ):
         self._trust_router = trust_router
+        self._calibration_tracker = calibration_tracker
 
     def supports(self, context: dict[str, Any]) -> bool:
         domain = str(context.get("domain", ""))
@@ -421,6 +426,7 @@ class FinancialMarketTrustAgent:
             source_type="financial_market",
             source_id=normalized.instrument_id,
             evidence_attributes=evidence_attrs,
+            calibration_tracker=self._calibration_tracker,
         )
 
     def _resolve_news_signal(
@@ -581,6 +587,9 @@ class SupplyChainTrustAgent:
     domain = "supply_chain"
     priority = 30
 
+    def __init__(self, calibration_tracker: Any | None = None):
+        self._calibration_tracker = calibration_tracker
+
     def supports(self, context: dict[str, Any]) -> bool:
         domain = str(context.get("domain", ""))
         source_type = str(context.get("source_type", ""))
@@ -598,6 +607,7 @@ class SupplyChainTrustAgent:
             why_trusted=_supply_chain_why_trusted(normalized, violations),
             source_type="supply_chain",
             source_id=normalized.network_id,
+            calibration_tracker=self._calibration_tracker,
         )
 
 
@@ -607,6 +617,9 @@ class NewsTrustAgent:
     agent_name = "news"
     domain = "news"
     priority = 40
+
+    def __init__(self, calibration_tracker: Any | None = None):
+        self._calibration_tracker = calibration_tracker
 
     def supports(self, context: dict[str, Any]) -> bool:
         domain = str(context.get("domain", ""))
@@ -628,6 +641,7 @@ class NewsTrustAgent:
             evidence_attributes={
                 "novelty": normalized.novelty,
             },
+            calibration_tracker=self._calibration_tracker,
         )
 
 
@@ -776,6 +790,9 @@ class GeopoliticalTrustAgent:
     domain = "geopolitical"
     priority = 50
 
+    def __init__(self, calibration_tracker: Any | None = None):
+        self._calibration_tracker = calibration_tracker
+
     def supports(self, context: dict[str, Any]) -> bool:
         domain = str(context.get("domain", ""))
         source_type = str(context.get("source_type", ""))
@@ -797,6 +814,7 @@ class GeopoliticalTrustAgent:
             why_trusted=_geopolitical_why_trusted(normalized, violations),
             source_type="geopolitical",
             source_id=normalized.region_id,
+            calibration_tracker=self._calibration_tracker,
         )
 
 
@@ -945,6 +963,9 @@ class RegulatoryTrustAgent:
     domain = "regulatory"
     priority = 60
 
+    def __init__(self, calibration_tracker: Any | None = None):
+        self._calibration_tracker = calibration_tracker
+
     def supports(self, context: dict[str, Any]) -> bool:
         domain = str(context.get("domain", ""))
         source_type = str(context.get("source_type", ""))
@@ -966,4 +987,5 @@ class RegulatoryTrustAgent:
             why_trusted=_regulatory_why_trusted(normalized, violations),
             source_type="regulatory",
             source_id=normalized.jurisdiction_id,
+            calibration_tracker=self._calibration_tracker,
         )

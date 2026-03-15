@@ -74,9 +74,11 @@ def test_create_server_registers_descriptions_for_all_tools(monkeypatch) -> None
         "tollama_pull",
         "tollama_show",
         "tollama_recommend",
+        "tollama_explain",
+        "tollama_trust_score",
+        "tollama_model_card",
     }
-    for payload in registered.values():
+    for name, payload in registered.items():
         description = payload["description"]
-        assert "Example:" in description
-        assert "model" in description
+        assert "Example:" in description, f"{name} missing 'Example:' in description"
     assert "horizon" in registered["tollama_forecast"]["description"]

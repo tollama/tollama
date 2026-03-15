@@ -2434,6 +2434,99 @@ def xai_model_card(
         typer.echo(json.dumps(result, indent=2, sort_keys=True))
 
 
+@xai_app.command("record-outcome")
+def xai_record_outcome(
+    input_path: Path = typer.Option(
+        ...,
+        "--input",
+        exists=True,
+        file_okay=True,
+        dir_okay=False,
+        help="JSON file containing the record-outcome request payload.",
+    ),
+    base_url: str = typer.Option(
+        DEFAULT_BASE_URL,
+        help="Daemon base URL.",
+    ),
+    timeout: float = typer.Option(
+        _RUN_TIMEOUT_SECONDS,
+        min=0.1,
+        help="HTTP timeout in seconds.",
+    ),
+) -> None:
+    """Record a prediction-outcome pair for calibration learning."""
+    payload = json.loads(input_path.read_text())
+    client = _make_client(base_url=base_url, timeout=timeout)
+    try:
+        result = client.record_outcome(payload)
+    except RuntimeError as exc:
+        _exit_with_runtime_error(exc)
+    typer.echo(json.dumps(result, indent=2, sort_keys=True))
+
+
+@xai_app.command("history")
+def xai_history(
+    domain: str | None = typer.Argument(
+        None,
+        help="Domain to show history for. Omit to show all domains.",
+    ),
+    limit: int = typer.Option(
+        50,
+        "--limit",
+        min=1,
+        max=500,
+        help="Maximum number of history records per domain.",
+    ),
+    base_url: str = typer.Option(
+        DEFAULT_BASE_URL,
+        help="Daemon base URL.",
+    ),
+    timeout: float = typer.Option(
+        _RUN_TIMEOUT_SECONDS,
+        min=0.1,
+        help="HTTP timeout in seconds.",
+    ),
+) -> None:
+    """Show trust score history and trends."""
+    payload: dict[str, Any] = {"limit": limit, "include_stats": True}
+    if domain:
+        payload["domains"] = [domain]
+    client = _make_client(base_url=base_url, timeout=timeout)
+    try:
+        result = client.dashboard_history(payload)
+    except RuntimeError as exc:
+        _exit_with_runtime_error(exc)
+    typer.echo(json.dumps(result, indent=2, sort_keys=True))
+
+
+@xai_app.command("connectors-health")
+def xai_connectors_health(
+    domain: str | None = typer.Argument(
+        None,
+        help="Domain to check connectors for. Omit for all domains.",
+    ),
+    base_url: str = typer.Option(
+        DEFAULT_BASE_URL,
+        help="Daemon base URL.",
+    ),
+    timeout: float = typer.Option(
+        _RUN_TIMEOUT_SECONDS,
+        min=0.1,
+        help="HTTP timeout in seconds.",
+    ),
+) -> None:
+    """Check connector availability and health."""
+    payload: dict[str, Any] = {}
+    if domain:
+        payload["domains"] = [domain]
+    client = _make_client(base_url=base_url, timeout=timeout)
+    try:
+        result = client.connectors_health(payload)
+    except RuntimeError as exc:
+        _exit_with_runtime_error(exc)
+    typer.echo(json.dumps(result, indent=2, sort_keys=True))
+
+
 @xai_app.command("calibration")
 def xai_calibration(
     agent: str | None = typer.Argument(

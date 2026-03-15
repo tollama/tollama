@@ -67,6 +67,7 @@ class TrustRouter:
         calibration_path: Path | None = None,
         auto_persist_every: int = 10,
         cache_ttl: float = 0.0,
+        history_tracker: Any | None = None,
     ):
         self.registry = registry
         self.primary_order = primary_order or self.DEFAULT_PRIMARY_ORDER
@@ -76,6 +77,9 @@ class TrustRouter:
         self._analyze_count = 0
         self._cache_ttl = cache_ttl
         self._cache: dict[str, tuple[float, NormalizedTrustResult]] = {}
+        self.history_tracker = history_tracker
+        self._cache_hits = 0
+        self._cache_misses = 0
 
     def select_agent(self, context: dict[str, Any]) -> TrustAgent | None:
         matches = self.registry.resolve(context)
@@ -120,6 +124,18 @@ class TrustRouter:
         self._cache.clear()
         return count
 
+    def cache_stats(self) -> dict[str, Any]:
+        """Return cache hit/miss statistics."""
+        total = self._cache_hits + self._cache_misses
+        return {
+            "hits": self._cache_hits,
+            "misses": self._cache_misses,
+            "total": total,
+            "hit_rate": self._cache_hits / total if total > 0 else 0.0,
+            "cached_entries": len(self._cache),
+            "ttl": self._cache_ttl,
+        }
+
     def analyze(
         self,
         *,
@@ -129,12 +145,15 @@ class TrustRouter:
         cache_key = self._cache_key(context, payload)
         cached = self._get_cached(cache_key)
         if cached is not None:
+            self._cache_hits += 1
             return cached
+        self._cache_misses += 1
         agent = self.select_agent(context)
         if agent is None:
             return None
         result = coerce_normalized_trust_result(agent.analyze(payload))
         self._put_cache(cache_key, result)
+        self._record_history(result)
         self._maybe_auto_persist()
         return result
 
@@ -214,6 +233,21 @@ class TrustRouter:
             None,
             lambda: self.analyze_multi(context=context, payload=payload),
         )
+
+    def _record_history(self, result: NormalizedTrustResult) -> None:
+        """Record a trust result in the history tracker if available."""
+        if self.history_tracker is None:
+            return
+        try:
+            self.history_tracker.record(
+                agent_name=result.agent_name,
+                domain=result.domain,
+                trust_score=result.trust_score,
+                risk_category=result.risk_category,
+                calibration_status=result.calibration_status,
+            )
+        except Exception:  # noqa: BLE001
+            _log.debug("Failed to record trust history", exc_info=True)
 
     def _maybe_auto_persist(self) -> None:
         """Persist calibration data every N analyze calls."""
@@ -302,11 +336,18 @@ def _aggregate_trust_results(
     )
 
 
-def build_default_trust_router(*, enable_calibration: bool = True) -> TrustRouter:
+def build_default_trust_router(
+    *,
+    enable_calibration: bool = True,
+    enable_history: bool = True,
+) -> TrustRouter:
     """Build the default in-repo trust agent router.
 
     When *enable_calibration* is True (default), loads persisted calibration
     data from disk and auto-persists every 10 analyze calls.
+
+    When *enable_history* is True (default), loads persisted trust history
+    from disk for trend analysis.
     """
     from tollama.xai.trust_agents import (
         CalibrationTracker,
@@ -329,18 +370,31 @@ def build_default_trust_router(*, enable_calibration: bool = True) -> TrustRoute
             _log.warning("Failed to load calibration data, starting fresh", exc_info=True)
             calibration_tracker = CalibrationTracker()
 
+    history_tracker = None
+    if enable_history:
+        from tollama.xai.trust_history import TrustHistoryTracker, default_history_path
+
+        try:
+            history_tracker = TrustHistoryTracker.load(default_history_path())
+        except Exception:  # noqa: BLE001
+            _log.warning("Failed to load trust history, starting fresh", exc_info=True)
+            history_tracker = TrustHistoryTracker()
+
     registry = TrustAgentRegistry()
     registry.register(MarketCalibrationTrustAgent())
-    financial_agent = FinancialMarketTrustAgent()
+    financial_agent = FinancialMarketTrustAgent(
+        calibration_tracker=calibration_tracker,
+    )
     registry.register(financial_agent)
-    registry.register(SupplyChainTrustAgent())
-    registry.register(NewsTrustAgent())
-    registry.register(GeopoliticalTrustAgent())
-    registry.register(RegulatoryTrustAgent())
+    registry.register(SupplyChainTrustAgent(calibration_tracker=calibration_tracker))
+    registry.register(NewsTrustAgent(calibration_tracker=calibration_tracker))
+    registry.register(GeopoliticalTrustAgent(calibration_tracker=calibration_tracker))
+    registry.register(RegulatoryTrustAgent(calibration_tracker=calibration_tracker))
     router = TrustRouter(
         registry,
         calibration_tracker=calibration_tracker,
         calibration_path=calibration_path,
+        history_tracker=history_tracker,
     )
     financial_agent._trust_router = router
     return router
