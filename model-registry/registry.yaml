@@ -254,3 +254,72 @@ models:
       future_covariates_numeric: false
       future_covariates_categorical: false
       static_covariates: false
+
+  - name: timer-base
+    family: timer
+    source:
+      type: huggingface
+      repo_id: thuml/Timer
+      revision: main
+    license:
+      type: apache-2.0
+      needs_acceptance: false
+    metadata:
+      implementation: timer_base
+      max_context: 2880
+      max_horizon: 720
+      install_extra: runner_timer
+      install_command: python -m pip install -e ".[dev,runner_timer]"
+      notes: Timer is a generative pre-trained Transformer for time series (ICML 2024). Strong zero-shot transfer across domains.
+    capabilities:
+      past_covariates_numeric: false
+      past_covariates_categorical: false
+      future_covariates_numeric: false
+      future_covariates_categorical: false
+      static_covariates: false
+
+  - name: timemixer-base
+    family: timemixer
+    source:
+      type: huggingface
+      repo_id: thuml/timemixer
+      revision: main
+    license:
+      type: apache-2.0
+      needs_acceptance: false
+    metadata:
+      implementation: timemixer_base
+      max_context: 1536
+      max_horizon: 720
+      install_extra: runner_timemixer
+      install_command: python -m pip install -e ".[dev,runner_timemixer]"
+      notes: TimeMixer uses channel-mixing architecture, excels at multivariate forecasting with dedicated mixing of temporal and channel dimensions.
+    capabilities:
+      past_covariates_numeric: false
+      past_covariates_categorical: false
+      future_covariates_numeric: false
+      future_covariates_categorical: false
+      static_covariates: false
+
+  - name: forecastpfn
+    family: forecastpfn
+    source:
+      type: huggingface
+      repo_id: abacusai/ForecastPFN
+      revision: main
+    license:
+      type: apache-2.0
+      needs_acceptance: false
+    metadata:
+      implementation: forecastpfn
+      max_context: 1000
+      max_horizon: 300
+      install_extra: runner_forecastpfn
+      install_command: python -m pip install -e ".[dev,runner_forecastpfn]"
+      notes: ForecastPFN is a zero-shot Bayesian forecaster producing well-calibrated probabilistic predictions without training data. Instant probabilistic baseline.
+    capabilities:
+      past_covariates_numeric: false
+      past_covariates_categorical: false
+      future_covariates_numeric: false
+      future_covariates_categorical: false
+      static_covariates: false

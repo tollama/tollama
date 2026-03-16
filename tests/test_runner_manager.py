@@ -541,6 +541,9 @@ def test_runner_manager_list_families_includes_expected_defaults() -> None:
         "tide",
         "nhits",
         "nbeatsx",
+        "timer",
+        "timemixer",
+        "forecastpfn",
     ]
 
 
@@ -589,6 +592,9 @@ def test_runner_manager_get_all_statuses_does_not_start_missing_supervisors(monk
         "tide",
         "nhits",
         "nbeatsx",
+        "timer",
+        "timemixer",
+        "forecastpfn",
     }
     assert by_family["mock"]["running"] is True
     assert by_family["torch"]["command"] == [

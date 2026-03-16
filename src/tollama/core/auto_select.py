@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from statistics import fmean
 from typing import Literal
@@ -9,6 +10,8 @@ from typing import Literal
 from .recommend import recommend_models
 from .registry import ModelSpec, list_registry_models
 from .schemas import SeriesInput
+
+logger = logging.getLogger(__name__)
 
 AutoForecastStrategy = Literal["auto", "fastest", "best_accuracy", "ensemble"]
 CovariatesType = Literal["numeric", "categorical"]
@@ -20,6 +23,9 @@ _FAMILY_SPEED_BONUS: dict[str, float] = {
     "uni2ts": 18.0,
     "sundial": 16.0,
     "toto": 14.0,
+    "timer": 15.0,
+    "timemixer": 17.0,
+    "forecastpfn": 50.0,
 }
 _FAMILY_ACCURACY_BONUS: dict[str, float] = {
     "mock": -60.0,
@@ -28,7 +34,27 @@ _FAMILY_ACCURACY_BONUS: dict[str, float] = {
     "uni2ts": 24.0,
     "sundial": 12.0,
     "toto": 22.0,
+    "timer": 18.0,
+    "timemixer": 20.0,
+    "forecastpfn": 10.0,
 }
+
+# Backtest-learned weights override heuristics when available.
+# Populated at runtime via ``set_learned_weights``.
+_learned_accuracy_override: dict[str, float] | None = None
+
+
+def set_learned_weights(weights: dict[str, float] | None) -> None:
+    """Install backtest-derived accuracy weights (or clear with None)."""
+    global _learned_accuracy_override  # noqa: PLW0603
+    _learned_accuracy_override = weights
+    if weights:
+        logger.info("auto_select: using learned accuracy weights for %d models", len(weights))
+
+
+def get_learned_weights() -> dict[str, float] | None:
+    """Return current learned weights (None if using heuristics)."""
+    return _learned_accuracy_override
 
 
 @dataclass(frozen=True, slots=True)
@@ -142,6 +168,7 @@ def select_auto_models(
             horizon=horizon,
             profile=profile,
             spec=spec,
+            model=model,
         )
         ranked_candidates.append(
             AutoCandidateScore(
@@ -183,9 +210,20 @@ def _strategy_bonus(
     horizon: int,
     profile: AutoSeriesProfile,
     spec: ModelSpec | None,
+    model: str | None = None,
 ) -> tuple[float, list[str]]:
     speed_bonus = _FAMILY_SPEED_BONUS.get(family, 0.0)
-    accuracy_bonus = _FAMILY_ACCURACY_BONUS.get(family, 0.0)
+
+    # Use backtest-learned accuracy weights when available
+    if _learned_accuracy_override is not None and model is not None:
+        learned = _learned_accuracy_override.get(model)
+        if learned is not None:
+            # Scale learned weight (0-1) into bonus range (0-30)
+            accuracy_bonus = learned * 30.0
+        else:
+            accuracy_bonus = _FAMILY_ACCURACY_BONUS.get(family, 0.0)
+    else:
+        accuracy_bonus = _FAMILY_ACCURACY_BONUS.get(family, 0.0)
     profile_bonus = _profile_bonus(profile=profile, horizon=horizon, spec=spec, family=family)
 
     if strategy == "fastest":

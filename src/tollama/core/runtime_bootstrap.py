@@ -44,6 +44,9 @@ FAMILY_EXTRAS: dict[str, str] = {
     "tide": "runner_tide",
     "nhits": "runner_nhits",
     "nbeatsx": "runner_nbeatsx",
+    "timer": "runner_timer",
+    "timemixer": "runner_timemixer",
+    "forecastpfn": "runner_forecastpfn",
 }
 
 # Increment when runtime state compatibility changes even without a package
@@ -72,6 +75,9 @@ FAMILY_RUNNER_MODULES: dict[str, str] = {
     "tide": "tollama.runners.tide_runner.main",
     "nhits": "tollama.runners.nhits_runner.main",
     "nbeatsx": "tollama.runners.nbeatsx_runner.main",
+    "timer": "tollama.runners.timer_runner.main",
+    "timemixer": "tollama.runners.timemixer_runner.main",
+    "forecastpfn": "tollama.runners.forecastpfn_runner.main",
 }
 
 _STATE_FILENAME = "installed.json"

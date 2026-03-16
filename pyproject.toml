@@ -55,6 +55,9 @@ tollama-runner-patchtst = "tollama.runners.patchtst_runner.main:main"
 tollama-runner-tide = "tollama.runners.tide_runner.main:main"
 tollama-runner-nhits = "tollama.runners.nhits_runner.main:main"
 tollama-runner-nbeatsx = "tollama.runners.nbeatsx_runner.main:main"
+tollama-runner-timer = "tollama.runners.timer_runner.main:main"
+tollama-runner-timemixer = "tollama.runners.timemixer_runner.main:main"
+tollama-runner-forecastpfn = "tollama.runners.forecastpfn_runner.main:main"
 tollama-mcp = "tollama.mcp.__main__:main"
 tollama-dashboard = "tollama.tui.app:main"
 
@@ -148,6 +151,25 @@ runner_nbeatsx = [
   "pytorch-lightning>=2.0,<3.0",
   "scipy>=1.10,<2.0",
   "torch>=2.2",
+]
+runner_timer = [
+  "transformers>=4.40.1,<6.0",
+  "torch>=2.0",
+  "numpy>=1.26,<3.0",
+  "pandas>=2.0,<3.0",
+  "huggingface_hub>=0.20,<2.0",
+]
+runner_timemixer = [
+  "transformers>=4.40.1,<6.0",
+  "torch>=2.0",
+  "numpy>=1.26,<3.0",
+  "pandas>=2.0,<3.0",
+  "huggingface_hub>=0.20,<2.0",
+]
+runner_forecastpfn = [
+  "ForecastPFN>=0.1",
+  "torch>=2.0",
+  "numpy>=1.26,<3.0",
 ]
 preprocess = [
   "scipy>=1.11,<2.0",
