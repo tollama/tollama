@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import enum
+import logging
 import os
 import select
 import shutil
@@ -21,7 +23,19 @@ from tollama.core.protocol import (
     generate_message_id,
 )
 
+logger = logging.getLogger(__name__)
+
 DEFAULT_CALL_TIMEOUT_SECONDS = 10.0
+
+# Circuit breaker defaults
+CB_FAILURE_THRESHOLD = 3
+CB_FAILURE_WINDOW_SECONDS = 30.0
+CB_RECOVERY_TIMEOUT_SECONDS = 15.0
+
+# Retry backoff defaults
+RETRY_BASE_DELAY_SECONDS = 0.1
+RETRY_MAX_DELAY_SECONDS = 5.0
+RETRY_MAX_ATTEMPTS = 3
 
 
 class RunnerError(RuntimeError):
@@ -30,6 +44,10 @@ class RunnerError(RuntimeError):
 
 class RunnerUnavailableError(RunnerError):
     """Raised when the runner process is unavailable."""
+
+
+class RunnerCircuitOpenError(RunnerUnavailableError):
+    """Raised when the circuit breaker is open and rejecting calls."""
 
 
 class RunnerProtocolError(RunnerError):
@@ -46,10 +64,111 @@ class RunnerCallError(RunnerError):
         self.data = data
 
 
+class CircuitState(enum.Enum):
+    """Circuit breaker states."""
+
+    CLOSED = "closed"
+    OPEN = "open"
+    HALF_OPEN = "half_open"
+
+
+class CircuitBreaker:
+    """Circuit breaker for runner failure protection.
+
+    State transitions:
+    - CLOSED: Normal operation. Track failures within a sliding window.
+    - OPEN: Reject all calls. Transition to HALF_OPEN after recovery timeout.
+    - HALF_OPEN: Allow one probe call. Success → CLOSED, failure → OPEN.
+    """
+
+    def __init__(
+        self,
+        *,
+        failure_threshold: int = CB_FAILURE_THRESHOLD,
+        failure_window_seconds: float = CB_FAILURE_WINDOW_SECONDS,
+        recovery_timeout_seconds: float = CB_RECOVERY_TIMEOUT_SECONDS,
+    ) -> None:
+        self._failure_threshold = failure_threshold
+        self._failure_window_seconds = failure_window_seconds
+        self._recovery_timeout_seconds = recovery_timeout_seconds
+        self._state = CircuitState.CLOSED
+        self._failure_timestamps: list[float] = []
+        self._opened_at: float | None = None
+
+    @property
+    def state(self) -> CircuitState:
+        """Return the current circuit state, auto-transitioning OPEN → HALF_OPEN."""
+        if self._state == CircuitState.OPEN and self._opened_at is not None:
+            if time.monotonic() - self._opened_at >= self._recovery_timeout_seconds:
+                self._state = CircuitState.HALF_OPEN
+        return self._state
+
+    def check(self) -> None:
+        """Check if a call is allowed. Raises RunnerCircuitOpenError if not."""
+        current = self.state
+        if current == CircuitState.OPEN:
+            raise RunnerCircuitOpenError(
+                "circuit breaker is open — runner has failed repeatedly; "
+                f"will retry after {self._recovery_timeout_seconds:.0f}s recovery period"
+            )
+
+    def record_success(self) -> None:
+        """Record a successful call."""
+        self._failure_timestamps.clear()
+        if self._state in (CircuitState.HALF_OPEN, CircuitState.OPEN):
+            logger.info("circuit breaker closed after successful probe")
+        self._state = CircuitState.CLOSED
+        self._opened_at = None
+
+    def record_failure(self) -> None:
+        """Record a failed call. May trip the breaker to OPEN."""
+        now = time.monotonic()
+        self._failure_timestamps.append(now)
+
+        if self._state == CircuitState.HALF_OPEN:
+            self._trip(now)
+            return
+
+        # Prune failures outside the sliding window
+        cutoff = now - self._failure_window_seconds
+        self._failure_timestamps = [t for t in self._failure_timestamps if t > cutoff]
+
+        if len(self._failure_timestamps) >= self._failure_threshold:
+            self._trip(now)
+
+    def _trip(self, now: float) -> None:
+        self._state = CircuitState.OPEN
+        self._opened_at = now
+        logger.warning(
+            "circuit breaker tripped to OPEN after %d failures in %.0fs",
+            len(self._failure_timestamps),
+            self._failure_window_seconds,
+        )
+
+    def get_status(self) -> dict[str, Any]:
+        """Return circuit breaker status for diagnostics."""
+        now = time.monotonic()
+        cutoff = now - self._failure_window_seconds
+        recent_failures = sum(1 for t in self._failure_timestamps if t > cutoff)
+        return {
+            "state": self.state.value,
+            "recent_failures": recent_failures,
+            "failure_threshold": self._failure_threshold,
+        }
+
+
 class RunnerSupervisor:
     """Manage one long-lived runner subprocess and synchronous method calls."""
 
-    def __init__(self, runner_command: Sequence[str] | None = None) -> None:
+    def __init__(
+        self,
+        runner_command: Sequence[str] | None = None,
+        *,
+        circuit_breaker: CircuitBreaker | None = None,
+        max_retry_attempts: int = RETRY_MAX_ATTEMPTS,
+        retry_base_delay: float = RETRY_BASE_DELAY_SECONDS,
+        retry_max_delay: float = RETRY_MAX_DELAY_SECONDS,
+    ) -> None:
         default_command = (sys.executable, "-m", "tollama.runners.mock.main")
         self._runner_command = list(runner_command or default_command)
         self._process: subprocess.Popen[bytes] | None = None
@@ -60,6 +179,10 @@ class RunnerSupervisor:
         self._last_error_message: str | None = None
         self._last_error_at: datetime | None = None
         self._stdout_buffer = bytearray()
+        self._circuit_breaker = circuit_breaker or CircuitBreaker()
+        self._max_retry_attempts = max(max_retry_attempts, 1)
+        self._retry_base_delay = retry_base_delay
+        self._retry_max_delay = retry_max_delay
 
     def start(self) -> None:
         """Start the runner process if it is not currently running."""
@@ -84,34 +207,56 @@ class RunnerSupervisor:
         params: dict[str, Any],
         timeout: float = DEFAULT_CALL_TIMEOUT_SECONDS,
     ) -> dict[str, Any]:
-        """Call a runner method and return the result payload."""
+        """Call a runner method and return the result payload.
+
+        Uses a circuit breaker to avoid hammering a persistently failing runner
+        and exponential backoff between retry attempts.
+        """
         if timeout <= 0:
             raise ValueError("timeout must be greater than zero")
 
+        # Circuit breaker check (outside lock to avoid holding lock while sleeping)
+        self._circuit_breaker.check()
+
         request = ProtocolRequest(id=self._new_request_id(), method=method, params=params)
 
-        with self._lock:
-            last_unavailable: RunnerUnavailableError | None = None
-            for _attempt in range(2):
-                process = self._ensure_running_locked()
-                self._last_used_at = datetime.now(UTC)
+        last_unavailable: RunnerUnavailableError | None = None
+        for attempt in range(self._max_retry_attempts):
+            if attempt > 0:
+                # Re-check circuit breaker before each retry
+                self._circuit_breaker.check()
+                # Exponential backoff: base * 2^(attempt-1), capped
+                delay = min(
+                    self._retry_base_delay * (2 ** (attempt - 1)),
+                    self._retry_max_delay,
+                )
+                time.sleep(delay)
+
+            with self._lock:
                 try:
-                    return self._call_once_locked(process, request, timeout)
+                    process = self._ensure_running_locked()
+                    self._last_used_at = datetime.now(UTC)
+                    result = self._call_once_locked(process, request, timeout)
+                    self._circuit_breaker.record_success()
+                    return result
                 except RunnerUnavailableError as exc:
                     self._record_error_locked(str(exc))
+                    self._circuit_breaker.record_failure()
                     last_unavailable = exc
                     self._restart_locked_for_failure()
                 except (RunnerCallError, RunnerProtocolError) as exc:
                     self._record_error_locked(str(exc))
+                    # Structured errors are not retry-able (bad request, etc.)
                     raise
 
-            final_message = (
-                str(last_unavailable)
-                if last_unavailable is not None
-                else "runner unavailable after restart"
-            )
+        final_message = (
+            str(last_unavailable)
+            if last_unavailable is not None
+            else "runner unavailable after retries"
+        )
+        with self._lock:
             self._record_error_locked(final_message)
-            raise RunnerUnavailableError(final_message) from last_unavailable
+        raise RunnerUnavailableError(final_message) from last_unavailable
 
     def get_status(self, *, family: str | None = None) -> dict[str, Any]:
         """Return current runner process status without starting the process."""
@@ -145,6 +290,7 @@ class RunnerSupervisor:
                 "last_used_at": last_used_at,
                 "restarts": self._restarts,
                 "last_error": last_error,
+                "circuit_breaker": self._circuit_breaker.get_status(),
             }
 
     def _call_once_locked(

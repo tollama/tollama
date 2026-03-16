@@ -19,6 +19,7 @@ from tollama.core.runtime_bootstrap import (
 )
 from tollama.core.storage import TollamaPaths
 
+from .memory_manager import MemoryPressureManager
 from .supervisor import RunnerCallError, RunnerSupervisor, RunnerUnavailableError
 
 logger = logging.getLogger(__name__)
@@ -47,12 +48,14 @@ class RunnerManager:
         supervisors: Mapping[str, RunnerSupervisor] | None = None,
         auto_bootstrap: bool = False,
         paths: TollamaPaths | None = None,
+        memory_manager: MemoryPressureManager | None = None,
     ) -> None:
         self._runner_configs = _build_runner_configs(runner_commands)
         self._supervisors: dict[str, RunnerSupervisor] = dict(supervisors or {})
         self._lock = threading.Lock()
         self._auto_bootstrap = auto_bootstrap
         self._paths = paths or TollamaPaths.default()
+        self._memory_manager = memory_manager or MemoryPressureManager()
         # Track families whose commands were explicitly overridden by the caller
         # so that auto-bootstrap never overrides them.
         self._explicit_families: frozenset[str] = (
@@ -93,6 +96,11 @@ class RunnerManager:
             )
         return statuses
 
+    @property
+    def memory_manager(self) -> MemoryPressureManager:
+        """Expose the memory manager for status reporting."""
+        return self._memory_manager
+
     def call(
         self,
         family: str,
@@ -103,9 +111,23 @@ class RunnerManager:
         """Call one runner method for the specified family."""
         supervisor = self._supervisor_for_family(family)
         try:
-            return supervisor.call(method=method, params=params, timeout=timeout)
+            result = supervisor.call(method=method, params=params, timeout=timeout)
+            self._memory_manager.record_usage(family)
+            self._check_memory_pressure()
+            return result
         except RunnerUnavailableError as exc:
             raise self._rewrite_runner_unavailable_error(family=family, error=exc) from exc
+
+    def _check_memory_pressure(self) -> None:
+        """Evict LRU families if GPU memory pressure exceeds threshold."""
+        families_to_evict = self._memory_manager.families_to_evict()
+        for family in families_to_evict:
+            logger.info("memory pressure: evicting family %r (LRU)", family)
+            try:
+                self.stop(family=family)
+                self._memory_manager.remove_family(family)
+            except Exception:  # noqa: BLE001
+                logger.warning("failed to evict family %r under memory pressure", family)
 
     def unload(self, family: str, *, model: str | None = None, timeout: float) -> None:
         """Unload one model from a family runner, or stop the family runner as fallback."""

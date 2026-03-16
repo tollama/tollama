@@ -477,6 +477,45 @@ def create_app(*, runner_manager: RunnerManager | None = None) -> FastAPI:
 
     app.add_middleware(_SecurityHeadersMiddleware)
 
+    # Request correlation ID middleware ----------------------------------------
+    from .logging_config import clear_request_id, set_request_id
+
+    class _RequestIdMiddleware(BaseHTTPMiddleware):
+        async def dispatch(self, request: Request, call_next):  # type: ignore[override]
+            incoming_id = request.headers.get("X-Request-ID")
+            request_id = set_request_id(incoming_id)
+            response = await call_next(request)
+            response.headers["X-Request-ID"] = request_id
+            clear_request_id()
+            return response
+
+    app.add_middleware(_RequestIdMiddleware)
+
+    # Request body size limit middleware ---------------------------------------
+    max_body_mb = _env_float("TOLLAMA_MAX_REQUEST_BODY_MB", 10.0)
+    max_body_bytes = int(max_body_mb * 1024 * 1024)
+
+    class _BodySizeLimitMiddleware(BaseHTTPMiddleware):
+        async def dispatch(self, request: Request, call_next):  # type: ignore[override]
+            content_length = request.headers.get("content-length")
+            if content_length is not None:
+                try:
+                    length = int(content_length)
+                except ValueError:
+                    length = 0
+                if length > max_body_bytes:
+                    return JSONResponse(
+                        status_code=413,
+                        content=_http_error_body(
+                            status_code=413,
+                            detail=f"request body too large: {length} bytes "
+                            f"exceeds {max_body_mb:.0f} MB limit",
+                        ),
+                    )
+            return await call_next(request)
+
+    app.add_middleware(_BodySizeLimitMiddleware)
+
     cors_origins = _resolve_cors_origins_from_env()
     if cors_origins:
         app.add_middleware(
@@ -2483,6 +2522,8 @@ def _execute_auto_ensemble(
             },
             method=payload.ensemble_method,
             model_name="ensemble",
+            partial_ok=True,
+            min_models=1,
         )
     except EnsembleError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
@@ -4005,6 +4046,16 @@ def _optional_nonempty_str(value: Any) -> str | None:
     if not normalized:
         return None
     return normalized
+
+
+def _env_float(name: str, default: float) -> float:
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    try:
+        return float(raw)
+    except ValueError:
+        return default
 
 
 def _optional_bool_str(value: Any) -> bool | None:

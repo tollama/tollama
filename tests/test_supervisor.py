@@ -128,7 +128,11 @@ def test_runner_supervisor_get_status_reports_started_process(monkeypatch) -> No
 
 
 def test_runner_supervisor_records_last_error_and_restarts(monkeypatch) -> None:
-    supervisor = RunnerSupervisor(runner_command=("runner-cmd",))
+    supervisor = RunnerSupervisor(
+        runner_command=("runner-cmd",),
+        max_retry_attempts=3,
+        retry_base_delay=0.0,  # Skip backoff delay in tests
+    )
     monkeypatch.setattr(supervisor, "_ensure_running_locked", lambda: object())
     monkeypatch.setattr(
         supervisor,
@@ -145,7 +149,7 @@ def test_runner_supervisor_records_last_error_and_restarts(monkeypatch) -> None:
         supervisor.call(method="forecast", params={"x": 1}, timeout=1.0)
 
     status = supervisor.get_status(family="mock")
-    assert status["restarts"] == 2
+    assert status["restarts"] == 3  # 3 attempts with exponential backoff
     assert status["last_used_at"] is not None
     assert status["last_error"] == {
         "message": "boom",
