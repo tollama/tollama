@@ -41,6 +41,9 @@ graph TD
         TIDE[tide<br/>TiDE]
         NHITS[nhits<br/>N-HiTS]
         NBEATSX[nbeatsx<br/>N-BEATSx]
+        TIMEMIXER[timemixer<br/>TimeMixer]
+        TIMER[timer<br/>Timer]
+        FPFN[forecastpfn<br/>ForecastPFN]
     end
 
     subgraph Core ["Shared Core"]
@@ -80,6 +83,9 @@ graph TD
     SUPER --> TIDE
     SUPER --> NHITS
     SUPER --> NBEATSX
+    SUPER --> TIMEMIXER
+    SUPER --> TIMER
+    SUPER --> FPFN
 
     ROUTES --> ENGINE
     ENGINE --> TRUST

@@ -241,6 +241,35 @@ tollama config init --force
 
 ---
 
+## Benchmarking
+
+Run all models against a dataset and compare accuracy/latency:
+```bash
+tollama benchmark examples/benchmark_data.json
+tollama benchmark examples/benchmark_data.json --horizon 96 --models chronos2,mock --folds 3
+tollama benchmark examples/benchmark_data.json --output results/
+```
+
+---
+
+## Export & Quantize
+
+Export a model to ONNX or TorchScript for edge deployment:
+```bash
+tollama export chronos2
+tollama export chronos2 --format onnx --context-length 512 --prediction-length 96
+tollama export chronos2 --format torchscript --output exports/
+```
+
+Quantize a pulled model for reduced memory usage:
+```bash
+tollama quantize chronos2
+tollama quantize chronos2 --precision int8
+tollama quantize chronos2 --precision int4
+```
+
+---
+
 ## Common Flags
 
 Progress control:

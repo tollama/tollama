@@ -7,10 +7,12 @@ Tollama is a forecast decision trust layer — evaluation, calibration, and expl
 Core layers:
 - `src/tollama/daemon`: HTTP API surface and runner lifecycle
 - `src/tollama/core`: shared schemas/contracts
-- `src/tollama/runners`: per-family inference adapters
+- `src/tollama/runners`: per-family inference adapters (14 families)
 - `src/tollama/cli`: user-facing command entrypoints
 - `src/tollama/client`: shared HTTP client used by CLI/MCP/tooling
 - `src/tollama/mcp`: MCP server and tool handlers
+- `src/tollama/xai`: explainability, trust scoring, decision policy, connectors
+- `src/tollama/sdk.py`: high-level Python API with workflow chaining
 
 ## Common Commands
 

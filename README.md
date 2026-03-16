@@ -58,7 +58,7 @@ AI agents can **invoke TSFMs as tools when forecasting is part of a broader work
 
 | Integration                       | Description                                                  |
 | --------------------------------- | ------------------------------------------------------------ |
-| **MCP Server**                    | 15 tools — forecast, analyze, compare, what-if, report, etc. |
+| **MCP Server**                    | 22 tools — forecast, analyze, compare, what-if, report, trust, etc. |
 | **A2A Protocol**                  | JSON-RPC based agent-to-agent communication with task queue  |
 | **LangChain**                     | 13 natively integrated tools                                 |
 | **CrewAI / AutoGen / Smolagents** | Per-framework adapters                                       |
@@ -66,8 +66,8 @@ AI agents can **invoke TSFMs as tools when forecasting is part of a broader work
 
 ## Supported Models
 
-Tollama ships **11 models**: 7 time series foundation models (TSFMs) and 4 neural baselines.
-**All 11 models share the exact same interface** — `tollama run`, `POST /api/forecast`, Python SDK, MCP tools — no extra configuration or training steps required regardless of model type.
+Tollama ships **14 models**: 7 time series foundation models (TSFMs) and 7 neural baselines.
+**All 14 models share the exact same interface** — `tollama run`, `POST /api/forecast`, Python SDK, MCP tools — no extra configuration or training steps required regardless of model type.
 
 | Model              | Provider                | Type            | Covariates    |
 | ------------------ | ----------------------- |:---------------:|:-------------:|
@@ -82,6 +82,9 @@ Tollama ships **11 models**: 7 time series foundation models (TSFMs) and 4 neura
 | TiDE               | Unit8 / Darts           | Neural Baseline | Past + Future |
 | N-HiTS             | Nixtla / NeuralForecast | Neural Baseline | Target only   |
 | N-BEATSx           | Nixtla / NeuralForecast | Neural Baseline | Target only   |
+| TimeMixer          | Tsinghua / THUML        | Neural Baseline | Past + Future |
+| Timer              | Tsinghua / THUML        | Neural Baseline | Target only   |
+| ForecastPFN        | PFN Research            | Neural Baseline | Target only   |
 
 Routing defaults can be driven by benchmark artifacts instead of static family heuristics.
 `benchmarks/cross_model_tsfm.py` now emits a `routing.json` manifest that Tollama can read

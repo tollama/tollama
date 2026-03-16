@@ -75,6 +75,7 @@ Authorization: Bearer <api-key>
 |---|---|---|
 | POST | `/api/validate` | Validate forecast payload |
 | POST | `/api/forecast` | Forecast (JSON or NDJSON stream) |
+| POST | `/api/forecast/stream` | SSE forecast stream with granular progress events |
 | POST | `/api/forecast/progressive` | Progressive SSE forecast stream |
 | POST | `/v1/forecast` | Forecast (stable JSON response) |
 | POST | `/api/auto-forecast` | Zero-config auto model-selection forecast |
@@ -91,6 +92,14 @@ Authorization: Bearer <api-key>
 | POST | `/api/what-if` | Scenario transform + forecast |
 | POST | `/api/report` | Composite report (analysis + recommendation + forecast) |
 | POST | `/api/pipeline` | End-to-end autonomous pipeline |
+| POST | `/api/explain-decision` | Decision explanation facade (trust-layer v3.8) |
+
+### Advanced
+
+| Method | Path | Purpose |
+|---|---|---|
+| POST | `/api/reconcile` | Reconcile hierarchical forecasts (bottom-up, top-down, OLS, MinT) |
+| POST | `/api/conformal` | Apply conformal prediction intervals with guaranteed coverage |
 
 ### XAI (Explainability & Trust)
 
@@ -101,6 +110,19 @@ Authorization: Bearer <api-key>
 | POST | `/api/xai/forecast-decompose` | Trend/seasonal/residual decomposition |
 | POST | `/api/xai/model-card` | Generate EU AI Act model card |
 | POST | `/api/xai/decision-report` | Build structured decision or explanation report |
+| POST | `/api/xai/connectors/health` | Check connector availability |
+| POST | `/api/xai/record-outcome` | Record prediction outcome for calibration |
+| POST | `/api/xai/gate-decision` | Trust-gated auto-execution check |
+| POST | `/api/xai/trust-attribution` | SHAP-like trust component attribution |
+| POST | `/api/xai/batch-analyze` | Batch trust analysis (concurrent, max 100) |
+| POST | `/api/xai/alerts/configure` | Configure trust alert thresholds |
+| GET | `/api/xai/alerts/config` | Get current alert configuration |
+| POST | `/api/xai/alerts/check` | Check trust against alert thresholds |
+| GET | `/api/xai/cache/stats` | Trust cache hit/miss statistics |
+| PUT | `/api/xai/cache/ttl` | Configure cache TTL |
+| DELETE | `/api/xai/cache/invalidate` | Clear trust cache |
+| GET | `/api/xai/dashboard/agents` | List registered trust agents |
+| POST | `/api/xai/dashboard/trust` | Trust dashboard aggregation |
 
 ### A2A
 
