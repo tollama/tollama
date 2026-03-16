@@ -163,7 +163,12 @@ class TrustRouter:
         agent = self.select_agent(context)
         if agent is None:
             return None
-        result = coerce_normalized_trust_result(agent.analyze(payload))
+        try:
+            result = coerce_normalized_trust_result(agent.analyze(payload))
+        except Exception as exc:  # noqa: BLE001
+            result = self._handle_agent_failure(agent, context, payload, exc)
+            if result is None:
+                return None
         self._put_cache(cache_key, result)
         self._record_history(result)
         self._maybe_auto_persist()
@@ -318,19 +323,49 @@ class TrustRouter:
             Additional context for the connector fetch.
         trust_context : dict
             Context for trust agent routing (must include 'domain').
+
+        On connector fetch failure, attempts heuristic fallback for retryable
+        errors, or returns a degraded result for auth/schema errors.
         """
         from tollama.xai.connectors.protocol import ConnectorFetchError
 
         try:
             result = connector.fetch(identifier, connector_context or {})
-        except ConnectorFetchError:
+        except ConnectorFetchError as exc:
             _log.warning(
-                "Connector %s fetch failed for %s",
+                "Connector %s fetch failed for %s: %s",
                 connector.connector_name,
                 identifier,
-                exc_info=True,
+                exc,
             )
-            return None
+            domain = (trust_context or {}).get("domain", getattr(connector, "domain", "unknown"))
+            context = trust_context or {"domain": domain}
+
+            # For retryable errors, try heuristic fallback with empty payload
+            if exc.error.retryable:
+                fallback = self._find_heuristic_fallback(
+                    context,
+                    exclude="",  # no agent to exclude since connector failed
+                )
+                if fallback is not None:
+                    _log.info(
+                        "Connector fetch failed, falling back to heuristic agent %s",
+                        fallback.agent_name,
+                    )
+                    try:
+                        return coerce_normalized_trust_result(
+                            fallback.analyze({"identifier": identifier}),
+                        )
+                    except Exception:  # noqa: BLE001
+                        _log.warning("Heuristic fallback also failed", exc_info=True)
+
+            # Return degraded result
+            return self._build_degraded_result(
+                agent_name=f"connector:{connector.connector_name}",
+                domain=domain,
+                error_type=exc.error.error_type,
+                message=str(exc),
+            )
 
         context = trust_context or {"domain": result.domain}
         payload = {
@@ -450,6 +485,130 @@ class TrustRouter:
             "risk_category": trust_result.risk_category,
             "trust_score": trust_result.trust_score,
         }
+
+    def _handle_agent_failure(
+        self,
+        agent: TrustAgent,
+        context: dict[str, Any],
+        payload: dict[str, Any],
+        exc: Exception,
+    ) -> NormalizedTrustResult | None:
+        """Handle agent analysis failure with fallback or degraded result.
+
+        Fallback policy:
+        - Timeout / 5xx / network errors (retryable) → try heuristic fallback agent
+        - Auth errors (401/403, not retryable) → return degraded result, no fallback
+        - Schema mismatch (422, not retryable) → return degraded result with error info
+        - Other errors → try heuristic fallback
+        """
+        from tollama.xai.connectors.protocol import ConnectorFetchError
+
+        error_type = "unknown"
+        retryable = True
+
+        if isinstance(exc, ConnectorFetchError):
+            error_type = exc.error.error_type
+            retryable = exc.error.retryable
+        elif isinstance(exc, TimeoutError):
+            error_type = "network"
+            retryable = True
+
+        _log.warning(
+            "Agent %s failed (error_type=%s, retryable=%s): %s",
+            agent.agent_name,
+            error_type,
+            retryable,
+            exc,
+        )
+
+        # Non-retryable auth/schema errors → degraded result, no fallback
+        if error_type in ("auth", "schema") or (not retryable and error_type != "not_found"):
+            return self._build_degraded_result(
+                agent_name=agent.agent_name,
+                domain=context.get("domain", agent.domain),
+                error_type=error_type,
+                message=str(exc),
+            )
+
+        # Retryable errors → try heuristic fallback
+        fallback = self._find_heuristic_fallback(context, exclude=agent.agent_name)
+        if fallback is not None:
+            _log.info(
+                "Falling back from %s to heuristic agent %s",
+                agent.agent_name,
+                fallback.agent_name,
+            )
+            try:
+                return coerce_normalized_trust_result(fallback.analyze(payload))
+            except Exception:  # noqa: BLE001
+                _log.warning(
+                    "Heuristic fallback %s also failed",
+                    fallback.agent_name,
+                    exc_info=True,
+                )
+
+        # All fallbacks exhausted → degraded result
+        return self._build_degraded_result(
+            agent_name=agent.agent_name,
+            domain=context.get("domain", agent.domain),
+            error_type=error_type,
+            message=str(exc),
+        )
+
+    def _find_heuristic_fallback(
+        self,
+        context: dict[str, Any],
+        *,
+        exclude: str,
+    ) -> TrustAgent | None:
+        """Find a heuristic (local) fallback agent for the given context.
+
+        Excludes the agent that already failed. Returns None if no fallback
+        is available.
+        """
+        matches = self.registry.resolve(context)
+        candidates = [
+            a for a in matches
+            if a.agent_name != exclude
+        ]
+        if not candidates:
+            return None
+        return sorted(candidates, key=lambda a: getattr(a, "priority", 100))[0]
+
+    @staticmethod
+    def _build_degraded_result(
+        *,
+        agent_name: str,
+        domain: str,
+        error_type: str,
+        message: str,
+    ) -> NormalizedTrustResult:
+        """Build a degraded NormalizedTrustResult for when analysis fails."""
+        return NormalizedTrustResult(
+            agent_name=agent_name,
+            domain=domain,
+            trust_score=0.0,
+            risk_category="RED",
+            calibration_status="poorly_calibrated",
+            component_breakdown={},
+            violations=[
+                TrustViolation(
+                    name=f"agent_failure:{error_type}",
+                    severity="critical",
+                    detail=message[:500],
+                ),
+            ],
+            why_trusted=f"Agent {agent_name} failed ({error_type}): {message[:200]}",
+            evidence=TrustEvidence(
+                source_type="degraded",
+                source_ids=[],
+                attributes={"error_type": error_type, "degraded": True},
+            ),
+            audit=TrustAudit(
+                formula_version="degraded-v1",
+                agent_version="0.1.0",
+            ),
+        )
 
     def _record_history(self, result: NormalizedTrustResult) -> None:
         """Record a trust result in the history tracker if available."""

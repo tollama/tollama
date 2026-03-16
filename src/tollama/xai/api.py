@@ -661,16 +661,25 @@ async def connectors_health(request: ConnectorHealthRequest):
     for connector in registry.connectors:
         if connector.domain not in domains:
             continue
-        status = "available"
-        try:
-            connector.supports("__health_check__", {})
-        except Exception:  # noqa: BLE001
-            status = "error"
-        results.append({
+        entry: dict[str, Any] = {
             "connector_name": connector.connector_name,
             "domain": connector.domain,
-            "status": status,
-        })
+        }
+        # Use real health_check for live connectors that support it
+        if hasattr(connector, "health_check") and callable(connector.health_check):
+            try:
+                health = connector.health_check()
+                entry["status"] = health.get("status", "available")
+                entry["latency_ms"] = health.get("latency_ms")
+            except Exception:  # noqa: BLE001
+                entry["status"] = "error"
+        else:
+            entry["status"] = "available"
+            try:
+                connector.supports("__health_check__", {})
+            except Exception:  # noqa: BLE001
+                entry["status"] = "error"
+        results.append(entry)
 
     return {"connectors": results}
 
