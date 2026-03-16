@@ -132,7 +132,7 @@ runner_lag_llama = [
 runner_patchtst = [
   "numpy>=1.26,<2.0",
   "torch>=2.2,<2.4",
-  "transformers>=4.40.1,<4.48",
+  "transformers>=4.40.1,<5.4",
 ]
 runner_tide = [
   "u8darts>=0.30.0",
