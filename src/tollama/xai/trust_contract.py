@@ -4,14 +4,14 @@ tollama.xai.trust_contract — Normalized contract for domain trust agents.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any, Protocol, runtime_checkable
 
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator
 
 
 def _utc_now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 class TrustComponent(BaseModel):
@@ -74,6 +74,42 @@ class NormalizedTrustResult(BaseModel):
     why_trusted: str = Field(default="")
     evidence: TrustEvidence = Field(default_factory=TrustEvidence)
     audit: TrustAudit = Field(default_factory=TrustAudit)
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize to a plain dict suitable for JSON responses."""
+        return {
+            "agent_name": self.agent_name,
+            "domain": self.domain,
+            "trust_score": self.trust_score,
+            "risk_category": self.risk_category,
+            "calibration_status": self.calibration_status,
+            "why_trusted": self.why_trusted,
+            "violations": [
+                {"name": v.name, "severity": v.severity, "detail": v.detail}
+                for v in self.violations
+            ],
+            "component_breakdown": {
+                name: {"score": c.score, "weight": c.weight}
+                for name, c in self.component_breakdown.items()
+            },
+            "evidence": self.evidence.model_dump(mode="json"),
+            "audit": self.audit.model_dump(mode="json"),
+        }
+
+    def to_summary(self) -> dict[str, Any]:
+        """Compact summary with just the key fields."""
+        return {
+            "agent_name": self.agent_name,
+            "domain": self.domain,
+            "trust_score": self.trust_score,
+            "risk_category": self.risk_category,
+            "calibration_status": self.calibration_status,
+            "why_trusted": self.why_trusted,
+            "violations": [
+                {"name": v.name, "severity": v.severity, "detail": v.detail}
+                for v in self.violations
+            ],
+        }
 
 
 class FinancialTrustPayload(BaseModel):

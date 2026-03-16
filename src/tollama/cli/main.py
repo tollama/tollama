@@ -2555,6 +2555,126 @@ def xai_calibration(
             typer.echo(json.dumps(stats.model_dump(mode="json"), indent=2, sort_keys=True))
 
 
+@xai_app.command("gate-decision")
+def xai_gate_decision(
+    input_path: Path = typer.Option(
+        ...,
+        "--input",
+        exists=True,
+        file_okay=True,
+        dir_okay=False,
+        help="JSON file containing the gate-decision request payload.",
+    ),
+    base_url: str = typer.Option(
+        DEFAULT_BASE_URL,
+        help="Daemon base URL.",
+    ),
+    timeout: float = typer.Option(
+        _RUN_TIMEOUT_SECONDS,
+        min=0.1,
+        help="HTTP timeout in seconds.",
+    ),
+) -> None:
+    """Evaluate trust gates for auto-execution."""
+    payload = json.loads(input_path.read_text())
+    client = _make_client(base_url=base_url, timeout=timeout)
+    try:
+        result = client.gate_decision(payload)
+    except RuntimeError as exc:
+        _exit_with_runtime_error(exc)
+    typer.echo(json.dumps(result, indent=2, sort_keys=True))
+
+
+@xai_app.command("batch-analyze")
+def xai_batch_analyze(
+    input_path: Path = typer.Option(
+        ...,
+        "--input",
+        exists=True,
+        file_okay=True,
+        dir_okay=False,
+        help="JSON file containing the batch-analyze request payload.",
+    ),
+    base_url: str = typer.Option(
+        DEFAULT_BASE_URL,
+        help="Daemon base URL.",
+    ),
+    timeout: float = typer.Option(
+        _RUN_TIMEOUT_SECONDS,
+        min=0.1,
+        help="HTTP timeout in seconds.",
+    ),
+) -> None:
+    """Submit a batch of trust analysis requests."""
+    payload = json.loads(input_path.read_text())
+    client = _make_client(base_url=base_url, timeout=timeout)
+    try:
+        result = client.batch_analyze(payload)
+    except RuntimeError as exc:
+        _exit_with_runtime_error(exc)
+    typer.echo(json.dumps(result, indent=2, sort_keys=True))
+
+
+@xai_app.command("alerts-configure")
+def xai_alerts_configure(
+    input_path: Path = typer.Option(
+        ...,
+        "--input",
+        exists=True,
+        file_okay=True,
+        dir_okay=False,
+        help="JSON file containing alert threshold configurations.",
+    ),
+    base_url: str = typer.Option(
+        DEFAULT_BASE_URL,
+        help="Daemon base URL.",
+    ),
+    timeout: float = typer.Option(
+        _RUN_TIMEOUT_SECONDS,
+        min=0.1,
+        help="HTTP timeout in seconds.",
+    ),
+) -> None:
+    """Configure trust alert thresholds."""
+    payload = json.loads(input_path.read_text())
+    client = _make_client(base_url=base_url, timeout=timeout)
+    try:
+        result = client.configure_alerts(payload)
+    except RuntimeError as exc:
+        _exit_with_runtime_error(exc)
+    typer.echo(json.dumps(result, indent=2, sort_keys=True))
+
+
+@xai_app.command("alerts-check")
+def xai_alerts_check(
+    input_path: Path = typer.Option(
+        ...,
+        "--input",
+        exists=True,
+        file_okay=True,
+        dir_okay=False,
+        help="JSON file containing context and payload for alert checking.",
+    ),
+    base_url: str = typer.Option(
+        DEFAULT_BASE_URL,
+        help="Daemon base URL.",
+    ),
+    timeout: float = typer.Option(
+        _RUN_TIMEOUT_SECONDS,
+        min=0.1,
+        help="HTTP timeout in seconds.",
+    ),
+) -> None:
+    """Check trust against configured alert thresholds."""
+    payload = json.loads(input_path.read_text())
+    client = _make_client(base_url=base_url, timeout=timeout)
+    try:
+        result = client.check_alerts(payload)
+    except RuntimeError as exc:
+        _exit_with_runtime_error(exc)
+    typer.echo(json.dumps(result, indent=2, sort_keys=True))
+
+
 def main() -> None:
     """Console script entrypoint for the Typer app."""
     app()

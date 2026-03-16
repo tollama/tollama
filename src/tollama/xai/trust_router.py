@@ -69,6 +69,7 @@ class TrustRouter:
         cache_ttl: float = 0.0,
         history_tracker: Any | None = None,
         history_path: Path | None = None,
+        connector_registry: Any | None = None,
     ):
         self.registry = registry
         self.primary_order = primary_order or self.DEFAULT_PRIMARY_ORDER
@@ -82,6 +83,7 @@ class TrustRouter:
         self._history_path = history_path
         self._cache_hits = 0
         self._cache_misses = 0
+        self.connector_registry = connector_registry
 
     def select_agent(self, context: dict[str, Any]) -> TrustAgent | None:
         matches = self.registry.resolve(context)
@@ -340,6 +342,32 @@ class TrustRouter:
         }
         return self.analyze(context=context, payload=payload)
 
+    def analyze_with_auto_connector(
+        self,
+        *,
+        domain: str,
+        identifier: str,
+        connector_context: dict[str, Any] | None = None,
+    ) -> NormalizedTrustResult | None:
+        """Auto-select a connector by domain and pipe into trust analysis.
+
+        Requires ``connector_registry`` to be set on this router instance.
+        Returns None if no connector matches or fetch fails.
+        """
+        if self.connector_registry is None:
+            _log.debug("No connector registry configured")
+            return None
+        connector = self.connector_registry.get(domain, identifier, connector_context)
+        if connector is None:
+            _log.debug("No connector found for domain=%s identifier=%s", domain, identifier)
+            return None
+        return self.analyze_with_connector(
+            connector=connector,
+            identifier=identifier,
+            connector_context=connector_context,
+            trust_context={"domain": domain},
+        )
+
     def gate_decision(
         self,
         trust_result: NormalizedTrustResult,
@@ -578,12 +606,22 @@ def build_default_trust_router(
     registry.register(NewsTrustAgent(calibration_tracker=calibration_tracker))
     registry.register(GeopoliticalTrustAgent(calibration_tracker=calibration_tracker))
     registry.register(RegulatoryTrustAgent(calibration_tracker=calibration_tracker))
+    # Wire connector registry for auto-discovery
+    connector_reg = None
+    try:
+        from tollama.xai.connectors.helpers import build_default_connector_registry
+
+        connector_reg = build_default_connector_registry()
+    except Exception:  # noqa: BLE001
+        _log.debug("Failed to build connector registry", exc_info=True)
+
     router = TrustRouter(
         registry,
         calibration_tracker=calibration_tracker,
         calibration_path=calibration_path,
         history_tracker=history_tracker,
         history_path=history_path,
+        connector_registry=connector_reg,
     )
     financial_agent._trust_router = router
     return router

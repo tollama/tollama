@@ -722,6 +722,42 @@ class TollamaClient:
             action="cache stats",
         )
 
+    def gate_decision(self, payload: dict[str, Any]) -> dict[str, Any]:
+        """Evaluate trust gates for auto-execution."""
+        return self._request_json(
+            "POST",
+            "/api/xai/gate-decision",
+            json_payload=payload,
+            action="gate decision",
+        )
+
+    def batch_analyze(self, payload: dict[str, Any]) -> dict[str, Any]:
+        """Submit a batch of trust analysis requests."""
+        return self._request_json(
+            "POST",
+            "/api/xai/batch-analyze",
+            json_payload=payload,
+            action="batch analyze",
+        )
+
+    def configure_alerts(self, payload: dict[str, Any]) -> dict[str, Any]:
+        """Configure trust alert thresholds."""
+        return self._request_json(
+            "POST",
+            "/api/xai/alerts/configure",
+            json_payload=payload,
+            action="configure alerts",
+        )
+
+    def check_alerts(self, payload: dict[str, Any]) -> dict[str, Any]:
+        """Check trust against configured alert thresholds."""
+        return self._request_json(
+            "POST",
+            "/api/xai/alerts/check",
+            json_payload=payload,
+            action="check alerts",
+        )
+
     def _request_headers(self) -> dict[str, str] | None:
         if self._api_key is None:
             return None
@@ -1131,6 +1167,50 @@ class AsyncTollamaClient:
             "GET",
             "/api/xai/cache/stats",
             action="cache stats",
+        )
+
+    async def gate_decision(
+        self, payload: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Evaluate trust gates for auto-execution."""
+        return await self._request_json(
+            "POST",
+            "/api/xai/gate-decision",
+            json_payload=payload,
+            action="gate decision",
+        )
+
+    async def batch_analyze(
+        self, payload: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Submit a batch of trust analysis requests."""
+        return await self._request_json(
+            "POST",
+            "/api/xai/batch-analyze",
+            json_payload=payload,
+            action="batch analyze",
+        )
+
+    async def configure_alerts(
+        self, payload: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Configure trust alert thresholds."""
+        return await self._request_json(
+            "POST",
+            "/api/xai/alerts/configure",
+            json_payload=payload,
+            action="configure alerts",
+        )
+
+    async def check_alerts(
+        self, payload: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Check trust against configured alert thresholds."""
+        return await self._request_json(
+            "POST",
+            "/api/xai/alerts/check",
+            json_payload=payload,
+            action="check alerts",
         )
 
     async def list_tags(self) -> dict[str, Any]:

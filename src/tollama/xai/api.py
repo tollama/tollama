@@ -723,36 +723,28 @@ class BatchAnalyzeRequest(BaseModel):
 @router.post(
     "/batch-analyze",
     summary="Batch trust analysis",
-    description="Evaluate multiple trust contexts in a single request.",
+    description="Evaluate multiple trust contexts in a single request using concurrent execution.",
 )
 async def batch_analyze(request: BatchAnalyzeRequest, raw_request: Request):
     """POST /api/xai/batch-analyze"""
+    import asyncio
+
     router_instance = _get_trust_router(raw_request)
-    results = []
-    for item in request.items:
-        result = router_instance.analyze(
-            context=item.context,
-            payload=item.payload,
+
+    async def _analyze_one(item: BatchAnalyzeItem) -> dict[str, Any]:
+        loop = asyncio.get_event_loop()
+        result = await loop.run_in_executor(
+            None,
+            lambda: router_instance.analyze(
+                context=item.context, payload=item.payload,
+            ),
         )
         if result is None:
-            results.append({"status": "no_agent", "result": None})
-        else:
-            results.append({
-                "status": "ok",
-                "result": {
-                    "agent_name": result.agent_name,
-                    "domain": result.domain,
-                    "trust_score": result.trust_score,
-                    "risk_category": result.risk_category,
-                    "calibration_status": result.calibration_status,
-                    "why_trusted": result.why_trusted,
-                    "violations": [
-                        {"name": v.name, "severity": v.severity, "detail": v.detail}
-                        for v in result.violations
-                    ],
-                },
-            })
-    return {"results": results, "count": len(results)}
+            return {"status": "no_agent", "result": None}
+        return {"status": "ok", "result": result.to_summary()}
+
+    results = await asyncio.gather(*[_analyze_one(item) for item in request.items])
+    return {"results": list(results), "count": len(results)}
 
 
 # ──────────────────────────────────────────────────────────────
@@ -770,6 +762,10 @@ class AlertThreshold(BaseModel):
     risk_categories: list[str] = Field(
         default_factory=lambda: ["RED"],
         description="Alert on these risk categories.",
+    )
+    alert_on_trend: list[str] = Field(
+        default_factory=list,
+        description="Alert on these trends: 'declining', 'stable', 'improving'.",
     )
     webhook_url: str | None = Field(
         None, description="URL to POST alert payload. Omit for log-only.",
@@ -847,7 +843,13 @@ async def check_alerts(request: AlertCheckRequest, raw_request: Request):
         payload=request.payload,
     )
     if result is None:
-        return {"alerts": [], "trust_result": None}
+        return {"alerts": [], "alert_count": 0, "trust_result": None}
+
+    # Get trend from history tracker if available
+    current_trend: str | None = None
+    if router_instance.history_tracker is not None:
+        stats = router_instance.history_tracker.get_stats(result.domain)
+        current_trend = stats.trend
 
     triggered: list[dict[str, Any]] = []
     for threshold in _alert_thresholds:
@@ -862,12 +864,15 @@ async def check_alerts(request: AlertCheckRequest, raw_request: Request):
             )
         if result.risk_category in threshold.risk_categories:
             reasons.append(f"risk_category {result.risk_category}")
+        if current_trend and threshold.alert_on_trend and current_trend in threshold.alert_on_trend:
+            reasons.append(f"trend {current_trend}")
 
         if reasons:
             alert = {
                 "domain": threshold.domain,
                 "trust_score": result.trust_score,
                 "risk_category": result.risk_category,
+                "trend": current_trend,
                 "reasons": reasons,
                 "webhook_url": threshold.webhook_url,
             }
@@ -898,5 +903,85 @@ async def check_alerts(request: AlertCheckRequest, raw_request: Request):
             "domain": result.domain,
             "trust_score": result.trust_score,
             "risk_category": result.risk_category,
+            "trend": current_trend,
         },
     }
+
+
+# ──────────────────────────────────────────────────────────────
+# Response Models (OpenAPI schema completeness)
+# ──────────────────────────────────────────────────────────────
+
+
+class GateStatus(BaseModel):
+    """A single gate evaluation result."""
+    gate: str = Field(..., description="Gate name.")
+    status: str = Field(..., description="PASS, WARN, or BLOCK.")
+    detail: str = Field(..., description="Human-readable detail.")
+
+
+class GateDecisionResponse(BaseModel):
+    """Response from /api/xai/gate-decision"""
+    allowed: bool = Field(..., description="Whether auto-execution is allowed.")
+    gates: list[GateStatus] = Field(..., description="Per-gate evaluation results.")
+    risk_category: str | None = Field(None, description="Trust result risk category.")
+    trust_score: float | None = Field(None, description="Trust result score.")
+
+
+class TrustAttributionItem(BaseModel):
+    """A single component attribution."""
+    component: str = Field(..., description="Component name.")
+    weight: float = Field(..., description="Component weight.")
+    score: float = Field(..., description="Component score.")
+    contribution: float = Field(..., description="Weighted contribution.")
+    impact_pct: float = Field(..., description="Percentage of total score.")
+
+
+class TrustAttributionResponse(BaseModel):
+    """Response from /api/xai/trust-attribution"""
+    attributions: list[TrustAttributionItem] = Field(
+        ..., description="Component attributions ordered by contribution.",
+    )
+    baseline: float = Field(..., description="Baseline value.")
+    total_score: float = Field(..., description="Total trust score.")
+    top_driver: str | None = Field(None, description="Top contributing component.")
+
+
+class BatchResultItem(BaseModel):
+    """A single batch analysis result."""
+    status: str = Field(..., description="'ok' or 'no_agent'.")
+    result: dict[str, Any] | None = Field(None, description="Trust result summary.")
+
+
+class BatchAnalyzeResponse(BaseModel):
+    """Response from /api/xai/batch-analyze"""
+    results: list[BatchResultItem] = Field(..., description="Per-item results.")
+    count: int = Field(..., description="Total number of results.")
+
+
+class AlertItem(BaseModel):
+    """A triggered alert."""
+    domain: str = Field(..., description="Domain that triggered the alert.")
+    trust_score: float = Field(..., description="Current trust score.")
+    risk_category: str = Field(..., description="Current risk category.")
+    trend: str | None = Field(None, description="Current trust trend.")
+    reasons: list[str] = Field(..., description="Alert trigger reasons.")
+    webhook_url: str | None = Field(None, description="Webhook URL if configured.")
+
+
+class AlertCheckResponse(BaseModel):
+    """Response from /api/xai/alerts/check"""
+    alerts: list[AlertItem] = Field(..., description="Triggered alerts.")
+    alert_count: int = Field(..., description="Number of triggered alerts.")
+    trust_result: dict[str, Any] | None = Field(
+        None, description="Trust analysis result summary.",
+    )
+
+
+class AlertConfigResponse(BaseModel):
+    """Response from /api/xai/alerts/configure and /api/xai/alerts/config"""
+    status: str | None = Field(None, description="Configuration status.")
+    threshold_count: int = Field(..., description="Number of configured thresholds.")
+    thresholds: list[dict[str, Any]] = Field(
+        ..., description="Configured alert thresholds.",
+    )
