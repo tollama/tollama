@@ -4,7 +4,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
 
-> Forecast decision trust layer — run, compare, and explain time series foundation model predictions for enterprise decisions
+> Unified TSFM platform for pulling, serving, comparing, and integrating time series foundation models through one local-first interface
 
 ---
 
@@ -52,9 +52,9 @@ flow = t.workflow(my_data).analyze().auto_forecast(horizon=30).what_if(scenarios
 | **CLI**        | `tollama pull` → `tollama run` — Ollama-style workflow                    |
 | **Dashboard**  | Web (Chart.js) + TUI (Textual) — model monitoring, forecast visualization |
 
-## Value for AI Agents — MCP, A2A, Skills
+## Value for AI Agents — Optional Integrations
 
-AI agents can **invoke TSFMs as tools the moment they need a forecast.**
+AI agents can **invoke TSFMs as tools when forecasting is part of a broader workflow.**
 
 | Integration                       | Description                                                  |
 | --------------------------------- | ------------------------------------------------------------ |
@@ -82,6 +82,10 @@ Tollama ships **11 models**: 7 time series foundation models (TSFMs) and 4 neura
 | TiDE               | Unit8 / Darts           | Neural Baseline | Past + Future |
 | N-HiTS             | Nixtla / NeuralForecast | Neural Baseline | Target only   |
 | N-BEATSx           | Nixtla / NeuralForecast | Neural Baseline | Target only   |
+
+Routing defaults can be driven by benchmark artifacts instead of static family heuristics.
+`benchmarks/cross_model_tsfm.py` now emits a `routing.json` manifest that Tollama can read
+from `~/.tollama/routing.json` or `TOLLAMA_ROUTING_MANIFEST`.
 
 > **TSFM vs Neural Baseline — what's the difference?**
 > 
@@ -233,6 +237,10 @@ baseline = t.forecast(
 comparison = baseline.then_compare(models=["timesfm-2.5-200m"])
 print(comparison.summary)
 ```
+
+`response_options.explain=true` and `response_options.narrative=true` return deterministic
+forecast summaries derived from the request/response payload. They are intended as lightweight
+decision support, not model-internal causal explanations.
 
 ## Data Ingest (CSV/Parquet)
 

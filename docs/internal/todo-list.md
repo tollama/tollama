@@ -39,7 +39,7 @@
 ### 2) 실행 런타임 격리: Dependency-Free / Conflict-Free Inference
 
 - [x] (P0) Worker-per-model-family(런너 분리) 기본 구조 유지/강화
-  - 현재 family: `torch`, `timesfm`, `uni2ts`, `sundial`, `toto` (+ `mock`)
+  - 현재 family: `torch`, `timesfm`, `uni2ts`, `sundial`, `toto`, `lag_llama`, `patchtst`, `tide`, `nhits`, `nbeatsx` (+ `mock`)
 - [~] (P1) 런너별 종속성 충돌 방지 정책(버전 pin, lockfile, 독립 venv) 확립
   - 현재: optional extras 분리 + family별 독립 runtime venv 자동화 구현(`~/.tollama/runtimes/<family>/venv/`, `tollama runtime install/list/update/remove`)
   - TODO: 버전 pin/lockfile 정책과 설치 재현성 보강
@@ -218,6 +218,7 @@
   - 현재: `/api/compare` 추가(다중 모델 동일 요청 비교, per-model success/error 반환)
   - 현재: `tollama_compare` MCP/LangChain 툴 추가
   - 현재: `tollama_recommend` MCP/LangChain 툴 추가(registry+capability 기반 랭킹)
+  - 현재: benchmark 산출물(`routing.json` 또는 benchmark `result.json`) 기반 routing default 로딩 지원
   - 현재: `tests/test_compare.py`, `tests/test_recommend.py` 추가
 - [x] (P1) Agentic 시계열 분석 기능 1차
   - 현재: `/api/analyze` 추가(주기/계절성/추세/이상치/정상성/품질 점수)
@@ -241,6 +242,7 @@
   - 현재: 회귀 테스트 `tests/test_report.py`, `tests/test_counterfactual.py`, `tests/test_scenario_tree.py` 및 연동 계층 테스트 확장
 - [x] (P1) Zero-config Auto-Forecast 1차
   - 현재: `/api/auto-forecast` 추가(설치 모델 기준 auto/fastest/best_accuracy/ensemble 선택)
+  - 현재: config routing 값이 비어 있으면 benchmark routing manifest를 fallback default로 사용
   - 현재: `AutoForecastRequest/AutoSelectionInfo/AutoForecastResponse` 스키마 추가
   - 현재: explicit `model`은 기본 hard override, `allow_fallback=true`일 때만 fallback 수행
   - 현재: ensemble은 weighted `mean`/`median` 집계 + bounded parallel 실행 (quantiles 생략 + warning)

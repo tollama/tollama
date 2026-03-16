@@ -89,6 +89,7 @@ from tollama.core.recommend import recommend_models
 from tollama.core.redact import redact_config_dict, redact_env_dict, redact_proxy_url
 from tollama.core.registry import ModelCapabilities, ModelSpec, get_model_spec, list_registry_models
 from tollama.core.report import build_forecast_report, build_report_narrative, run_report_analysis
+from tollama.core.routing import resolve_effective_routing_defaults
 from tollama.core.scenario_tree import build_scenario_tree
 from tollama.core.scenarios import apply_scenario
 from tollama.core.schemas import (
@@ -2173,9 +2174,12 @@ def _configured_routing_model_for_mode(*, app: FastAPI, mode: str) -> str | None
     try:
         config: TollamaConfig = app.state.config_provider.get()
     except ConfigFileError:
-        return None
+        config = TollamaConfig()
 
-    routing_defaults = config.routing
+    try:
+        routing_defaults = resolve_effective_routing_defaults(config=config)
+    except ValueError:
+        routing_defaults = config.routing
     if mode == "fast_path":
         return routing_defaults.fast_path
     if mode == "high_accuracy":

@@ -17,6 +17,7 @@ the optional future `packages/*` split as a migration phase.
 - Progressive refinement forecast SSE endpoint is available at `POST /api/forecast/progressive`.
 - Zero-config auto-forecast endpoint is available at `POST /api/auto-forecast`.
 - Auto-forecast `strategy="ensemble"` supports weighted `mean`/`median` aggregation with bounded parallel execution.
+- Auto-forecast routing modes can use benchmark-backed defaults from config or routing manifest files.
 - Model-free series diagnostics endpoint is available at `POST /api/analyze`.
 - Model-free synthetic generation endpoint is available at `POST /api/generate`.
 - Counterfactual endpoint is available at `POST /api/counterfactual`.
@@ -82,6 +83,7 @@ the optional future `packages/*` split as a migration phase.
 - Shared core (`src/tollama/core/`) provides schemas, protocol, registry/storage/config helpers.
 - CLI (`src/tollama/cli/`) provides user commands and daemon HTTP client integration.
 - Active runner implementations: `mock`, `torch`, `timesfm`, `uni2ts`, `sundial`, `toto`.
+- Additional runner implementations are shipped for `lag_llama`, `patchtst`, `tide`, `nhits`, and `nbeatsx`.
 
 ### Planned work / TODO
 - Keep daemon free of heavy ML runtime imports and dependencies.
@@ -236,6 +238,7 @@ tollama/
 - Add progress reporting for long-running pip install during auto-bootstrap.
 - Add support for specifying a custom Python interpreter per family in config.
 - Make single-install UX product-grade while preserving dependency isolation.
+- Add a first-class command to promote benchmark artifacts into persisted routing defaults.
 
 ## 8) Daemon supervisor lifecycle & VRAM reclaim [~]
 ### Current implementation status
@@ -376,7 +379,7 @@ tollama/
 - Forecast/pull paths map several failure classes to `400/404/409/502/503`.
 - Forecast endpoints support optional accuracy metrics
   (`mape`, `mase`, `mae`, `rmse`, `smape`, `wape`, `rmsse`, `pinball`) in response payloads.
-- Forecast responses include timing + enriched usage metadata and deterministic explainability payloads.
+- Forecast responses include timing + enriched usage metadata and deterministic summary/explanation payloads.
 - Daemon persists per-key usage aggregates in SQLite (`~/.tollama/usage.db`) and exposes them via
   `GET /api/usage`.
 - Optional token-bucket request limiting is available via environment configuration

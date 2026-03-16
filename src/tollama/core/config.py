@@ -45,7 +45,7 @@ class AuthConfig(BaseModel):
 
 
 class RoutingDefaults(BaseModel):
-    """Optional benchmark-driven model routing defaults."""
+    """Optional routing overrides applied ahead of benchmark-driven defaults."""
 
     model_config = ConfigDict(extra="forbid", strict=True)
 

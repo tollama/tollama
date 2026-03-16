@@ -1,4 +1,4 @@
-"""tollama — forecast decision trust layer for enterprise AI agents."""
+"""tollama — unified local-first platform for time series foundation models."""
 
 from typing import Any
 

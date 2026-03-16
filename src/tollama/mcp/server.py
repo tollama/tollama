@@ -9,10 +9,19 @@ from .tools import (
     MCPToolError,
 )
 from .tools import (
+    tollama_alerts_check as _tollama_alerts_check,
+)
+from .tools import (
+    tollama_alerts_configure as _tollama_alerts_configure,
+)
+from .tools import (
     tollama_analyze as _tollama_analyze,
 )
 from .tools import (
     tollama_auto_forecast as _tollama_auto_forecast,
+)
+from .tools import (
+    tollama_batch_analyze as _tollama_batch_analyze,
 )
 from .tools import (
     tollama_compare as _tollama_compare,
@@ -25,6 +34,9 @@ from .tools import (
 )
 from .tools import (
     tollama_forecast as _tollama_forecast,
+)
+from .tools import (
+    tollama_gate_decision as _tollama_gate_decision,
 )
 from .tools import (
     tollama_generate as _tollama_generate,
@@ -512,6 +524,91 @@ def create_server() -> Any:
     ) -> dict[str, Any]:
         try:
             return _tollama_model_card(request=request, base_url=base_url, timeout=timeout)
+        except MCPToolError as exc:
+            _raise_mcp_tool_error(exc)
+
+    @server.tool(
+        name="tollama_gate_decision",
+        description=(
+            "Evaluate trust gates (score threshold, constraint violations, risk category) "
+            "to determine whether auto-execution should proceed. "
+            "Required inputs: request.context (with 'domain'), request.payload. "
+            "Optional: request.trust_threshold (default 0.5). "
+            'Example: tollama_gate_decision({"request":{"context":{"domain":"financial_market"},'
+            '"payload":{"instrument_id":"AAPL"},"trust_threshold":0.6}}).'
+        ),
+    )
+    def tollama_gate_decision(
+        request: dict[str, Any],
+        base_url: str | None = None,
+        timeout: float | None = None,
+    ) -> dict[str, Any]:
+        try:
+            return _tollama_gate_decision(request=request, base_url=base_url, timeout=timeout)
+        except MCPToolError as exc:
+            _raise_mcp_tool_error(exc)
+
+    @server.tool(
+        name="tollama_batch_analyze",
+        description=(
+            "Run batch trust analysis for multiple items concurrently. "
+            "Required input: request.items (list of {context, payload}). "
+            "Max 100 items per request. "
+            "Example: tollama_batch_analyze("
+            '{"request":{"items":[{"context":{"domain":"financial_market"},'
+            '"payload":{"instrument_id":"AAPL"}}]}}).'
+        ),
+    )
+    def tollama_batch_analyze(
+        request: dict[str, Any],
+        base_url: str | None = None,
+        timeout: float | None = None,
+    ) -> dict[str, Any]:
+        try:
+            return _tollama_batch_analyze(request=request, base_url=base_url, timeout=timeout)
+        except MCPToolError as exc:
+            _raise_mcp_tool_error(exc)
+
+    @server.tool(
+        name="tollama_alerts_configure",
+        description=(
+            "Configure trust alert thresholds for monitoring trust score drops "
+            "and risk category escalations. "
+            "Required input: request.thresholds (list of threshold configs). "
+            "Each threshold: domain, min_trust_score, risk_categories, "
+            "alert_on_trend, webhook_url. "
+            "Example: tollama_alerts_configure("
+            '{"request":{"thresholds":[{"domain":"financial_market",'
+            '"min_trust_score":0.5,"risk_categories":["RED"],"webhook_url":null}]}}).'
+        ),
+    )
+    def tollama_alerts_configure(
+        request: dict[str, Any],
+        base_url: str | None = None,
+        timeout: float | None = None,
+    ) -> dict[str, Any]:
+        try:
+            return _tollama_alerts_configure(request=request, base_url=base_url, timeout=timeout)
+        except MCPToolError as exc:
+            _raise_mcp_tool_error(exc)
+
+    @server.tool(
+        name="tollama_alerts_check",
+        description=(
+            "Check current trust against configured alert thresholds. "
+            "Runs trust analysis and returns any triggered alerts with reasons. "
+            "Required inputs: request.context (with 'domain'), request.payload. "
+            'Example: tollama_alerts_check({"request":{"context":{"domain":"financial_market"},'
+            '"payload":{"instrument_id":"AAPL"}}}).'
+        ),
+    )
+    def tollama_alerts_check(
+        request: dict[str, Any],
+        base_url: str | None = None,
+        timeout: float | None = None,
+    ) -> dict[str, Any]:
+        try:
+            return _tollama_alerts_check(request=request, base_url=base_url, timeout=timeout)
         except MCPToolError as exc:
             _raise_mcp_tool_error(exc)
 

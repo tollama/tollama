@@ -73,6 +73,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help="Write protocol/report template without contacting daemon",
     )
+    parser.add_argument(
+        "--routing-manifest-path",
+        default=None,
+        help="Optional path to also export a routing manifest consumable by tollama.",
+    )
     return parser.parse_args(argv)
 
 
@@ -420,6 +425,28 @@ def _write(path: Path, content: str) -> None:
     path.write_text(content, encoding="utf-8")
 
 
+def _routing_manifest_payload(
+    *,
+    routing: dict[str, Any],
+    run_id: str,
+    generated_at: str,
+    source: str,
+) -> dict[str, Any]:
+    return {
+        "version": 1,
+        "generated_at": generated_at,
+        "run_id": run_id,
+        "source": source,
+        "routing": {
+            "default": routing.get("default"),
+            "fast_path": routing.get("fast_path"),
+            "high_accuracy": routing.get("high_accuracy"),
+        },
+        "policy": routing.get("policy"),
+        "caveats": list(routing.get("caveats", [])),
+    }
+
+
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     out_dir = Path(args.output_dir)
@@ -462,6 +489,13 @@ def main(argv: list[str] | None = None) -> int:
             out_dir / "report_template.json", json.dumps(template_payload, indent=2, sort_keys=True)
         )
         _write(out_dir / "report_template.md", _markdown_report(template_payload))
+        template_manifest = _routing_manifest_payload(
+            routing=template_payload["routing_recommendation"],
+            run_id=template_payload["run_id"],
+            generated_at=template_payload["generated_at"],
+            source="benchmark_template",
+        )
+        _write(out_dir / "routing.json", json.dumps(template_manifest, indent=2, sort_keys=True))
         print(f"template artifacts written: {out_dir}")
         return 0
 
@@ -524,6 +558,18 @@ def main(argv: list[str] | None = None) -> int:
 
     _write(out_dir / "result.json", json.dumps(payload, indent=2, sort_keys=True))
     _write(out_dir / "result.md", _markdown_report(payload))
+    routing_manifest = _routing_manifest_payload(
+        routing=routing,
+        run_id=payload["run_id"],
+        generated_at=payload["generated_at"],
+        source="cross_model_tsfm",
+    )
+    _write(out_dir / "routing.json", json.dumps(routing_manifest, indent=2, sort_keys=True))
+    if args.routing_manifest_path:
+        _write(
+            Path(args.routing_manifest_path),
+            json.dumps(routing_manifest, indent=2, sort_keys=True),
+        )
     print(f"benchmark artifacts written: {out_dir}")
     return 0
 

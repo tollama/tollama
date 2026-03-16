@@ -77,6 +77,10 @@ def test_create_server_registers_descriptions_for_all_tools(monkeypatch) -> None
         "tollama_explain",
         "tollama_trust_score",
         "tollama_model_card",
+        "tollama_gate_decision",
+        "tollama_batch_analyze",
+        "tollama_alerts_configure",
+        "tollama_alerts_check",
     }
     for name, payload in registered.items():
         description = payload["description"]

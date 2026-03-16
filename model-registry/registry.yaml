@@ -48,9 +48,9 @@ models:
       max_horizon: 256
       use_quantiles_by_default: true
     capabilities:
-      past_covariates_numeric: false
+      past_covariates_numeric: true
       past_covariates_categorical: false
-      future_covariates_numeric: false
+      future_covariates_numeric: true
       future_covariates_categorical: false
       static_covariates: false
 
@@ -68,9 +68,9 @@ models:
       implementation: moirai_2p0
       default_context_length: 1680
     capabilities:
-      past_covariates_numeric: false
+      past_covariates_numeric: true
       past_covariates_categorical: false
-      future_covariates_numeric: false
+      future_covariates_numeric: true
       future_covariates_categorical: false
       static_covariates: false
 
@@ -254,4 +254,3 @@ models:
       future_covariates_numeric: false
       future_covariates_categorical: false
       static_covariates: false
-

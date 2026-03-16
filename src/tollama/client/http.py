@@ -758,6 +758,23 @@ class TollamaClient:
             action="check alerts",
         )
 
+    def set_cache_ttl(self, ttl: float) -> dict[str, Any]:
+        """Update trust cache TTL."""
+        return self._request_json(
+            "PUT",
+            "/api/xai/cache/ttl",
+            json_payload={"ttl": ttl},
+            action="set cache ttl",
+        )
+
+    def invalidate_cache(self) -> dict[str, Any]:
+        """Clear all cached trust results."""
+        return self._request_json(
+            "DELETE",
+            "/api/xai/cache/invalidate",
+            action="invalidate cache",
+        )
+
     def _request_headers(self) -> dict[str, str] | None:
         if self._api_key is None:
             return None
@@ -1211,6 +1228,23 @@ class AsyncTollamaClient:
             "/api/xai/alerts/check",
             json_payload=payload,
             action="check alerts",
+        )
+
+    async def set_cache_ttl(self, ttl: float) -> dict[str, Any]:
+        """Update trust cache TTL."""
+        return await self._request_json(
+            "PUT",
+            "/api/xai/cache/ttl",
+            json_payload={"ttl": ttl},
+            action="set cache ttl",
+        )
+
+    async def invalidate_cache(self) -> dict[str, Any]:
+        """Clear all cached trust results."""
+        return await self._request_json(
+            "DELETE",
+            "/api/xai/cache/invalidate",
+            action="invalidate cache",
         )
 
     async def list_tags(self) -> dict[str, Any]:

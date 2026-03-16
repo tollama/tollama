@@ -124,3 +124,27 @@ class ModelCardToolInput(MCPInputBase):
     request: dict[str, Any]
     base_url: StrictStr | None = None
     timeout: StrictFloat | None = Field(default=None, gt=0)
+
+
+class GateDecisionToolInput(MCPInputBase):
+    request: dict[str, Any]
+    base_url: StrictStr | None = None
+    timeout: StrictFloat | None = Field(default=None, gt=0)
+
+
+class BatchAnalyzeToolInput(MCPInputBase):
+    request: dict[str, Any]
+    base_url: StrictStr | None = None
+    timeout: StrictFloat | None = Field(default=None, gt=0)
+
+
+class AlertsConfigureToolInput(MCPInputBase):
+    request: dict[str, Any]
+    base_url: StrictStr | None = None
+    timeout: StrictFloat | None = Field(default=None, gt=0)
+
+
+class AlertsCheckToolInput(MCPInputBase):
+    request: dict[str, Any]
+    base_url: StrictStr | None = None
+    timeout: StrictFloat | None = Field(default=None, gt=0)

@@ -63,6 +63,10 @@ Exposed tools:
 - `tollama_explain`
 - `tollama_trust_score`
 - `tollama_model_card`
+- `tollama_gate_decision`
+- `tollama_batch_analyze`
+- `tollama_alerts_configure`
+- `tollama_alerts_check`
 
 Error categories (exit-code aligned):
 - `INVALID_REQUEST` (`2`)

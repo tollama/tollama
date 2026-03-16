@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "tollama"
 version = "0.1.0"
-description = "Forecast decision trust layer — evaluation, calibration, and explanation for forecast-driven enterprise decisions."
+description = "Unified local-first platform for serving and using time series foundation models through one API, CLI, and SDK."
 readme = "README.md"
 requires-python = ">=3.11"
 license = { file = "LICENSE" }

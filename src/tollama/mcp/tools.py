@@ -29,12 +29,16 @@ from tollama.core.schemas import (
 )
 
 from .schemas import (
+    AlertsCheckToolInput,
+    AlertsConfigureToolInput,
     AnalyzeToolInput,
     AutoForecastToolInput,
+    BatchAnalyzeToolInput,
     CompareToolInput,
     CounterfactualToolInput,
     ExplainToolInput,
     ForecastToolInput,
+    GateDecisionToolInput,
     GenerateToolInput,
     HealthToolInput,
     ModelCardToolInput,
@@ -527,5 +531,81 @@ def tollama_model_card(
     client = _make_client(base_url=args.base_url, timeout=args.timeout)
     try:
         return client.model_card(args.request)
+    except TollamaClientError as exc:
+        _raise_from_client_error(exc)
+
+
+def tollama_gate_decision(
+    *,
+    request: dict[str, Any],
+    base_url: str | None = None,
+    timeout: float | None = None,
+) -> dict[str, Any]:
+    """Evaluate trust gates for auto-execution via XAI endpoint."""
+    try:
+        args = GateDecisionToolInput(request=request, base_url=base_url, timeout=timeout)
+    except ValidationError as exc:
+        _raise_invalid_request(str(exc))
+
+    client = _make_client(base_url=args.base_url, timeout=args.timeout)
+    try:
+        return client.gate_decision(args.request)
+    except TollamaClientError as exc:
+        _raise_from_client_error(exc)
+
+
+def tollama_batch_analyze(
+    *,
+    request: dict[str, Any],
+    base_url: str | None = None,
+    timeout: float | None = None,
+) -> dict[str, Any]:
+    """Run batch trust analysis via XAI endpoint."""
+    try:
+        args = BatchAnalyzeToolInput(request=request, base_url=base_url, timeout=timeout)
+    except ValidationError as exc:
+        _raise_invalid_request(str(exc))
+
+    client = _make_client(base_url=args.base_url, timeout=args.timeout)
+    try:
+        return client.batch_analyze(args.request)
+    except TollamaClientError as exc:
+        _raise_from_client_error(exc)
+
+
+def tollama_alerts_configure(
+    *,
+    request: dict[str, Any],
+    base_url: str | None = None,
+    timeout: float | None = None,
+) -> dict[str, Any]:
+    """Configure trust alert thresholds via XAI endpoint."""
+    try:
+        args = AlertsConfigureToolInput(request=request, base_url=base_url, timeout=timeout)
+    except ValidationError as exc:
+        _raise_invalid_request(str(exc))
+
+    client = _make_client(base_url=args.base_url, timeout=args.timeout)
+    try:
+        return client.configure_alerts(args.request)
+    except TollamaClientError as exc:
+        _raise_from_client_error(exc)
+
+
+def tollama_alerts_check(
+    *,
+    request: dict[str, Any],
+    base_url: str | None = None,
+    timeout: float | None = None,
+) -> dict[str, Any]:
+    """Check trust against alert thresholds via XAI endpoint."""
+    try:
+        args = AlertsCheckToolInput(request=request, base_url=base_url, timeout=timeout)
+    except ValidationError as exc:
+        _raise_invalid_request(str(exc))
+
+    client = _make_client(base_url=args.base_url, timeout=args.timeout)
+    try:
+        return client.check_alerts(args.request)
     except TollamaClientError as exc:
         _raise_from_client_error(exc)

@@ -63,8 +63,8 @@ def test_registry_loads_required_model_specs() -> None:
     assert timesfm.license.type == "apache-2.0"
     assert timesfm.license.needs_acceptance is False
     assert timesfm.capabilities is not None
-    assert timesfm.capabilities.past_covariates_numeric is False
-    assert timesfm.capabilities.future_covariates_numeric is False
+    assert timesfm.capabilities.past_covariates_numeric is True
+    assert timesfm.capabilities.future_covariates_numeric is True
     assert timesfm.capabilities.future_covariates_categorical is False
     assert timesfm.metadata == {
         "implementation": "timesfm_2p5_torch",
@@ -80,6 +80,9 @@ def test_registry_loads_required_model_specs() -> None:
     assert moirai.license.type == "cc-by-nc-4.0"
     assert moirai.license.needs_acceptance is True
     assert moirai.license.notice is not None
+    assert moirai.capabilities is not None
+    assert moirai.capabilities.past_covariates_numeric is True
+    assert moirai.capabilities.future_covariates_numeric is True
     assert moirai.metadata == {
         "implementation": "moirai_2p0",
         "default_context_length": 1680,

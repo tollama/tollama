@@ -40,6 +40,20 @@ def test_recommend_models_prefers_categorical_covariate_support() -> None:
     )
 
 
+def test_recommend_models_includes_timesfm_for_numeric_covariates() -> None:
+    payload = recommend_models(
+        horizon=24,
+        freq="D",
+        has_past_covariates=True,
+        has_future_covariates=True,
+        covariates_type="numeric",
+        top_k=50,
+    )
+
+    recommended_models = [item["model"] for item in payload["recommendations"]]
+    assert "timesfm-2.5-200m" in recommended_models
+
+
 def test_recommend_models_excludes_restricted_license_by_default() -> None:
     payload = recommend_models(
         horizon=24,
@@ -60,6 +74,20 @@ def test_recommend_models_allows_restricted_license_when_enabled() -> None:
     # claim covariate support in the registry, so omit covariate filters here).
     payload = recommend_models(
         horizon=24,
+        allow_restricted_license=True,
+        top_k=50,
+    )
+
+    recommended_models = [item["model"] for item in payload["recommendations"]]
+    assert "moirai-2.0-R-small" in recommended_models
+
+
+def test_recommend_models_allows_moirai_for_numeric_covariates_when_enabled() -> None:
+    payload = recommend_models(
+        horizon=24,
+        has_past_covariates=True,
+        has_future_covariates=True,
+        covariates_type="numeric",
         allow_restricted_license=True,
         top_k=50,
     )

@@ -227,6 +227,106 @@ class ConnectorHealthRequest(BaseModel):
 
 
 # ──────────────────────────────────────────────────────────────
+# Response Models (must be defined before endpoint decorators)
+# ──────────────────────────────────────────────────────────────
+
+
+class GateStatus(BaseModel):
+    """A single gate evaluation result."""
+    gate: str = Field(..., description="Gate name.")
+    status: str = Field(..., description="PASS, WARN, or BLOCK.")
+    detail: str = Field(..., description="Human-readable detail.")
+
+
+class GateDecisionResponse(BaseModel):
+    """Response from /api/xai/gate-decision"""
+    allowed: bool = Field(..., description="Whether auto-execution is allowed.")
+    gates: list[GateStatus] = Field(..., description="Per-gate evaluation results.")
+    risk_category: str | None = Field(None, description="Trust result risk category.")
+    trust_score: float | None = Field(None, description="Trust result score.")
+
+
+class TrustAttributionItem(BaseModel):
+    """A single component attribution."""
+    component: str = Field(..., description="Component name.")
+    weight: float = Field(..., description="Component weight.")
+    score: float = Field(..., description="Component score.")
+    contribution: float = Field(..., description="Weighted contribution.")
+    impact_pct: float = Field(..., description="Percentage of total score.")
+
+
+class TrustAttributionResponse(BaseModel):
+    """Response from /api/xai/trust-attribution"""
+    attributions: list[TrustAttributionItem] = Field(
+        ..., description="Component attributions ordered by contribution.",
+    )
+    baseline: float = Field(..., description="Baseline value.")
+    total_score: float = Field(..., description="Total trust score.")
+    top_driver: str | None = Field(None, description="Top contributing component.")
+
+
+class BatchResultItem(BaseModel):
+    """A single batch analysis result."""
+    status: str = Field(..., description="'ok' or 'no_agent'.")
+    result: dict[str, Any] | None = Field(None, description="Trust result summary.")
+
+
+class BatchAnalyzeResponse(BaseModel):
+    """Response from /api/xai/batch-analyze"""
+    results: list[BatchResultItem] = Field(..., description="Per-item results.")
+    count: int = Field(..., description="Total number of results.")
+
+
+class AlertItem(BaseModel):
+    """A triggered alert."""
+    domain: str = Field(..., description="Domain that triggered the alert.")
+    trust_score: float = Field(..., description="Current trust score.")
+    risk_category: str = Field(..., description="Current risk category.")
+    trend: str | None = Field(None, description="Current trust trend.")
+    reasons: list[str] = Field(..., description="Alert trigger reasons.")
+    webhook_url: str | None = Field(None, description="Webhook URL if configured.")
+
+
+class AlertCheckResponse(BaseModel):
+    """Response from /api/xai/alerts/check"""
+    alerts: list[AlertItem] = Field(..., description="Triggered alerts.")
+    alert_count: int = Field(..., description="Number of triggered alerts.")
+    trust_result: dict[str, Any] | None = Field(
+        None, description="Trust analysis result summary.",
+    )
+
+
+class AlertConfigResponse(BaseModel):
+    """Response from /api/xai/alerts/configure and /api/xai/alerts/config"""
+    status: str | None = Field(None, description="Configuration status.")
+    threshold_count: int = Field(..., description="Number of configured thresholds.")
+    thresholds: list[dict[str, Any]] = Field(
+        ..., description="Configured alert thresholds.",
+    )
+
+
+class CacheStatsResponse(BaseModel):
+    """Response from /api/xai/cache/stats"""
+    hits: int = Field(..., description="Cache hit count.")
+    misses: int = Field(..., description="Cache miss count.")
+    total: int = Field(..., description="Total cache lookups.")
+    hit_rate: float = Field(..., description="Cache hit rate (0.0-1.0).")
+    cached_entries: int = Field(..., description="Current number of cached entries.")
+    ttl: float = Field(..., description="Cache TTL in seconds.")
+
+
+class CacheTTLResponse(BaseModel):
+    """Response from /api/xai/cache/ttl"""
+    previous_ttl: float = Field(..., description="Previous TTL value.")
+    new_ttl: float = Field(..., description="New TTL value.")
+
+
+class CacheInvalidateResponse(BaseModel):
+    """Response from /api/xai/cache/invalidate"""
+    cleared: int = Field(..., description="Number of cache entries cleared.")
+
+
+# ──────────────────────────────────────────────────────────────
 # Endpoints
 # ──────────────────────────────────────────────────────────────
 
@@ -582,6 +682,7 @@ async def connectors_health(request: ConnectorHealthRequest):
 
 @router.get(
     "/cache/stats",
+    response_model=CacheStatsResponse,
     summary="Trust cache metrics",
     description="Returns trust result cache hit/miss statistics and TTL configuration.",
 )
@@ -601,6 +702,7 @@ class CacheTTLRequest(BaseModel):
 
 @router.put(
     "/cache/ttl",
+    response_model=CacheTTLResponse,
     summary="Configure cache TTL",
     description="Update the trust result cache TTL. Set to 0 to disable caching.",
 )
@@ -612,6 +714,19 @@ async def set_cache_ttl(request: CacheTTLRequest, raw_request: Request):
         "previous_ttl": old_ttl,
         "new_ttl": request.ttl,
     }
+
+
+@router.delete(
+    "/cache/invalidate",
+    response_model=CacheInvalidateResponse,
+    summary="Clear trust cache",
+    description="Invalidate all cached trust results. Returns number of entries cleared.",
+)
+async def invalidate_cache(raw_request: Request):
+    """DELETE /api/xai/cache/invalidate"""
+    router_instance = _get_trust_router(raw_request)
+    cleared = router_instance.clear_cache()
+    return {"cleared": cleared}
 
 
 # ──────────────────────────────────────────────────────────────
@@ -635,6 +750,7 @@ class GateDecisionRequest(BaseModel):
 
 @router.post(
     "/gate-decision",
+    response_model=GateDecisionResponse,
     summary="Trust-gated auto-execution check",
     description=(
         "Runs trust analysis and evaluates three safety gates "
@@ -678,6 +794,7 @@ class TrustAttributionRequest(BaseModel):
 
 @router.post(
     "/trust-attribution",
+    response_model=TrustAttributionResponse,
     summary="SHAP-like trust component attribution",
     description=(
         "Runs trust analysis and computes feature attribution from "
@@ -722,6 +839,7 @@ class BatchAnalyzeRequest(BaseModel):
 
 @router.post(
     "/batch-analyze",
+    response_model=BatchAnalyzeResponse,
     summary="Batch trust analysis",
     description="Evaluate multiple trust contexts in a single request using concurrent execution.",
 )
@@ -732,12 +850,8 @@ async def batch_analyze(request: BatchAnalyzeRequest, raw_request: Request):
     router_instance = _get_trust_router(raw_request)
 
     async def _analyze_one(item: BatchAnalyzeItem) -> dict[str, Any]:
-        loop = asyncio.get_event_loop()
-        result = await loop.run_in_executor(
-            None,
-            lambda: router_instance.analyze(
-                context=item.context, payload=item.payload,
-            ),
+        result = await router_instance.analyze_async(
+            context=item.context, payload=item.payload,
         )
         if result is None:
             return {"status": "no_agent", "result": None}
@@ -790,12 +904,50 @@ class AlertCheckRequest(BaseModel):
     )
 
 
+_WEBHOOK_MAX_RETRIES = 3
+_WEBHOOK_BASE_DELAY = 0.5  # seconds
+
+
+def _fire_webhook(
+    url: str,
+    payload: dict[str, Any],
+    logger: Any,
+) -> bool:
+    """Fire a webhook with exponential backoff retry.
+
+    Returns True if delivered successfully, False otherwise.
+    """
+    import time
+
+    import httpx
+
+    for attempt in range(_WEBHOOK_MAX_RETRIES):
+        try:
+            resp = httpx.post(url, json=payload, timeout=5.0)
+            if resp.status_code < 500:
+                return True
+            logger.warning(
+                "Webhook to %s returned %d (attempt %d/%d)",
+                url, resp.status_code, attempt + 1, _WEBHOOK_MAX_RETRIES,
+            )
+        except Exception:  # noqa: BLE001
+            logger.warning(
+                "Webhook to %s failed (attempt %d/%d)",
+                url, attempt + 1, _WEBHOOK_MAX_RETRIES,
+                exc_info=True,
+            )
+        if attempt < _WEBHOOK_MAX_RETRIES - 1:
+            time.sleep(_WEBHOOK_BASE_DELAY * (2 ** attempt))
+    return False
+
+
 # Module-level alert config (shared within the app via singleton router pattern)
 _alert_thresholds: list[AlertThreshold] = []
 
 
 @router.post(
     "/alerts/configure",
+    response_model=AlertConfigResponse,
     summary="Configure trust alert thresholds",
     description="Set up alert thresholds for trust score drops and risk escalations.",
 )
@@ -812,6 +964,7 @@ async def configure_alerts(request: AlertConfigRequest):
 
 @router.get(
     "/alerts/config",
+    response_model=AlertConfigResponse,
     summary="Get current alert configuration",
     description="Returns the currently configured alert thresholds.",
 )
@@ -825,6 +978,7 @@ async def get_alert_config():
 
 @router.post(
     "/alerts/check",
+    response_model=AlertCheckResponse,
     summary="Check trust against alert thresholds",
     description=(
         "Runs trust analysis and checks the result against configured "
@@ -878,22 +1032,9 @@ async def check_alerts(request: AlertCheckRequest, raw_request: Request):
             }
             triggered.append(alert)
 
-            # Fire webhook if configured
+            # Fire webhook if configured (with exponential backoff retry)
             if threshold.webhook_url:
-                try:
-                    import httpx
-
-                    httpx.post(
-                        threshold.webhook_url,
-                        json=alert,
-                        timeout=5.0,
-                    )
-                except Exception:  # noqa: BLE001
-                    _log.warning(
-                        "Failed to fire alert webhook to %s",
-                        threshold.webhook_url,
-                        exc_info=True,
-                    )
+                _fire_webhook(threshold.webhook_url, alert, _log)
 
     return {
         "alerts": triggered,
@@ -908,80 +1049,5 @@ async def check_alerts(request: AlertCheckRequest, raw_request: Request):
     }
 
 
-# ──────────────────────────────────────────────────────────────
-# Response Models (OpenAPI schema completeness)
-# ──────────────────────────────────────────────────────────────
 
 
-class GateStatus(BaseModel):
-    """A single gate evaluation result."""
-    gate: str = Field(..., description="Gate name.")
-    status: str = Field(..., description="PASS, WARN, or BLOCK.")
-    detail: str = Field(..., description="Human-readable detail.")
-
-
-class GateDecisionResponse(BaseModel):
-    """Response from /api/xai/gate-decision"""
-    allowed: bool = Field(..., description="Whether auto-execution is allowed.")
-    gates: list[GateStatus] = Field(..., description="Per-gate evaluation results.")
-    risk_category: str | None = Field(None, description="Trust result risk category.")
-    trust_score: float | None = Field(None, description="Trust result score.")
-
-
-class TrustAttributionItem(BaseModel):
-    """A single component attribution."""
-    component: str = Field(..., description="Component name.")
-    weight: float = Field(..., description="Component weight.")
-    score: float = Field(..., description="Component score.")
-    contribution: float = Field(..., description="Weighted contribution.")
-    impact_pct: float = Field(..., description="Percentage of total score.")
-
-
-class TrustAttributionResponse(BaseModel):
-    """Response from /api/xai/trust-attribution"""
-    attributions: list[TrustAttributionItem] = Field(
-        ..., description="Component attributions ordered by contribution.",
-    )
-    baseline: float = Field(..., description="Baseline value.")
-    total_score: float = Field(..., description="Total trust score.")
-    top_driver: str | None = Field(None, description="Top contributing component.")
-
-
-class BatchResultItem(BaseModel):
-    """A single batch analysis result."""
-    status: str = Field(..., description="'ok' or 'no_agent'.")
-    result: dict[str, Any] | None = Field(None, description="Trust result summary.")
-
-
-class BatchAnalyzeResponse(BaseModel):
-    """Response from /api/xai/batch-analyze"""
-    results: list[BatchResultItem] = Field(..., description="Per-item results.")
-    count: int = Field(..., description="Total number of results.")
-
-
-class AlertItem(BaseModel):
-    """A triggered alert."""
-    domain: str = Field(..., description="Domain that triggered the alert.")
-    trust_score: float = Field(..., description="Current trust score.")
-    risk_category: str = Field(..., description="Current risk category.")
-    trend: str | None = Field(None, description="Current trust trend.")
-    reasons: list[str] = Field(..., description="Alert trigger reasons.")
-    webhook_url: str | None = Field(None, description="Webhook URL if configured.")
-
-
-class AlertCheckResponse(BaseModel):
-    """Response from /api/xai/alerts/check"""
-    alerts: list[AlertItem] = Field(..., description="Triggered alerts.")
-    alert_count: int = Field(..., description="Number of triggered alerts.")
-    trust_result: dict[str, Any] | None = Field(
-        None, description="Trust analysis result summary.",
-    )
-
-
-class AlertConfigResponse(BaseModel):
-    """Response from /api/xai/alerts/configure and /api/xai/alerts/config"""
-    status: str | None = Field(None, description="Configuration status.")
-    threshold_count: int = Field(..., description="Number of configured thresholds.")
-    thresholds: list[dict[str, Any]] = Field(
-        ..., description="Configured alert thresholds.",
-    )

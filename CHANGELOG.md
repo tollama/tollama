@@ -9,11 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
-- Repositioned tollama as a "forecast decision trust layer" aligned with v4.0 strategy
+- Re-centered tollama messaging around its core role as a unified TSFM platform
 - Updated model count from 11 to 12 (includes mock runner) across all documentation
 - Updated endpoint count from 42 to 43+ across all documentation
 - Upgraded development status from Alpha to Beta (pyproject.toml classifier)
-- Updated A2A agent card, CLI, and architecture docs to reflect trust layer positioning
+- Synced TimesFM and Moirai registry capability metadata with their implemented covariate support
+- Auto-forecast routing modes now honor benchmark-backed routing manifests before falling back to heuristics
 
 ### Added
 

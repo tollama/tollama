@@ -162,6 +162,39 @@ def test_daemon_auto_forecast_mode_falls_back_when_configured_model_not_installe
     assert any("not installed" in item for item in body["selection"]["rationale"])
 
 
+def test_daemon_auto_forecast_mode_uses_routing_manifest_when_config_unset(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    paths = TollamaPaths(base_dir=tmp_path / ".tollama")
+    monkeypatch.setenv("TOLLAMA_HOME", str(paths.base_dir))
+    install_from_registry("mock", accept_license=True, paths=paths)
+
+    paths.routing_path.parent.mkdir(parents=True, exist_ok=True)
+    paths.routing_path.write_text(
+        (
+            "{"
+            '"version":1,'
+            '"source":"cross_model_tsfm",'
+            '"routing":{"default":"mock","fast_path":"mock","high_accuracy":"mock"}'
+            "}"
+        ),
+        encoding="utf-8",
+    )
+
+    payload = _auto_payload()
+    payload["mode"] = "fast_path"
+
+    with TestClient(create_app()) as client:
+        response = client.post("/api/auto-forecast", json=payload)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["selection"]["chosen_model"] == "mock"
+    assert body["selection"]["fallback_used"] is False
+    assert "configured routing model" in body["selection"]["rationale"][0]
+
+
 def test_daemon_auto_forecast_explicit_model_overrides_mode_default(monkeypatch, tmp_path) -> None:
     paths = TollamaPaths(base_dir=tmp_path / ".tollama")
     monkeypatch.setenv("TOLLAMA_HOME", str(paths.base_dir))

@@ -57,6 +57,10 @@ class TollamaPaths:
     def config_path(self) -> Path:
         return self.base_dir / "config.json"
 
+    @property
+    def routing_path(self) -> Path:
+        return self.base_dir / "routing.json"
+
 
 def is_installed(name: str, *, paths: TollamaPaths | None = None) -> bool:
     """Check whether a model manifest exists locally."""
