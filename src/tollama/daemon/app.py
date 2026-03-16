@@ -1533,6 +1533,82 @@ def create_app(*, runner_manager: RunnerManager | None = None) -> FastAPI:
         return response
 
     @app.post(
+        "/api/reconcile",
+        tags=["advanced"],
+        summary="Reconcile hierarchical forecasts",
+        description=(
+            "Enforce coherency constraints on hierarchical time series "
+            "forecasts using bottom-up, top-down, OLS, or MinT methods."
+        ),
+    )
+    def api_reconcile(payload: dict, request: Request) -> dict:
+        from tollama.core.reconciliation import (
+            HierarchySpec,
+            check_coherency,
+            reconcile,
+        )
+        from tollama.core.schemas import ForecastResponse
+
+        try:
+            forecast_data = payload.get("forecast", {})
+            hierarchy_data = payload.get("hierarchy", {})
+            method = payload.get("method", "bottom_up")
+            proportions = payload.get("proportions")
+            check_only = payload.get("check_only", False)
+
+            response = ForecastResponse.model_validate(forecast_data)
+            spec = HierarchySpec(tree=hierarchy_data.get("tree", {}))
+
+            if check_only:
+                violations = check_coherency(response, spec)
+                return {
+                    "coherent": len(violations) == 0,
+                    "violations": violations,
+                }
+
+            reconciled = reconcile(
+                response, spec, method=method, proportions=proportions,
+            )
+            return reconciled.model_dump(mode="json", exclude_none=True)
+        except Exception as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post(
+        "/api/conformal",
+        tags=["advanced"],
+        summary="Apply conformal prediction intervals",
+        description=(
+            "Add distribution-free prediction intervals with guaranteed "
+            "coverage to an existing forecast using conformal calibration."
+        ),
+    )
+    def api_conformal(payload: dict, request: Request) -> dict:
+        import numpy as np
+
+        from tollama.core.conformal import (
+            apply_conformal_to_response,
+            calibrate,
+        )
+        from tollama.core.schemas import ForecastResponse
+
+        try:
+            forecast_data = payload.get("forecast", {})
+            actuals = payload.get("actuals", [])
+            predictions = payload.get("predictions", [])
+            coverage = payload.get("coverage", 0.9)
+            method = payload.get("method", "split")
+
+            response = ForecastResponse.model_validate(forecast_data)
+            cal = calibrate(
+                np.array(actuals), np.array(predictions),
+                coverage=coverage, method=method,
+            )
+            result = apply_conformal_to_response(response, cal)
+            return result.model_dump(mode="json", exclude_none=True)
+        except Exception as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post(
         "/api/generate",
         response_model=GenerateResponse,
         tags=["analysis"],

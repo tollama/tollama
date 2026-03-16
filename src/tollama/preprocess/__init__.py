@@ -6,6 +6,7 @@ plain numpy arrays and have no dependency on tollama internals.  The ``bridge``
 module provides optional integration with ``tollama.core.schemas.SeriesInput``.
 """
 
+from .feature_engineering import FeatureConfig, auto_engineer_features
 from .imputation import ImputationMethod, impute
 from .pipeline import PreprocessResult, run_pipeline
 from .schemas import PreprocessConfig, SplineConfig, ValidationConfig
@@ -23,6 +24,7 @@ from .window import make_windows, make_windows_multivariate
 
 __all__ = [
     "DifferencingTransform",
+    "FeatureConfig",
     "ImputationMethod",
     "LogTransform",
     "MinMaxScaler1D",
@@ -38,5 +40,6 @@ __all__ = [
     "make_windows",
     "make_windows_multivariate",
     "run_pipeline",
+    "auto_engineer_features",
     "validate_series",
 ]

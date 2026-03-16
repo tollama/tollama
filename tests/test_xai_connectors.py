@@ -29,7 +29,6 @@ from tollama.xai.trust_contract import (
     coerce_supply_chain_payload,
 )
 
-
 # ── Protocol conformance ──────────────────────────────────────────────
 
 

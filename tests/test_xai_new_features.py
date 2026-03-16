@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Any
-
 import pytest
 from pydantic import ValidationError
 
@@ -12,7 +10,6 @@ from tollama.xai.connectors.protocol import ConnectorFetchError, DataConnector
 from tollama.xai.connectors.stubs import MockGeopoliticalConnector, MockRegulatoryConnector
 from tollama.xai.trust_agents.calibration import (
     CalibrationRecord,
-    CalibrationStats,
     CalibrationTracker,
 )
 from tollama.xai.trust_agents.heuristic import (
@@ -21,14 +18,11 @@ from tollama.xai.trust_agents.heuristic import (
     _build_result,
 )
 from tollama.xai.trust_contract import (
-    GeopoliticalTrustPayload,
-    RegulatoryTrustPayload,
     TrustComponent,
     coerce_geopolitical_payload,
     coerce_regulatory_payload,
 )
 from tollama.xai.trust_router import build_default_trust_router
-
 
 # ── Geopolitical Agent Tests ──────────────────────────────────────────
 

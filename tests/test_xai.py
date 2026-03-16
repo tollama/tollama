@@ -4,9 +4,8 @@ tests/test_xai.py — Comprehensive tests for Tollama XAI modules
 Tests all v3.8 XAI components across all 5 repositories.
 """
 
-import json
-import sys
 import os
+import sys
 
 # Add source paths — resolve to TollamaAI-Github root
 _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -21,13 +20,13 @@ def test_explanation_engine():
     print("TEST 1: ExplanationEngine — End-to-End Decision Explanation")
     print("=" * 70)
 
+    from tollama.xai.decision_policy import DecisionPolicyExplainer
     from tollama.xai.engine import ExplanationEngine
-    from tollama.xai.model_selection import ModelSelectionExplainer
-    from tollama.xai.forecast_decompose import ForecastDecomposer
     from tollama.xai.feature_attribution import TemporalFeatureAttribution
+    from tollama.xai.forecast_decompose import ForecastDecomposer
+    from tollama.xai.model_selection import ModelSelectionExplainer
     from tollama.xai.scenario_rationale import ScenarioRationale
     from tollama.xai.trust_breakdown import TrustBreakdown
-    from tollama.xai.decision_policy import DecisionPolicyExplainer
 
     engine = ExplanationEngine(
         model_selection_explainer=ModelSelectionExplainer(primary_metric="mse"),
@@ -208,7 +207,7 @@ def test_trust_breakdown():
 
     print(f"\n  Trust scores: {result['trust_scores']}")
     print(f"  Why trusted: {result['why_trusted']}")
-    print(f"  Breakdowns:")
+    print("  Breakdowns:")
     for comp, info in result["breakdowns"].get("polymarket", {}).items():
         if info.get("value") is not None:
             print(f"    {comp}: {info['value']} ({info.get('assessment', 'N/A')})")
@@ -256,7 +255,7 @@ def test_decision_policy():
         {"confidence": 0.90},
         {"auto_execute_threshold": 0.85, "audit_required": True},
     )
-    print(f"\n  Case 1 (confidence=0.90):")
+    print("\n  Case 1 (confidence=0.90):")
     print(f"    Auto: {result1['auto_executed']}, Reason: {result1['reason']}")
 
     # Case 2: Needs approval
@@ -264,7 +263,7 @@ def test_decision_policy():
         {"confidence": 0.70},
         {"auto_execute_threshold": 0.85, "audit_required": True},
     )
-    print(f"  Case 2 (confidence=0.70):")
+    print("  Case 2 (confidence=0.70):")
     print(f"    Auto: {result2['auto_executed']}, Escalation: {result2['escalation_triggered']}")
 
     assert result1["auto_executed"] is True
@@ -371,7 +370,6 @@ def test_tollama_eval_xai():
 
     eval_path = os.path.join(_REPO_ROOT, "tollama-eval", "src", "ts_autopilot", "reporting")
     sys.path.insert(0, eval_path)
-    import importlib
     if "xai_integration" in sys.modules:
         del sys.modules["xai_integration"]
     from xai_integration import EvalExplanationExtender
@@ -541,7 +539,7 @@ def test_coding_agent_xai():
     print(f"  Summary: {trace['summary']}")
 
     audit = tracer.get_audit_report()
-    print(f"\n  Audit report:")
+    print("\n  Audit report:")
     print(f"    Human review needed: {audit['audit_report']['human_review_needed']}")
     print(f"    Low confidence: {len(audit['audit_report']['low_confidence_decisions'])}")
 

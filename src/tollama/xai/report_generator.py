@@ -8,8 +8,8 @@ Evidence-backed decision report를 JSON, Markdown, HTML 형식으로 생성.
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
-from typing import Any, Optional
+from datetime import UTC, datetime
+from typing import Any
 
 
 class DecisionReportBuilder:
@@ -25,8 +25,8 @@ class DecisionReportBuilder:
     def build_decision_report(
         self,
         explanation: dict[str, Any],
-        forecast_result: Optional[dict[str, Any]] = None,
-        report_config: Optional[dict[str, Any]] = None,
+        forecast_result: dict[str, Any] | None = None,
+        report_config: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """
         Build a decision report for C-suite/stakeholders.
@@ -52,7 +52,7 @@ class DecisionReportBuilder:
         report = {
             "report_type": "decision_report",
             "title": config.get("title", "Forecast Decision Report"),
-            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "generated_at": datetime.now(UTC).isoformat(),
             "explanation_id": explanation.get("explanation_id", ""),
 
             "executive_summary": self._executive_summary(ie, pe, dpe, forecast_result),
@@ -107,7 +107,7 @@ class DecisionReportBuilder:
     def build_explanation_report(
         self,
         explanation: dict[str, Any],
-        model_card: Optional[dict[str, Any]] = None,
+        model_card: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """
         Build a detailed explanation report for audit/compliance.
@@ -121,7 +121,7 @@ class DecisionReportBuilder:
         report = {
             "report_type": "explanation_report",
             "title": "Detailed Explanation & Audit Report",
-            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "generated_at": datetime.now(UTC).isoformat(),
             "explanation_id": explanation.get("explanation_id", ""),
             "compliance_note": (
                 "This report provides structured explanation of the "
@@ -194,7 +194,7 @@ class DecisionReportBuilder:
     def _executive_summary(
         self,
         ie: dict, pe: dict, dpe: dict,
-        forecast_result: Optional[dict],
+        forecast_result: dict | None,
     ) -> str:
         model = pe.get("model_selected", "selected model")
         confidence = dpe.get("confidence", 0)
@@ -235,13 +235,13 @@ class DecisionReportBuilder:
 
         # Model Selection
         ms = report.get("model_selection", {})
-        lines.append(f"\n## Model Selection")
+        lines.append("\n## Model Selection")
         lines.append(f"\n**Selected**: {ms.get('selected_model', '')}")
         lines.append(f"**Rationale**: {ms.get('rationale', '')}")
 
         # Decision Recommendation
         dr = report.get("decision_recommendation", {})
-        lines.append(f"\n## Decision Recommendation")
+        lines.append("\n## Decision Recommendation")
         lines.append(f"\n**Action**: {dr.get('action_required', '')}")
         lines.append(f"**Confidence**: {dr.get('confidence', 0):.2f}")
         lines.append(f"**Reason**: {dr.get('reason', '')}")

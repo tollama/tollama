@@ -178,6 +178,22 @@ preprocess = [
 tui = [
   "textual>=0.47,<9.0",
 ]
+export = [
+  "torch>=2.0",
+  "onnx>=1.14,<2.0",
+]
+connectors_postgresql = [
+  "psycopg2-binary>=2.9,<3.0",
+]
+connectors_influxdb = [
+  "influxdb-client>=1.30,<2.0",
+]
+connectors_s3 = [
+  "boto3>=1.28,<2.0",
+]
+connectors_kafka = [
+  "kafka-python>=2.0,<3.0",
+]
 
 [tool.setuptools]
 package-dir = { "" = "src" }

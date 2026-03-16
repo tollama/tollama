@@ -36,34 +36,34 @@ __all__ = [
 ]
 
 try:
+    from tollama.xai.decision_policy import DecisionPolicyExplainer
     from tollama.xai.engine import ExplanationEngine
-    from tollama.xai.model_selection import ModelSelectionExplainer
-    from tollama.xai.forecast_decompose import ForecastDecomposer
     from tollama.xai.feature_attribution import TemporalFeatureAttribution
+    from tollama.xai.forecast_decompose import ForecastDecomposer
+    from tollama.xai.model_card import ModelCardGenerator
+    from tollama.xai.model_selection import ModelSelectionExplainer
+    from tollama.xai.report_generator import DecisionReportBuilder
     from tollama.xai.scenario_rationale import ScenarioRationale
     from tollama.xai.trust_breakdown import TrustBreakdown
-    from tollama.xai.decision_policy import DecisionPolicyExplainer
     from tollama.xai.trust_contract import (
         FinancialTrustPayload,
         NewsTrustPayload,
         NormalizedTrustResult,
     )
     from tollama.xai.trust_router import TrustAgentRegistry, TrustRouter
-    from tollama.xai.model_card import ModelCardGenerator
-    from tollama.xai.report_generator import DecisionReportBuilder
 except ImportError:
+    from xai.decision_policy import DecisionPolicyExplainer
     from xai.engine import ExplanationEngine
-    from xai.model_selection import ModelSelectionExplainer
-    from xai.forecast_decompose import ForecastDecomposer
     from xai.feature_attribution import TemporalFeatureAttribution
+    from xai.forecast_decompose import ForecastDecomposer
+    from xai.model_card import ModelCardGenerator
+    from xai.model_selection import ModelSelectionExplainer
+    from xai.report_generator import DecisionReportBuilder
     from xai.scenario_rationale import ScenarioRationale
     from xai.trust_breakdown import TrustBreakdown
-    from xai.decision_policy import DecisionPolicyExplainer
     from xai.trust_contract import (
         FinancialTrustPayload,
         NewsTrustPayload,
         NormalizedTrustResult,
     )
     from xai.trust_router import TrustAgentRegistry, TrustRouter
-    from xai.model_card import ModelCardGenerator
-    from xai.report_generator import DecisionReportBuilder

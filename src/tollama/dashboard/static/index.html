@@ -33,6 +33,7 @@
       <button class="tab" data-tab="forecast">Forecast <span id="badge-forecasts" class="badge">0</span></button>
       <button class="tab" data-tab="models">Models <span id="badge-models" class="badge">0</span></button>
       <button class="tab" data-tab="compare">Compare</button>
+      <button class="tab" data-tab="whatif">What-If</button>
       <button class="tab" data-tab="help">Help</button>
     </nav>
 
@@ -74,6 +75,35 @@
         </article>
       </section>
 
+      <section class="panel" id="tab-whatif" data-panel="whatif">
+        <article class="card">
+          <h2>What-If Scenario Explorer</h2>
+          <p>Apply hypothetical transforms to your series and compare forecast outcomes.</p>
+          <form id="whatif-form" class="stack" autocomplete="off">
+            <label for="whatif-model">Model</label>
+            <input id="whatif-model" name="model" type="text" placeholder="mock" required />
+            <label for="whatif-series">Series JSON</label>
+            <textarea id="whatif-series" name="series" rows="4" required>[{"id":"s1","freq":"D","timestamps":["2025-01-01","2025-01-02","2025-01-03","2025-01-04","2025-01-05"],"target":[10,11,12,13,14]}]</textarea>
+            <label for="whatif-horizon">Horizon</label>
+            <input id="whatif-horizon" name="horizon" type="number" min="1" value="3" required />
+            <label for="whatif-operation">Operation</label>
+            <select id="whatif-operation" name="operation">
+              <option value="multiply">Multiply</option>
+              <option value="add">Add</option>
+              <option value="replace">Replace</option>
+            </select>
+            <label for="whatif-factor">Factor / Value</label>
+            <input id="whatif-factor" name="factor" type="number" step="any" value="1.1" required />
+            <div class="row">
+              <button class="btn" type="submit">Run Baseline</button>
+              <button class="btn ghost" type="button" id="whatif-scenario-btn">Run Scenario</button>
+            </div>
+          </form>
+          <canvas id="whatif-chart" height="240"></canvas>
+          <pre id="whatif-output" class="output"></pre>
+        </article>
+      </section>
+
       <section class="panel" id="tab-help" data-panel="help">
         <article class="card">
           <h2>Keyboard Shortcuts</h2>
@@ -111,6 +141,7 @@
     <script src="/dashboard/static/js/chart.min.js"></script>
     <script src="/dashboard/static/js/forecast.js"></script>
     <script src="/dashboard/static/js/comparison.js"></script>
+    <script src="/dashboard/static/js/whatif.js"></script>
     <script src="/dashboard/static/js/app.js"></script>
   </body>
 </html>

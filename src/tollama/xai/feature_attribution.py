@@ -14,8 +14,9 @@ Methods:
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
-from typing import Any, Callable, Optional, Sequence
+from typing import Any
 
 import numpy as np
 
@@ -58,7 +59,7 @@ class TemporalFeatureAttribution:
         method: str = "permutation",
         n_repeats: int = 10,
         window_size: int = 1,
-        random_state: Optional[int] = 42,
+        random_state: int | None = 42,
     ):
         """
         Parameters
@@ -80,10 +81,10 @@ class TemporalFeatureAttribution:
     def compute(
         self,
         data: Sequence[float],
-        predict_fn: Optional[Callable] = None,
+        predict_fn: Callable | None = None,
         forecast_horizon: int = 1,
-        feature_names: Optional[list[str]] = None,
-        exogenous: Optional[np.ndarray] = None,
+        feature_names: list[str] | None = None,
+        exogenous: np.ndarray | None = None,
     ) -> list[dict[str, Any]]:
         """
         Compute temporal feature attribution.
@@ -129,8 +130,8 @@ class TemporalFeatureAttribution:
         data: np.ndarray,
         predict_fn: Callable,
         horizon: int,
-        exogenous: Optional[np.ndarray],
-        feature_names: Optional[list[str]],
+        exogenous: np.ndarray | None,
+        feature_names: list[str] | None,
     ) -> AttributionResult:
         """
         Permutation-based temporal importance.

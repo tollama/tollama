@@ -7,13 +7,12 @@ data structures and DecisionExplanation schemas.
 from __future__ import annotations
 
 import logging
-from typing import Any, Callable, Optional
+from collections.abc import Callable
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
 try:
-    from trust_intelligence.pipeline.trust_pipeline import TrustIntelligencePipeline
-    from trust_intelligence.schemas import PipelineResult
 
     HAS_TRUST_INTELLIGENCE = True
 except Exception:
@@ -78,10 +77,10 @@ def pipeline_result_to_metadata(result: Any) -> dict[str, Any]:
 def run_trust_pipeline(
     pipeline: Any,
     prediction_probability: float,
-    features: Optional[dict[str, float]] = None,
-    context: Optional[dict[str, Any]] = None,
-    predict_fn: Optional[Callable] = None,
-) -> Optional[dict[str, Any]]:
+    features: dict[str, float] | None = None,
+    context: dict[str, Any] | None = None,
+    predict_fn: Callable | None = None,
+) -> dict[str, Any] | None:
     """Run the trust intelligence pipeline and return metadata.
 
     Safe wrapper that returns None if the pipeline is unavailable or fails.

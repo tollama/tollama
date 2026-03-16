@@ -8,7 +8,7 @@ Market Calibration Agent의 Trust Score 구성요소를 분해하여
 
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any
 
 from tollama.xai.trust_contract import normalized_result_to_breakdown
 
@@ -69,7 +69,7 @@ class TrustBreakdown:
 
     def __init__(
         self,
-        weight_config: Optional[dict[str, float]] = None,
+        weight_config: dict[str, float] | None = None,
     ):
         """
         Parameters

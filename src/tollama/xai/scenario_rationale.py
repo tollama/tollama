@@ -8,7 +8,7 @@ evidence-backed rationale로 변환.
 
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any
 
 
 class ScenarioRationale:
@@ -23,7 +23,7 @@ class ScenarioRationale:
     def explain(
         self,
         scenarios: dict[str, Any],
-        forecast_result: Optional[dict[str, Any]] = None,
+        forecast_result: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """
         Generate scenario rationale from scenario tree output.

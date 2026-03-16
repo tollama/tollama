@@ -349,8 +349,8 @@ class TestEngineIntegration:
 
     def test_engine_with_trust_pipeline_produces_trust_explanation(self):
         """Engine with trust pipeline → trust_intelligence_explanation populated."""
-        from tollama.xai.engine import ExplanationEngine
         from tollama.xai.decision_policy import DecisionPolicyExplainer
+        from tollama.xai.engine import ExplanationEngine
 
         mock_pipeline = MagicMock()
         mock_run_result = MagicMock(
@@ -406,8 +406,8 @@ class TestEngineIntegration:
 
     def test_engine_trust_blocks_auto_execution(self):
         """Engine with low-trust pipeline result blocks auto-execution."""
-        from tollama.xai.engine import ExplanationEngine
         from tollama.xai.decision_policy import DecisionPolicyExplainer
+        from tollama.xai.engine import ExplanationEngine
 
         mock_pipeline = MagicMock()
         mock_run_result = MagicMock(

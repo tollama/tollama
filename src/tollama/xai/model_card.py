@@ -14,8 +14,8 @@ References:
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
-from typing import Any, Optional
+from datetime import UTC, datetime
+from typing import Any
 
 
 class ModelCardGenerator:
@@ -37,10 +37,10 @@ class ModelCardGenerator:
     def generate(
         self,
         model_info: dict[str, Any],
-        eval_result: Optional[dict[str, Any]] = None,
-        explanation_result: Optional[dict[str, Any]] = None,
-        governance_info: Optional[dict[str, Any]] = None,
-        custom_sections: Optional[dict[str, Any]] = None,
+        eval_result: dict[str, Any] | None = None,
+        explanation_result: dict[str, Any] | None = None,
+        governance_info: dict[str, Any] | None = None,
+        custom_sections: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """
         Generate a model card.
@@ -64,7 +64,7 @@ class ModelCardGenerator:
         """
         card = {
             "model_card_version": self.TEMPLATE_VERSION,
-            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "generated_at": datetime.now(UTC).isoformat(),
             "generator": "tollama-xai",
         }
 
@@ -202,7 +202,7 @@ class ModelCardGenerator:
         }
 
     def _training_data(
-        self, model_info: dict[str, Any], eval_result: Optional[dict[str, Any]]
+        self, model_info: dict[str, Any], eval_result: dict[str, Any] | None
     ) -> dict[str, Any]:
         data_info = model_info.get("training_data", {})
         if eval_result:
@@ -215,7 +215,7 @@ class ModelCardGenerator:
             })
         return data_info
 
-    def _evaluation(self, eval_result: Optional[dict[str, Any]]) -> dict[str, Any]:
+    def _evaluation(self, eval_result: dict[str, Any] | None) -> dict[str, Any]:
         if not eval_result:
             return {"status": "Evaluation pending", "metrics": {}}
 
@@ -241,7 +241,7 @@ class ModelCardGenerator:
         }
 
     def _explainability(
-        self, explanation_result: Optional[dict[str, Any]]
+        self, explanation_result: dict[str, Any] | None
     ) -> dict[str, Any]:
         if not explanation_result:
             return {
@@ -313,7 +313,7 @@ class ModelCardGenerator:
         }
 
     def _governance(
-        self, governance_info: Optional[dict[str, Any]]
+        self, governance_info: dict[str, Any] | None
     ) -> dict[str, Any]:
         if not governance_info:
             return {
@@ -341,7 +341,7 @@ class ModelCardGenerator:
         }
 
     def _limitations(
-        self, model_info: dict[str, Any], eval_result: Optional[dict[str, Any]]
+        self, model_info: dict[str, Any], eval_result: dict[str, Any] | None
     ) -> dict[str, Any]:
         limitations = [
             "Forecasts are probabilistic estimates, not guarantees",

@@ -14,8 +14,8 @@ from __future__ import annotations
 
 import hashlib
 import json
-from datetime import datetime, timezone
-from typing import Any, Optional
+from datetime import UTC, datetime
+from typing import Any
 
 
 class EvalExplanationExtender:
@@ -60,7 +60,7 @@ class EvalExplanationExtender:
         # Build explanation
         xai = {
             "version": "0.1.0",
-            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "generated_at": datetime.now(UTC).isoformat(),
             "explanation_type": "eval_evidence",
         }
 

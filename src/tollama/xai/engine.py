@@ -16,9 +16,10 @@ Phase 4: /api/explain-decision 정식 출시
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, field, asdict
-from datetime import datetime, timezone
-from typing import Any, Callable, Optional
+from collections.abc import Callable
+from dataclasses import asdict, dataclass, field
+from datetime import UTC, datetime
+from typing import Any
 
 from tollama.xai.trust_contract import (
     coerce_normalized_trust_result,
@@ -65,8 +66,8 @@ class DecisionPolicyExplanation:
     policy_rules_applied: list[str] = field(default_factory=list)
     escalation_triggered: bool = False
     escalation_reason: str = ""
-    trust_score: Optional[float] = None
-    risk_category: Optional[str] = None
+    trust_score: float | None = None
+    risk_category: str | None = None
     trust_blocked: bool = False
     constraint_violations_count: int = 0
 
@@ -82,7 +83,7 @@ class DecisionExplanation:
     decision_policy_explanation: DecisionPolicyExplanation = field(
         default_factory=DecisionPolicyExplanation
     )
-    trust_intelligence_explanation: Optional[dict[str, Any]] = None
+    trust_intelligence_explanation: dict[str, Any] | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
@@ -137,15 +138,15 @@ class ExplanationEngine:
     def explain_decision(
         self,
         forecast_result: dict[str, Any],
-        eval_result: Optional[dict[str, Any]] = None,
-        calibration_result: Optional[dict[str, Any]] = None,
-        trust_result: Optional[dict[str, Any]] = None,
-        policy_config: Optional[dict[str, Any]] = None,
-        time_series_data: Optional[Any] = None,
-        explain_options: Optional[dict[str, Any]] = None,
-        trust_context: Optional[dict[str, Any]] = None,
-        trust_payload: Optional[dict[str, Any]] = None,
-        predict_fn: Optional[Callable] = None,
+        eval_result: dict[str, Any] | None = None,
+        calibration_result: dict[str, Any] | None = None,
+        trust_result: dict[str, Any] | None = None,
+        policy_config: dict[str, Any] | None = None,
+        time_series_data: Any | None = None,
+        explain_options: dict[str, Any] | None = None,
+        trust_context: dict[str, Any] | None = None,
+        trust_payload: dict[str, Any] | None = None,
+        predict_fn: Callable | None = None,
     ) -> DecisionExplanation:
         """
         End-to-end decision explanation.
@@ -192,7 +193,7 @@ class ExplanationEngine:
         )
         explanation = DecisionExplanation(
             explanation_id=str(uuid.uuid4()),
-            timestamp=datetime.now(timezone.utc).isoformat(),
+            timestamp=datetime.now(UTC).isoformat(),
         )
 
         # ── Phase 1: Input Explanation (Signal Trust) ──
@@ -280,8 +281,8 @@ class ExplanationEngine:
     def _explain_input(
         self,
         forecast_result: dict[str, Any],
-        calibration_result: Optional[dict[str, Any]],
-        trust_result: Optional[dict[str, Any]] = None,
+        calibration_result: dict[str, Any] | None,
+        trust_result: dict[str, Any] | None = None,
     ) -> InputExplanation:
         """Assemble input-stage explanation: why these signals were used."""
         ie = InputExplanation()
@@ -317,10 +318,10 @@ class ExplanationEngine:
     def _resolve_trust_result(
         self,
         *,
-        calibration_result: Optional[dict[str, Any]],
-        trust_result: Optional[dict[str, Any]],
-        trust_context: Optional[dict[str, Any]],
-        trust_payload: Optional[dict[str, Any]],
+        calibration_result: dict[str, Any] | None,
+        trust_result: dict[str, Any] | None,
+        trust_context: dict[str, Any] | None,
+        trust_payload: dict[str, Any] | None,
         explain_options: dict[str, Any],
     ):
         if trust_result is not None:
@@ -352,8 +353,8 @@ class ExplanationEngine:
     def _explain_plan(
         self,
         forecast_result: dict[str, Any],
-        eval_result: Optional[dict[str, Any]],
-        time_series_data: Optional[Any],
+        eval_result: dict[str, Any] | None,
+        time_series_data: Any | None,
         include_decomposition: bool = True,
         include_attribution: bool = False,
     ) -> PlanExplanation:
@@ -370,8 +371,8 @@ class ExplanationEngine:
         elif eval_result:
             pe.model_selected = eval_result.get("best_model", "")
             pe.why_this_model = (
-                f"Selected based on lowest error metric in "
-                f"expanding-window cross-validation"
+                "Selected based on lowest error metric in "
+                "expanding-window cross-validation"
             )
 
         # Forecast Decomposition
@@ -404,8 +405,8 @@ class ExplanationEngine:
     def _explain_decision_policy(
         self,
         forecast_result: dict[str, Any],
-        policy_config: Optional[dict[str, Any]],
-        trust_metadata: Optional[dict[str, Any]] = None,
+        policy_config: dict[str, Any] | None,
+        trust_metadata: dict[str, Any] | None = None,
     ) -> DecisionPolicyExplanation:
         """Assemble decision-policy explanation: why this action was recommended."""
         dpe = DecisionPolicyExplanation()
@@ -446,8 +447,8 @@ class ExplanationEngine:
                 )
                 dpe.escalation_triggered = True
                 dpe.escalation_reason = (
-                    f"Confidence below auto-execution threshold. "
-                    f"Evidence package attached for reviewer."
+                    "Confidence below auto-execution threshold. "
+                    "Evidence package attached for reviewer."
                 )
 
         return dpe

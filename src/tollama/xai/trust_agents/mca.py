@@ -4,7 +4,7 @@ tollama.xai.trust_agents.mca — MCA adapter for normalized trust output.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from tollama.xai.trust_breakdown import TrustBreakdown
@@ -83,7 +83,7 @@ class MarketCalibrationTrustAgent:
             audit=TrustAudit(
                 formula_version=str(payload.get("formula_version", "mca-v1")),
                 generated_at=payload.get(
-                    "generated_at", datetime.now(timezone.utc).isoformat()
+                    "generated_at", datetime.now(UTC).isoformat()
                 ),
                 agent_version="0.1.0",
             ),

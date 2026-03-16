@@ -1207,6 +1207,133 @@ def benchmark(
         )
 
 
+@app.command("export")
+def export_cmd(
+    model: str = typer.Argument(
+        ...,
+        help="Model name to export.",
+        autocompletion=_complete_model_names,
+    ),
+    fmt: str = typer.Option(
+        "onnx",
+        "--format",
+        help="Export format: onnx or torchscript.",
+    ),
+    context_length: int = typer.Option(
+        512,
+        "--context-length",
+        min=1,
+        help="Input context length for the exported model.",
+    ),
+    prediction_length: int = typer.Option(
+        96,
+        "--prediction-length",
+        min=1,
+        help="Prediction horizon for the exported model.",
+    ),
+    output_dir: str | None = typer.Option(
+        None,
+        "--output",
+        help="Output directory. Defaults to model exports/ subdirectory.",
+    ),
+) -> None:
+    """Export a model to ONNX or TorchScript format for edge deployment."""
+    from tollama.core.export import ExportFormat, export_model
+
+    try:
+        spec = get_model_spec(model)
+        family = spec.family
+    except KeyError:
+        typer.echo(
+            _style_text(f"Error: model {model!r} not found in registry", fg=_COLOR_ERROR),
+            err=True,
+        )
+        raise typer.Exit(code=1)
+
+    if fmt not in ("onnx", "torchscript"):
+        typer.echo(
+            _style_text(f"Error: unsupported format {fmt!r}", fg=_COLOR_ERROR),
+            err=True,
+        )
+        raise typer.Exit(code=1)
+
+    typer.echo(f"Exporting {model} to {fmt}...")
+    try:
+        result = export_model(
+            model_name=model,
+            family=family,
+            fmt=cast(ExportFormat, fmt),
+            context_length=context_length,
+            prediction_length=prediction_length,
+            output_dir=output_dir,
+        )
+    except Exception as exc:
+        typer.echo(
+            _style_text(f"Export failed: {exc}", fg=_COLOR_ERROR),
+            err=True,
+        )
+        raise typer.Exit(code=1) from exc
+
+    typer.echo(_style_text(f"Exported to {result.output_path}", fg=_COLOR_SUCCESS))
+    typer.echo(f"  format: {result.format}")
+    typer.echo(f"  size: {result.file_size_bytes / 1024 / 1024:.1f} MB")
+    typer.echo(f"  duration: {result.export_duration_ms:.0f} ms")
+    for w in result.warnings:
+        typer.echo(_style_text(f"  warning: {w}", fg=_COLOR_WARNING))
+
+
+@app.command("quantize")
+def quantize_cmd(
+    model: str = typer.Argument(
+        ...,
+        help="Model name to quantize.",
+        autocompletion=_complete_model_names,
+    ),
+    precision: str = typer.Option(
+        "int8",
+        "--precision",
+        help="Target precision: int8 or int4.",
+    ),
+) -> None:
+    """Quantize a pulled model's weights for reduced memory usage."""
+    from tollama.core.quantization import PrecisionMode, quantize_model
+
+    try:
+        spec = get_model_spec(model)
+        family = spec.family
+    except KeyError:
+        family = None
+
+    if precision not in ("int8", "int4"):
+        typer.echo(
+            _style_text(f"Error: unsupported precision {precision!r}", fg=_COLOR_ERROR),
+            err=True,
+        )
+        raise typer.Exit(code=1)
+
+    typer.echo(f"Quantizing {model} to {precision}...")
+    try:
+        result = quantize_model(
+            model_name=model,
+            target_precision=cast(PrecisionMode, precision),
+            family=family,
+        )
+    except Exception as exc:
+        typer.echo(
+            _style_text(f"Quantization failed: {exc}", fg=_COLOR_ERROR),
+            err=True,
+        )
+        raise typer.Exit(code=1) from exc
+
+    typer.echo(_style_text("Quantization complete!", fg=_COLOR_SUCCESS))
+    typer.echo(f"  output: {result.output_path}")
+    typer.echo(f"  savings: {result.savings_pct}%")
+    typer.echo(
+        f"  size: {result.original_size_bytes / 1024 / 1024:.1f} MB → "
+        f"{result.quantized_size_bytes / 1024 / 1024:.1f} MB"
+    )
+
+
 def _quickstart_request_payload(*, model: str, horizon: int) -> dict[str, Any]:
     timestamps = [
         "2025-01-01",

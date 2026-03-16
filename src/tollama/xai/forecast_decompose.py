@@ -10,8 +10,9 @@ Phase 2a에서 기존 기능 재포장으로 시작, Phase 3에서 완성.
 from __future__ import annotations
 
 import logging
+from collections.abc import Sequence
 from dataclasses import dataclass, field
-from typing import Any, Optional, Sequence
+from typing import Any
 
 import numpy as np
 
@@ -73,7 +74,7 @@ class ForecastDecomposer:
     def __init__(
         self,
         method: str = "stl",
-        period: Optional[int] = None,
+        period: int | None = None,
         robust: bool = True,
     ):
         """
@@ -93,7 +94,7 @@ class ForecastDecomposer:
     def decompose(
         self,
         data: Sequence[float],
-        period: Optional[int] = None,
+        period: int | None = None,
     ) -> dict[str, Any]:
         """
         Decompose time series and return explanation-ready result.
