@@ -1078,6 +1078,11 @@ def create_app(*, runner_manager: RunnerManager | None = None) -> FastAPI:
     from tollama.xai.api import router as xai_router
     app.include_router(xai_router)
 
+    # Shared singleton trust router — avoids rebuilding on every XAI request.
+    from tollama.xai.trust_router import build_default_trust_router
+
+    app.state.trust_router = build_default_trust_router()
+
     @app.get(
         "/v1/health",
         response_model=HealthResponse,
@@ -1775,13 +1780,13 @@ def _generate_xai_explanation(
     response: Any,
 ) -> dict[str, Any] | None:
     """Run XAI explanation engine on a forecast result. Returns None on failure."""
+    from tollama.xai.decision_policy import DecisionPolicyExplainer
     from tollama.xai.engine import ExplanationEngine
-    from tollama.xai.model_selection import ModelSelectionExplainer
-    from tollama.xai.forecast_decompose import ForecastDecomposer
     from tollama.xai.feature_attribution import TemporalFeatureAttribution
+    from tollama.xai.forecast_decompose import ForecastDecomposer
+    from tollama.xai.model_selection import ModelSelectionExplainer
     from tollama.xai.scenario_rationale import ScenarioRationale
     from tollama.xai.trust_breakdown import TrustBreakdown
-    from tollama.xai.decision_policy import DecisionPolicyExplainer
     from tollama.xai.trust_router import build_default_trust_router
 
     engine = ExplanationEngine(

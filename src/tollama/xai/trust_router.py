@@ -253,6 +253,176 @@ class TrustRouter:
             lambda: self.analyze_multi(context=context, payload=payload),
         )
 
+    def trust_feature_attribution(
+        self,
+        trust_result: NormalizedTrustResult,
+    ) -> dict[str, Any]:
+        """Compute SHAP-like feature attribution from trust component weights.
+
+        Returns a dict mapping component names to their contribution
+        towards the final trust score, ordered by absolute impact.
+        """
+        components = trust_result.component_breakdown
+        if not components:
+            return {
+                "attributions": [],
+                "baseline": 0.0,
+                "total_score": trust_result.trust_score,
+                "top_driver": None,
+            }
+
+        # Compute each component's contribution = weight * score
+        attributions: list[dict[str, Any]] = []
+        total_weight = sum(c.weight for c in components.values()) or 1.0
+        for name, comp in components.items():
+            contribution = (comp.weight / total_weight) * comp.score
+            attributions.append({
+                "component": name,
+                "weight": comp.weight,
+                "score": comp.score,
+                "contribution": round(contribution, 4),
+                "impact_pct": round(
+                    contribution / trust_result.trust_score * 100, 1,
+                ) if trust_result.trust_score > 0 else 0.0,
+            })
+
+        # Sort by absolute contribution descending
+        attributions.sort(key=lambda a: abs(a["contribution"]), reverse=True)
+
+        return {
+            "attributions": attributions,
+            "baseline": 0.0,
+            "total_score": trust_result.trust_score,
+            "top_driver": attributions[0]["component"] if attributions else None,
+        }
+
+    def analyze_with_connector(
+        self,
+        *,
+        connector: Any,
+        identifier: str,
+        connector_context: dict[str, Any] | None = None,
+        trust_context: dict[str, Any] | None = None,
+    ) -> NormalizedTrustResult | None:
+        """Fetch data from a connector and pipe into trust analysis.
+
+        Parameters
+        ----------
+        connector : DataConnector
+            A connector instance to fetch data from.
+        identifier : str
+            Connector-specific identifier (instrument_id, story_id, etc.).
+        connector_context : dict
+            Additional context for the connector fetch.
+        trust_context : dict
+            Context for trust agent routing (must include 'domain').
+        """
+        from tollama.xai.connectors.protocol import ConnectorFetchError
+
+        try:
+            result = connector.fetch(identifier, connector_context or {})
+        except ConnectorFetchError:
+            _log.warning(
+                "Connector %s fetch failed for %s",
+                connector.connector_name,
+                identifier,
+                exc_info=True,
+            )
+            return None
+
+        context = trust_context or {"domain": result.domain}
+        payload = {
+            "connector_data": result.payload,
+            "source_id": result.source_id,
+            "source_type": result.source_type,
+            "freshness_seconds": result.freshness_seconds,
+            **result.payload,
+        }
+        return self.analyze(context=context, payload=payload)
+
+    def gate_decision(
+        self,
+        trust_result: NormalizedTrustResult,
+        *,
+        trust_threshold: float = 0.5,
+    ) -> dict[str, Any]:
+        """Evaluate trust gates for auto-execution gating.
+
+        Returns a dict with:
+          allowed: bool — whether auto-execution should proceed
+          gates: list of gate evaluation dicts
+          risk_category: str
+          trust_score: float
+        """
+        gates: list[dict[str, Any]] = []
+        allowed = True
+
+        # Gate A: Trust Score
+        if trust_result.trust_score < trust_threshold:
+            gates.append({
+                "gate": "trust_score",
+                "status": "BLOCK",
+                "detail": (
+                    f"trust_score {trust_result.trust_score:.2f} "
+                    f"< threshold {trust_threshold:.2f}"
+                ),
+            })
+            allowed = False
+        else:
+            gates.append({
+                "gate": "trust_score",
+                "status": "PASS",
+                "detail": (
+                    f"trust_score {trust_result.trust_score:.2f} "
+                    f">= threshold {trust_threshold:.2f}"
+                ),
+            })
+
+        # Gate B: Critical violations
+        critical = [v for v in trust_result.violations if v.severity == "critical"]
+        if critical:
+            names = ", ".join(v.name for v in critical)
+            gates.append({
+                "gate": "constraint_violations",
+                "status": "BLOCK",
+                "detail": f"{len(critical)} critical violation(s): {names}",
+            })
+            allowed = False
+        else:
+            gates.append({
+                "gate": "constraint_violations",
+                "status": "PASS",
+                "detail": "no critical violations",
+            })
+
+        # Gate C: Risk Category
+        if trust_result.risk_category == "RED":
+            gates.append({
+                "gate": "risk_category",
+                "status": "BLOCK",
+                "detail": "risk_category RED",
+            })
+            allowed = False
+        elif trust_result.risk_category == "YELLOW":
+            gates.append({
+                "gate": "risk_category",
+                "status": "WARN",
+                "detail": "risk_category YELLOW",
+            })
+        else:
+            gates.append({
+                "gate": "risk_category",
+                "status": "PASS",
+                "detail": f"risk_category {trust_result.risk_category}",
+            })
+
+        return {
+            "allowed": allowed,
+            "gates": gates,
+            "risk_category": trust_result.risk_category,
+            "trust_score": trust_result.trust_score,
+        }
+
     def _record_history(self, result: NormalizedTrustResult) -> None:
         """Record a trust result in the history tracker if available."""
         if self.history_tracker is None:

@@ -17,10 +17,23 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field, ValidationError
 
 router = APIRouter(prefix="/api/xai", tags=["xai"])
+
+
+def _get_trust_router(request: Request | None = None):
+    """Return shared trust router from app.state, or build a fresh one."""
+    if request is not None:
+        tr = getattr(getattr(request, "app", None), "state", None)
+        if tr is not None:
+            shared = getattr(tr, "trust_router", None)
+            if shared is not None:
+                return shared
+    from tollama.xai.trust_router import build_default_trust_router
+
+    return build_default_trust_router()
 
 
 # ──────────────────────────────────────────────────────────────
@@ -228,7 +241,7 @@ class ConnectorHealthRequest(BaseModel):
         "Phase 4: Full explanation API."
     ),
 )
-async def explain_decision(request: ExplainDecisionRequest):
+async def explain_decision(request: ExplainDecisionRequest, raw_request: Request):
     """
     POST /api/explain-decision
 
@@ -242,7 +255,6 @@ async def explain_decision(request: ExplainDecisionRequest):
     from tollama.xai.model_selection import ModelSelectionExplainer
     from tollama.xai.scenario_rationale import ScenarioRationale
     from tollama.xai.trust_breakdown import TrustBreakdown
-    from tollama.xai.trust_router import build_default_trust_router
 
     trust_pipeline = None
     try:
@@ -259,7 +271,7 @@ async def explain_decision(request: ExplainDecisionRequest):
         trust_breakdown=TrustBreakdown(),
         decision_policy_explainer=DecisionPolicyExplainer(),
         trust_intelligence_pipeline=trust_pipeline,
-        trust_router=build_default_trust_router(),
+        trust_router=_get_trust_router(raw_request),
     )
 
     explain_options = request.explain_options or {}
@@ -386,11 +398,9 @@ async def generate_decision_report(request: DecisionReportRequest):
     summary="List registered trust agents",
     description="Returns all trust agents with their domain and priority.",
 )
-async def dashboard_agents():
+async def dashboard_agents(raw_request: Request):
     """GET /api/xai/dashboard/agents"""
-    from tollama.xai.trust_router import build_default_trust_router
-
-    router_instance = build_default_trust_router(enable_calibration=False)
+    router_instance = _get_trust_router(raw_request)
     agents = []
     for agent in router_instance.registry.agents:
         agents.append({
@@ -409,13 +419,9 @@ async def dashboard_agents():
         "Suitable for dashboard rendering."
     ),
 )
-async def dashboard_trust(request: DashboardTrustRequest):
+async def dashboard_trust(request: DashboardTrustRequest, raw_request: Request):
     """POST /api/xai/dashboard/trust"""
-    from tollama.xai.trust_router import build_default_trust_router
-
-    router_instance = build_default_trust_router(
-        enable_calibration=request.include_calibration,
-    )
+    router_instance = _get_trust_router(raw_request)
 
     all_domains = {
         "prediction_market", "financial_market", "supply_chain",
@@ -461,11 +467,9 @@ async def dashboard_trust(request: DashboardTrustRequest):
         "so trust agents can learn and self-correct over time."
     ),
 )
-async def record_outcome(request: RecordOutcomeRequest):
+async def record_outcome(request: RecordOutcomeRequest, raw_request: Request):
     """POST /api/xai/record-outcome"""
-    from tollama.xai.trust_router import build_default_trust_router
-
-    router_instance = build_default_trust_router(enable_calibration=True)
+    router_instance = _get_trust_router(raw_request)
     router_instance.record_outcome(
         agent_name=request.agent_name,
         domain=request.domain,
@@ -581,14 +585,9 @@ async def connectors_health(request: ConnectorHealthRequest):
     summary="Trust cache metrics",
     description="Returns trust result cache hit/miss statistics and TTL configuration.",
 )
-async def cache_stats():
+async def cache_stats(raw_request: Request):
     """GET /api/xai/cache/stats"""
-    from tollama.xai.trust_router import build_default_trust_router
-
-    router_instance = build_default_trust_router(
-        enable_calibration=False,
-        enable_history=False,
-    )
+    router_instance = _get_trust_router(raw_request)
     return router_instance.cache_stats()
 
 
@@ -605,16 +604,299 @@ class CacheTTLRequest(BaseModel):
     summary="Configure cache TTL",
     description="Update the trust result cache TTL. Set to 0 to disable caching.",
 )
-async def set_cache_ttl(request: CacheTTLRequest):
+async def set_cache_ttl(request: CacheTTLRequest, raw_request: Request):
     """PUT /api/xai/cache/ttl"""
-    from tollama.xai.trust_router import build_default_trust_router
-
-    router_instance = build_default_trust_router(
-        enable_calibration=False,
-        enable_history=False,
-    )
+    router_instance = _get_trust_router(raw_request)
     old_ttl = router_instance.set_cache_ttl(request.ttl)
     return {
         "previous_ttl": old_ttl,
         "new_ttl": request.ttl,
+    }
+
+
+# ──────────────────────────────────────────────────────────────
+# Trust Gate (auto-execution gating)
+# ──────────────────────────────────────────────────────────────
+
+
+class GateDecisionRequest(BaseModel):
+    """Request body for /api/xai/gate-decision"""
+    context: dict[str, Any] = Field(
+        ..., description="Trust agent routing context (must include 'domain').",
+    )
+    payload: dict[str, Any] = Field(
+        ..., description="Payload for trust analysis.",
+    )
+    trust_threshold: float = Field(
+        default=0.5, ge=0.0, le=1.0,
+        description="Minimum trust score for auto-execution.",
+    )
+
+
+@router.post(
+    "/gate-decision",
+    summary="Trust-gated auto-execution check",
+    description=(
+        "Runs trust analysis and evaluates three safety gates "
+        "(trust score, constraint violations, risk category) to determine "
+        "whether auto-execution should proceed."
+    ),
+)
+async def gate_decision(request: GateDecisionRequest, raw_request: Request):
+    """POST /api/xai/gate-decision"""
+    router_instance = _get_trust_router(raw_request)
+    result = router_instance.analyze(
+        context=request.context,
+        payload=request.payload,
+    )
+    if result is None:
+        return {
+            "allowed": False,
+            "gates": [{"gate": "no_agent", "status": "BLOCK", "detail": "no matching agent"}],
+            "risk_category": None,
+            "trust_score": None,
+        }
+    return router_instance.gate_decision(
+        result, trust_threshold=request.trust_threshold,
+    )
+
+
+# ──────────────────────────────────────────────────────────────
+# Trust Feature Attribution
+# ──────────────────────────────────────────────────────────────
+
+
+class TrustAttributionRequest(BaseModel):
+    """Request body for /api/xai/trust-attribution"""
+    context: dict[str, Any] = Field(
+        ..., description="Trust agent routing context (must include 'domain').",
+    )
+    payload: dict[str, Any] = Field(
+        ..., description="Payload for trust analysis.",
+    )
+
+
+@router.post(
+    "/trust-attribution",
+    summary="SHAP-like trust component attribution",
+    description=(
+        "Runs trust analysis and computes feature attribution from "
+        "trust component weights, showing each component's contribution "
+        "to the overall trust score."
+    ),
+)
+async def trust_attribution(request: TrustAttributionRequest, raw_request: Request):
+    """POST /api/xai/trust-attribution"""
+    router_instance = _get_trust_router(raw_request)
+    result = router_instance.analyze(
+        context=request.context,
+        payload=request.payload,
+    )
+    if result is None:
+        raise HTTPException(status_code=404, detail="No matching trust agent")
+    return router_instance.trust_feature_attribution(result)
+
+
+# ──────────────────────────────────────────────────────────────
+# Batch Trust Analysis
+# ──────────────────────────────────────────────────────────────
+
+
+class BatchAnalyzeItem(BaseModel):
+    """Single item in a batch trust analysis request."""
+    context: dict[str, Any] = Field(
+        ..., description="Trust agent routing context.",
+    )
+    payload: dict[str, Any] = Field(
+        ..., description="Payload for trust analysis.",
+    )
+
+
+class BatchAnalyzeRequest(BaseModel):
+    """Request body for /api/xai/batch-analyze"""
+    items: list[BatchAnalyzeItem] = Field(
+        ..., min_length=1, max_length=100,
+        description="List of trust analysis requests (max 100).",
+    )
+
+
+@router.post(
+    "/batch-analyze",
+    summary="Batch trust analysis",
+    description="Evaluate multiple trust contexts in a single request.",
+)
+async def batch_analyze(request: BatchAnalyzeRequest, raw_request: Request):
+    """POST /api/xai/batch-analyze"""
+    router_instance = _get_trust_router(raw_request)
+    results = []
+    for item in request.items:
+        result = router_instance.analyze(
+            context=item.context,
+            payload=item.payload,
+        )
+        if result is None:
+            results.append({"status": "no_agent", "result": None})
+        else:
+            results.append({
+                "status": "ok",
+                "result": {
+                    "agent_name": result.agent_name,
+                    "domain": result.domain,
+                    "trust_score": result.trust_score,
+                    "risk_category": result.risk_category,
+                    "calibration_status": result.calibration_status,
+                    "why_trusted": result.why_trusted,
+                    "violations": [
+                        {"name": v.name, "severity": v.severity, "detail": v.detail}
+                        for v in result.violations
+                    ],
+                },
+            })
+    return {"results": results, "count": len(results)}
+
+
+# ──────────────────────────────────────────────────────────────
+# Trust Alert / Threshold Webhook
+# ──────────────────────────────────────────────────────────────
+
+
+class AlertThreshold(BaseModel):
+    """A single alert threshold configuration."""
+    domain: str = Field(..., min_length=1, description="Domain to monitor.")
+    min_trust_score: float = Field(
+        default=0.5, ge=0.0, le=1.0,
+        description="Alert when trust score drops below this.",
+    )
+    risk_categories: list[str] = Field(
+        default_factory=lambda: ["RED"],
+        description="Alert on these risk categories.",
+    )
+    webhook_url: str | None = Field(
+        None, description="URL to POST alert payload. Omit for log-only.",
+    )
+
+
+class AlertConfigRequest(BaseModel):
+    """Request body for /api/xai/alerts/configure"""
+    thresholds: list[AlertThreshold] = Field(
+        ..., min_length=1, max_length=20,
+        description="Alert threshold configurations.",
+    )
+
+
+class AlertCheckRequest(BaseModel):
+    """Request body for /api/xai/alerts/check"""
+    context: dict[str, Any] = Field(
+        ..., description="Trust agent routing context.",
+    )
+    payload: dict[str, Any] = Field(
+        ..., description="Payload for trust analysis.",
+    )
+
+
+# Module-level alert config (shared within the app via singleton router pattern)
+_alert_thresholds: list[AlertThreshold] = []
+
+
+@router.post(
+    "/alerts/configure",
+    summary="Configure trust alert thresholds",
+    description="Set up alert thresholds for trust score drops and risk escalations.",
+)
+async def configure_alerts(request: AlertConfigRequest):
+    """POST /api/xai/alerts/configure"""
+    global _alert_thresholds  # noqa: PLW0603
+    _alert_thresholds = list(request.thresholds)
+    return {
+        "status": "configured",
+        "threshold_count": len(_alert_thresholds),
+        "thresholds": [t.model_dump() for t in _alert_thresholds],
+    }
+
+
+@router.get(
+    "/alerts/config",
+    summary="Get current alert configuration",
+    description="Returns the currently configured alert thresholds.",
+)
+async def get_alert_config():
+    """GET /api/xai/alerts/config"""
+    return {
+        "threshold_count": len(_alert_thresholds),
+        "thresholds": [t.model_dump() for t in _alert_thresholds],
+    }
+
+
+@router.post(
+    "/alerts/check",
+    summary="Check trust against alert thresholds",
+    description=(
+        "Runs trust analysis and checks the result against configured "
+        "alert thresholds. Returns any triggered alerts."
+    ),
+)
+async def check_alerts(request: AlertCheckRequest, raw_request: Request):
+    """POST /api/xai/alerts/check"""
+    import logging
+
+    _log = logging.getLogger(__name__)
+
+    router_instance = _get_trust_router(raw_request)
+    result = router_instance.analyze(
+        context=request.context,
+        payload=request.payload,
+    )
+    if result is None:
+        return {"alerts": [], "trust_result": None}
+
+    triggered: list[dict[str, Any]] = []
+    for threshold in _alert_thresholds:
+        if threshold.domain != result.domain:
+            continue
+
+        reasons: list[str] = []
+        if result.trust_score < threshold.min_trust_score:
+            reasons.append(
+                f"trust_score {result.trust_score:.2f} "
+                f"< threshold {threshold.min_trust_score:.2f}"
+            )
+        if result.risk_category in threshold.risk_categories:
+            reasons.append(f"risk_category {result.risk_category}")
+
+        if reasons:
+            alert = {
+                "domain": threshold.domain,
+                "trust_score": result.trust_score,
+                "risk_category": result.risk_category,
+                "reasons": reasons,
+                "webhook_url": threshold.webhook_url,
+            }
+            triggered.append(alert)
+
+            # Fire webhook if configured
+            if threshold.webhook_url:
+                try:
+                    import httpx
+
+                    httpx.post(
+                        threshold.webhook_url,
+                        json=alert,
+                        timeout=5.0,
+                    )
+                except Exception:  # noqa: BLE001
+                    _log.warning(
+                        "Failed to fire alert webhook to %s",
+                        threshold.webhook_url,
+                        exc_info=True,
+                    )
+
+    return {
+        "alerts": triggered,
+        "alert_count": len(triggered),
+        "trust_result": {
+            "agent_name": result.agent_name,
+            "domain": result.domain,
+            "trust_score": result.trust_score,
+            "risk_category": result.risk_category,
+        },
     }
