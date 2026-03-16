@@ -289,6 +289,24 @@ def pull(
     ),
 ) -> None:
     """Pull a model from the registry into local storage."""
+    # Hardware requirements check before pull
+    try:
+        spec = get_model_spec(model)
+        from tollama.core.hardware_check import check_hardware_requirements
+
+        hw_warnings = check_hardware_requirements(
+            model_name=model,
+            family=spec.family,
+            metadata=spec.metadata,
+        )
+        for hw_warn in hw_warnings:
+            typer.echo(
+                _style_text(f"warning: {hw_warn}", fg=_COLOR_WARNING, err=True),
+                err=True,
+            )
+    except KeyError:
+        pass  # Unknown model, skip hardware check
+
     client = _make_client(base_url=base_url, timeout=timeout)
     stream = not no_stream
     resolved_token = token if token is not None else os.environ.get("TOLLAMA_HF_TOKEN")
@@ -1055,6 +1073,138 @@ def quickstart(
         "  3. python -c \"from tollama import Tollama; "
         "print(Tollama().models('available'))\"",
     )
+
+
+@app.command("benchmark")
+def benchmark(
+    dataset: str = typer.Argument(
+        ...,
+        help="Path to a JSON file containing series data with actuals.",
+    ),
+    horizon: int = typer.Option(96, "--horizon", min=1, help="Forecast horizon."),
+    models: str | None = typer.Option(
+        None,
+        "--models",
+        help="Comma-separated model names. Defaults to all installed.",
+    ),
+    num_folds: int = typer.Option(
+        3, "--folds", min=1, max=10, help="Walk-forward folds.",
+    ),
+    output: str | None = typer.Option(
+        None,
+        "--output",
+        help="Directory to save JSON results.",
+    ),
+    base_url: str = typer.Option(
+        DEFAULT_BASE_URL,
+        help="Daemon base URL.",
+    ),
+    timeout: float = typer.Option(
+        _RUN_TIMEOUT_SECONDS,
+        min=0.1,
+        help="Per-forecast timeout in seconds.",
+    ),
+) -> None:
+    """Run all models against a dataset and compare accuracy/latency."""
+    from tollama.core.benchmark import (
+        format_benchmark_table,
+        run_benchmark,
+        save_benchmark_results,
+    )
+    from tollama.core.schemas import ForecastRequest, ForecastResponse, SeriesInput
+
+    dataset_path = Path(dataset)
+    if not dataset_path.exists():
+        typer.echo(
+            _style_text(f"Error: dataset not found: {dataset}", fg=_COLOR_ERROR),
+            err=True,
+        )
+        raise typer.Exit(code=1)
+
+    try:
+        raw = json.loads(dataset_path.read_text())
+    except (json.JSONDecodeError, OSError) as exc:
+        typer.echo(
+            _style_text(f"Error: cannot read dataset: {exc}", fg=_COLOR_ERROR),
+            err=True,
+        )
+        raise typer.Exit(code=1) from exc
+
+    # Parse series from dataset
+    raw_series = raw if isinstance(raw, list) else raw.get("series", [raw])
+    try:
+        series_list = [SeriesInput.model_validate(s) for s in raw_series]
+    except Exception as exc:
+        typer.echo(
+            _style_text(f"Error: invalid series data: {exc}", fg=_COLOR_ERROR),
+            err=True,
+        )
+        raise typer.Exit(code=1) from exc
+
+    # Resolve model list
+    client = _make_client(base_url=base_url, timeout=timeout)
+    if models:
+        model_list = [m.strip() for m in models.split(",") if m.strip()]
+    else:
+        try:
+            installed = client.list_models()
+            model_list = [
+                m["name"] for m in installed
+                if isinstance(m, dict) and m.get("name")
+            ]
+        except RuntimeError:
+            typer.echo(
+                _style_text(
+                    "Error: cannot reach daemon. Specify --models explicitly.",
+                    fg=_COLOR_ERROR,
+                ),
+                err=True,
+            )
+            raise typer.Exit(code=1)
+
+    if not model_list:
+        typer.echo(
+            _style_text("No models available for benchmarking.", fg=_COLOR_WARNING),
+            err=True,
+        )
+        raise typer.Exit(code=1)
+
+    typer.echo(
+        _style_text(
+            f"Benchmarking {len(model_list)} model(s) on "
+            f"{len(series_list)} series, horizon={horizon}, folds={num_folds}",
+            bold=True,
+        )
+    )
+
+    def _forecast_via_daemon(req: ForecastRequest) -> ForecastResponse:
+        payload = req.model_dump(mode="json", exclude_none=True)
+        result = client.forecast(payload, stream=False)
+        return ForecastResponse.model_validate(result)
+
+    try:
+        summary = run_benchmark(
+            series=series_list,
+            models=model_list,
+            horizon=horizon,
+            num_folds=num_folds,
+            forecast_fn=_forecast_via_daemon,
+        )
+    except Exception as exc:
+        typer.echo(
+            _style_text(f"Benchmark failed: {exc}", fg=_COLOR_ERROR),
+            err=True,
+        )
+        raise typer.Exit(code=1) from exc
+
+    typer.echo("")
+    typer.echo(format_benchmark_table(summary))
+
+    if output:
+        out_path = save_benchmark_results(summary, Path(output))
+        typer.echo(
+            _style_text(f"\nResults saved to {out_path}", fg=_COLOR_SUCCESS)
+        )
 
 
 def _quickstart_request_payload(*, model: str, horizon: int) -> dict[str, Any]:

@@ -1355,6 +1355,36 @@ def create_app(*, runner_manager: RunnerManager | None = None) -> FastAPI:
         )
 
     @app.post(
+        "/api/forecast/stream",
+        response_model=None,
+        tags=["forecast"],
+        summary="SSE forecast stream with granular progress events",
+        description=(
+            "Stream forecast progress over SSE with events: "
+            "model_loading, inference_started, series_complete, done."
+        ),
+        responses={
+            200: {
+                "description": "SSE stream of forecast progress events.",
+                "content": {"text/event-stream": {}},
+            }
+        },
+    )
+    def api_forecast_stream(
+        payload: ApiForecastRequest,
+        request: Request,
+    ) -> StreamingResponse:
+        return StreamingResponse(
+            _forecast_sse_stream(app=app, payload=payload, request=request),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "X-Accel-Buffering": "no",
+            },
+        )
+
+    @app.post(
         "/api/forecast/progressive",
         response_model=None,
         tags=["forecast"],
@@ -2808,6 +2838,75 @@ def _compare_error_message(exc: HTTPException) -> str:
     if isinstance(detail, str):
         return detail
     return str(detail)
+
+
+def _forecast_sse_stream(
+    *,
+    app: FastAPI,
+    payload: Any,
+    request: Request | None,
+) -> Iterator[str]:
+    """SSE stream with granular forecast progress events."""
+    key_id = _event_key_id(request)
+    yield "retry: 3000\n\n"
+
+    # Phase 1: model_loading
+    yield format_sse_event(
+        event="model_loading",
+        data={"model": payload.model, "status": "loading"},
+    )
+    _publish_event(
+        app=app, key_id=key_id, event="forecast.stream",
+        data={"phase": "model_loading", "model": payload.model},
+    )
+
+    try:
+        response = _execute_forecast(
+            app, payload=payload, request=request,
+            extra_exclude={"stream"},
+        )
+    except HTTPException as exc:
+        yield format_sse_event(
+            event="error",
+            data={"code": exc.status_code, "message": str(exc.detail)},
+        )
+        return
+
+    # Phase 2: inference_started
+    yield format_sse_event(
+        event="inference_started",
+        data={
+            "model": response.model,
+            "series_count": len(response.forecasts),
+            "horizon": payload.horizon,
+        },
+    )
+
+    # Phase 3: series_complete for each series
+    for i, forecast in enumerate(response.forecasts):
+        yield format_sse_event(
+            event="series_complete",
+            data={
+                "series_id": forecast.id,
+                "series_index": i,
+                "total_series": len(response.forecasts),
+                "mean_length": len(forecast.mean),
+            },
+        )
+
+    # Phase 4: done with full response
+    yield format_sse_event(
+        event="done",
+        data={
+            "response": response.model_dump(
+                mode="json", exclude_none=True,
+            ),
+        },
+    )
+    _publish_event(
+        app=app, key_id=key_id, event="forecast.stream.complete",
+        data={"model": response.model},
+    )
 
 
 def _forecast_stream_lines(response: ForecastResponse) -> Iterator[str]:

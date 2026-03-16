@@ -87,6 +87,7 @@ models:
       implementation: sundial_base
       max_context: 2880
       max_horizon: 720
+      min_vram_gb: 4.0
       default_num_samples: 100
     capabilities:
       past_covariates_numeric: false
@@ -108,6 +109,7 @@ models:
       implementation: toto_open_base
       max_context: 4096
       max_horizon: 720
+      min_vram_gb: 8.0
       default_num_samples: 256
       default_samples_per_batch: 256
       default_use_kv_cache: true
@@ -268,6 +270,7 @@ models:
       implementation: timer_base
       max_context: 2880
       max_horizon: 720
+      min_vram_gb: 4.0
       install_extra: runner_timer
       install_command: python -m pip install -e ".[dev,runner_timer]"
       notes: Timer is a generative pre-trained Transformer for time series (ICML 2024). Strong zero-shot transfer across domains.

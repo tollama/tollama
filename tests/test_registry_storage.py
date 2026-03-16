@@ -100,6 +100,7 @@ def test_registry_loads_required_model_specs() -> None:
         "implementation": "sundial_base",
         "max_context": 2880,
         "max_horizon": 720,
+        "min_vram_gb": 4.0,
         "default_num_samples": 100,
     }
 
@@ -116,6 +117,7 @@ def test_registry_loads_required_model_specs() -> None:
         "implementation": "toto_open_base",
         "max_context": 4096,
         "max_horizon": 720,
+        "min_vram_gb": 8.0,
         "default_num_samples": 256,
         "default_samples_per_batch": 256,
         "default_use_kv_cache": True,
