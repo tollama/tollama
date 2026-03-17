@@ -11,6 +11,8 @@ import time
 from pathlib import Path
 from typing import Any
 
+from pydantic import ValidationError
+
 from tollama.xai.trust_contract import (
     NormalizedTrustResult,
     TrustAgent,
@@ -165,6 +167,8 @@ class TrustRouter:
             return None
         try:
             result = coerce_normalized_trust_result(agent.analyze(payload))
+        except ValidationError:
+            raise
         except Exception as exc:  # noqa: BLE001
             result = self._handle_agent_failure(agent, context, payload, exc)
             if result is None:
