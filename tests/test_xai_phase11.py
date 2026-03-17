@@ -271,7 +271,11 @@ class TestConnectorFedAnalysis:
             connector=connector,
             identifier="AAPL",
         )
-        assert result is None
+        # Connector failure now returns degraded result (Phase 2.3 fallback)
+        assert result is not None
+        assert result.trust_score == 0.0
+        assert result.risk_category == "RED"
+        assert any("agent_failure" in v.name for v in result.violations)
 
 
 # ──────────────────────────────────────────────────────────────
