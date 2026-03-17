@@ -21,6 +21,7 @@ from tollama.xai.connectors.live import (
     HttpNewsConnector,
 )
 from tollama.xai.connectors.protocol import ConnectorFetchError
+from tollama.xai.trust_router import build_default_trust_router
 
 
 def _find_by_domain(connectors: list, domain: str):
@@ -205,6 +206,35 @@ class TestNewsConnectorFetch:
         result = connector.fetch("story-001", {})
         assert result.domain == "news"
         assert result.payload["story_id"] == "story-001"
+
+    def test_low_contradiction_payload_flows_to_router_without_inversion(self, httpx_mock):
+        payload = {
+            "story_id": "story-raw-low-contradiction",
+            "source_credibility": 0.9,
+            "corroboration": 0.85,
+            "contradiction_score": 0.05,
+            "propagation_delay_seconds": 60.0,
+            "freshness_score": 0.95,
+            "novelty": 0.4,
+        }
+        httpx_mock.add_response(
+            url="http://test:8090/stories/story-raw-low-contradiction",
+            json=payload,
+        )
+        connector = HttpNewsConnector(base_url="http://test:8090")
+
+        fetched = connector.fetch("story-raw-low-contradiction", {})
+        router = build_default_trust_router()
+        result = router.analyze(
+            context={"domain": fetched.domain, "source_type": "news"},
+            payload=fetched.payload,
+        )
+
+        assert result is not None
+        assert result.risk_category == "GREEN"
+        assert fetched.payload["contradiction_score"] == 0.05
+        assert result.component_breakdown["contradiction_penalty"].value == 0.05
+        assert result.component_breakdown["contradiction_penalty"].score == 0.95
 
     def test_not_found_error(self, httpx_mock):
         httpx_mock.add_response(
