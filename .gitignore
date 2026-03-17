@@ -12,6 +12,7 @@ pip-wheel-metadata/
 
 # Virtual environments
 .venv/
+.venv_langchain_e2e/
 venv/
 env/
 
@@ -20,6 +21,7 @@ env/
 .ruff_cache/
 .mypy_cache/
 .tox/
+.ipynb_checkpoints/
 
 # Coverage
 .coverage
@@ -41,5 +43,5 @@ load_models*.py
 .daemon.log
 artifacts/realdata/
 data/raw/
-hf_data/ 
-/lightning_logs
+hf_data/
+lightning_logs/
