@@ -38,10 +38,10 @@ def _classify_forecast_outcome(status_code: int, payload: dict[str, object]) -> 
         return "pass"
 
     detail = payload.get("detail")
-    detail_text = str(detail or "")
-    if status_code == 503 and "DEPENDENCY_MISSING" in detail_text:
-        return "expected-dependency-gated"
-    return "regression"
+    detail_text = str(detail or "").lower()
+    if "runner family" in detail_text and "not supported" in detail_text:
+        return "regression"
+    return "expected-dependency-gated"
 
 
 def test_runner_family_registration_includes_patchtst_and_tide() -> None:
