@@ -58,19 +58,32 @@ Unified covariates contract:
 }
 ```
 
-## Forecast Accuracy Metrics (MAPE, MASE, MAE, RMSE, SMAPE)
+## Forecast Accuracy Metrics (MAPE, MASE, MAE, RMSE, SMAPE, WAPE, RMSSE, Pinball)
 
 `/api/forecast` and `/v1/forecast` can optionally calculate forecast accuracy
 metrics against provided actuals:
 
 - set `series[].actuals` (length must equal `horizon`)
 - set `parameters.metrics.names` to any of
-  `["mape", "mase", "mae", "rmse", "smape"]`
+  `["mape", "mase", "mae", "rmse", "smape", "wape", "rmsse", "pinball"]`
 - optional `parameters.metrics.mase_seasonality` (default `1`)
+- `metrics.aggregate` is a macro average across series where that metric is defined
 - undefined cases are best-effort with response `warnings[]`:
   - MAPE skips when all actual values are `0`
   - MASE skips when `len(target) <= mase_seasonality` or naive denominator is `0`
   - SMAPE skips when all `|actual|+|prediction|` denominators are `0`
+  - WAPE skips when `sum(|actual|) == 0`
+  - RMSSE skips when `len(target) <= mase_seasonality` or squared naive denominator is `0`
+  - Pinball skips when quantile forecasts are missing or malformed
+
+### Metric Ownership
+
+- Shared primitive formulas for `mae`, `mase`, `smape`, and `rmsse` follow
+  `ts_autopilot.evaluation.metrics` in `tollama-eval`.
+- `tollama` owns request-time adaptation: overlap trimming, warning-driven
+  best-effort behavior, and response aggregation.
+- `mape`, `rmse`, `wape`, and `pinball` are currently Core-side runtime metrics
+  defined in `tollama.core.forecast_metrics`.
 
 ```json
 {

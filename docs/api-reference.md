@@ -250,6 +250,11 @@ into a unified Decision Explanation.
 | `names` | array of string | — | Metrics to compute. Options: `"mape"`, `"mase"`, `"mae"`, `"rmse"`, `"smape"`, `"wape"`, `"rmsse"`, `"pinball"` |
 | `mase_seasonality` | integer ≥ 1 | `1` | Seasonality lag used for MASE normalization |
 
+Shared primitive formulas for `mae`, `mase`, `smape`, and `rmsse` follow
+`ts_autopilot.evaluation.metrics` in `tollama-eval`. The forecast API wraps
+those formulas with best-effort request-time behavior: overlap trimming,
+warning emission, and macro aggregation across series with defined values.
+
 #### `ResponseOptions`
 
 | Field | Type | Default | Description |
@@ -276,7 +281,7 @@ into a unified Decision Explanation.
 | `model` | string | yes | Model name used for the forecast |
 | `forecasts` | array of `SeriesForecast` | yes | One entry per input series |
 | `warnings` | array of string | no | Covariate drops, compatibility notices |
-| `metrics` | object | no | Accuracy metrics per series (only when `parameters.metrics` is set) |
+| `metrics` | object | no | Accuracy metrics per series plus `aggregate` macro averages over defined series (only when `parameters.metrics` is set) |
 | `timing` | object | no | `model_load_ms`, `inference_ms`, `total_ms` |
 | `explanation` | object | no | Explainability summaries (model-dependent) |
 | `narrative` | object | no | Natural-language summary (only when `response_options.narrative=true`) |
