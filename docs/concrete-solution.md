@@ -100,6 +100,12 @@ python scripts/e2e_realdata/run_tsfm_realdata.py \
   --output-dir artifacts/realdata/core-solution
 ```
 
+Or run the concrete-solution bridge + benchmark flow directly:
+
+```bash
+bash examples/core_concrete_solution_demo.sh
+```
+
 This command keeps the story narrow:
 
 - hourly-demand-style real data when available
@@ -120,6 +126,7 @@ The standard Core benchmark flow writes:
 - `result.json`
 - `routing.json`
 - `leaderboard.csv`
+- `summary.md`
 
 The concrete solution is complete only when the user can move from benchmark
 evidence into routing action.
@@ -141,5 +148,6 @@ not yet a concrete solution.
 
 - Use `docs/core-workflow.md` for the canonical Core product path.
 - Use this document for the opinionated real-data solution path.
+- Use `docs/core-artifact-bundle-v1.md` for the stable Core artifact contract.
 - Use `docs/tsfm-routing-defaults.md` for routing-manifest semantics.
 - Use `docs/how-to-run.md` for broader installation and real-data harness details.

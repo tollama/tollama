@@ -1180,6 +1180,7 @@ def benchmark(
 ) -> None:
     """Run all models against a dataset and compare accuracy/latency."""
     from tollama.core.benchmark import (
+        format_operator_summary,
         format_benchmark_table,
         run_benchmark,
         save_benchmark_bundle,
@@ -1272,6 +1273,8 @@ def benchmark(
 
     typer.echo("")
     typer.echo(format_benchmark_table(summary))
+    typer.echo("")
+    typer.echo(format_operator_summary(summary))
 
     if output:
         artifact_paths = save_benchmark_bundle(summary, Path(output))
@@ -1279,6 +1282,7 @@ def benchmark(
         typer.echo(f"  - result.json: {artifact_paths['result']}")
         typer.echo(f"  - routing.json: {artifact_paths['routing_manifest']}")
         typer.echo(f"  - leaderboard.csv: {artifact_paths['leaderboard']}")
+        typer.echo(f"  - summary.md: {artifact_paths['operator_summary']}")
         typer.echo(f"  - legacy summary: {artifact_paths['legacy_summary']}")
 
 

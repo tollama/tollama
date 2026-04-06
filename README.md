@@ -148,6 +148,7 @@ That output directory now contains:
 - `result.json` for the Core benchmark summary and routing recommendation
 - `routing.json` for benchmark-backed routing defaults
 - `leaderboard.csv` for quick inspection and sharing
+- `summary.md` for the operator-facing lane recommendation
 - `benchmark_<fingerprint>.json` for legacy compatibility
 
 Human-friendly progress is enabled automatically on interactive terminals.
@@ -157,10 +158,13 @@ You can override with `--progress on` or `--progress off` on `pull`, `run`,
 For benchmark-backed routing defaults, see `docs/tsfm-routing-defaults.md`.
 For the end-to-end Core walkthrough, see `docs/core-workflow.md`.
 For the opinionated real-data solution path, see `docs/concrete-solution.md`.
+For the stable benchmark bundle contract, see `docs/core-artifact-bundle-v1.md`.
 Use `tollama routing apply <result.json>` to promote a Core benchmark artifact
 into the active local routing policy.
 For one runnable Core loop after the daemon is up, use
 `bash examples/core_workflow_demo.sh`.
+For the concrete-solution real-data bridge, use
+`bash examples/core_concrete_solution_demo.sh`.
 
 If you are new to Tollama, stop here and validate `serve`, `quickstart`,
 `benchmark`, and `routing apply` end to end before moving to scenario,

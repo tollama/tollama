@@ -384,6 +384,7 @@ def build_benchmark_result_payload(
             "result_json": "result.json",
             "routing_manifest": "routing.json",
             "leaderboard_csv": "leaderboard.csv",
+            "operator_summary_md": "summary.md",
             "legacy_summary_json": legacy_filename,
             "rich_eval_artifacts": "Use tollama-eval for results.json, details.json, and report.html.",
         },
@@ -411,6 +412,142 @@ def build_routing_manifest_payload(
         "policy": routing.get("policy"),
         "caveats": list(routing.get("caveats", [])),
     }
+
+
+def build_operator_summary(summary: BenchmarkSummary) -> dict[str, Any]:
+    """Build a deterministic operator-facing recommendation summary."""
+    routing = recommend_routing(summary)
+    primary_metric = _ordered_quality_metric_names(summary.metric_names)[0]
+    by_model = {result.model: result for result in summary.models}
+    ranking = {
+        item["model"]: item
+        for item in routing.get("ranking", [])
+        if isinstance(item, dict) and isinstance(item.get("model"), str)
+    }
+
+    def _lane_summary(lane: str, model_name: str | None) -> dict[str, Any]:
+        if model_name is None:
+            return {
+                "lane": lane,
+                "model": None,
+                "reason": "No successful benchmark recommendation is available yet.",
+                "latency_ms": None,
+                "primary_metric": primary_metric,
+                "primary_metric_value": None,
+                "quality_rank": None,
+                "latency_rank": None,
+            }
+
+        result = by_model.get(model_name)
+        ranking_item = ranking.get(model_name, {})
+        latency_ms = round(result.latency_ms, 4) if result is not None else None
+        metric_value = result.metrics.get(primary_metric) if result is not None else None
+        if lane == "default":
+            reason = "Best balanced benchmark profile for general workloads."
+        elif lane == "fast_path":
+            reason = "Lowest observed latency among successful benchmark runs."
+        else:
+            reason = f"Best {primary_metric.upper()} among successful benchmark runs."
+        return {
+            "lane": lane,
+            "model": model_name,
+            "reason": reason,
+            "latency_ms": latency_ms,
+            "primary_metric": primary_metric,
+            "primary_metric_value": metric_value,
+            "quality_rank": ranking_item.get("quality_rank"),
+            "latency_rank": ranking_item.get("latency_rank"),
+        }
+
+    return {
+        "primary_metric": primary_metric,
+        "policy": routing.get("policy"),
+        "caveats": list(routing.get("caveats", [])),
+        "default": _lane_summary("default", routing.get("default")),
+        "fast_path": _lane_summary("fast_path", routing.get("fast_path")),
+        "high_accuracy": _lane_summary("high_accuracy", routing.get("high_accuracy")),
+    }
+
+
+def format_operator_summary(summary: BenchmarkSummary) -> str:
+    """Format an operator-facing summary for terminal output."""
+    payload = build_operator_summary(summary)
+
+    def _metric_text(entry: dict[str, Any]) -> str:
+        value = entry.get("primary_metric_value")
+        metric_name = str(entry.get("primary_metric", "metric")).upper()
+        if value is None or not isinstance(value, (int, float)) or not math.isfinite(value):
+            return f"{metric_name}=N/A"
+        return f"{metric_name}={value:.4f}"
+
+    def _latency_text(entry: dict[str, Any]) -> str:
+        value = entry.get("latency_ms")
+        if value is None or not isinstance(value, (int, float)) or not math.isfinite(value):
+            return "latency=N/A"
+        return f"latency={value:.1f}ms"
+
+    lines = ["Recommendation summary:"]
+    for lane_name in ("default", "fast_path", "high_accuracy"):
+        entry = payload[lane_name]
+        model_name = entry.get("model") or "n/a"
+        lines.append(
+            f"  {lane_name}: {model_name} "
+            f"({_metric_text(entry)}; {_latency_text(entry)}; {entry['reason']})"
+        )
+
+    caveats = payload.get("caveats", [])
+    if caveats:
+        lines.append("Caveats:")
+        for caveat in caveats:
+            lines.append(f"  - {caveat}")
+
+    return "\n".join(lines)
+
+
+def build_operator_summary_markdown(summary: BenchmarkSummary) -> str:
+    """Render the operator-facing recommendation summary as Markdown."""
+    payload = build_operator_summary(summary)
+
+    def _metric_text(entry: dict[str, Any]) -> str:
+        value = entry.get("primary_metric_value")
+        metric_name = str(entry.get("primary_metric", "metric")).upper()
+        if value is None or not isinstance(value, (int, float)) or not math.isfinite(value):
+            return f"{metric_name}=N/A"
+        return f"{metric_name}={value:.4f}"
+
+    def _latency_text(entry: dict[str, Any]) -> str:
+        value = entry.get("latency_ms")
+        if value is None or not isinstance(value, (int, float)) or not math.isfinite(value):
+            return "latency=N/A"
+        return f"latency={value:.1f}ms"
+
+    lines = [
+        "# Operator Summary",
+        "",
+        f"- Default lane: `{payload['default']['model'] or 'n/a'}`",
+        f"  - {_metric_text(payload['default'])}",
+        f"  - {_latency_text(payload['default'])}",
+        f"  - {payload['default']['reason']}",
+        f"- Fast path: `{payload['fast_path']['model'] or 'n/a'}`",
+        f"  - {_metric_text(payload['fast_path'])}",
+        f"  - {_latency_text(payload['fast_path'])}",
+        f"  - {payload['fast_path']['reason']}",
+        f"- High accuracy: `{payload['high_accuracy']['model'] or 'n/a'}`",
+        f"  - {_metric_text(payload['high_accuracy'])}",
+        f"  - {_latency_text(payload['high_accuracy'])}",
+        f"  - {payload['high_accuracy']['reason']}",
+        "",
+        "## Policy",
+        "",
+        str(payload.get("policy") or "No routing policy is available."),
+    ]
+
+    caveats = payload.get("caveats", [])
+    if caveats:
+        lines.extend(["", "## Caveats", ""])
+        lines.extend(f"- {caveat}" for caveat in caveats)
+
+    return "\n".join(lines) + "\n"
 
 
 def export_benchmark_leaderboard_csv(
@@ -452,6 +589,7 @@ def save_benchmark_bundle(
     result_path = output_dir / "result.json"
     routing_path = output_dir / "routing.json"
     leaderboard_path = output_dir / "leaderboard.csv"
+    operator_summary_path = output_dir / "summary.md"
 
     result_payload = build_benchmark_result_payload(
         summary,
@@ -468,11 +606,16 @@ def save_benchmark_bundle(
     routing_path.write_text(json.dumps(routing_payload, indent=2, sort_keys=True), encoding="utf-8")
 
     export_benchmark_leaderboard_csv(summary, leaderboard_path)
+    operator_summary_path.write_text(
+        build_operator_summary_markdown(summary),
+        encoding="utf-8",
+    )
     logger.info("saved benchmark bundle to %s", output_dir)
     return {
         "result": result_path,
         "routing_manifest": routing_path,
         "leaderboard": leaderboard_path,
+        "operator_summary": operator_summary_path,
         "legacy_summary": legacy_summary_path,
     }
 

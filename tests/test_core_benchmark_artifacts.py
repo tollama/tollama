@@ -8,6 +8,7 @@ import json
 from tollama.core.benchmark import (
     BenchmarkSummary,
     ModelBenchmarkResult,
+    format_operator_summary,
     recommend_routing,
     save_benchmark_bundle,
 )
@@ -66,19 +67,29 @@ def test_save_benchmark_bundle_writes_core_artifacts(monkeypatch, tmp_path) -> N
     result_path = artifacts["result"]
     routing_path = artifacts["routing_manifest"]
     leaderboard_path = artifacts["leaderboard"]
+    summary_path = artifacts["operator_summary"]
     legacy_path = artifacts["legacy_summary"]
 
     assert result_path.exists()
     assert routing_path.exists()
     assert leaderboard_path.exists()
+    assert summary_path.exists()
     assert legacy_path.exists()
 
     result_payload = json.loads(result_path.read_text(encoding="utf-8"))
     assert result_payload["artifact_kind"] == "tollama_core_benchmark"
+    assert result_payload["schema_version"] == 1
+    assert result_payload["source"] == "tollama.core.benchmark"
+    assert result_payload["run_id"].startswith("core-benchmark-demo1234abcd5678-")
+    assert result_payload["quality_metric_priority"][0] == "mase"
     assert result_payload["routing_recommendation"]["high_accuracy"] == "accurate"
+    assert result_payload["artifact_mapping"]["result_json"] == "result.json"
     assert result_payload["artifact_mapping"]["routing_manifest"] == "routing.json"
+    assert result_payload["artifact_mapping"]["operator_summary_md"] == "summary.md"
 
     routing_payload = json.loads(routing_path.read_text(encoding="utf-8"))
+    assert routing_payload["version"] == 1
+    assert routing_payload["source"] == "tollama.core.benchmark"
     assert routing_payload["routing"]["default"] == "accurate"
     assert routing_payload["routing"]["fast_path"] == "fast"
 
@@ -87,6 +98,11 @@ def test_save_benchmark_bundle_writes_core_artifacts(monkeypatch, tmp_path) -> N
     assert rows[0]["model"] == "accurate"
     assert rows[0]["rank"] == "1"
 
+    summary_markdown = summary_path.read_text(encoding="utf-8")
+    assert "# Operator Summary" in summary_markdown
+    assert "`accurate`" in summary_markdown
+    assert "Fast path" in summary_markdown
+
     monkeypatch.setenv("TOLLAMA_HOME", str(tmp_path / "home"))
     monkeypatch.setenv("TOLLAMA_ROUTING_MANIFEST", str(result_path))
     manifest = load_routing_manifest(paths=TollamaPaths.default())
@@ -94,3 +110,13 @@ def test_save_benchmark_bundle_writes_core_artifacts(monkeypatch, tmp_path) -> N
     assert manifest is not None
     assert manifest.routing.default == "accurate"
     assert manifest.routing.fast_path == "fast"
+
+
+def test_format_operator_summary_surfaces_lane_recommendations() -> None:
+    rendered = format_operator_summary(_summary())
+
+    assert "Recommendation summary:" in rendered
+    assert "default: accurate" in rendered
+    assert "fast_path: fast" in rendered
+    assert "high_accuracy: accurate" in rendered
+    assert "Caveats:" in rendered

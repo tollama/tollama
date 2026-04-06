@@ -705,6 +705,94 @@ def test_quickstart_prints_daemon_guidance_when_unreachable(monkeypatch) -> None
     assert "tollama serve" in stderr
 
 
+def test_benchmark_prints_operator_summary_and_summary_artifact(monkeypatch, tmp_path: Path) -> None:
+    from tollama.core.benchmark import BenchmarkSummary, ModelBenchmarkResult
+
+    dataset_path = tmp_path / "benchmark.json"
+    dataset_path.write_text(
+        json.dumps(
+            {
+                "series": [
+                    {
+                        "id": "demo",
+                        "freq": "D",
+                        "timestamps": [
+                            "2026-01-01",
+                            "2026-01-02",
+                            "2026-01-03",
+                            "2026-01-04",
+                            "2026-01-05",
+                            "2026-01-06",
+                        ],
+                        "target": [10.0, 11.0, 12.0, 13.0, 14.0, 15.0],
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    output_dir = tmp_path / "artifacts"
+
+    class _FakeClient:
+        def forecast(self, payload: dict[str, object], *, stream: bool) -> dict[str, object]:
+            del payload, stream
+            raise AssertionError("forecast_fn should not be called when run_benchmark is stubbed")
+
+    monkeypatch.setattr(
+        "tollama.cli.main._make_client",
+        lambda **_kwargs: _FakeClient(),
+    )
+
+    def _fake_run_benchmark(**_kwargs: object) -> BenchmarkSummary:
+        return BenchmarkSummary(
+            dataset_fingerprint="demo-cli",
+            horizon=2,
+            num_folds=2,
+            metric_names=["mase", "mae", "rmse"],
+            learned_weights={"accurate": 0.7, "fast": 0.3},
+            models=[
+                ModelBenchmarkResult(
+                    model="accurate",
+                    metrics={"mase": 0.8, "mae": 1.0, "rmse": 1.3},
+                    latency_ms=220.0,
+                    folds_evaluated=2,
+                ),
+                ModelBenchmarkResult(
+                    model="fast",
+                    metrics={"mase": 1.1, "mae": 1.4, "rmse": 1.8},
+                    latency_ms=50.0,
+                    folds_evaluated=2,
+                ),
+            ],
+        )
+
+    monkeypatch.setattr("tollama.core.benchmark.run_benchmark", _fake_run_benchmark)
+    runner = _new_runner()
+    result = runner.invoke(
+        app,
+        [
+            "benchmark",
+            str(dataset_path),
+            "--models",
+            "accurate,fast",
+            "--horizon",
+            "2",
+            "--folds",
+            "2",
+            "--output",
+            str(output_dir),
+        ],
+    )
+
+    assert result.exit_code == 0
+    output = _result_stdout(result)
+    assert "Recommendation summary:" in output
+    assert "default: accurate" in output
+    assert "fast_path: fast" in output
+    assert "summary.md:" in output
+    assert (output_dir / "summary.md").exists()
+
+
 def test_run_auto_pulls_when_model_not_installed(monkeypatch, tmp_path: Path) -> None:
     request_path = tmp_path / "request.json"
     request_path.write_text(json.dumps(_sample_request_payload()), encoding="utf-8")
