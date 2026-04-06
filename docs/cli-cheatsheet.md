@@ -48,35 +48,6 @@ Show raw metadata for one installed model:
 tollama show chronos2
 ```
 
-Explain model capabilities, license, limits, and recommended use cases:
-```bash
-tollama explain chronos2
-tollama explain chronos2 --json
-```
-
-Example output (`tollama explain mock`):
-```
-mock
-family: mock
-installed: yes
-source: - @ -
-
-license
-  type: MIT
-  acceptance required: no
-
-limits
-  max_horizon: -
-  max_context: -
-
-capabilities
-  past_covariates_numeric: no
-  ...
-
-recommended use cases
-  - Fast local smoke tests and integration checks.
-```
-
 Pull a model from the registry into local storage:
 ```bash
 tollama pull chronos2
@@ -149,6 +120,10 @@ Apply a saved benchmark result as the active local routing manifest:
 tollama routing apply artifacts/benchmarks/demo/result.json
 tollama routing show
 ```
+
+If you are new to Tollama, stop here first. Validate `serve`, `quickstart`,
+`benchmark`, and `routing apply` before using secondary surfaces like dashboards,
+exports, or developer tooling.
 
 ---
 
@@ -299,6 +274,39 @@ Quantize a pulled model for reduced memory usage:
 tollama quantize chronos2
 tollama quantize chronos2 --precision int8
 tollama quantize chronos2 --precision int4
+```
+
+---
+
+## Secondary / Advanced Surfaces
+
+Explain model capabilities, license, limits, and recommended use cases:
+```bash
+tollama explain chronos2
+tollama explain chronos2 --json
+```
+
+Example output (`tollama explain mock`):
+```
+mock
+family: mock
+installed: yes
+source: - @ -
+
+license
+  type: MIT
+  acceptance required: no
+
+limits
+  max_horizon: -
+  max_context: -
+
+capabilities
+  past_covariates_numeric: no
+  ...
+
+recommended use cases
+  - Fast local smoke tests and integration checks.
 ```
 
 ---

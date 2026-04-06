@@ -48,19 +48,6 @@ When `--output` is set, Tollama Core writes a reusable bundle:
 `result.json`, `routing.json`, `leaderboard.csv`, plus a legacy
 `benchmark_<fingerprint>.json` compatibility file.
 
-## Optional Integrations
-
-Once the Core forecast path is working, Tollama can also plug into broader
-agent systems and orchestration layers.
-
-| Integration                       | Description                                                  |
-| --------------------------------- | ------------------------------------------------------------ |
-| **MCP Server**                    | 22 tools — forecast, compare, diagnostics, reporting, trust, etc. |
-| **A2A Protocol**                  | JSON-RPC based agent-to-agent communication with task queue  |
-| **LangChain**                     | 13 natively integrated tools                                 |
-| **CrewAI / AutoGen / Smolagents** | Per-framework adapters                                       |
-| **OpenClaw Skill**                | OpenAI tool schema + shell scripts                           |
-
 ## Supported Models
 
 Tollama ships **14 models**: 7 time series foundation models (TSFMs) and 7 neural baselines.
@@ -96,15 +83,13 @@ from `~/.tollama/routing.json` or `TOLLAMA_ROUTING_MANIFEST`.
 
 ```
 ┌────────────────────────────────────────────────────────┐
-│  Core users: CLI / SDK / HTTP API / Dashboard          │
+│  Core users: CLI / SDK / HTTP API                      │
 ├────────────────────────────────────────────────────────┤
 │  Core workflow: Preprocess -> Forecast -> Benchmark -> Route │
 ├────────────────────────────────────────────────────────┤
-│  Optional integrations: MCP / A2A / LangChain / ...   │
-├────────────────────────────────────────────────────────┤
 │  Tollama daemon (tollamad)                             │
-│  Forecast · Compare · Benchmark · Routing · Pipeline   │
-│  Auth · Rate Limiting · Prometheus · SSE               │
+│  Forecast · Benchmark · Routing · Pipeline             │
+│  Local model execution + reusable Core artifacts       │
 ├──────┬──────┬──────┬──────┬──────┬──────┬──────────────┤
 │      │ stdio JSON-lines protocol      │              │
 │      ▼      ▼      ▼      ▼      ▼      ▼              │
@@ -174,18 +159,9 @@ For the end-to-end Core walkthrough, see `docs/core-workflow.md`.
 Use `tollama routing apply <result.json>` to promote a Core benchmark artifact
 into the active local routing policy.
 
-Useful CLI additions:
-
-```bash
-# explain model limits/capabilities/license from registry + local manifest
-tollama explain chronos2
-
-# scaffold a new runner family skeleton (files only)
-tollama dev scaffold acme_family
-
-# scaffold + register script/module-map/registry template entry
-tollama dev scaffold acme_family --register
-```
+If you are new to Tollama, stop here and validate `serve`, `quickstart`,
+`benchmark`, and `routing apply` end to end before moving to scenario,
+agent-wrapper, or developer-scaffolding surfaces.
 
 ## Python SDK
 
@@ -219,42 +195,7 @@ from_file = t.forecast_from_file(
 )
 print(from_file.to_df())
 
-what_if = t.what_if(
-    model="chronos2",
-    series={"target": [10, 11, 12, 13, 14], "freq": "D"},
-    horizon=3,
-    scenarios=[
-        {"name": "high_demand", "transforms": [{"operation": "multiply", "field": "target", "value": 1.2}]}
-    ],
-)
-print(what_if.summary)
-
-pipeline = t.pipeline(
-    series={"target": [10, 11, 12, 13, 14], "freq": "D"},
-    horizon=3,
-    strategy="auto",
-    pull_if_missing=True,
-)
-print(pipeline.auto_forecast.response.model)
-
-synthetic = t.generate(
-    series={"target": [10, 11, 12, 13, 14], "freq": "D"},
-    count=2,
-    length=7,
-    seed=42,
-)
-print(synthetic.generated[0].id)
-
-# additive chainable workflow (keeps existing SDK method contracts unchanged)
-with Tollama() as sdk:
-    flow = (
-        sdk.workflow(series={"target": [10, 11, 12, 13, 14], "freq": "D"})
-        .analyze()
-        .auto_forecast(horizon=3)
-    )
-print(flow.auto_forecast_result.selection.chosen_model)
-
-# reuse one forecast request for compare/what-if
+# reuse one forecast request for compare
 baseline = t.forecast(
     model="chronos2",
     series={"target": [10, 11, 12, 13, 14], "freq": "D"},
@@ -263,6 +204,10 @@ baseline = t.forecast(
 comparison = baseline.then_compare(models=["timesfm-2.5-200m"])
 print(comparison.summary)
 ```
+
+Additional SDK surfaces like `what_if`, `pipeline`, `generate`, structured
+reports, and chainable workflows remain available, but they are intentionally
+secondary to the Core path above.
 
 `response_options.explain=true` and `response_options.narrative=true` return deterministic
 forecast summaries derived from the request/response payload. They are intended as lightweight
@@ -351,7 +296,10 @@ Implementation: `src/tollama/preprocess/`.
   - `tollama dashboard` launches the Textual TUI (install with `python -m pip install -e \".[tui]\"`)
 - Detailed user guide: `docs/dashboard-user-guide.md`
 
-## Structured Intelligence + Generative Planning
+## Additional Decision Surfaces (After Core)
+
+These endpoints are available once the base forecast workflow is stable. They
+are useful follow-on surfaces, not the recommended first touch for Core users.
 
 - `POST /api/report` returns composite structured intelligence in one call:
   analyze + recommend + auto-forecast (+ optional baseline/narrative).
@@ -394,6 +342,19 @@ Daemon APIs:
 - `GET /api/modelfiles/{name}`
 - `POST /api/modelfiles`
 - `DELETE /api/modelfiles/{name}`
+
+## Additional Integrations (After the Core Path)
+
+Once the Core forecast path is working, Tollama can also plug into broader
+agent systems and orchestration layers.
+
+| Integration                       | Description                                                  |
+| --------------------------------- | ------------------------------------------------------------ |
+| **MCP Server**                    | 22 tools — forecast, compare, diagnostics, reporting, trust, etc. |
+| **A2A Protocol**                  | JSON-RPC based agent-to-agent communication with task queue  |
+| **LangChain**                     | 13 natively integrated tools                                 |
+| **CrewAI / AutoGen / Smolagents** | Per-framework adapters                                       |
+| **OpenClaw Skill**                | OpenAI tool schema + shell scripts                           |
 
 ## Agent Integrations
 
