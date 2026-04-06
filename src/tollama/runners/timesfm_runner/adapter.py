@@ -160,15 +160,21 @@ class TimesFMAdapter:
             force_on_cpu = (
                 bool(timesfm_parameters.force_on_cpu) if timesfm_parameters is not None else False
             )
-            forecast_output = _forecast_with_covariates(
-                model=compiled.model,
-                horizon=request.horizon,
-                inputs=inputs,
-                dynamic_numerical_covariates=covariate_payload.dynamic_numerical_covariates,
-                xreg_mode=xreg_mode,
-                ridge=ridge_value,
-                force_on_cpu=force_on_cpu,
-            )
+            try:
+                forecast_output = _forecast_with_covariates(
+                    model=compiled.model,
+                    horizon=request.horizon,
+                    inputs=inputs,
+                    dynamic_numerical_covariates=covariate_payload.dynamic_numerical_covariates,
+                    xreg_mode=xreg_mode,
+                    ridge=ridge_value,
+                    force_on_cpu=force_on_cpu,
+                )
+            except ImportError as exc:
+                raise DependencyMissingError(
+                    "missing optional timesfm covariate dependencies "
+                    "(timesfm[xreg]); install them with `pip install -e \".[dev,runner_timesfm]\"`",
+                ) from exc
         else:
             forecast_output = compiled.model.forecast(horizon=request.horizon, inputs=inputs)
         point_forecast, quantile_forecast = _split_forecast_output(forecast_output)

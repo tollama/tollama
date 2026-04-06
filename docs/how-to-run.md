@@ -106,7 +106,7 @@ Optional extras:
 | `mcp` | MCP server integration | `mcp`, `httpx` |
 | `langchain` | Python SDK LangChain tool wrappers | `langchain-core` |
 | `runner_torch` | Chronos + Granite runner dependencies | `chronos-forecasting`, `granite-tsfm`, `pandas`, `numpy` |
-| `runner_timesfm` | TimesFM runner dependencies | `numpy`, `pandas`, `huggingface_hub`, `timesfm[torch]` from `https://github.com/google-research/timesfm/archive/2dcc66fbfe2155adba1af66aa4d564a0ee52f61e.tar.gz` |
+| `runner_timesfm` | TimesFM runner dependencies | `numpy`, `pandas`, `huggingface_hub`, `timesfm[torch,xreg]` from `https://github.com/google-research/timesfm/archive/2dcc66fbfe2155adba1af66aa4d564a0ee52f61e.tar.gz` |
 | `runner_uni2ts` | Uni2TS/Moirai runner dependencies | `uni2ts`, `numpy`, `pandas`, `huggingface_hub`, `gluonts` |
 | `runner_sundial` | Sundial runner dependencies | `transformers`, `torch`, `numpy`, `pandas`, `huggingface_hub` |
 | `runner_toto` | Toto runner dependencies | `toto-ts`, `torch`, `numpy`, `pandas` |

@@ -15,7 +15,7 @@ from tollama.runners.timesfm_runner.adapter import (
     point_forecast_to_rows,
     truncate_target_to_max_context,
 )
-from tollama.runners.timesfm_runner.errors import AdapterInputError
+from tollama.runners.timesfm_runner.errors import AdapterInputError, DependencyMissingError
 
 
 class _FakePandas:
@@ -199,6 +199,17 @@ class _FakeTimesFMNaNModule:
     TimesFM_2p5_200M_torch = _FakeTimesFMNaNModel
 
 
+class _FakeTimesFMImportErrorModel(_FakeTimesFMModel):
+    def forecast_with_covariates(self, **kwargs):  # noqa: ANN003
+        del kwargs
+        raise ImportError("Did you forget to install `timesfm[xreg]`?")
+
+
+class _FakeTimesFMImportErrorModule:
+    ForecastConfig = _FakeForecastConfig
+    TimesFM_2p5_200M_torch = _FakeTimesFMImportErrorModel
+
+
 def _covariate_request() -> ForecastRequest:
     return ForecastRequest.model_validate(
         {
@@ -297,3 +308,22 @@ def test_timesfm_adapter_replaces_non_finite_forecasts(monkeypatch) -> None:
     assert response.forecasts[0].mean == [12.0, 12.0]
     assert response.warnings is not None
     assert "non-finite forecast values" in response.warnings[-1]
+
+
+def test_timesfm_adapter_maps_missing_xreg_dependencies_to_dependency_error(monkeypatch) -> None:
+    adapter = TimesFMAdapter()
+    monkeypatch.setattr(
+        adapter,
+        "_resolve_dependencies",
+        lambda: _TimesFMDependencies(
+            numpy=_FakeNumpy(),
+            pandas=_FakePandas(),
+            timesfm=_FakeTimesFMImportErrorModule(),
+        ),
+    )
+
+    with pytest.raises(
+        DependencyMissingError,
+        match="missing optional timesfm covariate dependencies",
+    ):
+        adapter.forecast(_covariate_request())
