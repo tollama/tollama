@@ -44,6 +44,10 @@ tollama quickstart
 tollama benchmark examples/benchmark_data.json --models mock --horizon 4 --folds 1 --output artifacts/benchmarks/demo
 ```
 
+When `--output` is set, Tollama Core writes a reusable bundle:
+`result.json`, `routing.json`, `leaderboard.csv`, plus a legacy
+`benchmark_<fingerprint>.json` compatibility file.
+
 ## Optional Integrations
 
 Once the Core forecast path is working, Tollama can also plug into broader
@@ -153,6 +157,13 @@ tollama quickstart
 # Terminal 2: save a first benchmark artifact
 tollama benchmark examples/benchmark_data.json --models mock --horizon 4 --folds 1 --output artifacts/benchmarks/demo
 ```
+
+That output directory now contains:
+
+- `result.json` for the Core benchmark summary and routing recommendation
+- `routing.json` for benchmark-backed routing defaults
+- `leaderboard.csv` for quick inspection and sharing
+- `benchmark_<fingerprint>.json` for legacy compatibility
 
 Human-friendly progress is enabled automatically on interactive terminals.
 You can override with `--progress on` or `--progress off` on `pull`, `run`,

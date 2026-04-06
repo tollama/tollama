@@ -1095,7 +1095,7 @@ def benchmark(
     output: str | None = typer.Option(
         None,
         "--output",
-        help="Directory to save benchmark JSON results.",
+        help="Directory to save Core benchmark artifacts.",
     ),
     base_url: str = typer.Option(
         DEFAULT_BASE_URL,
@@ -1111,7 +1111,7 @@ def benchmark(
     from tollama.core.benchmark import (
         format_benchmark_table,
         run_benchmark,
-        save_benchmark_results,
+        save_benchmark_bundle,
     )
     from tollama.core.schemas import ForecastRequest, ForecastResponse, SeriesInput
 
@@ -1203,10 +1203,12 @@ def benchmark(
     typer.echo(format_benchmark_table(summary))
 
     if output:
-        out_path = save_benchmark_results(summary, Path(output))
-        typer.echo(
-            _style_text(f"\nResults saved to {out_path}", fg=_COLOR_SUCCESS)
-        )
+        artifact_paths = save_benchmark_bundle(summary, Path(output))
+        typer.echo(_style_text(f"\nArtifacts saved to {Path(output)}", fg=_COLOR_SUCCESS))
+        typer.echo(f"  - result.json: {artifact_paths['result']}")
+        typer.echo(f"  - routing.json: {artifact_paths['routing_manifest']}")
+        typer.echo(f"  - leaderboard.csv: {artifact_paths['leaderboard']}")
+        typer.echo(f"  - legacy summary: {artifact_paths['legacy_summary']}")
 
 
 @app.command("export")

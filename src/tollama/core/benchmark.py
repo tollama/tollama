@@ -7,10 +7,13 @@ for comparison and regression detection.
 
 from __future__ import annotations
 
+import csv
 import json
 import logging
+import math
 import time
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -26,6 +29,17 @@ from .backtest import (
 from .schemas import ForecastResponse, SeriesInput
 
 logger = logging.getLogger(__name__)
+
+_QUALITY_METRIC_PRIORITY = (
+    "mase",
+    "smape",
+    "mae",
+    "rmse",
+    "rmsse",
+    "wape",
+    "mape",
+    "pinball",
+)
 
 
 @dataclass(frozen=True)
@@ -246,3 +260,274 @@ def save_benchmark_results(
     path.write_text(json.dumps(payload, indent=2))
     logger.info("saved benchmark results to %s", path)
     return path
+
+
+def recommend_routing(summary: BenchmarkSummary) -> dict[str, Any]:
+    """Derive benchmark-backed routing defaults from a benchmark summary."""
+    quality_metric_names = _ordered_quality_metric_names(summary.metric_names)
+    successful = [
+        result
+        for result in summary.models
+        if result.folds_evaluated > 0 and _has_quality_metrics(result, quality_metric_names)
+    ]
+
+    if not successful:
+        return {
+            "default": None,
+            "fast_path": None,
+            "high_accuracy": None,
+            "policy": "no successful benchmark runs",
+            "ranking": [],
+            "caveats": [
+                "All benchmarked models failed or produced no comparable quality metrics.",
+                "Keep existing routing defaults until a successful benchmark run is available.",
+            ],
+        }
+
+    quality_sorted = sorted(
+        successful,
+        key=lambda result: (
+            _quality_sort_key(result, quality_metric_names),
+            result.latency_ms,
+            result.model,
+        ),
+    )
+    latency_sorted = sorted(
+        successful,
+        key=lambda result: (
+            result.latency_ms,
+            _quality_sort_key(result, quality_metric_names),
+            result.model,
+        ),
+    )
+
+    quality_rank = {result.model: index for index, result in enumerate(quality_sorted, start=1)}
+    latency_rank = {result.model: index for index, result in enumerate(latency_sorted, start=1)}
+
+    ranking = [
+        {
+            "model": result.model,
+            "quality_rank": quality_rank[result.model],
+            "latency_rank": latency_rank[result.model],
+            "balanced_score": round(
+                0.7 * quality_rank[result.model] + 0.3 * latency_rank[result.model],
+                4,
+            ),
+            "primary_metric": quality_metric_names[0],
+            "primary_metric_value": result.metrics.get(quality_metric_names[0]),
+            "latency_ms": round(result.latency_ms, 4),
+        }
+        for result in successful
+    ]
+    balanced_sorted = sorted(
+        ranking,
+        key=lambda item: (
+            item["balanced_score"],
+            item["quality_rank"],
+            item["latency_rank"],
+            item["model"],
+        ),
+    )
+
+    return {
+        "default": balanced_sorted[0]["model"],
+        "fast_path": latency_sorted[0].model,
+        "high_accuracy": quality_sorted[0].model,
+        "policy": (
+            "Use default for general workloads; route latency-sensitive requests to "
+            "fast_path; route accuracy-critical requests to high_accuracy."
+        ),
+        "ranking": balanced_sorted,
+        "caveats": [
+            "Routing recommendation is only as good as the benchmark dataset and fold design.",
+            "Latency can shift with hardware, daemon warm-up, and runner cache state.",
+        ],
+    }
+
+
+def build_benchmark_result_payload(
+    summary: BenchmarkSummary,
+    *,
+    generated_at: str,
+    run_id: str,
+) -> dict[str, Any]:
+    """Build the canonical Core benchmark result payload."""
+    routing_recommendation = recommend_routing(summary)
+    legacy_filename = f"benchmark_{summary.dataset_fingerprint}.json"
+
+    return {
+        "artifact_kind": "tollama_core_benchmark",
+        "schema_version": 1,
+        "generated_at": generated_at,
+        "run_id": run_id,
+        "source": "tollama.core.benchmark",
+        "dataset_fingerprint": summary.dataset_fingerprint,
+        "horizon": summary.horizon,
+        "num_folds": summary.num_folds,
+        "metric_names": summary.metric_names,
+        "quality_metric_priority": _ordered_quality_metric_names(summary.metric_names),
+        "models": [
+            {
+                "model": result.model,
+                "metrics": result.metrics,
+                "latency_ms": result.latency_ms,
+                "folds_evaluated": result.folds_evaluated,
+                "warnings": result.warnings,
+                "learned_weight": summary.learned_weights.get(result.model),
+            }
+            for result in summary.models
+        ],
+        "leaderboard": build_benchmark_leaderboard(summary),
+        "learned_weights": summary.learned_weights,
+        "routing_recommendation": routing_recommendation,
+        "artifact_mapping": {
+            "result_json": "result.json",
+            "routing_manifest": "routing.json",
+            "leaderboard_csv": "leaderboard.csv",
+            "legacy_summary_json": legacy_filename,
+            "rich_eval_artifacts": "Use tollama-eval for results.json, details.json, and report.html.",
+        },
+    }
+
+
+def build_routing_manifest_payload(
+    summary: BenchmarkSummary,
+    *,
+    generated_at: str,
+    run_id: str,
+) -> dict[str, Any]:
+    """Build a routing manifest from a benchmark summary."""
+    routing = recommend_routing(summary)
+    return {
+        "version": 1,
+        "generated_at": generated_at,
+        "run_id": run_id,
+        "source": "tollama.core.benchmark",
+        "routing": {
+            "default": routing.get("default"),
+            "fast_path": routing.get("fast_path"),
+            "high_accuracy": routing.get("high_accuracy"),
+        },
+        "policy": routing.get("policy"),
+        "caveats": list(routing.get("caveats", [])),
+    }
+
+
+def export_benchmark_leaderboard_csv(
+    summary: BenchmarkSummary,
+    output_path: Path,
+) -> Path:
+    """Export a compact leaderboard CSV for the Core benchmark bundle."""
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    leaderboard = build_benchmark_leaderboard(summary)
+    fieldnames = [
+        "rank",
+        "model",
+        *summary.metric_names,
+        "latency_ms",
+        "folds_evaluated",
+        "learned_weight",
+    ]
+    with output_path.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fieldnames)
+        writer.writeheader()
+        for row in leaderboard:
+            writer.writerow({name: row.get(name) for name in fieldnames})
+    logger.info("exported benchmark leaderboard CSV to %s", output_path)
+    return output_path
+
+
+def save_benchmark_bundle(
+    summary: BenchmarkSummary,
+    output_dir: Path,
+) -> dict[str, Path]:
+    """Persist the canonical Core benchmark bundle plus legacy compatibility output."""
+    output_dir.mkdir(parents=True, exist_ok=True)
+    generated_at = datetime.now(UTC).replace(microsecond=0).isoformat()
+    run_id = datetime.now(UTC).strftime(
+        f"core-benchmark-{summary.dataset_fingerprint}-%Y%m%dT%H%M%SZ"
+    )
+
+    legacy_summary_path = save_benchmark_results(summary, output_dir)
+    result_path = output_dir / "result.json"
+    routing_path = output_dir / "routing.json"
+    leaderboard_path = output_dir / "leaderboard.csv"
+
+    result_payload = build_benchmark_result_payload(
+        summary,
+        generated_at=generated_at,
+        run_id=run_id,
+    )
+    result_path.write_text(json.dumps(result_payload, indent=2, sort_keys=True), encoding="utf-8")
+
+    routing_payload = build_routing_manifest_payload(
+        summary,
+        generated_at=generated_at,
+        run_id=run_id,
+    )
+    routing_path.write_text(json.dumps(routing_payload, indent=2, sort_keys=True), encoding="utf-8")
+
+    export_benchmark_leaderboard_csv(summary, leaderboard_path)
+    logger.info("saved benchmark bundle to %s", output_dir)
+    return {
+        "result": result_path,
+        "routing_manifest": routing_path,
+        "leaderboard": leaderboard_path,
+        "legacy_summary": legacy_summary_path,
+    }
+
+
+def build_benchmark_leaderboard(summary: BenchmarkSummary) -> list[dict[str, Any]]:
+    """Build a quality-first leaderboard for benchmark artifacts."""
+    quality_metric_names = _ordered_quality_metric_names(summary.metric_names)
+    sorted_models = sorted(
+        summary.models,
+        key=lambda result: (
+            _quality_sort_key(result, quality_metric_names),
+            result.latency_ms,
+            result.model,
+        ),
+    )
+    leaderboard: list[dict[str, Any]] = []
+    for index, result in enumerate(sorted_models, start=1):
+        row: dict[str, Any] = {
+            "rank": index,
+            "model": result.model,
+            "latency_ms": round(result.latency_ms, 4),
+            "folds_evaluated": result.folds_evaluated,
+            "learned_weight": summary.learned_weights.get(result.model),
+        }
+        for metric_name in summary.metric_names:
+            row[metric_name] = result.metrics.get(metric_name)
+        leaderboard.append(row)
+    return leaderboard
+
+
+def _ordered_quality_metric_names(metric_names: list[str]) -> list[str]:
+    ordered = [name for name in _QUALITY_METRIC_PRIORITY if name in metric_names]
+    ordered.extend(name for name in metric_names if name not in ordered)
+    return ordered or ["mase"]
+
+
+def _has_quality_metrics(
+    result: ModelBenchmarkResult,
+    metric_names: list[str],
+) -> bool:
+    return any(
+        (value := result.metrics.get(name)) is not None and math.isfinite(value)
+        for name in metric_names
+    )
+
+
+def _quality_sort_key(
+    result: ModelBenchmarkResult,
+    metric_names: list[str],
+) -> tuple[float, ...]:
+    values: list[float] = []
+    for name in metric_names:
+        value = result.metrics.get(name)
+        if value is None or not math.isfinite(value):
+            values.append(float("inf"))
+        else:
+            values.append(float(value))
+    return tuple(values)

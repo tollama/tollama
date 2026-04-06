@@ -138,6 +138,9 @@ Save JSON output for later comparison or routing work:
 tollama benchmark examples/benchmark_data.json --models mock --horizon 4 --folds 1 --output artifacts/benchmarks/demo
 ```
 
+`--output` writes a Core bundle with `result.json`, `routing.json`,
+`leaderboard.csv`, and a legacy `benchmark_<fingerprint>.json`.
+
 Use `docs/tsfm-routing-defaults.md` when you want to turn benchmark results into
 `default`, `fast_path`, and `high_accuracy` routing policy.
 
@@ -270,6 +273,9 @@ tollama benchmark examples/benchmark_data.json
 tollama benchmark examples/benchmark_data.json --horizon 96 --models chronos2,mock --folds 3
 tollama benchmark examples/benchmark_data.json --output results/
 ```
+
+With `--output`, use `results/result.json` as the main Core benchmark artifact and
+`results/routing.json` as the direct routing-manifest input.
 
 ---
 
