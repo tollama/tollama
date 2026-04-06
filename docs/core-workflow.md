@@ -76,14 +76,17 @@ That output directory contains:
 
 ## 6. Apply routing evidence
 
-Use the generated manifest directly:
+Apply the generated artifact as the active local routing manifest:
 
 ```bash
-export TOLLAMA_ROUTING_MANIFEST="$(pwd)/artifacts/benchmarks/demo/routing.json"
+tollama routing apply artifacts/benchmarks/demo/result.json
 ```
 
-You can also copy it to `~/.tollama/routing.json` if you want it to become the
-default local routing policy.
+Inspect the applied policy any time:
+
+```bash
+tollama routing show
+```
 
 ## 7. Route through `auto_forecast`
 

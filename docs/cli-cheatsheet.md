@@ -144,6 +144,12 @@ tollama benchmark examples/benchmark_data.json --models mock --horizon 4 --folds
 Use `docs/tsfm-routing-defaults.md` when you want to turn benchmark results into
 `default`, `fast_path`, and `high_accuracy` routing policy.
 
+Apply a saved benchmark result as the active local routing manifest:
+```bash
+tollama routing apply artifacts/benchmarks/demo/result.json
+tollama routing show
+```
+
 ---
 
 ## Dashboard

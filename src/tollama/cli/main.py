@@ -48,10 +48,12 @@ from .info import collect_info
 app = typer.Typer(help="Ollama-style command-line interface for the tollama core.")
 config_app = typer.Typer(help="Manage local tollama defaults in ~/.tollama/config.json.")
 runtime_app = typer.Typer(help="Manage per-family isolated runner environments.")
+routing_app = typer.Typer(help="Manage benchmark-backed routing defaults.")
 modelfile_app = typer.Typer(help="Manage TSModelfile forecast profiles.")
 xai_app = typer.Typer(help="XAI explainability, trust scoring, and model card generation.")
 app.add_typer(config_app, name="config")
 app.add_typer(runtime_app, name="runtime")
+app.add_typer(routing_app, name="routing")
 app.add_typer(modelfile_app, name="modelfile")
 app.add_typer(dev_app, name="dev")
 app.add_typer(xai_app, name="xai")
@@ -471,6 +473,72 @@ def config_init(
     except OSError as exc:
         _exit_with_message(f"Error: unable to write {config_path}: {exc}", code=1)
     typer.echo(f"Wrote default config to {config_path}")
+
+
+@routing_app.command("show")
+def routing_show(
+    source: str | None = typer.Argument(
+        None,
+        help="Optional path to a Core `result.json` or `routing.json` artifact.",
+    ),
+    json_output: bool = typer.Option(False, "--json", help="Print compact JSON."),
+) -> None:
+    """Show the effective or explicitly provided routing manifest."""
+    from tollama.core.routing import (
+        get_routing_manifest_path,
+        load_routing_manifest,
+        load_routing_manifest_from_path,
+    )
+
+    paths = TollamaPaths.default()
+    try:
+        manifest = (
+            load_routing_manifest_from_path(source)
+            if source is not None
+            else load_routing_manifest(paths=paths)
+        )
+    except ValueError as exc:
+        _exit_with_message(f"Error: {exc}", code=1)
+
+    if manifest is None:
+        _exit_with_message("no routing manifest found", code=1)
+
+    payload = manifest.model_dump(mode="json", exclude_none=True)
+    if json_output:
+        typer.echo(json.dumps(payload, separators=(",", ":"), sort_keys=True))
+        return
+
+    typer.echo(_style_text("Routing manifest:", bold=True))
+    typer.echo(json.dumps(payload, indent=2, sort_keys=True))
+    if source is not None:
+        typer.echo(f"Loaded from: {Path(source).expanduser()}")
+    else:
+        typer.echo(f"Resolved save path: {get_routing_manifest_path(paths)}")
+
+
+@routing_app.command("apply")
+def routing_apply(
+    source: str = typer.Argument(
+        ...,
+        help="Path to a Core `result.json` or `routing.json` artifact to apply.",
+    ),
+    path: str | None = typer.Option(
+        None,
+        "--path",
+        help="Destination path. Defaults to ~/.tollama/routing.json.",
+    ),
+) -> None:
+    """Apply a benchmark artifact as the active local routing manifest."""
+    from tollama.core.routing import load_routing_manifest_from_path, save_routing_manifest
+
+    try:
+        manifest = load_routing_manifest_from_path(source)
+    except ValueError as exc:
+        _exit_with_message(f"Error: {exc}", code=1)
+
+    target = save_routing_manifest(manifest, paths=TollamaPaths.default(), path=path)
+    typer.echo(_style_text(f"Applied routing manifest to {target}", fg=_COLOR_SUCCESS))
+    typer.echo(json.dumps(manifest.routing.model_dump(mode="json", exclude_none=True), indent=2))
 
 
 @app.command("info")

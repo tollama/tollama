@@ -108,6 +108,67 @@ def test_open_command_launches_browser(monkeypatch) -> None:
     assert "http://127.0.0.1:11435/dashboard" in _result_stdout(result)
 
 
+def test_routing_show_reads_core_result_payload(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("TOLLAMA_HOME", str(tmp_path / "home"))
+    artifact = tmp_path / "result.json"
+    artifact.write_text(
+        json.dumps(
+            {
+                "generated_at": "2026-04-06T00:00:00Z",
+                "run_id": "core-demo",
+                "routing_recommendation": {
+                    "default": "chronos2",
+                    "fast_path": "timesfm-2.5-200m",
+                    "high_accuracy": "moirai-2.0-R-small",
+                    "policy": "demo policy",
+                    "caveats": ["synthetic benchmark"],
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    runner = _new_runner()
+    result = runner.invoke(app, ["routing", "show", str(artifact), "--json"])
+
+    assert result.exit_code == 0
+    payload = json.loads(_result_stdout(result))
+    assert payload["routing"]["default"] == "chronos2"
+    assert payload["routing"]["fast_path"] == "timesfm-2.5-200m"
+
+
+def test_routing_apply_writes_default_manifest(monkeypatch, tmp_path) -> None:
+    home = tmp_path / "routing-home"
+    monkeypatch.setenv("TOLLAMA_HOME", str(home))
+    artifact = tmp_path / "result.json"
+    artifact.write_text(
+        json.dumps(
+            {
+                "generated_at": "2026-04-06T00:00:00Z",
+                "run_id": "core-demo",
+                "routing_recommendation": {
+                    "default": "chronos2",
+                    "fast_path": "timesfm-2.5-200m",
+                    "high_accuracy": "moirai-2.0-R-small",
+                    "policy": "demo policy",
+                    "caveats": ["synthetic benchmark"],
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    runner = _new_runner()
+    result = runner.invoke(app, ["routing", "apply", str(artifact)])
+
+    assert result.exit_code == 0
+    manifest_path = home / "routing.json"
+    assert manifest_path.exists()
+    payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    assert payload["routing"]["default"] == "chronos2"
+    assert "Applied routing manifest" in _result_stdout(result)
+
+
 def test_open_command_fails_when_browser_cannot_open(monkeypatch) -> None:
     monkeypatch.setattr("tollama.cli.main.webbrowser.open", lambda *_args, **_kwargs: False)
     runner = _new_runner()
@@ -621,7 +682,8 @@ def test_quickstart_pulls_model_and_runs_demo_forecast(monkeypatch) -> None:
     output = _result_stdout(result)
     assert "tollama quickstart complete" in output
     assert "Next steps:" in output
-    assert "tollama run mock --input examples/request.json --no-stream" in output
+    assert "tollama benchmark examples/benchmark_data.json --models mock" in output
+    assert "tollama explain mock" in output
 
 
 def test_quickstart_prints_daemon_guidance_when_unreachable(monkeypatch) -> None:

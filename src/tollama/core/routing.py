@@ -61,14 +61,30 @@ def load_routing_manifest(*, paths: TollamaPaths | None = None) -> RoutingManife
     for candidate in candidates:
         if not candidate.exists():
             continue
-        payload = json.loads(candidate.read_text(encoding="utf-8"))
         try:
-            coerced = _coerce_manifest_payload(payload=payload, source_path=candidate)
-            return RoutingManifest.model_validate(coerced)
-        except ValidationError as exc:
-            raise ValueError(f"invalid routing manifest in {candidate}: {exc}") from exc
+            return load_routing_manifest_from_path(candidate)
+        except ValueError as exc:
+            raise ValueError(str(exc)) from exc
 
     return None
+
+
+def load_routing_manifest_from_path(path: str | Path) -> RoutingManifest:
+    """Load and normalize a routing manifest or benchmark result from a specific path."""
+    candidate = Path(path).expanduser()
+    if not candidate.exists():
+        raise ValueError(f"routing manifest not found: {candidate}")
+
+    try:
+        payload = json.loads(candidate.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError) as exc:
+        raise ValueError(f"unable to read routing manifest {candidate}: {exc}") from exc
+
+    try:
+        coerced = _coerce_manifest_payload(payload=payload, source_path=candidate)
+        return RoutingManifest.model_validate(coerced)
+    except ValidationError as exc:
+        raise ValueError(f"invalid routing manifest in {candidate}: {exc}") from exc
 
 
 def save_routing_manifest(

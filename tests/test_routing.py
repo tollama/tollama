@@ -9,6 +9,7 @@ from tollama.core.routing import (
     RoutingManifest,
     get_routing_manifest_path,
     load_routing_manifest,
+    load_routing_manifest_from_path,
     resolve_effective_routing_defaults,
     save_routing_manifest,
 )
@@ -68,6 +69,29 @@ def test_load_routing_manifest_accepts_benchmark_result_payload(monkeypatch, tmp
     assert loaded.routing.default == "chronos2"
     assert loaded.routing.fast_path == "timesfm-2.5-200m"
     assert loaded.routing.high_accuracy == "moirai-2.0-R-small"
+
+
+def test_load_routing_manifest_from_path_accepts_routing_json(tmp_path) -> None:
+    path = tmp_path / "routing.json"
+    path.write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "routing": {
+                    "default": "mock",
+                    "fast_path": "timesfm-2.5-200m",
+                    "high_accuracy": "chronos2",
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    loaded = load_routing_manifest_from_path(path)
+
+    assert loaded.routing.default == "mock"
+    assert loaded.routing.fast_path == "timesfm-2.5-200m"
+    assert loaded.routing.high_accuracy == "chronos2"
 
 
 def test_resolve_effective_routing_defaults_prefers_config_over_manifest(

@@ -38,6 +38,7 @@ from .routing import (
     RoutingManifest,
     get_routing_manifest_path,
     load_routing_manifest,
+    load_routing_manifest_from_path,
     resolve_effective_routing_defaults,
     save_routing_manifest,
 )
@@ -108,6 +109,7 @@ __all__ = [
     "list_registry_models",
     "load_config",
     "load_routing_manifest",
+    "load_routing_manifest_from_path",
     "read_manifest",
     "remove_model",
     "resolve_effective_routing_defaults",

@@ -171,6 +171,8 @@ You can override with `--progress on` or `--progress off` on `pull`, `run`,
 
 For benchmark-backed routing defaults, see `docs/tsfm-routing-defaults.md`.
 For the end-to-end Core walkthrough, see `docs/core-workflow.md`.
+Use `tollama routing apply <result.json>` to promote a Core benchmark artifact
+into the active local routing policy.
 
 Useful CLI additions:
 
