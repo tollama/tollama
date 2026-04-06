@@ -82,8 +82,12 @@ installed.
 - Validate the concrete-solution path:
   - `bash examples/core_concrete_solution_demo.sh` syntax is clean.
   - `python scripts/e2e_realdata/export_core_solution_input.py --help` works.
+  - `examples/core_solution_hourly_input.json` still matches the hourly-demand Core profile.
+  - `examples/core_solution_expected_output/` still matches the current Core artifact contract.
   - the concrete-solution smoke tests pass:
     - `tests/test_core_demo_script.py`
+    - `tests/test_checked_in_core_solution_input.py`
+    - `tests/test_checked_in_core_solution_expected_output.py`
     - `tests/test_concrete_solution_demo_script.py`
     - `tests/test_e2e_realdata_export_core_solution_input.py`
     - `tests/test_core_benchmark_artifacts.py`

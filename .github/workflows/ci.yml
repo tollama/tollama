@@ -36,6 +36,8 @@ jobs:
           python scripts/e2e_realdata/export_core_solution_input.py --help
           PYTHONPATH=src pytest -q \
             tests/test_core_demo_script.py \
+            tests/test_checked_in_core_solution_input.py \
+            tests/test_checked_in_core_solution_expected_output.py \
             tests/test_concrete_solution_demo_script.py \
             tests/test_e2e_realdata_export_core_solution_input.py \
             tests/test_core_benchmark_artifacts.py \
