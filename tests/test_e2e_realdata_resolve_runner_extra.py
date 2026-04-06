@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import subprocess
 import sys
 from importlib.util import module_from_spec, spec_from_file_location
 from pathlib import Path
@@ -46,3 +47,16 @@ def test_resolve_runner_extra_returns_expected_extra(
 def test_resolve_runner_extra_rejects_local_models_without_runtime_extra() -> None:
     with pytest.raises(ValueError, match="does not declare a runner extra"):
         resolve_runner_extra("mock")
+
+
+def test_resolve_runner_extra_script_runs_standalone() -> None:
+    completed = subprocess.run(
+        [sys.executable, str(_MODULE_PATH), "--model", "timesfm-2.5-200m"],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert completed.returncode == 0
+    assert completed.stdout.strip() == "runner_timesfm"
+    assert completed.stderr == ""
