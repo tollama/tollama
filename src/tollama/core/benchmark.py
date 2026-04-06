@@ -405,7 +405,9 @@ def build_benchmark_result_payload(
             "leaderboard_csv": "leaderboard.csv",
             "operator_summary_md": "summary.md",
             "legacy_summary_json": legacy_filename,
-            "rich_eval_artifacts": "Use tollama-eval for results.json, details.json, and report.html.",
+            "rich_eval_artifacts": (
+                "Use tollama-eval for results.json, details.json, and report.html."
+            ),
         },
     }
 

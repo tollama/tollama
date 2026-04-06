@@ -117,7 +117,10 @@ class ModelCardGenerator:
         lines.append("\n## 2. Intended Use")
         for key, value in iu.items():
             if isinstance(value, list):
-                lines.append(f"- **{key.replace('_', ' ').title()}**: {', '.join(str(v) for v in value)}")
+                lines.append(
+                    f"- **{key.replace('_', ' ').title()}**: "
+                    f"{', '.join(str(v) for v in value)}"
+                )
             elif value:
                 lines.append(f"- **{key.replace('_', ' ').title()}**: {value}")
 
@@ -361,7 +364,8 @@ class ModelCardGenerator:
                 metrics = model_results[0].get("metrics", {})
                 if metrics.get("mape", 0) > 20:
                     limitations.append(
-                        f"High MAPE ({metrics['mape']:.1f}%) indicates significant prediction uncertainty"
+                        f"High MAPE ({metrics['mape']:.1f}%) indicates "
+                        "significant prediction uncertainty"
                     )
 
         return {

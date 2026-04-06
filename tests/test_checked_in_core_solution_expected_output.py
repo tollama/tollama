@@ -30,7 +30,10 @@ def test_checked_in_core_solution_expected_output_bundle_is_consistent() -> None
 
     assert routing_payload["eval_ref"] == result_payload["eval_ref"]
     assert routing_payload["forecast_id"] == result_payload["forecast_id"]
-    assert routing_payload["routing"]["default"] == result_payload["routing_recommendation"]["default"]
+    assert (
+        routing_payload["routing"]["default"]
+        == result_payload["routing_recommendation"]["default"]
+    )
     assert routing_payload["routing_rationale"]["fast_path"]["model"] == "timesfm-2.5-200m"
 
     manifest = load_routing_manifest_from_path(bundle_dir / "routing.json")

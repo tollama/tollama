@@ -37,7 +37,10 @@ class ModelSelectionExplainer:
         "brier_score": {
             "name": "Brier Score",
             "direction": "lower_is_better",
-            "explanation": "Measures the mean squared difference between predicted probabilities and actual outcomes",
+            "explanation": (
+                "Measures the mean squared difference between predicted "
+                "probabilities and actual outcomes"
+            ),
         },
         "mse": {
             "name": "Mean Squared Error",

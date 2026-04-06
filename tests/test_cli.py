@@ -716,7 +716,9 @@ def test_quickstart_prints_daemon_guidance_when_unreachable(monkeypatch) -> None
     assert "tollama serve" in stderr
 
 
-def test_benchmark_prints_operator_summary_and_summary_artifact(monkeypatch, tmp_path: Path) -> None:
+def test_benchmark_prints_operator_summary_and_summary_artifact(
+    monkeypatch, tmp_path: Path
+) -> None:
     from tollama.core.benchmark import BenchmarkSummary, ModelBenchmarkResult
 
     dataset_path = tmp_path / "benchmark.json"

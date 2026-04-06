@@ -236,7 +236,8 @@ def _financial_why_trusted(
 ) -> str:
     base = (
         f"Liquidity={payload.liquidity_depth:.2f}, spread={payload.bid_ask_spread_bps:.1f}bps, "
-        f"volatility={payload.realized_volatility:.2f}, execution_risk={payload.execution_risk:.2f}, "
+        f"volatility={payload.realized_volatility:.2f}, "
+        f"execution_risk={payload.execution_risk:.2f}, "
         f"freshness={payload.data_freshness:.2f}."
     )
     if not violations:
@@ -351,7 +352,8 @@ def _news_why_trusted(
 ) -> str:
     base = (
         f"Credibility={payload.source_credibility:.2f}, corroboration={payload.corroboration:.2f}, "
-        f"contradiction={payload.contradiction_score:.2f}, propagation_delay={payload.propagation_delay_seconds:.0f}s, "
+        f"contradiction={payload.contradiction_score:.2f}, "
+        f"propagation_delay={payload.propagation_delay_seconds:.0f}s, "
         f"freshness={payload.freshness_score:.2f}."
     )
     if not violations:
@@ -571,7 +573,8 @@ def _supply_chain_why_trusted(
     violations: list[TrustViolation],
 ) -> str:
     base = (
-        f"Lead-time={payload.lead_time_reliability:.2f}, visibility={payload.inventory_visibility:.2f}, "
+        f"Lead-time={payload.lead_time_reliability:.2f}, "
+        f"visibility={payload.inventory_visibility:.2f}, "
         f"disruption={payload.disruption_risk:.2f}, sensor={payload.sensor_quality:.2f}, "
         f"freshness={payload.data_freshness:.2f}."
     )

@@ -125,7 +125,7 @@ def _should_retry(
     """Decide if a request should be retried."""
     if attempt >= max_retries:
         return False
-    if isinstance(exc, httpx.TimeoutException):
+    if isinstance(exc, (httpx.TimeoutException, httpx.ConnectError)):
         return True
     if isinstance(exc, httpx.HTTPStatusError):
         status = exc.response.status_code
@@ -222,7 +222,7 @@ class HttpFinancialConnector:
                         **({"rate_limit": rate_info} if rate_info else {}),
                     },
                 )
-            except (httpx.TimeoutException, httpx.HTTPStatusError) as exc:
+            except (httpx.TimeoutException, httpx.ConnectError, httpx.HTTPStatusError) as exc:
                 last_exc = exc
                 if _should_retry(exc, attempt, self._max_retries):
                     delay = self._retry_base_delay * (2 ** attempt)
@@ -235,13 +235,17 @@ class HttpFinancialConnector:
                 break
 
         # Exhausted retries — raise appropriate error
-        if isinstance(last_exc, httpx.TimeoutException):
+        if isinstance(last_exc, (httpx.TimeoutException, httpx.ConnectError)):
             raise ConnectorFetchError(
                 ConnectorError(
                     domain=self.domain,
                     source_id=identifier,
                     error_type="network",
-                    message="Connection timeout",
+                    message=(
+                        "Connection timeout"
+                        if isinstance(last_exc, httpx.TimeoutException)
+                        else str(last_exc)
+                    ),
                     retryable=True,
                 )
             )
@@ -345,7 +349,7 @@ class HttpNewsConnector:
                         **({"rate_limit": rate_info} if rate_info else {}),
                     },
                 )
-            except (httpx.TimeoutException, httpx.HTTPStatusError) as exc:
+            except (httpx.TimeoutException, httpx.ConnectError, httpx.HTTPStatusError) as exc:
                 last_exc = exc
                 if _should_retry(exc, attempt, self._max_retries):
                     delay = self._retry_base_delay * (2 ** attempt)
@@ -357,13 +361,17 @@ class HttpNewsConnector:
                     continue
                 break
 
-        if isinstance(last_exc, httpx.TimeoutException):
+        if isinstance(last_exc, (httpx.TimeoutException, httpx.ConnectError)):
             raise ConnectorFetchError(
                 ConnectorError(
                     domain=self.domain,
                     source_id=identifier,
                     error_type="network",
-                    message="Connection timeout",
+                    message=(
+                        "Connection timeout"
+                        if isinstance(last_exc, httpx.TimeoutException)
+                        else str(last_exc)
+                    ),
                     retryable=True,
                 )
             )

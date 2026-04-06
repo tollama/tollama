@@ -7,11 +7,11 @@ Tests all v3.8 XAI components across all 5 repositories.
 import os
 import sys
 
+import numpy as np
+
 # Add source paths — resolve to TollamaAI-Github root
 _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.join(_REPO_ROOT, "tollama", "src"))
-
-import numpy as np
 
 
 def test_explanation_engine():
@@ -45,7 +45,11 @@ def test_explanation_engine():
         "scenarios": {
             "branches": {
                 "base": {"probability": 0.62, "value": 42.5, "conditions": ["stable macro"]},
-                "upside": {"probability": 0.24, "value": 48.0, "conditions": ["growth acceleration"]},
+                "upside": {
+                    "probability": 0.24,
+                    "value": 48.0,
+                    "conditions": ["growth acceleration"],
+                },
                 "downside": {"probability": 0.14, "value": 35.0, "conditions": ["recession"]},
             }
         },
@@ -483,7 +487,7 @@ def test_coding_agent_xai():
     print("TEST 12: Coding Agent Decision Tracer")
     print("=" * 70)
 
-    ca_path = os.path.join(_REPO_ROOT, "coding-agent", "autodev")
+    ca_path = os.path.join(_REPO_ROOT, "autodev-coding-agent", "autodev")
     sys.path.insert(0, ca_path)
     if "xai_integration" in sys.modules:
         del sys.modules["xai_integration"]

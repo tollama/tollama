@@ -16,7 +16,7 @@ import json
 import logging
 import os
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 _RBAC_POLICY_ENV = "TOLLAMA_RBAC_POLICY"
 
 
-class Role(str, Enum):
+class Role(StrEnum):
     ADMIN = "admin"
     ANALYST = "analyst"
     AUDITOR = "auditor"

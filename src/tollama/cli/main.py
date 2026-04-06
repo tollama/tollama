@@ -1180,8 +1180,8 @@ def benchmark(
 ) -> None:
     """Run all models against a dataset and compare accuracy/latency."""
     from tollama.core.benchmark import (
-        format_operator_summary,
         format_benchmark_table,
+        format_operator_summary,
         run_benchmark,
         save_benchmark_bundle,
     )
