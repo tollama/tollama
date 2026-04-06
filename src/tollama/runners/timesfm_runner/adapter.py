@@ -774,10 +774,11 @@ def _to_float_2d(value: Any) -> list[list[float]]:
 
     normalized: list[list[float]] = []
     for row in rows:
-        if not isinstance(row, list):
+        row_values = _to_nested_list(row)
+        if not isinstance(row_values, list):
             raise AdapterInputError("TimesFM output row is not list-like")
         values: list[float] = []
-        for item in row:
+        for item in row_values:
             values.append(_to_float(item))
         normalized.append(values)
     return normalized
@@ -790,13 +791,15 @@ def _to_float_3d(value: Any) -> list[list[list[float]]]:
 
     normalized: list[list[list[float]]] = []
     for matrix in outer:
-        if not isinstance(matrix, list):
+        matrix_values = _to_nested_list(matrix)
+        if not isinstance(matrix_values, list):
             raise AdapterInputError("TimesFM output matrix is not list-like")
         rows: list[list[float]] = []
-        for row in matrix:
-            if not isinstance(row, list):
+        for row in matrix_values:
+            row_values = _to_nested_list(row)
+            if not isinstance(row_values, list):
                 raise AdapterInputError("TimesFM output row is not list-like")
-            values: list[float] = [_to_float(item) for item in row]
+            values: list[float] = [_to_float(item) for item in row_values]
             rows.append(values)
         normalized.append(rows)
     return normalized
@@ -805,6 +808,8 @@ def _to_float_3d(value: Any) -> list[list[list[float]]]:
 def _to_nested_list(value: Any) -> Any:
     if hasattr(value, "tolist"):
         return value.tolist()
+    if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
+        return list(value)
     return value
 
 
