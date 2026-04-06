@@ -12,6 +12,12 @@ import pytest
 from tollama.core.registry import load_registry
 
 _REMOTE_VALIDATION_ENV = "TOLLAMA_VALIDATE_REGISTRY_REMOTE"
+_HF_TOKEN_ENV_NAMES = (
+    "TOLLAMA_HF_TOKEN",
+    "HF_TOKEN",
+    "HUGGINGFACE_HUB_TOKEN",
+    "HUGGING_FACE_HUB_TOKEN",
+)
 
 
 @dataclass(frozen=True)
@@ -31,7 +37,9 @@ def test_registry_huggingface_entries_resolve_and_match_declared_license() -> No
     from huggingface_hub import HfApi
 
     api = HfApi()
+    token = _hf_token_from_env()
     failures: list[_ValidationFailure] = []
+    inaccessible: list[_ValidationFailure] = []
     specs = sorted(load_registry().values(), key=lambda item: item.name)
 
     for spec in specs:
@@ -42,15 +50,18 @@ def test_registry_huggingface_entries_resolve_and_match_declared_license() -> No
             api=api,
             repo_id=spec.source.repo_id,
             revision=spec.source.revision,
+            token=token,
         )
         if info is None:
-            failures.append(
-                _ValidationFailure(
-                    model_name=spec.name,
-                    repo_id=spec.source.repo_id,
-                    reason=f"model_info lookup failed ({error_message})",
-                ),
+            issue = _ValidationFailure(
+                model_name=spec.name,
+                repo_id=spec.source.repo_id,
+                reason=f"model_info lookup failed ({error_message})",
             )
+            if _is_inaccessible_repo_error(error_message):
+                inaccessible.append(issue)
+            else:
+                failures.append(issue)
             continue
 
         upstream_license = _extract_upstream_license(info)
@@ -75,7 +86,26 @@ def test_registry_huggingface_entries_resolve_and_match_declared_license() -> No
                 ),
             )
 
-    assert not failures, _format_failures(failures)
+    if failures:
+        message = _format_failures(failures)
+        if inaccessible:
+            inaccessible_message = _format_failures(
+                inaccessible,
+                heading="registry upstream validation skipped inaccessible repos:",
+            )
+            message = (
+                f"{message}\n\n"
+                f"{inaccessible_message}"
+            )
+        pytest.fail(message)
+
+    if inaccessible:
+        pytest.skip(
+            _format_failures(
+                inaccessible,
+                heading="registry upstream validation skipped inaccessible repos:",
+            )
+        )
 
 
 def _fetch_model_info_with_retries(
@@ -83,12 +113,13 @@ def _fetch_model_info_with_retries(
     api: Any,
     repo_id: str,
     revision: str,
+    token: str | None = None,
     attempts: int = 3,
 ) -> tuple[Any | None, str | None]:
     last_error: str | None = None
     for attempt in range(1, attempts + 1):
         try:
-            info = api.model_info(repo_id=repo_id, revision=revision)
+            info = api.model_info(repo_id=repo_id, revision=revision, token=token)
         except Exception as exc:  # noqa: BLE001
             last_error = f"{type(exc).__name__}: {exc}"
             if attempt < attempts:
@@ -135,8 +166,57 @@ def _nonempty_str(value: Any) -> str | None:
     return normalized
 
 
-def _format_failures(failures: list[_ValidationFailure]) -> str:
-    lines = ["registry upstream validation failures:"]
+def _hf_token_from_env() -> str | None:
+    for env_name in _HF_TOKEN_ENV_NAMES:
+        token = _nonempty_str(os.environ.get(env_name))
+        if token is not None:
+            return token
+    return None
+
+
+def _is_inaccessible_repo_error(error_message: str | None) -> bool:
+    if error_message is None:
+        return False
+
+    normalized = error_message.lower()
+    return any(
+        marker in normalized
+        for marker in (
+            "401 client error",
+            "403 client error",
+            "private or gated repo",
+            "gated repo",
+            "authentication",
+            "invalid username or password",
+        )
+    )
+
+
+def _format_failures(
+    failures: list[_ValidationFailure],
+    *,
+    heading: str = "registry upstream validation failures:",
+) -> str:
+    lines = [heading]
     for failure in failures:
         lines.append(f"{failure.model_name} ({failure.repo_id}): {failure.reason}")
     return "\n".join(lines)
+
+
+def test_inaccessible_repo_error_classifies_auth_failures() -> None:
+    error_message = (
+        "RepositoryNotFoundError: 401 Client Error. "
+        "If you are trying to access a private or gated repo, make sure you are authenticated. "
+        "Invalid username or password."
+    )
+
+    assert _is_inaccessible_repo_error(error_message) is True
+
+
+def test_inaccessible_repo_error_does_not_hide_true_not_found() -> None:
+    error_message = (
+        "RepositoryNotFoundError: 404 Client Error. "
+        "Repository Not Found for url: https://huggingface.co/api/models/example/revision/main."
+    )
+
+    assert _is_inaccessible_repo_error(error_message) is False

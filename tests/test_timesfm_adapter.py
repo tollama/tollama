@@ -15,7 +15,7 @@ from tollama.runners.timesfm_runner.adapter import (
     point_forecast_to_rows,
     truncate_target_to_max_context,
 )
-from tollama.runners.timesfm_runner.errors import AdapterInputError
+from tollama.runners.timesfm_runner.errors import AdapterInputError, DependencyMissingError
 
 
 class _FakePandas:
@@ -148,11 +148,54 @@ def test_point_forecast_to_rows_normalizes_two_dimensional_output() -> None:
     assert rows == [[1.0, 2.0], [4.0, 5.0]]
 
 
+def test_point_forecast_to_rows_accepts_array_like_rows() -> None:
+    rows = point_forecast_to_rows(
+        point_forecast=[
+            _FakeArrayLike([1.0, 2.0, 3.0]),
+            _FakeArrayLike([4.0, 5.0, 6.0]),
+        ],
+        n_series=2,
+        horizon=2,
+    )
+    assert rows == [[1.0, 2.0], [4.0, 5.0]]
+
+
+def test_map_quantile_forecast_accepts_array_like_matrices() -> None:
+    payloads = map_quantile_forecast(
+        quantile_forecast=[
+            _FakeArrayLike(
+                [
+                    [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
+                    [0.0, 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8, 1.9],
+                ],
+            ),
+        ],
+        requested_quantiles=[0.1, 0.5, 0.9],
+        n_series=1,
+        horizon=2,
+    )
+    assert payloads == [
+        {
+            "0.1": [0.1, 1.1],
+            "0.5": [0.5, 1.5],
+            "0.9": [0.9, 1.9],
+        }
+    ]
+
+
 class _FakeNumpy:
     @staticmethod
     def asarray(values, dtype=float):  # noqa: ANN001
         del dtype
         return [float(value) for value in values]
+
+
+class _FakeArrayLike:
+    def __init__(self, values):  # noqa: ANN001
+        self._values = values
+
+    def tolist(self):  # noqa: ANN201
+        return self._values
 
 
 class _FakeForecastConfig:
@@ -180,7 +223,7 @@ class _FakeTimesFMModel:
     def forecast_with_covariates(self, **kwargs):  # noqa: ANN003
         self.covariate_kwargs = dict(kwargs)
         horizon = int(kwargs.get("horizon", 1))
-        return [[float(index + 1) for index in range(horizon)]]
+        return ([_FakeArrayLike([float(index + 1) for index in range(horizon)])], None)
 
 
 class _FakeTimesFMModule:
@@ -197,6 +240,17 @@ class _FakeTimesFMNaNModel(_FakeTimesFMModel):
 class _FakeTimesFMNaNModule:
     ForecastConfig = _FakeForecastConfig
     TimesFM_2p5_200M_torch = _FakeTimesFMNaNModel
+
+
+class _FakeTimesFMImportErrorModel(_FakeTimesFMModel):
+    def forecast_with_covariates(self, **kwargs):  # noqa: ANN003
+        del kwargs
+        raise ImportError("Did you forget to install `timesfm[xreg]`?")
+
+
+class _FakeTimesFMImportErrorModule:
+    ForecastConfig = _FakeForecastConfig
+    TimesFM_2p5_200M_torch = _FakeTimesFMImportErrorModel
 
 
 def _covariate_request() -> ForecastRequest:
@@ -297,3 +351,22 @@ def test_timesfm_adapter_replaces_non_finite_forecasts(monkeypatch) -> None:
     assert response.forecasts[0].mean == [12.0, 12.0]
     assert response.warnings is not None
     assert "non-finite forecast values" in response.warnings[-1]
+
+
+def test_timesfm_adapter_maps_missing_xreg_dependencies_to_dependency_error(monkeypatch) -> None:
+    adapter = TimesFMAdapter()
+    monkeypatch.setattr(
+        adapter,
+        "_resolve_dependencies",
+        lambda: _TimesFMDependencies(
+            numpy=_FakeNumpy(),
+            pandas=_FakePandas(),
+            timesfm=_FakeTimesFMImportErrorModule(),
+        ),
+    )
+
+    with pytest.raises(
+        DependencyMissingError,
+        match="missing optional timesfm covariate dependencies",
+    ):
+        adapter.forecast(_covariate_request())

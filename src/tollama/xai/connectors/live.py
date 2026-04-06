@@ -117,6 +117,28 @@ def _map_http_error(
     )
 
 
+def _map_network_error(
+    domain: str,
+    identifier: str,
+    exc: httpx.RequestError,
+) -> ConnectorFetchError:
+    """Map network/request failures to ConnectorFetchError."""
+    if isinstance(exc, httpx.TimeoutException):
+        message = "Connection timeout"
+    else:
+        message = str(exc) or "Network request failed"
+
+    return ConnectorFetchError(
+        ConnectorError(
+            domain=domain,
+            source_id=identifier,
+            error_type="network",
+            message=message,
+            retryable=True,
+        )
+    )
+
+
 def _should_retry(
     exc: Exception,
     attempt: int,
@@ -125,7 +147,7 @@ def _should_retry(
     """Decide if a request should be retried."""
     if attempt >= max_retries:
         return False
-    if isinstance(exc, (httpx.TimeoutException, httpx.ConnectError)):
+    if isinstance(exc, httpx.RequestError):
         return True
     if isinstance(exc, httpx.HTTPStatusError):
         status = exc.response.status_code
@@ -222,7 +244,7 @@ class HttpFinancialConnector:
                         **({"rate_limit": rate_info} if rate_info else {}),
                     },
                 )
-            except (httpx.TimeoutException, httpx.ConnectError, httpx.HTTPStatusError) as exc:
+            except (httpx.RequestError, httpx.HTTPStatusError) as exc:
                 last_exc = exc
                 if _should_retry(exc, attempt, self._max_retries):
                     delay = self._retry_base_delay * (2 ** attempt)
@@ -235,20 +257,8 @@ class HttpFinancialConnector:
                 break
 
         # Exhausted retries — raise appropriate error
-        if isinstance(last_exc, (httpx.TimeoutException, httpx.ConnectError)):
-            raise ConnectorFetchError(
-                ConnectorError(
-                    domain=self.domain,
-                    source_id=identifier,
-                    error_type="network",
-                    message=(
-                        "Connection timeout"
-                        if isinstance(last_exc, httpx.TimeoutException)
-                        else str(last_exc)
-                    ),
-                    retryable=True,
-                )
-            )
+        if isinstance(last_exc, httpx.RequestError):
+            raise _map_network_error(self.domain, identifier, last_exc)
         if isinstance(last_exc, httpx.HTTPStatusError):
             raise _map_http_error(self.domain, identifier, last_exc)
         raise ConnectorFetchError(  # pragma: no cover
@@ -349,7 +359,7 @@ class HttpNewsConnector:
                         **({"rate_limit": rate_info} if rate_info else {}),
                     },
                 )
-            except (httpx.TimeoutException, httpx.ConnectError, httpx.HTTPStatusError) as exc:
+            except (httpx.RequestError, httpx.HTTPStatusError) as exc:
                 last_exc = exc
                 if _should_retry(exc, attempt, self._max_retries):
                     delay = self._retry_base_delay * (2 ** attempt)
@@ -361,20 +371,8 @@ class HttpNewsConnector:
                     continue
                 break
 
-        if isinstance(last_exc, (httpx.TimeoutException, httpx.ConnectError)):
-            raise ConnectorFetchError(
-                ConnectorError(
-                    domain=self.domain,
-                    source_id=identifier,
-                    error_type="network",
-                    message=(
-                        "Connection timeout"
-                        if isinstance(last_exc, httpx.TimeoutException)
-                        else str(last_exc)
-                    ),
-                    retryable=True,
-                )
-            )
+        if isinstance(last_exc, httpx.RequestError):
+            raise _map_network_error(self.domain, identifier, last_exc)
         if isinstance(last_exc, httpx.HTTPStatusError):
             raise _map_http_error(self.domain, identifier, last_exc)
         raise ConnectorFetchError(  # pragma: no cover
@@ -418,16 +416,8 @@ class HttpSupplyChainConnector:
                     headers=headers,
                 )
                 response.raise_for_status()
-        except httpx.TimeoutException:
-            raise ConnectorFetchError(
-                ConnectorError(
-                    domain=self.domain,
-                    source_id=identifier,
-                    error_type="network",
-                    message="Connection timeout",
-                    retryable=True,
-                )
-            )
+        except httpx.RequestError as exc:
+            raise _map_network_error(self.domain, identifier, exc)
         except httpx.HTTPStatusError as exc:
             raise _map_http_error(self.domain, identifier, exc)
 
@@ -473,16 +463,8 @@ class HttpGeopoliticalConnector:
                     headers=headers,
                 )
                 response.raise_for_status()
-        except httpx.TimeoutException:
-            raise ConnectorFetchError(
-                ConnectorError(
-                    domain=self.domain,
-                    source_id=identifier,
-                    error_type="network",
-                    message="Connection timeout",
-                    retryable=True,
-                )
-            )
+        except httpx.RequestError as exc:
+            raise _map_network_error(self.domain, identifier, exc)
         except httpx.HTTPStatusError as exc:
             raise _map_http_error(self.domain, identifier, exc)
 
@@ -528,16 +510,8 @@ class HttpRegulatoryConnector:
                     headers=headers,
                 )
                 response.raise_for_status()
-        except httpx.TimeoutException:
-            raise ConnectorFetchError(
-                ConnectorError(
-                    domain=self.domain,
-                    source_id=identifier,
-                    error_type="network",
-                    message="Connection timeout",
-                    retryable=True,
-                )
-            )
+        except httpx.RequestError as exc:
+            raise _map_network_error(self.domain, identifier, exc)
         except httpx.HTTPStatusError as exc:
             raise _map_http_error(self.domain, identifier, exc)
 
@@ -581,16 +555,8 @@ async def _async_fetch(
                 headers=headers,
             )
             response.raise_for_status()
-    except httpx.TimeoutException:
-        raise ConnectorFetchError(
-            ConnectorError(
-                domain=domain,
-                source_id=identifier,
-                error_type="network",
-                message="Connection timeout",
-                retryable=True,
-            )
-        )
+    except httpx.RequestError as exc:
+        raise _map_network_error(domain, identifier, exc)
     except httpx.HTTPStatusError as exc:
         raise _map_http_error(domain, identifier, exc)
 

@@ -104,6 +104,27 @@ def test_registry_loads_required_model_specs() -> None:
         "default_num_samples": 100,
     }
 
+    timer = registry["timer-base"]
+    assert timer.family == "timer"
+    assert timer.source.repo_id == "thuml/timer-base-84m"
+    assert timer.source.revision == "main"
+    assert timer.license.type == "apache-2.0"
+    assert timer.license.needs_acceptance is False
+    assert timer.capabilities is not None
+    assert timer.capabilities.past_covariates_numeric is False
+    assert timer.metadata == {
+        "implementation": "timer_base",
+        "max_context": 2880,
+        "max_horizon": 720,
+        "min_vram_gb": 4.0,
+        "install_extra": "runner_timer",
+        "install_command": 'python -m pip install -e ".[dev,runner_timer]"',
+        "notes": (
+            "Timer is a generative pre-trained Transformer for time series "
+            "(ICML 2024). Strong zero-shot transfer across domains."
+        ),
+    }
+
     toto = registry["toto-open-base-1.0"]
     assert toto.family == "toto"
     assert toto.source.repo_id == "Datadog/Toto-Open-Base-1.0"

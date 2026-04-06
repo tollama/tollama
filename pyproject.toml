@@ -99,7 +99,7 @@ runner_timesfm = [
   "numpy>=1.26,<3.0",
   "pandas>=2.0,<3.0",
   "huggingface_hub>=0.20,<2.0",
-  "timesfm[torch] @ git+https://github.com/google-research/timesfm.git@2dcc66fbfe2155adba1af66aa4d564a0ee52f61e",
+  "timesfm[torch,xreg] @ https://github.com/google-research/timesfm/archive/2dcc66fbfe2155adba1af66aa4d564a0ee52f61e.tar.gz",
 ]
 runner_uni2ts = [
   "uni2ts>=2.0.0",

@@ -32,6 +32,7 @@ htmlcov/
 .DS_Store
 .idea/
 .vscode/
+.claude/
 
 # Development scratch scripts
 reproduce_*.py

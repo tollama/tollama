@@ -90,10 +90,16 @@ jobs:
         with:
           python-version: "3.11"
 
+      - name: Resolve runner extra
+        id: resolve-extra
+        run: |
+          extra="$(python scripts/e2e_realdata/resolve_runner_extra.py --model "${{ matrix.model }}")"
+          echo "extra=${extra}" >> "$GITHUB_OUTPUT"
+
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -e ".[dev]"
+          python -m pip install -e ".[dev,${{ steps.resolve-extra.outputs.extra }}]"
 
       - name: Start daemon
         run: |

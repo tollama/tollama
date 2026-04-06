@@ -56,6 +56,6 @@ Generated with [pip-licenses](https://pypi.org/project/pip-licenses/).
 
 ### TimesFM
 
-- **Source:** `git+https://github.com/google-research/timesfm.git@2dcc66fbfe2155adba1af66aa4d564a0ee52f61e`
+- **Source:** `https://github.com/google-research/timesfm/archive/2dcc66fbfe2155adba1af66aa4d564a0ee52f61e.tar.gz`
 - **License:** Apache-2.0 (verified at pinned commit)
 - **Note:** Installed only via the optional `runner_timesfm` extra.
