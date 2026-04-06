@@ -123,6 +123,9 @@ The checked-in input lives at `examples/core_solution_hourly_input.json` and
 preserves the same hourly-demand concrete-solution story without requiring the
 real-data prep step.
 
+If you want to preview a successful artifact bundle before running anything,
+inspect `examples/core_solution_expected_output/`.
+
 ## What To Read In The Output
 
 The real-data harness writes:
@@ -141,6 +144,8 @@ The standard Core benchmark flow writes:
 
 The checked-in benchmark input writes the same Core bundle, so the user sees the
 same artifact contract even when starting from a repo-native sample payload.
+That expected bundle shape is illustrated in
+`examples/core_solution_expected_output/`.
 
 The concrete solution is complete only when the user can move from benchmark
 evidence into routing action.

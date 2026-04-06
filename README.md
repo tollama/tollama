@@ -167,6 +167,8 @@ For the concrete-solution real-data bridge, use
 `bash examples/core_concrete_solution_demo.sh`.
 For an offline-friendly concrete-solution starter, use
 `USE_CHECKED_IN_INPUT=1 MODELS=mock bash examples/core_concrete_solution_demo.sh`.
+For a checked-in example of the expected artifact bundle, inspect
+`examples/core_solution_expected_output/`.
 
 If you are new to Tollama, stop here and validate `serve`, `quickstart`,
 `benchmark`, and `routing apply` end to end before moving to scenario,
