@@ -261,7 +261,7 @@ models:
     family: timer
     source:
       type: huggingface
-      repo_id: thuml/Timer
+      repo_id: thuml/timer-base-84m
       revision: main
     license:
       type: apache-2.0
