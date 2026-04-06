@@ -28,6 +28,8 @@ def test_save_and_load_routing_manifest(monkeypatch, tmp_path) -> None:
         {
             "generated_at": "2026-03-16T00:00:00Z",
             "run_id": "20260316T000000Z",
+            "eval_ref": "20260316T000000Z",
+            "forecast_id": "core-routing-candidate:20260316T000000Z:chronos2",
             "source": "cross_model_tsfm",
             "routing": {
                 "default": "chronos2",
@@ -36,6 +38,10 @@ def test_save_and_load_routing_manifest(monkeypatch, tmp_path) -> None:
             },
             "policy": "benchmark-backed defaults",
             "caveats": ["validate against production data"],
+            "preprocessing_metadata": {"available": False},
+            "routing_rationale": {
+                "default": {"model": "chronos2", "reason": "balanced winner"}
+            },
         }
     )
 
@@ -50,6 +56,12 @@ def test_load_routing_manifest_accepts_benchmark_result_payload(monkeypatch, tmp
     paths = _paths(monkeypatch, tmp_path)
     payload = {
         "run_id": "20260316T000000Z",
+        "eval_ref": "20260316T000000Z",
+        "forecast_id": "core-routing-candidate:20260316T000000Z:chronos2",
+        "preprocessing_metadata": {"available": False},
+        "routing_rationale": {
+            "default": {"model": "chronos2", "reason": "balanced winner"}
+        },
         "generated_at": "2026-03-16T00:00:00Z",
         "routing_recommendation": {
             "default": "chronos2",
@@ -57,6 +69,9 @@ def test_load_routing_manifest_accepts_benchmark_result_payload(monkeypatch, tmp
             "high_accuracy": "moirai-2.0-R-small",
             "policy": "use benchmark recommendation",
             "caveats": ["synthetic benchmark"],
+            "rationale": {
+                "default": {"model": "chronos2", "reason": "balanced winner"}
+            },
         },
     }
     path = tmp_path / "benchmark-result.json"
@@ -66,9 +81,12 @@ def test_load_routing_manifest_accepts_benchmark_result_payload(monkeypatch, tmp
     loaded = load_routing_manifest(paths=paths)
 
     assert loaded is not None
+    assert loaded.eval_ref == "20260316T000000Z"
+    assert loaded.forecast_id == "core-routing-candidate:20260316T000000Z:chronos2"
     assert loaded.routing.default == "chronos2"
     assert loaded.routing.fast_path == "timesfm-2.5-200m"
     assert loaded.routing.high_accuracy == "moirai-2.0-R-small"
+    assert loaded.routing_rationale["default"]["reason"] == "balanced winner"
 
 
 def test_load_routing_manifest_from_path_accepts_routing_json(tmp_path) -> None:

@@ -81,8 +81,15 @@ def test_save_benchmark_bundle_writes_core_artifacts(monkeypatch, tmp_path) -> N
     assert result_payload["schema_version"] == 1
     assert result_payload["source"] == "tollama.core.benchmark"
     assert result_payload["run_id"].startswith("core-benchmark-demo1234abcd5678-")
+    assert result_payload["eval_ref"] == result_payload["run_id"]
+    assert result_payload["forecast_id"].startswith("core-routing-candidate:")
     assert result_payload["quality_metric_priority"][0] == "mase"
     assert result_payload["routing_recommendation"]["high_accuracy"] == "accurate"
+    assert (
+        result_payload["routing_recommendation"]["rationale"]["default"]["reason"]
+        == "Best balanced benchmark profile for general workloads."
+    )
+    assert result_payload["preprocessing_metadata"]["available"] is False
     assert result_payload["artifact_mapping"]["result_json"] == "result.json"
     assert result_payload["artifact_mapping"]["routing_manifest"] == "routing.json"
     assert result_payload["artifact_mapping"]["operator_summary_md"] == "summary.md"
@@ -90,8 +97,14 @@ def test_save_benchmark_bundle_writes_core_artifacts(monkeypatch, tmp_path) -> N
     routing_payload = json.loads(routing_path.read_text(encoding="utf-8"))
     assert routing_payload["version"] == 1
     assert routing_payload["source"] == "tollama.core.benchmark"
+    assert routing_payload["eval_ref"] == result_payload["eval_ref"]
+    assert routing_payload["forecast_id"] == result_payload["forecast_id"]
     assert routing_payload["routing"]["default"] == "accurate"
     assert routing_payload["routing"]["fast_path"] == "fast"
+    assert (
+        routing_payload["routing_rationale"]["high_accuracy"]["reason"]
+        == "Best MASE among successful benchmark runs."
+    )
 
     with leaderboard_path.open("r", encoding="utf-8", newline="") as handle:
         rows = list(csv.DictReader(handle))
@@ -108,8 +121,11 @@ def test_save_benchmark_bundle_writes_core_artifacts(monkeypatch, tmp_path) -> N
     manifest = load_routing_manifest(paths=TollamaPaths.default())
 
     assert manifest is not None
+    assert manifest.eval_ref == result_payload["run_id"]
+    assert manifest.forecast_id == result_payload["forecast_id"]
     assert manifest.routing.default == "accurate"
     assert manifest.routing.fast_path == "fast"
+    assert manifest.routing_rationale["default"]["model"] == "accurate"
 
 
 def test_format_operator_summary_surfaces_lane_recommendations() -> None:

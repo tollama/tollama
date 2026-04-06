@@ -353,13 +353,20 @@ def build_benchmark_result_payload(
 ) -> dict[str, Any]:
     """Build the canonical Core benchmark result payload."""
     routing_recommendation = recommend_routing(summary)
+    routing_rationale = build_routing_rationale(summary)
     legacy_filename = f"benchmark_{summary.dataset_fingerprint}.json"
+    forecast_id = _build_forecast_selection_id(
+        run_id=run_id,
+        default_model=routing_recommendation.get("default"),
+    )
 
     return {
         "artifact_kind": "tollama_core_benchmark",
         "schema_version": 1,
         "generated_at": generated_at,
         "run_id": run_id,
+        "eval_ref": run_id,
+        "forecast_id": forecast_id,
         "source": "tollama.core.benchmark",
         "dataset_fingerprint": summary.dataset_fingerprint,
         "horizon": summary.horizon,
@@ -379,7 +386,19 @@ def build_benchmark_result_payload(
         ],
         "leaderboard": build_benchmark_leaderboard(summary),
         "learned_weights": summary.learned_weights,
-        "routing_recommendation": routing_recommendation,
+        "routing_recommendation": {
+            **routing_recommendation,
+            "rationale": routing_rationale,
+        },
+        "preprocessing_metadata": {
+            "available": False,
+            "source": "benchmark_input",
+            "note": (
+                "No structured preprocessing metadata was attached to this Core "
+                "benchmark run."
+            ),
+        },
+        "routing_rationale": routing_rationale,
         "artifact_mapping": {
             "result_json": "result.json",
             "routing_manifest": "routing.json",
@@ -399,10 +418,16 @@ def build_routing_manifest_payload(
 ) -> dict[str, Any]:
     """Build a routing manifest from a benchmark summary."""
     routing = recommend_routing(summary)
+    routing_rationale = build_routing_rationale(summary)
     return {
         "version": 1,
         "generated_at": generated_at,
         "run_id": run_id,
+        "eval_ref": run_id,
+        "forecast_id": _build_forecast_selection_id(
+            run_id=run_id,
+            default_model=routing.get("default"),
+        ),
         "source": "tollama.core.benchmark",
         "routing": {
             "default": routing.get("default"),
@@ -411,6 +436,15 @@ def build_routing_manifest_payload(
         },
         "policy": routing.get("policy"),
         "caveats": list(routing.get("caveats", [])),
+        "preprocessing_metadata": {
+            "available": False,
+            "source": "benchmark_input",
+            "note": (
+                "No structured preprocessing metadata was attached to this Core "
+                "benchmark run."
+            ),
+        },
+        "routing_rationale": routing_rationale,
     }
 
 
@@ -467,6 +501,29 @@ def build_operator_summary(summary: BenchmarkSummary) -> dict[str, Any]:
         "fast_path": _lane_summary("fast_path", routing.get("fast_path")),
         "high_accuracy": _lane_summary("high_accuracy", routing.get("high_accuracy")),
     }
+
+
+def build_routing_rationale(summary: BenchmarkSummary) -> dict[str, dict[str, Any]]:
+    """Build a compact lane-by-lane rationale for downstream handoff."""
+    payload = build_operator_summary(summary)
+    rationale: dict[str, dict[str, Any]] = {}
+    for lane_name in ("default", "fast_path", "high_accuracy"):
+        entry = payload[lane_name]
+        rationale[lane_name] = {
+            "model": entry.get("model"),
+            "reason": entry.get("reason"),
+            "primary_metric": entry.get("primary_metric"),
+            "primary_metric_value": entry.get("primary_metric_value"),
+            "latency_ms": entry.get("latency_ms"),
+            "quality_rank": entry.get("quality_rank"),
+            "latency_rank": entry.get("latency_rank"),
+        }
+    return rationale
+
+
+def _build_forecast_selection_id(*, run_id: str, default_model: Any) -> str:
+    model_name = default_model if isinstance(default_model, str) and default_model else "none"
+    return f"core-routing-candidate:{run_id}:{model_name}"
 
 
 def format_operator_summary(summary: BenchmarkSummary) -> str:

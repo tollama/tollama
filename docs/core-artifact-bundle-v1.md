@@ -42,6 +42,8 @@ Minimum required top-level fields:
 - `schema_version`
 - `generated_at`
 - `run_id`
+- `eval_ref`
+- `forecast_id`
 - `source`
 - `dataset_fingerprint`
 - `horizon`
@@ -52,6 +54,8 @@ Minimum required top-level fields:
 - `leaderboard`
 - `learned_weights`
 - `routing_recommendation`
+- `preprocessing_metadata`
+- `routing_rationale`
 - `artifact_mapping`
 
 Required values for `v1`:
@@ -77,6 +81,7 @@ Each entry in `models` must include:
 - `policy`
 - `ranking`
 - `caveats`
+- `rationale`
 
 `artifact_mapping` must include:
 
@@ -99,10 +104,14 @@ Minimum required top-level fields:
 - `version`
 - `generated_at`
 - `run_id`
+- `eval_ref`
+- `forecast_id`
 - `source`
 - `routing`
 - `policy`
 - `caveats`
+- `preprocessing_metadata`
+- `routing_rationale`
 
 Required values for `v1`:
 
@@ -114,6 +123,18 @@ Required values for `v1`:
 - `default`
 - `fast_path`
 - `high_accuracy`
+
+## Trust Handoff Fields
+
+To keep future `Core + Trust` attachment simple, `v1` also preserves:
+
+- `eval_ref`: stable identifier for the benchmark evaluation run
+- `forecast_id`: stable identifier for the routing candidate promoted from that run
+- `preprocessing_metadata`: currently a minimal placeholder when no structured preprocessing metadata is attached
+- `routing_rationale`: lane-by-lane explanation for `default`, `fast_path`, and `high_accuracy`
+
+These fields are additive and should stay stable enough for downstream Trust
+tooling to reference without reinterpreting the Core bundle.
 
 ## `leaderboard.csv`
 

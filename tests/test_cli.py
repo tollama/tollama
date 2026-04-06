@@ -116,6 +116,11 @@ def test_routing_show_reads_core_result_payload(monkeypatch, tmp_path) -> None:
             {
                 "generated_at": "2026-04-06T00:00:00Z",
                 "run_id": "core-demo",
+                "eval_ref": "core-demo",
+                "forecast_id": "core-routing-candidate:core-demo:chronos2",
+                "routing_rationale": {
+                    "default": {"model": "chronos2", "reason": "balanced winner"}
+                },
                 "routing_recommendation": {
                     "default": "chronos2",
                     "fast_path": "timesfm-2.5-200m",
@@ -133,6 +138,8 @@ def test_routing_show_reads_core_result_payload(monkeypatch, tmp_path) -> None:
 
     assert result.exit_code == 0
     payload = json.loads(_result_stdout(result))
+    assert payload["eval_ref"] == "core-demo"
+    assert payload["forecast_id"] == "core-routing-candidate:core-demo:chronos2"
     assert payload["routing"]["default"] == "chronos2"
     assert payload["routing"]["fast_path"] == "timesfm-2.5-200m"
 
@@ -146,6 +153,8 @@ def test_routing_apply_writes_default_manifest(monkeypatch, tmp_path) -> None:
             {
                 "generated_at": "2026-04-06T00:00:00Z",
                 "run_id": "core-demo",
+                "eval_ref": "core-demo",
+                "forecast_id": "core-routing-candidate:core-demo:chronos2",
                 "routing_recommendation": {
                     "default": "chronos2",
                     "fast_path": "timesfm-2.5-200m",
@@ -165,6 +174,8 @@ def test_routing_apply_writes_default_manifest(monkeypatch, tmp_path) -> None:
     manifest_path = home / "routing.json"
     assert manifest_path.exists()
     payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    assert payload["eval_ref"] == "core-demo"
+    assert payload["forecast_id"] == "core-routing-candidate:core-demo:chronos2"
     assert payload["routing"]["default"] == "chronos2"
     assert "Applied routing manifest" in _result_stdout(result)
 
