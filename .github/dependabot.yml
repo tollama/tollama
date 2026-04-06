@@ -8,7 +8,39 @@ updates:
     groups:
       python-dependencies:
         patterns:
-          - "*"
+          - "wandb"
+          - "langchain-core"
+        update-types:
+          - minor
+          - patch
+    ignore:
+      - dependency-name: "langchain-core"
+        update-types:
+          - "version-update:semver-major"
+      - dependency-name: "pandas"
+        update-types:
+          - "version-update:semver-major"
+      - dependency-name: "pyarrow"
+        update-types:
+          - "version-update:semver-major"
+      - dependency-name: "numpy"
+        update-types:
+          - "version-update:semver-major"
+      - dependency-name: "torch"
+        update-types:
+          - "version-update:semver-major"
+      - dependency-name: "transformers"
+        update-types:
+          - "version-update:semver-major"
+      - dependency-name: "gluonts"
+        update-types:
+          - "version-update:semver-major"
+      - dependency-name: "lightning"
+        update-types:
+          - "version-update:semver-major"
+      - dependency-name: "pytorch-lightning"
+        update-types:
+          - "version-update:semver-major"
 
   - package-ecosystem: github-actions
     directory: "/"
