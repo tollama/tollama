@@ -514,7 +514,7 @@ Each run writes:
 
 - `result.json`: raw scenario/model run entries
 - `summary.json`: aggregated pass/fail + latency/metric summary
-- `summary.md`: human-readable leaderboard
+- `summary.md`: human-readable real-data summary
 - `raw/`: per-request payload/response captures
 
 `--gate-profile strict` is the CI default. For optional HuggingFace local runs use

@@ -30,6 +30,17 @@ jobs:
       - name: Validate OpenClaw tollama-forecast skill
         run: bash scripts/validate_openclaw_skill_tollama_forecast.sh
 
+      - name: Concrete solution smoke gate
+        run: |
+          bash -n examples/core_concrete_solution_demo.sh
+          python scripts/e2e_realdata/export_core_solution_input.py --help
+          PYTHONPATH=src pytest -q \
+            tests/test_core_demo_script.py \
+            tests/test_concrete_solution_demo_script.py \
+            tests/test_e2e_realdata_export_core_solution_input.py \
+            tests/test_core_benchmark_artifacts.py \
+            tests/test_routing.py
+
       - name: Pytest
         env:
           TOLLAMA_VALIDATE_REGISTRY_REMOTE: "1"
