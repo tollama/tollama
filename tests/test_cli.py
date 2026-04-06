@@ -683,7 +683,8 @@ def test_quickstart_pulls_model_and_runs_demo_forecast(monkeypatch) -> None:
     assert "tollama quickstart complete" in output
     assert "Next steps:" in output
     assert "tollama benchmark examples/benchmark_data.json --models mock" in output
-    assert "tollama explain mock" in output
+    assert "tollama routing apply artifacts/benchmarks/demo/result.json" in output
+    assert "tollama routing show" in output
 
 
 def test_quickstart_prints_daemon_guidance_when_unreachable(monkeypatch) -> None:

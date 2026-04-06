@@ -1141,7 +1141,10 @@ def quickstart(
         f"--models {model} --horizon 4 --folds 1 --output artifacts/benchmarks/demo",
     )
     typer.echo(
-        f"  3. tollama explain {model}",
+        "  3. tollama routing apply artifacts/benchmarks/demo/result.json",
+    )
+    typer.echo(
+        "  4. tollama routing show",
     )
 
 
