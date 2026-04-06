@@ -121,6 +121,11 @@ tollama routing apply artifacts/benchmarks/demo/result.json
 tollama routing show
 ```
 
+One-command shortcut for the full Core loop after the daemon is up:
+```bash
+bash examples/core_workflow_demo.sh
+```
+
 If you are new to Tollama, stop here first. Validate `serve`, `quickstart`,
 `benchmark`, and `routing apply` before using secondary surfaces like dashboards,
 exports, or developer tooling.

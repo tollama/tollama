@@ -19,7 +19,17 @@ python -m pip install "tollama[eval,preprocess]"
 tollama serve
 ```
 
-In a second terminal, verify the daemon and pull a demo model:
+In a second terminal, the fastest full-loop shortcut is:
+
+```bash
+bash examples/core_workflow_demo.sh
+```
+
+That one command runs the full Core evidence loop with the default `mock`
+model and writes artifacts under `artifacts/benchmarks/core-demo`.
+
+If you want to walk each step manually instead, start by verifying the daemon
+and pulling a demo model:
 
 ```bash
 tollama quickstart

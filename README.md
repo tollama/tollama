@@ -158,6 +158,8 @@ For benchmark-backed routing defaults, see `docs/tsfm-routing-defaults.md`.
 For the end-to-end Core walkthrough, see `docs/core-workflow.md`.
 Use `tollama routing apply <result.json>` to promote a Core benchmark artifact
 into the active local routing policy.
+For one runnable Core loop after the daemon is up, use
+`bash examples/core_workflow_demo.sh`.
 
 If you are new to Tollama, stop here and validate `serve`, `quickstart`,
 `benchmark`, and `routing apply` end to end before moving to scenario,
