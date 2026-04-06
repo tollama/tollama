@@ -20,8 +20,15 @@ DATASET="${DATASET:-pjm_hourly_energy}"
 FALLBACK_DATASET="${FALLBACK_DATASET:-m4_daily}"
 MODELS="${MODELS:-chronos2,granite-ttm-r2,timesfm-2.5-200m,moirai-2.0-R-small}"
 FOLDS="${FOLDS:-2}"
-INPUT_PATH="${INPUT_PATH:-artifacts/core-solution/benchmark_input.json}"
+DEFAULT_INPUT_PATH="artifacts/core-solution/benchmark_input.json"
+CHECKED_IN_INPUT="${CHECKED_IN_INPUT:-examples/core_solution_hourly_input.json}"
+USE_CHECKED_IN_INPUT="${USE_CHECKED_IN_INPUT:-0}"
+INPUT_PATH="${INPUT_PATH:-${DEFAULT_INPUT_PATH}}"
 BENCHMARK_OUTPUT_DIR="${BENCHMARK_OUTPUT_DIR:-artifacts/core-solution/benchmark}"
+
+if [[ "${USE_CHECKED_IN_INPUT}" == "1" && "${INPUT_PATH}" == "${DEFAULT_INPUT_PATH}" ]]; then
+  INPUT_PATH="${CHECKED_IN_INPUT}"
+fi
 
 ALLOW_KAGGLE_FALLBACK_FLAG=()
 if [[ "${ALLOW_KAGGLE_FALLBACK:-1}" != "0" ]]; then
@@ -35,15 +42,24 @@ echo "Mode: ${MODE}"
 echo "Preferred dataset: ${DATASET}"
 echo "Fallback dataset: ${FALLBACK_DATASET}"
 echo "Models: ${MODELS}"
+echo "Use checked-in input: ${USE_CHECKED_IN_INPUT}"
 echo ""
 
-echo "[1/3] export prepared benchmark input"
-"${PYTHON_BIN}" scripts/e2e_realdata/export_core_solution_input.py \
-  --mode "${MODE}" \
-  --dataset "${DATASET}" \
-  --fallback-dataset "${FALLBACK_DATASET}" \
-  "${ALLOW_KAGGLE_FALLBACK_FLAG[@]}" \
-  --output "${INPUT_PATH}"
+if [[ "${USE_CHECKED_IN_INPUT}" == "1" ]]; then
+  echo "[1/3] use checked-in hero benchmark input"
+  if [[ ! -f "${INPUT_PATH}" ]]; then
+    echo "Checked-in benchmark input not found: ${INPUT_PATH}" >&2
+    exit 1
+  fi
+else
+  echo "[1/3] export prepared benchmark input"
+  "${PYTHON_BIN}" scripts/e2e_realdata/export_core_solution_input.py \
+    --mode "${MODE}" \
+    --dataset "${DATASET}" \
+    --fallback-dataset "${FALLBACK_DATASET}" \
+    "${ALLOW_KAGGLE_FALLBACK_FLAG[@]}" \
+    --output "${INPUT_PATH}"
+fi
 echo ""
 
 BENCHMARK_HORIZON="${BENCHMARK_HORIZON:-$("${PYTHON_BIN}" -c 'import json, sys; print(json.loads(open(sys.argv[1], encoding="utf-8").read())["recommended_horizon"])' "${INPUT_PATH}")}"
@@ -69,3 +85,4 @@ echo "  - ${INPUT_PATH}"
 echo "  - ${BENCHMARK_OUTPUT_DIR}/result.json"
 echo "  - ${BENCHMARK_OUTPUT_DIR}/routing.json"
 echo "  - ${BENCHMARK_OUTPUT_DIR}/leaderboard.csv"
+echo "  - ${BENCHMARK_OUTPUT_DIR}/summary.md"

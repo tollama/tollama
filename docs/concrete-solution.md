@@ -112,6 +112,17 @@ This command keeps the story narrow:
 - open fallback when credentials are missing
 - one curated benchmark set instead of the full model matrix
 
+For a zero-download or offline-friendly starting point, use the checked-in hero
+payload:
+
+```bash
+USE_CHECKED_IN_INPUT=1 MODELS=mock bash examples/core_concrete_solution_demo.sh
+```
+
+The checked-in input lives at `examples/core_solution_hourly_input.json` and
+preserves the same hourly-demand concrete-solution story without requiring the
+real-data prep step.
+
 ## What To Read In The Output
 
 The real-data harness writes:
@@ -127,6 +138,9 @@ The standard Core benchmark flow writes:
 - `routing.json`
 - `leaderboard.csv`
 - `summary.md`
+
+The checked-in benchmark input writes the same Core bundle, so the user sees the
+same artifact contract even when starting from a repo-native sample payload.
 
 The concrete solution is complete only when the user can move from benchmark
 evidence into routing action.

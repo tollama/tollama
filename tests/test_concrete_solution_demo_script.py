@@ -22,6 +22,8 @@ def test_core_concrete_solution_demo_script_is_wired_to_realdata_flow() -> None:
 
     content = script_path.read_text(encoding="utf-8")
     assert "export_core_solution_input.py" in content
+    assert "USE_CHECKED_IN_INPUT" in content
+    assert "core_solution_hourly_input.json" in content
     assert "tollama.cli.main benchmark" in content
     assert "routing apply" in content
     assert "chronos2,granite-ttm-r2,timesfm-2.5-200m,moirai-2.0-R-small" in content
