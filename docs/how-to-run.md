@@ -30,7 +30,7 @@ Additional docs:
 - API reference: `docs/api-reference.md`
 - Dashboard user guide (Web GUI + TUI): `docs/dashboard-user-guide.md`
 
-## TSFM Model Matrix
+## Forecast Model Matrix
 
 | Model name | Family | Hugging Face repo | Revision | License | `--accept-license` required | Runner extra |
 |---|---|---|---|---|---|---|
@@ -45,12 +45,17 @@ Additional docs:
 | `tide` | `tide` | `tollama/tide-runner` (local source manifest) | `main` | `apache-2.0` | No | `runner_tide` |
 | `nhits` | `nhits` | `tollama/nhits-runner` (local source manifest) | `main` | `apache-2.0` | No | `runner_nhits` |
 | `nbeatsx` | `nbeatsx` | `tollama/nbeatsx-runner` (local source manifest) | `main` | `apache-2.0` | No | `runner_nbeatsx` |
+| `timer-base` | `timer` | `thuml/timer-base-84m` | `main` | `apache-2.0` | No | `runner_timer` |
+| `timemixer-base` | `timemixer` | `thuml/timemixer` | `main` | `apache-2.0` | No | `runner_timemixer` |
+| `forecastpfn` | `forecastpfn` | `abacusai/ForecastPFN` | `main` | `apache-2.0` | No | `runner_forecastpfn` |
 
 > [!NOTE]
 > `timesfm` models may take several minutes to compile on the first run. The default timeout has been increased to 5 minutes to accommodate this, but slower machines may require even more time.
 
 Sundial is target-only in the current runner; do not include covariates in Sundial requests.
 Toto supports target + past numeric covariates; known-future/static/categorical covariates are unsupported.
+Timer, TimeMixer, and ForecastPFN are currently target-only runner integrations and return
+canonical mean forecasts without quantiles.
 
 > [!IMPORTANT]
 > `patchtst` is a **Phase-2 baseline integration**: it is discoverable/pullable and now executes canonical target-only forecasts via the dedicated runner family. Quantiles are returned when the backend exposes them; otherwise the runner returns mean-only forecasts with a warning. If dependencies are missing, the runner returns `DEPENDENCY_MISSING` with the install command `python -m pip install -e ".[dev,runner_patchtst]"`.
@@ -115,6 +120,9 @@ Optional extras:
 | `runner_tide` | TiDE runner dependencies | `u8darts`, `torch` |
 | `runner_nhits` | N-HiTS runner dependencies | `neuralforecast`, `pytorch-lightning`, `torch` |
 | `runner_nbeatsx` | N-BEATSx runner dependencies | `neuralforecast`, `pytorch-lightning`, `torch` |
+| `runner_timer` | Timer runner dependencies | `transformers`, `torch`, `numpy`, `pandas`, `huggingface_hub` |
+| `runner_timemixer` | TimeMixer runner dependencies | `transformers`, `torch`, `numpy`, `pandas`, `huggingface_hub` |
+| `runner_forecastpfn` | ForecastPFN runner dependencies | `ForecastPFN`, `torch`, `numpy` |
 
 ## One-Time Environment Setup (Default: Per-Family Runtime Isolation)
 
@@ -138,7 +146,7 @@ With the default `daemon.auto_bootstrap=true`, family runtimes are created lazil
 If you prefer single-environment mode (legacy), install all runner extras in the same `.venv`:
 
 ```bash
-python -m pip install -e ".[dev,runner_torch,runner_timesfm,runner_uni2ts,runner_sundial,runner_toto,runner_lag_llama,runner_patchtst,runner_tide,runner_nhits,runner_nbeatsx]"
+python -m pip install -e ".[dev,runner_torch,runner_timesfm,runner_uni2ts,runner_sundial,runner_toto,runner_lag_llama,runner_patchtst,runner_tide,runner_nhits,runner_nbeatsx,runner_timer,runner_timemixer,runner_forecastpfn]"
 ```
 
 ## Single-Environment Checklist (Legacy)
@@ -160,7 +168,7 @@ Use this checklist to avoid mixed Conda/system/venv runners:
 python3.11 -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip setuptools wheel
-python -m pip install -e ".[dev,runner_torch,runner_timesfm,runner_uni2ts,runner_sundial,runner_toto,runner_lag_llama,runner_patchtst,runner_tide,runner_nhits,runner_nbeatsx]"
+python -m pip install -e ".[dev,runner_torch,runner_timesfm,runner_uni2ts,runner_sundial,runner_toto,runner_lag_llama,runner_patchtst,runner_tide,runner_nhits,runner_nbeatsx,runner_timer,runner_timemixer,runner_forecastpfn]"
 
 which python
 which tollama
@@ -284,7 +292,13 @@ Families with explicit `runner_commands` entries skip auto-bootstrap.
 │   └── ...
 ├── nhits/
 │   └── ...
-└── nbeatsx/
+├── nbeatsx/
+│   └── ...
+├── timer/
+│   └── ...
+├── timemixer/
+│   └── ...
+└── forecastpfn/
     └── ...
 ```
 
@@ -397,7 +411,7 @@ print(result.to_df())
 - `pandas.Series`
 - `pandas.DataFrame` (wide or long-format with `target`)
 
-## Install All TSFM Models
+## Install All Forecast Models
 
 If any model is gated/private in your environment, set a token first:
 
@@ -408,7 +422,7 @@ export TOLLAMA_HF_TOKEN=hf_xxx
 Pull models that do not require explicit acceptance:
 
 ```bash
-for model in chronos2 granite-ttm-r2 timesfm-2.5-200m sundial-base-128m toto-open-base-1.0 lag-llama patchtst tide nhits nbeatsx; do
+for model in chronos2 granite-ttm-r2 timesfm-2.5-200m sundial-base-128m toto-open-base-1.0 lag-llama patchtst tide nhits nbeatsx timer-base timemixer-base forecastpfn; do
   tollama pull "$model" --no-stream
 done
 ```
@@ -424,7 +438,7 @@ Single command block version:
 ```bash
 set -euo pipefail
 
-for model in chronos2 granite-ttm-r2 timesfm-2.5-200m sundial-base-128m toto-open-base-1.0 lag-llama patchtst tide nhits nbeatsx; do
+for model in chronos2 granite-ttm-r2 timesfm-2.5-200m sundial-base-128m toto-open-base-1.0 lag-llama patchtst tide nhits nbeatsx timer-base timemixer-base forecastpfn; do
   tollama pull "$model" --no-stream
 done
 
@@ -449,7 +463,7 @@ Verify all expected model directories exist:
 
 ```bash
 BASE="${TOLLAMA_HOME:-$HOME/.tollama}/models"
-for model in chronos2 granite-ttm-r2 timesfm-2.5-200m moirai-2.0-R-small sundial-base-128m toto-open-base-1.0 lag-llama patchtst tide nhits nbeatsx; do
+for model in chronos2 granite-ttm-r2 timesfm-2.5-200m moirai-2.0-R-small sundial-base-128m toto-open-base-1.0 lag-llama patchtst tide nhits nbeatsx timer-base timemixer-base forecastpfn; do
   test -f "$BASE/$model/manifest.json" && echo "ok: $model" || echo "missing: $model"
 done
 ```
@@ -470,6 +484,9 @@ tollama run patchtst --input examples/request.json --no-stream
 tollama run tide --input examples/request.json --no-stream
 tollama run nhits --input examples/request.json --no-stream
 tollama run nbeatsx --input examples/request.json --no-stream
+tollama run timer-base --input examples/request.json --no-stream
+tollama run timemixer-base --input examples/request.json --no-stream
+tollama run forecastpfn --input examples/request.json --no-stream
 ```
 
 ## Real-Data E2E Matrix (Kaggle + Open Data)
@@ -608,9 +625,8 @@ tollama ps
 
 ## Integration Test Status
 
-All eleven model families have integration tests across Python 3.11–3.13. The CI badge
-at the top of the README reflects the current state. To run integration tests locally against
-real model weights (requires models pulled and internet access):
+Weight-backed integration tests currently cover the primary pulled families below. To run
+them locally against real model weights (requires models pulled and internet access):
 
 ```bash
 TOLLAMA_RUN_INTEGRATION_TESTS=1 TOLLAMA_TOTO_INTEGRATION_CPU=1 pytest -q -rs \
@@ -622,8 +638,9 @@ TOLLAMA_RUN_INTEGRATION_TESTS=1 TOLLAMA_TOTO_INTEGRATION_CPU=1 pytest -q -rs \
   tests/test_toto_integration.py
 ```
 
-Baseline model families (lag-llama, patchtst, tide, nhits, nbeatsx) have dedicated adapter
-and runner tests; run `scripts/run_all_models_e2e_local.sh` for full-model E2E coverage.
+Additional runner families (`lag-llama`, `patchtst`, `tide`, `nhits`, `nbeatsx`,
+`timer`, `timemixer`, `forecastpfn`) currently rely on dedicated runner/adapter tests plus
+`scripts/run_all_models_e2e_local.sh` for cross-family smoke coverage.
 
 See `docs/releases/v0.1.0.md` for per-family compatibility notes and known limitations.
 

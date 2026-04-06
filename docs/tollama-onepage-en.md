@@ -43,8 +43,8 @@ flow = t.workflow(my_data).analyze().auto_forecast(horizon=30).what_if(scenarios
 
 | Interface | Description |
 |-----------|------------|
-| **HTTP API** | 43+ endpoints — forecast, analysis, comparison, what-if, report |
-| **Python SDK** | `Tollama` class with 16 methods, DataFrame conversion, chained workflow |
+| **HTTP API** | One daemon for forecasting, comparison, analysis, reporting, dashboard, and XAI |
+| **Python SDK** | `Tollama` class with DataFrame conversion and chained workflow helpers |
 | **CLI** | `tollama pull` → `tollama run` — Ollama-style workflow |
 | **Dashboard** | Web (Chart.js) + TUI (Textual) — model monitoring, forecast visualization |
 
@@ -54,7 +54,7 @@ AI agents can **invoke TSFMs as tools the moment they need a forecast.**
 
 | Integration | Description |
 |------------|------------|
-| **MCP Server** | 15 tools — forecast, analyze, compare, what-if, report, etc. |
+| **MCP Server** | 22 tools — 15 forecast/orchestration tools + 7 XAI/trust tools |
 | **A2A Protocol** | JSON-RPC based agent-to-agent communication with task queue |
 | **LangChain** | 13 natively integrated tools |
 | **CrewAI / AutoGen / Smolagents** | Per-framework adapters |
@@ -77,16 +77,16 @@ Manage the entire platform at a glance through web and terminal TUI dashboards.
 ┌────────────────────────────────────────────────────────┐
 │  Developers: CLI / SDK / HTTP API / Dashboard          │
 ├────────────────────────────────────────────────────────┤
-│  AI Agents: MCP (15 tools) / A2A / LangChain / ...    │
+│  AI Agents: MCP (22 tools) / A2A / LangChain / ...    │
 ├────────────────────────────────────────────────────────┤
 │  TSFM Platform Daemon (tollamad)                       │
 │  Forecast · Analysis · Compare · What-if · Pipeline    │
 │  Auth · Rate Limiting · Prometheus · SSE               │
-├──────┬──────┬──────┬──────┬──────┬──────┬──────────────┤
-│      │ stdio JSON-lines protocol      │              │
-│      ▼      ▼      ▼      ▼      ▼      ▼              │
-│   torch  timesfm  uni2ts  sundial  toto  mock          │
-│   (Chronos, Granite)                                   │
+├────────────────────────────────────────────────────────┤
+│  stdio JSON-lines protocol                             │
+│  torch / timesfm / uni2ts / sundial / toto / lag_llama│
+│  patchtst / tide / nhits / nbeatsx / timer            │
+│  timemixer / forecastpfn / mock                       │
 │   Independent venv per family — zero dependency clash   │
 └────────────────────────────────────────────────────────┘
 ```
@@ -101,6 +101,14 @@ Manage the entire platform at a glance through web and terminal TUI dashboards.
 | Moirai 2.0-R Small | Salesforce | Past + Future |
 | Sundial Base 128M | THUML | Target only |
 | Toto Open Base 1.0 | Datadog | Past only |
+| Lag-Llama | Time-Series-Foundation-Models | Target only |
+| PatchTST | IBM Granite | Target only |
+| TiDE | Tollama local runner | Past + Future |
+| N-HiTS | Tollama local runner | Target only |
+| N-BEATSx | Tollama local runner | Target only |
+| Timer Base | THUML | Target only |
+| TimeMixer Base | THUML | Target only |
+| ForecastPFN | Abacus.AI | Target only |
 
 ---
 
@@ -109,6 +117,6 @@ Manage the entire platform at a glance through web and terminal TUI dashboards.
 | Item | Current Status | Goal |
 |------|:--------------:|------|
 | **Auto model comparison / selection** | ✅ Basic impl (`/api/compare`, `/api/auto-forecast`) | Advanced best-model routing based on data characteristics |
-| **Auto data preprocessing** | ❌ Not implemented | Missing value interpolation, resampling, outlier removal handled by the platform |
+| **Auto data preprocessing** | ⚠️ Basic pipeline exists (`preprocess/pipeline.py`, ingest normalization) | Harden defaults for interpolation, resampling, and outlier handling |
 | **Fine-tuning / ensemble** | ⚠️ Ensemble only (`ensemble.py`) | Add domain-adaptation fine-tuning workflow |
 | **Local + cloud execution** | ⚠️ Dockerfile exists, local-centric | K8s manifests, docker-compose, cloud deployment guide |

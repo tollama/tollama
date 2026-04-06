@@ -10,8 +10,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Changed
 
 - Re-centered tollama messaging around its core role as a unified TSFM platform
-- Updated model count from 11 to 12 (includes mock runner) across all documentation
-- Updated endpoint count from 42 to 43+ across all documentation
+- Synced documentation with the current registry and runner surface, including
+  Lag-Llama, PatchTST, TiDE, N-HiTS, N-BEATSx, Timer, TimeMixer, and ForecastPFN
+- Synced documentation with the current API surface, including dashboard bootstrap
+  and XAI/trust routes
 - Upgraded development status from Alpha to Beta (pyproject.toml classifier)
 - Synced TimesFM and Moirai registry capability metadata with their implemented covariate support
 - Auto-forecast routing modes now honor benchmark-backed routing manifests before falling back to heuristics
@@ -26,11 +28,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Counterfactual, scenario-tree, what-if, pipeline, compare, and report endpoints
 - CSV/Parquet ingest via `data_url` and upload endpoints
 - TSModelfile profile management (YAML-based model presets)
-- Runner families: Chronos-2, Granite TTM, TimesFM 2.5, Moirai, Sundial, Toto
+- Runner families: Chronos-2, Granite TTM, TimesFM 2.5, Moirai, Sundial, Toto,
+  Lag-Llama, PatchTST, TiDE, N-HiTS, N-BEATSx, Timer, TimeMixer, ForecastPFN
 - Unified covariates contract (`past_covariates`, `future_covariates`, `static_covariates`)
 - Python SDK (`Tollama` class) with workflow chaining and DataFrame support
 - CLI with shell completion, interactive model selection, and progress display
-- MCP server with 15 tool handlers for Claude Desktop integration
+- MCP server with 22 tool handlers for Claude Desktop integration
 - Agent framework wrappers: LangChain, CrewAI, AutoGen, smolagents
 - OpenClaw skill (`skills/tollama-forecast/`)
 - Optional API-key authentication with HMAC constant-time comparison
