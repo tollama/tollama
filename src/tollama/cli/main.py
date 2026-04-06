@@ -1,4 +1,4 @@
-"""Typer-based CLI for the tollama forecast decision trust layer."""
+"""Typer-based CLI for the tollama forecasting core."""
 
 from __future__ import annotations
 
@@ -45,7 +45,7 @@ from .client import (
 from .dev import dev_app
 from .info import collect_info
 
-app = typer.Typer(help="Ollama-style command-line interface for tollama.")
+app = typer.Typer(help="Ollama-style command-line interface for the tollama core.")
 config_app = typer.Typer(help="Manage local tollama defaults in ~/.tollama/config.json.")
 runtime_app = typer.Typer(help="Manage per-family isolated runner environments.")
 modelfile_app = typer.Typer(help="Manage TSModelfile forecast profiles.")
@@ -1015,7 +1015,7 @@ def quickstart(
         help="Progress display mode: auto, on, or off.",
     ),
 ) -> None:
-    """Pull a model, run demo forecast, and print next-step commands."""
+    """Pull a model, run a demo forecast, and print Core next-step commands."""
     show_progress = _resolve_progress_enabled(progress)
     client = _make_client(base_url=base_url, timeout=timeout)
 
@@ -1068,10 +1068,12 @@ def quickstart(
     typer.echo("")
     typer.echo(_style_text("Next steps:", bold=True))
     typer.echo("  1. tollama list")
-    typer.echo("  2. tollama run mock --input examples/request.json --no-stream")
     typer.echo(
-        "  3. python -c \"from tollama import Tollama; "
-        "print(Tollama().models('available'))\"",
+        "  2. tollama benchmark examples/benchmark_data.json "
+        f"--models {model} --horizon 4 --folds 1 --output artifacts/benchmarks/demo",
+    )
+    typer.echo(
+        f"  3. tollama explain {model}",
     )
 
 
@@ -1079,7 +1081,7 @@ def quickstart(
 def benchmark(
     dataset: str = typer.Argument(
         ...,
-        help="Path to a JSON file containing series data with actuals.",
+        help="Path to a JSON file containing benchmark series data.",
     ),
     horizon: int = typer.Option(96, "--horizon", min=1, help="Forecast horizon."),
     models: str | None = typer.Option(
@@ -1093,7 +1095,7 @@ def benchmark(
     output: str | None = typer.Option(
         None,
         "--output",
-        help="Directory to save JSON results.",
+        help="Directory to save benchmark JSON results.",
     ),
     base_url: str = typer.Option(
         DEFAULT_BASE_URL,

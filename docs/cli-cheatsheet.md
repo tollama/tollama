@@ -2,9 +2,13 @@
 
 ## Install / Setup
 
-Install tollama, start the daemon, then verify with a demo forecast:
+Install tollama, start the daemon, then verify with the Core forecast path:
 ```bash
 python -m pip install tollama
+
+# recommended Core install: preprocessing + benchmark tooling
+python -m pip install "tollama[eval,preprocess]"
+
 # dev
 python -m pip install -e ".[dev]"
 
@@ -119,6 +123,23 @@ Extend timeout for large models or slow first-run loads:
 ```bash
 tollama run moirai-2.0-R-small --input examples/moirai_2p0_request.json --timeout 600 --no-stream
 ```
+
+---
+
+## Benchmarking
+
+Run a small local benchmark on the sample dataset:
+```bash
+tollama benchmark examples/benchmark_data.json --models mock --horizon 4 --folds 1
+```
+
+Save JSON output for later comparison or routing work:
+```bash
+tollama benchmark examples/benchmark_data.json --models mock --horizon 4 --folds 1 --output artifacts/benchmarks/demo
+```
+
+Use `docs/tsfm-routing-defaults.md` when you want to turn benchmark results into
+`default`, `fast_path`, and `high_accuracy` routing policy.
 
 ---
 

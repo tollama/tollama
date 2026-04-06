@@ -1,64 +1,57 @@
-# Tollama — Ollama for Time Series Foundation Models
+# Tollama Core — Local-First Time Series Forecasting
 
 [![CI](https://github.com/yongchoelchoi/tollama/actions/workflows/ci.yml/badge.svg)](https://github.com/yongchoelchoi/tollama/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
 
-> Unified TSFM platform for pulling, serving, comparing, and integrating time series foundation models through one local-first interface
+> Local-first time series forecasting core for preprocessing irregular series, benchmarking models, and routing forecast workloads through one API, CLI, and SDK
 
 ---
 
 ## Why?
 
-TSFMs are emerging as general-purpose models — just like LLMs — enabling time series forecasting without domain-specific custom models. But **actually using them is still painful.**
+TSFMs are becoming practical building blocks for forecasting, but **the path from raw series to an operational decision is still fragmented.**
 
-| Problem                 | Reality                                                                                               |
-| ----------------------- | ----------------------------------------------------------------------------------------------------- |
-| Fragmented installation | Chronos requires a specific PyTorch version, TimesFM has its own package, Uni2TS requires Python 3.11 |
-| Non-unified APIs        | Each model has different input formats, prediction methods, and covariate handling                    |
-| Dependency conflicts    | Installing two models simultaneously causes package version collisions                                |
-| Integration friction    | Using TSFMs as tools in AI agents or services requires writing per-model wrappers                     |
+| Problem                  | Reality                                                                                               |
+| ------------------------ | ----------------------------------------------------------------------------------------------------- |
+| Fragmented installation  | Chronos requires a specific PyTorch version, TimesFM has its own package, Uni2TS requires Python 3.11 |
+| Non-unified APIs         | Each model has different input formats, prediction methods, and covariate handling                    |
+| Irregular-series cleanup | Missing timestamps, gaps, and smoothing are often solved outside the forecast stack                   |
+| No benchmark evidence    | Teams still guess which model to trust in production without comparable accuracy and latency results  |
 
 ## Goal
 
-**Unify fragmented TSFMs under a single interface so that both developers and AI agents can easily leverage time series forecasting through one TSFM platform.**
+**Turn fragmented TSFMs and neural baselines into one core workflow for forecast-driven time-series work: preprocess -> forecast -> benchmark -> route.**
 
 ---
 
-## Value for Developers — API, SDK, Dashboard
+## Core Workflow
 
-Build forecast-based services **quickly** and operate them **with minimal maintenance overhead.**
+Start with the Core path first. Optional agent integrations come after the
+forecast workflow is stable.
 
-```python
-from tollama import Tollama
+| Stage          | Primary surface                                | Outcome                                                                    |
+| -------------- | ---------------------------------------------- | -------------------------------------------------------------------------- |
+| **Preprocess** | `tollama.preprocess`                           | Spline interpolation, smoothing, scaling, and windowing for irregular data |
+| **Forecast**   | CLI, SDK, HTTP API                             | One canonical request shape across 14 forecast models                      |
+| **Benchmark**  | `tollama benchmark` or `tollama[eval]`         | Comparable accuracy, latency, and learned weights on the same dataset      |
+| **Route**      | Benchmark-backed routing manifest and defaults | Promote evidence into `default`, `fast_path`, and `high_accuracy` modes    |
 
-t = Tollama()
-
-# Forecast in 3 lines
-result = t.forecast(model="chronos2", series=my_data, horizon=30)
-df = result.to_df()
-
-# Auto model selection + ensemble
-best = t.auto_forecast(series=my_data, horizon=30, strategy="ensemble")
-
-# Chained workflow: analyze → forecast → what-if scenario
-flow = t.workflow(my_data).analyze().auto_forecast(horizon=30).what_if(scenarios)
+```bash
+python -m pip install "tollama[eval,preprocess]"
+tollama serve
+tollama quickstart
+tollama benchmark examples/benchmark_data.json --models mock --horizon 4 --folds 1 --output artifacts/benchmarks/demo
 ```
 
-| Interface      | Description                                                               |
-| -------------- | ------------------------------------------------------------------------- |
-| **HTTP API**   | 43+ endpoints — forecast, analysis, comparison, what-if, report           |
-| **Python SDK** | `Tollama` class with 16 methods, DataFrame conversion, chained workflow   |
-| **CLI**        | `tollama pull` → `tollama run` — Ollama-style workflow                    |
-| **Dashboard**  | Web (Chart.js) + TUI (Textual) — model monitoring, forecast visualization |
+## Optional Integrations
 
-## Value for AI Agents — Optional Integrations
-
-AI agents can **invoke TSFMs as tools when forecasting is part of a broader workflow.**
+Once the Core forecast path is working, Tollama can also plug into broader
+agent systems and orchestration layers.
 
 | Integration                       | Description                                                  |
 | --------------------------------- | ------------------------------------------------------------ |
-| **MCP Server**                    | 22 tools — forecast, analyze, compare, what-if, report, trust, etc. |
+| **MCP Server**                    | 22 tools — forecast, compare, diagnostics, reporting, trust, etc. |
 | **A2A Protocol**                  | JSON-RPC based agent-to-agent communication with task queue  |
 | **LangChain**                     | 13 natively integrated tools                                 |
 | **CrewAI / AutoGen / Smolagents** | Per-framework adapters                                       |
@@ -67,7 +60,7 @@ AI agents can **invoke TSFMs as tools when forecasting is part of a broader work
 ## Supported Models
 
 Tollama ships **14 models**: 7 time series foundation models (TSFMs) and 7 neural baselines.
-**All 14 models share the exact same interface** — `tollama run`, `POST /api/forecast`, Python SDK, MCP tools — no extra configuration or training steps required regardless of model type.
+**All 14 models share the exact same Core interface** — `tollama run`, `POST /api/forecast`, and the Python SDK — no extra configuration or training steps required regardless of model type.
 
 | Model              | Provider                | Type            | Covariates    |
 | ------------------ | ----------------------- |:---------------:|:-------------:|
@@ -99,18 +92,20 @@ from `~/.tollama/routing.json` or `TOLLAMA_ROUTING_MANIFEST`.
 
 ```
 ┌────────────────────────────────────────────────────────┐
-│  Developers: CLI / SDK / HTTP API / Dashboard          │
+│  Core users: CLI / SDK / HTTP API / Dashboard          │
 ├────────────────────────────────────────────────────────┤
-│  AI Agents: MCP (15 tools) / A2A / LangChain / ...    │
+│  Core workflow: Preprocess -> Forecast -> Benchmark -> Route │
 ├────────────────────────────────────────────────────────┤
-│  TSFM Platform Daemon (tollamad)                       │
-│  Forecast · Analysis · Compare · What-if · Pipeline    │
+│  Optional integrations: MCP / A2A / LangChain / ...   │
+├────────────────────────────────────────────────────────┤
+│  Tollama daemon (tollamad)                             │
+│  Forecast · Compare · Benchmark · Routing · Pipeline   │
 │  Auth · Rate Limiting · Prometheus · SSE               │
 ├──────┬──────┬──────┬──────┬──────┬──────┬──────────────┤
 │      │ stdio JSON-lines protocol      │              │
 │      ▼      ▼      ▼      ▼      ▼      ▼              │
 │ torch timesfm uni2ts sundial toto lag_llama patchtst tide nhits nbeatsx mock │
-│   7 TSFMs + 4 neural baselines — 11 models total       │
+│   14 forecast models + mock utility runner             │
 │   Independent venv per family — zero dependency clash   │
 └────────────────────────────────────────────────────────┘
 ```
@@ -128,8 +123,16 @@ from `~/.tollama/routing.json` or `TOLLAMA_ROUTING_MANIFEST`.
 
 ## Install
 
+Base forecast runtime:
+
 ```bash
 python -m pip install tollama
+```
+
+Canonical Core install for preprocessing + benchmarking:
+
+```bash
+python -m pip install "tollama[eval,preprocess]"
 ```
 
 For local development:
@@ -146,11 +149,16 @@ tollama serve
 
 # Terminal 2: pull + forecast demo + next steps
 tollama quickstart
+
+# Terminal 2: save a first benchmark artifact
+tollama benchmark examples/benchmark_data.json --models mock --horizon 4 --folds 1 --output artifacts/benchmarks/demo
 ```
 
 Human-friendly progress is enabled automatically on interactive terminals.
 You can override with `--progress on` or `--progress off` on `pull`, `run`,
 `quickstart`, and `runtime install`.
+
+For benchmark-backed routing defaults, see `docs/tsfm-routing-defaults.md`.
 
 Useful CLI additions:
 
@@ -259,7 +267,7 @@ leakage-safe train-fit scaling, and sliding window generation.
 Install optional dependency:
 
 ```bash
-python -m pip install -e ".[preprocess]"
+python -m pip install "tollama[preprocess]"
 ```
 
 Standalone usage (no daemon required):
@@ -351,7 +359,7 @@ Example `data_url` request:
 Parquet requires optional dependency:
 
 ```bash
-python -m pip install -e ".[ingest]"
+python -m pip install "tollama[ingest]"
 ```
 
 ## TSModelfile
