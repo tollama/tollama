@@ -54,7 +54,8 @@ If publishing wheels/containers, keep this artifact in the release bundle.
 
 ### 2.4 Source provenance checks for non-PyPI pins
 
-`runner_timesfm` currently uses a Git commit pin (`timesfm[torch] @ git+...`).
+`runner_timesfm` currently uses a source-archive commit pin
+(`timesfm[torch] @ https://github.com/google-research/timesfm/archive/<commit>.tar.gz`).
 Before release:
 
 - Verify upstream license at that exact commit.
