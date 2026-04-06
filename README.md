@@ -170,6 +170,7 @@ You can override with `--progress on` or `--progress off` on `pull`, `run`,
 `quickstart`, and `runtime install`.
 
 For benchmark-backed routing defaults, see `docs/tsfm-routing-defaults.md`.
+For the end-to-end Core walkthrough, see `docs/core-workflow.md`.
 
 Useful CLI additions:
 
@@ -202,6 +203,7 @@ auto = t.auto_forecast(
     series={"target": [10, 11, 12, 13, 14], "freq": "D"},
     horizon=3,
     strategy="auto",
+    mode="high_accuracy",
     ensemble_method="mean",  # or "median" when strategy="ensemble"
 )
 print(auto.selection.chosen_model)
