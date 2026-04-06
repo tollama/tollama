@@ -140,6 +140,27 @@ TimesFM knobs live under `parameters.timesfm`:
 - In `best_effort`, non-numeric values are dropped/zero-filled with warnings.
 - In `strict`, non-numeric values raise `BAD_REQUEST`.
 
+### Timer (timer runner)
+
+- Timer is target-only in the current runner implementation.
+- `past_covariates`, `future_covariates`, and `static_covariates` are unsupported.
+- In `best_effort`, unsupported covariates are ignored and surfaced as warnings.
+- In `strict`, covariate usage is rejected with HTTP 400.
+
+### TimeMixer (timemixer runner)
+
+- TimeMixer is target-only in the current runner implementation.
+- `past_covariates`, `future_covariates`, and `static_covariates` are unsupported.
+- In `best_effort`, unsupported covariates are ignored and surfaced as warnings.
+- In `strict`, covariate usage is rejected with HTTP 400.
+
+### ForecastPFN (forecastpfn runner)
+
+- ForecastPFN is target-only in the current runner implementation.
+- `past_covariates`, `future_covariates`, and `static_covariates` are unsupported.
+- In `best_effort`, unsupported covariates are ignored and surfaced as warnings.
+- In `strict`, covariate usage is rejected with HTTP 400.
+
 ## Capability Visibility
 
 Covariate compatibility is exposed in:
@@ -162,6 +183,9 @@ Covariate compatibility is exposed in:
 | TiDE | Yes | No | Yes | No | Yes |
 | N-HiTS | No | No | No | No | No |
 | N-BEATSx | No | No | No | No | No |
+| Timer | No | No | No | No | No |
+| TimeMixer | No | No | No | No | No |
+| ForecastPFN | No | No | No | No | No |
 
 ## API Example (curl)
 

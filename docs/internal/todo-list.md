@@ -18,7 +18,8 @@
 ## 0) 배경 및 목표 정리
 
 - [~] (R) TSFM 후보 모델군 정리 및 비교표 유지
-  - 대상: Chronos2, Moirai(Uni2TS), TimesFM, IBM(Granite/TTM/PatchTST 계열), Toto, Sundial
+  - 대상: Chronos2, Moirai(Uni2TS), TimesFM, IBM(Granite/TTM/PatchTST 계열), Toto, Sundial,
+    Lag-Llama, TiDE, N-HiTS, N-BEATSx, Timer, TimeMixer, ForecastPFN
   - 현재: 모델 매트릭스/라이선스/capabilities는 `model-registry/registry.yaml`, `README.md`, `docs/covariates.md`, `docs/how-to-run.md`에 반영됨
   - TODO: 입력 방식/아키텍처/배포 조건까지 포함한 심화 비교표로 확장
 
@@ -39,7 +40,8 @@
 ### 2) 실행 런타임 격리: Dependency-Free / Conflict-Free Inference
 
 - [x] (P0) Worker-per-model-family(런너 분리) 기본 구조 유지/강화
-  - 현재 family: `torch`, `timesfm`, `uni2ts`, `sundial`, `toto`, `lag_llama`, `patchtst`, `tide`, `nhits`, `nbeatsx` (+ `mock`)
+  - 현재 family: `torch`, `timesfm`, `uni2ts`, `sundial`, `toto`, `lag_llama`, `patchtst`,
+    `tide`, `nhits`, `nbeatsx`, `timer`, `timemixer`, `forecastpfn` (+ `mock`)
 - [~] (P1) 런너별 종속성 충돌 방지 정책(버전 pin, lockfile, 독립 venv) 확립
   - 현재: optional extras 분리 + family별 독립 runtime venv 자동화 구현(`~/.tollama/runtimes/<family>/venv/`, `tollama runtime install/list/update/remove`)
   - TODO: 버전 pin/lockfile 정책과 설치 재현성 보강
@@ -58,6 +60,7 @@
 - [~] (P1) 전처리 공통 라이브러리화
   - 현재: covariates 정규화/strict-best_effort는 daemon 공통 처리
   - 현재: `freq="auto"` 기본 추론(타임스탬프 기반)은 daemon 공통 처리
+  - 현재: `src/tollama/preprocess/pipeline.py`에 결측/리샘플링/이상치 처리용 기본 파이프라인 뼈대가 추가됨
   - TODO: 리샘플링/결측/스케일링/윈도잉/타임존 처리의 공통 유틸 정리
 
 ### 4) 하드웨어 가속 자동 감지: Backend Selection
@@ -193,8 +196,10 @@
   - 현재: `scripts/install_mcp.sh`, `CLAUDE.md` 추가
   - 현재: 실 SDK 환경 E2E smoke 완료(`tollama-mcp` stdio + live daemon tool call)
   - 현재: `README.md`/`roadmap.md`/`CLAUDE.md`에 MCP 구현 상세(툴 계약/에러 매핑/기본값) 반영
-  - 현재: MCP 15개 툴(`health/models/forecast/auto_forecast/analyze/generate/counterfactual/scenario_tree/report/what_if/pipeline/compare/recommend/pull/show`) description에
-    입력 스키마/모델 예시/호출 예시 추가
+  - 현재: MCP 22개 툴이 등록됨
+    (`health/models/forecast/auto_forecast/analyze/generate/counterfactual/scenario_tree/report/what_if/pipeline/compare/recommend/pull/show`
+    + `explain/trust_score/model_card/gate_decision/batch_analyze/alerts_configure/alerts_check`)
+  - 현재: 각 도구 description에 입력 스키마/모델 예시/호출 예시 추가
   - TODO: Claude Desktop 운영 가이드(권한/세션/배포 정책) 보강
 - [~] (P1) A2A(Agent2Agent) 프로토콜 1차 도입
   - 현재: discovery `GET /.well-known/agent-card.json` + legacy alias `GET /.well-known/agent.json` 추가
@@ -321,7 +326,7 @@
   - 현재: `docs/public-release-checklist.md` 추가(업스트림 라이선스 검증/서드파티 라이선스 인벤토리/제한 라이선스 정책)
   - TODO: 릴리스 태그마다 체크 결과(`docs/releases/`)를 남기고, `cc-by-nc-4.0` 모델 공개 정책을 최종 확정
 
-- [x] (P1) 6개 모델 e2e 통합 테스트 매트릭스 재검증 + 문서 동기화
+- [x] (P1) 핵심 pulled family e2e 통합 테스트 매트릭스 재검증 + 문서 동기화
   - 기준 일자: `2026-02-17`
   - pass: `chronos2`, `granite-ttm-r2`, `timesfm-2.5-200m`,
     `moirai-2.0-R-small`, `sundial-base-128m`
@@ -340,7 +345,7 @@
   - pass: `pytest -q`
   - pass: ingest/modelfile/ensemble 신규 테스트
     (`tests/test_ingest.py`, `tests/test_modelfile.py`, `tests/test_ensemble.py`)
-- [x] (P1) Real-data 6모델 E2E harness + CI matrix 추가
+- [x] (P1) Real-data 핵심 6모델 E2E harness + CI matrix 추가
   - 기준 일자: `2026-02-27`
   - 추가: `scripts/e2e_realdata/` (dataset 준비, payload 빌더, gate 검증, summary 리포트)
   - 추가: `scripts/e2e_realdata_tsfm.sh`

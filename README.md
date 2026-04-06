@@ -66,7 +66,7 @@ Tollama ships **14 models**: 7 time series foundation models (TSFMs) and 7 neura
 | TiDE               | Unit8 / Darts           | Neural Baseline | Past + Future |
 | N-HiTS             | Nixtla / NeuralForecast | Neural Baseline | Target only   |
 | N-BEATSx           | Nixtla / NeuralForecast | Neural Baseline | Target only   |
-| TimeMixer          | Tsinghua / THUML        | Neural Baseline | Past + Future |
+| TimeMixer          | Tsinghua / THUML        | Neural Baseline | Target only   |
 | Timer              | Tsinghua / THUML        | Neural Baseline | Target only   |
 | ForecastPFN        | PFN Research            | Neural Baseline | Target only   |
 
@@ -93,9 +93,10 @@ from `~/.tollama/routing.json` or `TOLLAMA_ROUTING_MANIFEST`.
 ├──────┬──────┬──────┬──────┬──────┬──────┬──────────────┤
 │      │ stdio JSON-lines protocol      │              │
 │      ▼      ▼      ▼      ▼      ▼      ▼              │
-│ torch timesfm uni2ts sundial toto lag_llama patchtst tide nhits nbeatsx mock │
-│   14 forecast models + mock utility runner             │
-│   Independent venv per family — zero dependency clash   │
+│ torch timesfm uni2ts sundial toto lag_llama patchtst tide nhits nbeatsx │
+│ timer timemixer forecastpfn mock                                          │
+│   14 forecast models + mock utility runner                                │
+│   Independent venv per family — zero dependency clash                     │
 └────────────────────────────────────────────────────────┘
 ```
 
@@ -361,7 +362,7 @@ agent systems and orchestration layers.
 
 | Integration                       | Description                                                  |
 | --------------------------------- | ------------------------------------------------------------ |
-| **MCP Server**                    | 22 tools — forecast, compare, diagnostics, reporting, trust, etc. |
+| **MCP Server**                    | Forecast/orchestration plus XAI/trust MCP tools                    |
 | **A2A Protocol**                  | JSON-RPC based agent-to-agent communication with task queue  |
 | **LangChain**                     | 13 natively integrated tools                                 |
 | **CrewAI / AutoGen / Smolagents** | Per-framework adapters                                       |
@@ -983,6 +984,13 @@ bash scripts/install_mcp.sh --base-url "http://127.0.0.1:11435"
 
 ### Tool contracts (current)
 
+Current MCP registration ships 22 tools:
+
+- 15 core forecasting/orchestration tools
+- 7 XAI/trust tools
+
+#### Core forecasting/orchestration tools
+
 | Tool                     | Backend endpoint(s)                         | Key args                                                        | Return shape                            |
 | ------------------------ | ------------------------------------------- | --------------------------------------------------------------- | --------------------------------------- |
 | `tollama_health`         | `GET /v1/health`, `GET /api/version`        | `base_url?`, `timeout?`                                         | `{healthy, health, version}`            |
@@ -1000,6 +1008,18 @@ bash scripts/install_mcp.sh --base-url "http://127.0.0.1:11435"
 | `tollama_recommend`      | registry metadata + capabilities            | `horizon`, covariate flags, `top_k`, `allow_restricted_license` | ranked recommendation payload           |
 | `tollama_pull`           | `POST /api/pull` (non-stream)               | `model`, `accept_license?`, `base_url?`, `timeout?`             | daemon pull result JSON                 |
 | `tollama_show`           | `POST /api/show`                            | `model`, `base_url?`, `timeout?`                                | daemon show payload JSON                |
+
+#### XAI/trust tools
+
+| Tool                        | Backend endpoint(s)              | Key args                                        | Return shape                         |
+| --------------------------- | -------------------------------- | ----------------------------------------------- | ------------------------------------ |
+| `tollama_explain`           | `POST /api/xai/explain-decision` | `request.forecast_result`, optional trust/eval  | decision explanation payload         |
+| `tollama_trust_score`       | `POST /api/xai/trust-breakdown`  | `request.trust_score`, `request.metrics`        | trust breakdown payload              |
+| `tollama_model_card`        | `POST /api/xai/model-card`       | `request.model_info`, optional eval/governance  | model card JSON or markdown payload  |
+| `tollama_gate_decision`     | `POST /api/xai/gate-decision`    | `request.context`, `request.payload`            | trust-gate decision payload          |
+| `tollama_batch_analyze`     | `POST /api/xai/batch-analyze`    | `request.items[]`                               | batch trust-analysis payload         |
+| `tollama_alerts_configure`  | `POST /api/xai/alerts/configure` | `request.thresholds[]`                          | alert configuration payload          |
+| `tollama_alerts_check`      | `POST /api/xai/alerts/check`     | `request.context`, `request.payload`            | triggered alerts payload             |
 
 Notes:
 
