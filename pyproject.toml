@@ -127,7 +127,7 @@ runner_lag_llama = [
   "huggingface_hub>=0.20,<2.0",
   "numpy>=1.26,<3.0",
   "pandas>=2.0,<3.0",
-  "wandb==0.25.0",
+  "wandb==0.25.1",
 ]
 runner_patchtst = [
   "numpy>=1.26,<2.0",
