@@ -26,7 +26,7 @@ dependencies = [
   "fastapi>=0.111.0,<1.0.0",
   "huggingface_hub>=0.20,<2.0",
   "httpx>=0.27.0,<1.0.0",
-  "pandas>=2.0,<3.0",
+  "pandas>=2.0,<4.0",
   "pydantic>=2.0,<3.0",
   "python-multipart>=0.0.9,<1.0",
   "pyyaml>=6.0,<7.0",
@@ -73,7 +73,7 @@ mcp = [
   "httpx>=0.27.0,<1.0.0",
 ]
 langchain = [
-  "langchain-core>=0.2,<1.0",
+  "langchain-core>=0.2,<2.0",
 ]
 metrics = [
   "prometheus-client>=0.20,<1.0",
@@ -85,54 +85,54 @@ notebooks = [
   "plotly>=5.22,<7.0",
 ]
 ingest = [
-  "pyarrow>=15.0,<20.0",
+  "pyarrow>=15.0,<24.0",
 ]
 runner_torch = [
   "chronos-forecasting>=2.0",
   "granite-tsfm>=0.3.0,<0.4",
   "torch>=2.0",
-  "pandas>=2.0,<3.0",
+  "pandas>=2.0,<4.0",
   "numpy>=1.26,<3.0",
 ]
 runner_timesfm = [
   "numpy>=1.26,<3.0",
-  "pandas>=2.0,<3.0",
+  "pandas>=2.0,<4.0",
   "huggingface_hub>=0.20,<2.0",
   "timesfm[torch] @ git+https://github.com/google-research/timesfm.git@2dcc66fbfe2155adba1af66aa4d564a0ee52f61e",
 ]
 runner_uni2ts = [
   "uni2ts>=2.0.0",
   "numpy>=1.26,<3.0",
-  "pandas>=2.0,<3.0",
+  "pandas>=2.0,<4.0",
   "huggingface_hub>=0.20,<2.0",
-  "gluonts>=0.14.0,<0.16.0",
+  "gluonts>=0.14.0,<0.17.0",
 ]
 runner_sundial = [
   "transformers>=4.40.1,<6.0",
   "torch>=2.0",
   "numpy>=1.26,<3.0",
-  "pandas>=2.0,<3.0",
+  "pandas>=2.0,<4.0",
   "huggingface_hub>=0.20,<2.0",
 ]
 runner_toto = [
   "toto-ts>=0.1.4",
   "torch>=2.5",
   "numpy>=1.26,<3.0",
-  "pandas>=2.0,<3.0",
+  "pandas>=2.0,<4.0",
 ]
 runner_lag_llama = [
   "lag-llama @ git+https://github.com/time-series-foundation-models/lag-llama.git",
-  "gluonts>=0.14.0,<0.16.0",
-  "lightning>=2.0,<2.2",
+  "gluonts>=0.14.0,<0.17.0",
+  "lightning>=2.0,<2.7",
   "huggingface_hub>=0.20,<2.0",
   "numpy>=1.26,<3.0",
-  "pandas>=2.0,<3.0",
-  "wandb==0.25.0",
+  "pandas>=2.0,<4.0",
+  "wandb==0.25.1",
 ]
 runner_patchtst = [
-  "numpy>=1.26,<2.0",
-  "torch>=2.2,<2.4",
-  "transformers>=4.40.1,<4.48",
+  "numpy>=1.26,<3.0",
+  "torch>=2.2,<2.12",
+  "transformers>=4.40.1,<5.6",
 ]
 runner_tide = [
   "u8darts>=0.30.0",
@@ -140,14 +140,14 @@ runner_tide = [
 ]
 runner_nhits = [
   "neuralforecast>=1.7.0",
-  "numpy>=1.26,<2.0",
+  "numpy>=1.26,<3.0",
   "pytorch-lightning>=2.0,<3.0",
   "scipy>=1.10,<2.0",
   "torch>=2.2",
 ]
 runner_nbeatsx = [
   "neuralforecast>=1.7.0",
-  "numpy>=1.26,<2.0",
+  "numpy>=1.26,<3.0",
   "pytorch-lightning>=2.0,<3.0",
   "scipy>=1.10,<2.0",
   "torch>=2.2",
@@ -156,14 +156,14 @@ runner_timer = [
   "transformers>=4.40.1,<6.0",
   "torch>=2.0",
   "numpy>=1.26,<3.0",
-  "pandas>=2.0,<3.0",
+  "pandas>=2.0,<4.0",
   "huggingface_hub>=0.20,<2.0",
 ]
 runner_timemixer = [
   "transformers>=4.40.1,<6.0",
   "torch>=2.0",
   "numpy>=1.26,<3.0",
-  "pandas>=2.0,<3.0",
+  "pandas>=2.0,<4.0",
   "huggingface_hub>=0.20,<2.0",
 ]
 runner_forecastpfn = [
