@@ -25,7 +25,7 @@ TSFMs are becoming practical building blocks for forecasting, but **the path fro
 
 ---
 
-## Quickstart (5분)
+## Quickstart (5 min)
 
 ```bash
 # Terminal 1: Install & run daemon
@@ -135,7 +135,7 @@ Tollama can **invoke TSFMs as tools when forecasting is part of a broader workfl
 | **MCP Server**                    | [docs/agent-tools.md](docs/agent-tools.md)              |
 | **CrewAI / AutoGen / Smolagents** | [docs/agent-tools.md](docs/agent-tools.md)              |
 | **A2A Protocol**                  | [docs/a2a-integration.md](docs/a2a-integration.md)      |
-| **OpenClaw Skill**                | `skills/tollama-forecast/SKILL.md`                      |
+| **OpenClaw Skill**                | [skills/tollama-forecast/SKILL.md](skills/tollama-forecast/SKILL.md) |
 
 ---
 
