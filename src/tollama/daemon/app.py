@@ -3908,15 +3908,14 @@ def _resolve_model_capabilities(
     model_name: str,
     manifest: dict[str, Any],
 ) -> ModelCapabilities | None:
-    from_manifest = _manifest_capabilities(manifest)
-    if from_manifest is not None:
-        return from_manifest
-
     try:
         spec = get_model_spec(model_name)
     except KeyError:
-        return None
-    return spec.capabilities
+        return _manifest_capabilities(manifest)
+
+    if spec.capabilities is not None:
+        return spec.capabilities
+    return _manifest_capabilities(manifest)
 
 
 def _dedupe_preserve_order(values: list[str]) -> list[str]:

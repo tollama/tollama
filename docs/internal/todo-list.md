@@ -115,6 +115,7 @@ Canonical inventories:
   - TODO: 추가 최적화 및 기능 확장
 - [~] (R) 각 모델별 지원 기능 체크리스트 유지
   - 현재: covariates 중심 capability matrix는 문서화됨
+  - 현재: `nhits`/`nbeatsx`는 numeric `past/future/static_covariates` 지원으로 정리되었고, `tide`는 target-only capability로 문서/registry/daemon이 동기화됨
   - TODO: 멀티변량/샘플링/최대 context/horizon까지 체크리스트 고도화
 
 ---
@@ -151,6 +152,7 @@ Canonical inventories:
 
 - [x] (P1) covariates contract 확정 + strict/best_effort 동작 통일
 - [x] (P1) 모델별 공변량 매핑 구현 + 호환성 매트릭스 제공(문서 + `/api/info`)
+  - 현재: daemon capability preflight가 registry-first로 동작해 stale local manifest보다 현재 capability matrix를 우선 사용함
 - [~] (P1) 데이터 어댑터(패치/바이닝/연속값) 공통 모듈화
 
 ### Stage 3 (P2): "고성능/의존성 최소화(선택 트랙)"

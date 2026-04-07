@@ -16,6 +16,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   and XAI/trust routes
 - Upgraded development status from Alpha to Beta (pyproject.toml classifier)
 - Synced TimesFM and Moirai registry capability metadata with their implemented covariate support
+- Synced TiDE, N-HiTS, and N-BEATSx capability metadata/docs with current runner behavior and made daemon covariate preflight prefer current registry capabilities over stale installed manifest copies
+- Synced raw HTTP API docs with current error body semantics (`detail`/`hint`, validation as HTTP `400`) and runtime telemetry semantics for `ForecastResponse.usage`
 - Auto-forecast routing modes now honor benchmark-backed routing manifests before falling back to heuristics
 
 ### Added

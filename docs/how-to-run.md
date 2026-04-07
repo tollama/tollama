@@ -52,7 +52,7 @@ Additional docs:
 > [!NOTE]
 > `timesfm` models may take several minutes to compile on the first run. The default timeout has been increased to 5 minutes to accommodate this, but slower machines may require even more time.
 
-Sundial is target-only in the current runner; do not include covariates in Sundial requests.
+Sundial and TiDE are target-only in the current runners; do not include covariates or static features in those requests.
 Toto supports target + past numeric covariates; known-future/static/categorical covariates are unsupported.
 Timer, TimeMixer, and ForecastPFN are currently target-only runner integrations and return
 canonical mean forecasts without quantiles.

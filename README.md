@@ -69,16 +69,12 @@ Tollama keeps TSFMs and neural baselines behind the same forecast contract.
 Use `tollama run`, `POST /api/forecast`, the Python SDK, or agent integrations
 without changing the request shape.
 
-The human-facing model guide lives in `docs/models.md`, while the
+The canonical human-facing inventory lives in `docs/models.md`, while the
 machine-readable source of truth lives in `model-registry/registry.yaml`.
-When `--output` is set, Tollama Core writes a reusable bundle:
-`result.json`, `routing.json`, `leaderboard.csv`, plus a legacy
+The table below is a quick snapshot of the current forecast families. When
+`--output` is set, Tollama Core writes a reusable bundle: `result.json`,
+`routing.json`, `leaderboard.csv`, plus a legacy
 `benchmark_<fingerprint>.json` compatibility file.
-
-## Supported Models
-
-Tollama ships **14 models**: 7 time series foundation models (TSFMs) and 7 neural baselines.
-**All 14 models share the exact same Core interface** — `tollama run`, `POST /api/forecast`, and the Python SDK — no extra configuration or training steps required regardless of model type.
 
 | Model              | Provider                | Type            | Covariates    |
 | ------------------ | ----------------------- |:---------------:|:-------------:|
@@ -90,9 +86,9 @@ Tollama ships **14 models**: 7 time series foundation models (TSFMs) and 7 neura
 | Toto Open Base 1.0 | Datadog                 | TSFM            | Past only     |
 | Lag-Llama          | TSFM Community          | TSFM            | Target only   |
 | PatchTST           | IBM Granite             | Neural Baseline | Target only   |
-| TiDE               | Unit8 / Darts           | Neural Baseline | Past + Future |
-| N-HiTS             | Nixtla / NeuralForecast | Neural Baseline | Target only   |
-| N-BEATSx           | Nixtla / NeuralForecast | Neural Baseline | Target only   |
+| TiDE               | Unit8 / Darts           | Neural Baseline | Target only   |
+| N-HiTS             | Nixtla / NeuralForecast | Neural Baseline | Past + Future + Static |
+| N-BEATSx           | Nixtla / NeuralForecast | Neural Baseline | Past + Future + Static |
 | TimeMixer          | Tsinghua / THUML        | Neural Baseline | Target only   |
 | Timer              | Tsinghua / THUML        | Neural Baseline | Target only   |
 | ForecastPFN        | PFN Research            | Neural Baseline | Target only   |
@@ -403,7 +399,7 @@ agent systems and orchestration layers.
 | --------------------------------- | ------------------------------------------------------------ |
 | **MCP Server**                    | Forecast/orchestration plus XAI/trust MCP tools                    |
 | **A2A Protocol**                  | JSON-RPC based agent-to-agent communication with task queue  |
-| **LangChain**                     | 13 natively integrated tools                                 |
+| **LangChain**                     | Native tool wrappers maintained alongside the core API surface |
 | **CrewAI / AutoGen / Smolagents** | Per-framework adapters                                       |
 | **OpenClaw Skill**                | OpenAI tool schema + shell scripts                           |
 

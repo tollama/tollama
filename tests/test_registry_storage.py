@@ -182,11 +182,15 @@ def test_registry_loads_required_model_specs() -> None:
         "install_command": 'python -m pip install -e ".[dev,runner_tide]"',
         "notes": (
             "TiDE runner supports deterministic forecasts and best-effort requested "
-            "quantiles when runtime probabilistic outputs are available. When quantiles "
-            "cannot be produced, responses explicitly fall back to mean-only forecasts "
-            "with warnings."
+            "quantiles when runtime probabilistic outputs are available. Covariates and "
+            "static features are currently unsupported; when quantiles cannot be produced, "
+            "responses explicitly fall back to mean-only forecasts with warnings."
         ),
     }
+    assert tide.capabilities is not None
+    assert tide.capabilities.past_covariates_numeric is False
+    assert tide.capabilities.future_covariates_numeric is False
+    assert tide.capabilities.static_covariates is False
 
     nhits = registry["nhits"]
     assert nhits.family == "nhits"
@@ -200,12 +204,17 @@ def test_registry_loads_required_model_specs() -> None:
         "install_command": 'python -m pip install -e ".[dev,runner_nhits]"',
         "notes": (
             "N-HiTS runner supports canonical point forecasts (single/multi series) "
-            "via runtime NeuralForecast inference. Pull is manifest-only (local source, "
-            "no Hugging Face snapshot/auth required). Requested quantiles and covariates "
-            "are currently best-effort limitations and return explicit response "
-            "warnings."
+            "via runtime NeuralForecast inference with numeric past/future/static "
+            "exogenous inputs in practical best-effort mode. Pull is manifest-only "
+            "(local source, no Hugging Face snapshot/auth required). Requested "
+            "quantiles use backend outputs when available and otherwise fall back to "
+            "calibrated residual-based estimates with explicit warnings."
         ),
     }
+    assert nhits.capabilities is not None
+    assert nhits.capabilities.past_covariates_numeric is True
+    assert nhits.capabilities.future_covariates_numeric is True
+    assert nhits.capabilities.static_covariates is True
 
     nbeatsx = registry["nbeatsx"]
     assert nbeatsx.family == "nbeatsx"
@@ -219,13 +228,17 @@ def test_registry_loads_required_model_specs() -> None:
         "install_command": 'python -m pip install -e ".[dev,runner_nbeatsx]"',
         "notes": (
             "N-BEATSx runner supports canonical single/multi-series forecasts via runtime "
-            "NeuralForecast inference with stricter input validation. Pull is manifest-only "
-            "(local source, no Hugging Face snapshot/auth required). Requested quantiles "
-            "are best-effort (returned when backend probabilistic outputs are exposed, "
-            "otherwise omitted with explicit warnings). Covariates and static features are "
-            "currently ignored with explicit warnings."
+            "NeuralForecast inference with stricter input validation and numeric "
+            "past/future/static exogenous inputs in practical best-effort mode. Pull is "
+            "manifest-only (local source, no Hugging Face snapshot/auth required). "
+            "Requested quantiles are best-effort (returned when backend probabilistic "
+            "outputs are exposed, otherwise omitted with explicit warnings)."
         ),
     }
+    assert nbeatsx.capabilities is not None
+    assert nbeatsx.capabilities.past_covariates_numeric is True
+    assert nbeatsx.capabilities.future_covariates_numeric is True
+    assert nbeatsx.capabilities.static_covariates is True
 
     lag_llama = registry["lag-llama"]
     assert lag_llama.family == "lag_llama"

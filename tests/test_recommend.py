@@ -54,6 +54,25 @@ def test_recommend_models_includes_timesfm_for_numeric_covariates() -> None:
     assert "timesfm-2.5-200m" in recommended_models
 
 
+def test_recommend_models_includes_nhits_and_nbeatsx_for_numeric_static_covariates() -> None:
+    payload = recommend_models(
+        horizon=24,
+        freq="D",
+        has_past_covariates=True,
+        has_future_covariates=True,
+        has_static_covariates=True,
+        covariates_type="numeric",
+        top_k=50,
+    )
+
+    recommended_models = {item["model"] for item in payload["recommendations"]}
+    excluded_models = {item["model"]: item["reasons"] for item in payload["excluded"]}
+
+    assert {"nhits", "nbeatsx"} <= recommended_models
+    assert "tide" in excluded_models
+    assert "missing_static_covariates" in excluded_models["tide"]
+
+
 def test_recommend_models_excludes_restricted_license_by_default() -> None:
     payload = recommend_models(
         horizon=24,

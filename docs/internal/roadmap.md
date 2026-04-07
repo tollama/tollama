@@ -135,6 +135,8 @@ tollama/
 - Canonical schemas are implemented in `ForecastRequest`, `ForecastResponse`, `SeriesInput`, and `SeriesForecast`.
 - Auto-selection schemas are implemented in `AutoForecastRequest`, `AutoSelectionInfo`, and
   `AutoForecastResponse`.
+- Daemon capability preflight now prefers current registry metadata over stale installed
+  manifest capability copies when both are present.
 - Canonical request shape in production includes:
   - `model`, `horizon`, `series[]`, optional `quantiles[]`, optional `options`, optional `parameters`.
   - optional `response_options` (`narrative: true|false`, default `false`)
@@ -163,7 +165,7 @@ tollama/
 
 ### Planned work / TODO
 - Add explicit compatibility/versioning policy for canonical schema evolution.
-- Enable runner-level static covariate support (daemon pass-through/filtering is in place).
+- Expand runner-level static covariate support beyond the current N-HiTS/N-BEATSx paths.
 
 ## 4) Internal communication: daemon <-> runner protocol [~]
 ### Current implementation status
@@ -305,9 +307,11 @@ tollama/
   - variate-building adapter path and canonical output shaping
   - forecast/unload/hello RPC parity with other families
 - Additional runner families currently ship with narrower but production-wired adapters:
-  - `lag_llama`, `patchtst`, `nhits`, `nbeatsx`: canonical forecasting paths with family-specific
-    best-effort limits around covariates and/or quantiles
-  - `tide`: deterministic mean forecasts with best-effort quantile extraction
+  - `lag_llama`, `patchtst`: target-only canonical forecasting paths with family-specific
+    quantile/runtime limits
+  - `nhits`, `nbeatsx`: canonical forecasting paths with numeric past/future/static covariate
+    support plus family-specific quantile fallback
+  - `tide`: target-only deterministic mean forecasts with best-effort quantile extraction
   - `timer`, `timemixer`, `forecastpfn`: target-only canonical forecasting paths, mean forecasts
     first, quantiles omitted in the current adapters
 
@@ -640,7 +644,7 @@ Phase F - Product hardening:
 2. ~~Add per-family runtime bootstrap/install automation under `~/.tollama/runtimes/`.~~ ✓ Implemented.
 3. Expand structured runtime telemetry beyond current `/metrics` and `/api/usage` endpoints.
 4. Add cache/memory policy controls (LRU + limits + reclaim behavior).
-5. Enable static covariates in runner adapters/capability flags (daemon-side pass-through done).
+5. Expand static covariate support beyond N-HiTS/N-BEATSx and add stronger runner/registry parity checks.
 6. Add explicit license receipt files under `~/.tollama/licenses/`.
 7. Add dedicated per-model capabilities endpoint for API consumers.
 8. Expand developer docs and operational playbooks.

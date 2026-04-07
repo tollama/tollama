@@ -303,7 +303,7 @@ warning emission, and macro aggregation across series with defined values.
 | `timing` | object | no | `model_load_ms`, `inference_ms`, `total_ms` |
 | `explanation` | object | no | Explainability summaries (model-dependent) |
 | `narrative` | object | no | Natural-language summary (only when `response_options.narrative=true`) |
-| `usage` | object | no | Per-key usage snapshot at time of response |
+| `usage` | object | no | Runtime telemetry snapshot such as `runner`, `device`, `peak_memory_mb`, plus adapter-specific keys |
 
 #### `SeriesForecast`
 
@@ -372,42 +372,40 @@ Response (abbreviated):
 | Status | Meaning | Example cause |
 |---|---|---|
 | `200` | Success | Forecast completed |
-| `400` | Bad request | Missing `horizon`, covariate shape mismatch, invalid `quantiles` order, `series` + `data_url` both set |
+| `400` | Bad request | Missing `horizon`, field type mismatch, extra fields, covariate shape mismatch, invalid `quantiles` order, `series` + `data_url` both set |
 | `401` | Unauthorized | Missing or invalid `Authorization: Bearer` header |
 | `403` | Forbidden | Model requires license acceptance (`accept_license` not provided) |
 | `404` | Not found | Model not installed — run `tollama pull <model>` first |
 | `409` | Conflict | Runner process conflict during concurrent operation |
-| `422` | Validation error | Pydantic schema rejection — field type mismatch, extra fields |
+| `502` | Bad gateway | Runner returned an execution error or invalid upstream response |
 | `500` | Internal error | Unhandled exception in runner process |
 | `503` | Service unavailable | Runner process crashed or daemon unreachable |
 
 ---
 
-## Structured Error Envelope
+Request payload/schema validation is intentionally normalized to HTTP `400`
+rather than `422`.
 
-All error responses use a consistent JSON envelope:
+## HTTP Error Body
+
+Raw HTTP endpoints return a compact JSON body built around `detail`, with an
+optional `hint` when the daemon can suggest the next step:
 
 ```json
 {
-  "error": {
-    "code": "MODEL_MISSING",
-    "message": "model 'chronos2' is not installed; run: tollama pull chronos2",
-    "exit_code": 4
-  }
+  "detail": "model 'chronos2' is not installed; run: tollama pull chronos2",
+  "hint": "Run `tollama pull <model>` to install. Use `tollama info --json` to inspect available models."
 }
 ```
 
-| `code` | `exit_code` | HTTP status | Meaning |
+| Field | Type | Always present | Description |
 |---|---|---|---|
-| `INVALID_REQUEST` | `2` | 400 | Schema or validation failure |
-| `DAEMON_UNREACHABLE` | `3` | 503 | Daemon or runner not reachable |
-| `MODEL_MISSING` | `4` | 404 | Model not installed |
-| `LICENSE_REQUIRED` | `5` | 403 | Model requires license acceptance |
-| `PERMISSION_DENIED` | `5` | 401 | Authentication failure |
-| `TIMEOUT` | `6` | 504 | Request exceeded timeout |
-| `INTERNAL_ERROR` | `10` | 500 | Unexpected internal failure |
+| `detail` | string \| array \| object | yes | Human-readable or structured error detail |
+| `hint` | string | no | Actionable retry guidance when the daemon can provide one |
 
-The `hint` field may also appear alongside `message` with actionable next steps.
+Typed clients and agent integrations may map these raw HTTP failures into
+higher-level categories or exit codes, but the HTTP response body itself does
+not include `code` or `exit_code`.
 
 ---
 

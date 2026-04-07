@@ -1348,6 +1348,102 @@ def test_forecast_best_effort_ignores_unsupported_covariates_with_warning(
     assert passed_series.get("future_covariates") is None
 
 
+@pytest.mark.parametrize(
+    ("model", "family"),
+    [("nhits", "nhits"), ("nbeatsx", "nbeatsx")],
+)
+def test_forecast_uses_registry_capabilities_for_numeric_covariate_runners(
+    monkeypatch,
+    tmp_path,
+    model: str,
+    family: str,
+) -> None:
+    paths = TollamaPaths(base_dir=tmp_path / ".tollama")
+    monkeypatch.setenv("TOLLAMA_HOME", str(paths.base_dir))
+    install_from_registry(model, accept_license=False, paths=paths)
+
+    manifest_path = paths.manifest_path(model)
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["capabilities"] = {
+        "past_covariates_numeric": False,
+        "past_covariates_categorical": False,
+        "future_covariates_numeric": False,
+        "future_covariates_categorical": False,
+        "static_covariates": False,
+    }
+    manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True), encoding="utf-8")
+
+    runner_manager = _CapturingRunnerManager()
+    app = create_app(runner_manager=runner_manager)  # type: ignore[arg-type]
+    payload = {
+        "model": model,
+        "horizon": 2,
+        "quantiles": [],
+        "series": [
+            {
+                "id": "s1",
+                "freq": "D",
+                "timestamps": ["2025-01-01", "2025-01-02"],
+                "target": [1.0, 2.0],
+                "past_covariates": {"promo": [0.0, 1.0]},
+                "future_covariates": {"promo": [1.0, 1.0]},
+                "static_covariates": {"store_size": 1.5},
+            }
+        ],
+        "options": {},
+    }
+
+    with TestClient(app) as client:
+        response = client.post("/v1/forecast", json=payload)
+
+    assert response.status_code == 200
+    assert runner_manager.captured["family"] == family
+    passed_series = runner_manager.captured["params"]["series"][0]
+    assert passed_series["past_covariates"] == {"promo": [0.0, 1.0]}
+    assert passed_series["future_covariates"] == {"promo": [1.0, 1.0]}
+    assert passed_series["static_covariates"] == {"store_size": 1.5}
+
+
+def test_forecast_tide_drops_unsupported_covariates_before_runner_call(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    paths = TollamaPaths(base_dir=tmp_path / ".tollama")
+    monkeypatch.setenv("TOLLAMA_HOME", str(paths.base_dir))
+    install_from_registry("tide", accept_license=False, paths=paths)
+
+    runner_manager = _CapturingRunnerManager()
+    app = create_app(runner_manager=runner_manager)  # type: ignore[arg-type]
+    payload = {
+        "model": "tide",
+        "horizon": 2,
+        "quantiles": [],
+        "series": [
+            {
+                "id": "s1",
+                "freq": "D",
+                "timestamps": ["2025-01-01", "2025-01-02"],
+                "target": [1.0, 2.0],
+                "past_covariates": {"promo": [0.0, 1.0]},
+                "future_covariates": {"promo": [1.0, 1.0]},
+                "static_covariates": {"store_size": 1.5},
+            }
+        ],
+        "options": {},
+    }
+
+    with TestClient(app) as client:
+        response = client.post("/v1/forecast", json=payload)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["warnings"]
+    passed_series = runner_manager.captured["params"]["series"][0]
+    assert passed_series.get("past_covariates") is None
+    assert passed_series.get("future_covariates") is None
+    assert passed_series.get("static_covariates") is None
+
+
 def test_forecast_strict_rejects_unsupported_covariates_before_runner_call(
     monkeypatch,
     tmp_path,

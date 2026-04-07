@@ -17,9 +17,9 @@ docs should link here instead of repeating model counts or long support tables.
 | `toto-open-base-1.0` | `toto` | `Datadog/Toto-Open-Base-1.0` | Past only |
 | `lag-llama` | `lag_llama` | `time-series-foundation-models/Lag-Llama` | Target only |
 | `patchtst` | `patchtst` | `ibm-granite/granite-timeseries-patchtst` | Target only |
-| `tide` | `tide` | `tollama/tide-runner` | Past + Future |
-| `nhits` | `nhits` | `tollama/nhits-runner` | Target only |
-| `nbeatsx` | `nbeatsx` | `tollama/nbeatsx-runner` | Target only |
+| `tide` | `tide` | `tollama/tide-runner` | Target only |
+| `nhits` | `nhits` | `tollama/nhits-runner` | Past + Future + Static |
+| `nbeatsx` | `nbeatsx` | `tollama/nbeatsx-runner` | Past + Future + Static |
 | `timer-base` | `timer` | `thuml/Timer` | Target only |
 | `timemixer-base` | `timemixer` | `thuml/timemixer` | Target only |
 | `forecastpfn` | `forecastpfn` | `abacusai/ForecastPFN` | Target only |
@@ -171,22 +171,22 @@ See `docs/covariates.md` for the full compatibility matrix and model-family mapp
 
 Compatibility snapshot:
 
-| Family | Past Numeric | Past Categorical | Known-Future Numeric | Known-Future Categorical |
-|---|---|---|---|---|
-| Chronos-2 | Yes | Yes | Yes | Yes |
-| Granite TTM | Yes | No | Yes | No |
-| TimesFM 2.5 | Yes | No | Yes | No |
-| Uni2TS / Moirai | Yes | No | Yes | No |
-| Sundial | No | No | No | No |
-| Toto Open Base 1.0 | Yes | No | No | No |
-| Lag-Llama | No | No | No | No |
-| PatchTST | No | No | No | No |
-| TiDE | Yes | No | Yes | No |
-| N-HiTS | No | No | No | No |
-| N-BEATSx | No | No | No | No |
-| Timer | No | No | No | No |
-| TimeMixer | No | No | No | No |
-| ForecastPFN | No | No | No | No |
+| Family | Past Numeric | Past Categorical | Known-Future Numeric | Known-Future Categorical | Static |
+|---|---|---|---|---|---|
+| Chronos-2 | Yes | Yes | Yes | Yes | No |
+| Granite TTM | Yes | No | Yes | No | No |
+| TimesFM 2.5 | Yes | No | Yes | No | No |
+| Uni2TS / Moirai | Yes | No | Yes | No | No |
+| Sundial | No | No | No | No | No |
+| Toto Open Base 1.0 | Yes | No | No | No | No |
+| Lag-Llama | No | No | No | No | No |
+| PatchTST | No | No | No | No | No |
+| TiDE | No | No | No | No | No |
+| N-HiTS | Yes | No | Yes | No | Yes |
+| N-BEATSx | Yes | No | Yes | No | Yes |
+| Timer | No | No | No | No | No |
+| TimeMixer | No | No | No | No | No |
+| ForecastPFN | No | No | No | No | No |
 
 TimesFM XReg knobs are available at `parameters.timesfm`:
 `xreg_mode`, `ridge`, `force_on_cpu`.
@@ -436,6 +436,7 @@ TiDE is integrated for inference via the dedicated `tide` runner family.
   - returns deterministic mean forecasts for valid requests
   - attempts to produce requested quantiles using probabilistic sampling
   - explicitly falls back to mean-only responses (with warning) when quantiles are unavailable in the active runtime/backend
+  - treats requests as target-only history; `past_covariates`, `future_covariates`, and `static_covariates` are unsupported in the current adapter path
 
 Runtime tuning knobs (TiDE):
 
@@ -460,7 +461,7 @@ N-HiTS is integrated for real inference via the dedicated `nhits` runner family.
   - performs runtime NeuralForecast inference for canonical single/multi-series forecast requests
   - validates edge cases more strictly (finite numeric targets, timestamp parsing, and per-series frequency sanity)
   - uses backend quantile outputs when available; otherwise applies calibrated residual-based quantile fallback with explicit warnings
-  - supports numeric covariates/static features in practical best-effort mode (with strict-mode validation via `parameters.covariates_mode`)
+  - supports numeric past/future/static covariates in the current runner path (with strict-mode validation via `parameters.covariates_mode`)
 
 Runtime tuning & limitations (N-HiTS):
 
@@ -495,7 +496,7 @@ N-BEATSx is integrated for real inference via the dedicated `nbeatsx` runner fam
   - performs runtime NeuralForecast inference for canonical single/multi-series forecast requests
   - validates edge cases more strictly (finite numeric targets, timestamp parsing, and per-series frequency sanity)
   - uses backend quantile outputs when available; otherwise applies calibrated residual-based quantile fallback with explicit warnings
-  - supports numeric covariates/static features in practical best-effort mode (with strict-mode validation via `parameters.covariates_mode`)
+  - supports numeric past/future/static covariates in the current runner path (with strict-mode validation via `parameters.covariates_mode`)
 
 Runtime tuning & limitations (N-BEATSx):
 
