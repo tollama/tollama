@@ -169,7 +169,7 @@ tollama/
 ### Current implementation status
 - JSON-over-stdio line protocol is implemented in `tollama.core.protocol`.
 - Request/response primitives are implemented (`ProtocolRequest`, `ProtocolResponse`).
-- Supported method set includes `load`, `unload`, `forecast`, `hello`.
+- Supported method set includes `capabilities`, `load`, `unload`, `forecast`, `ping`, and `hello`.
 - Active handlers today:
   - `mock`: `hello`, `forecast`
   - `torch`: `hello`, `load`, `unload`, `forecast`
@@ -225,6 +225,14 @@ tollama/
   - `runner_uni2ts`
   - `runner_sundial`
   - `runner_toto`
+  - `runner_lag_llama`
+  - `runner_patchtst`
+  - `runner_tide`
+  - `runner_nhits`
+  - `runner_nbeatsx`
+  - `runner_timer`
+  - `runner_timemixer`
+  - `runner_forecastpfn`
 - Default `mock` and `torch` launches use interpreter-module commands.
 - `timesfm` and `uni2ts` launch via console entrypoints intended for separate env/runtime installs.
 - **Per-family venv auto-bootstrap** implemented under `~/.tollama/runtimes/<family>/venv/`.
@@ -277,7 +285,9 @@ tollama/
 
 ## 10) Runner internals [~]
 ### Current implementation status
-- `mock`, `torch`, `timesfm`, `uni2ts`, `sundial`, and `toto` runner loops are implemented with stdio RPC handling.
+- `mock`, `torch`, `timesfm`, `uni2ts`, `sundial`, `toto`, `lag_llama`, `patchtst`, `tide`,
+  `nhits`, `nbeatsx`, `timer`, `timemixer`, and `forecastpfn` runner loops are implemented with
+  stdio RPC handling.
 - Torch runner router supports:
   - `ChronosAdapter` using `predict_df` + history/future dataframes
   - `GraniteTTMAdapter` using `future_time_series`, `control_columns`, and `conditional_columns`
@@ -294,6 +304,12 @@ tollama/
 - Toto runner supports:
   - variate-building adapter path and canonical output shaping
   - forecast/unload/hello RPC parity with other families
+- Additional runner families currently ship with narrower but production-wired adapters:
+  - `lag_llama`, `patchtst`, `nhits`, `nbeatsx`: canonical forecasting paths with family-specific
+    best-effort limits around covariates and/or quantiles
+  - `tide`: deterministic mean forecasts with best-effort quantile extraction
+  - `timer`, `timemixer`, `forecastpfn`: target-only canonical forecasting paths, mean forecasts
+    first, quantiles omitted in the current adapters
 
 ### Planned work / TODO
 - Add cache policy controls (LRU, max loaded models, memory thresholds).
@@ -302,42 +318,21 @@ tollama/
 
 ## 11) Public API + CLI [x]
 ### Current implementation status
-- Implemented HTTP endpoints:
-  - `GET /metrics` (requires optional `prometheus-client`)
-  - `GET /v1/health`
-  - `GET /v1/models`
-  - `POST /v1/models/pull`
-  - `DELETE /v1/models/{name}`
-  - `POST /v1/forecast`
-  - `GET /api/version`
-  - `GET /api/info`
-  - `GET /api/tags`
-  - `POST /api/show`
-  - `POST /api/pull`
-  - `DELETE /api/delete`
-  - `GET /api/ps`
-  - `POST /api/forecast`
-  - `POST /api/forecast/progressive` (SSE)
-  - `POST /api/forecast/upload`
-  - `POST /api/ingest/upload`
-  - `POST /api/auto-forecast`
-  - `POST /api/analyze`
-  - `POST /api/generate`
-  - `POST /api/counterfactual`
-  - `POST /api/scenario-tree`
-  - `POST /api/report`
-  - `POST /api/what-if`
-  - `POST /api/pipeline`
-  - `POST /api/compare`
-  - `GET /api/usage`
-  - `GET /api/events`
-  - `GET /api/modelfiles`
-  - `GET /api/modelfiles/{name}`
-  - `POST /api/modelfiles`
-  - `DELETE /api/modelfiles/{name}`
-  - `GET /.well-known/agent-card.json`
-  - `GET /.well-known/agent.json` (legacy compatibility alias)
-  - `POST /a2a`
+- Implemented HTTP endpoints are maintained canonically in `docs/api-reference.md` and currently include:
+  - system + observability: `/v1/health`, `/api/version`, `/api/info`, `/api/usage`,
+    `/api/events`, `/metrics`
+  - model lifecycle: `/api/tags`, `/api/show`, `/api/pull`, `/api/delete`, `/api/ps`,
+    `/v1/models`, `/v1/models/pull`, `/v1/models/{name}`
+  - forecast core: `/api/validate`, `/api/forecast`, `/api/forecast/stream`,
+    `/api/forecast/progressive`, `/api/forecast/upload`, `/v1/forecast`, `/api/auto-forecast`
+  - structured analysis: `/api/analyze`, `/api/generate`, `/api/counterfactual`,
+    `/api/scenario-tree`, `/api/what-if`, `/api/report`, `/api/pipeline`, `/api/compare`,
+    `/api/explain-decision`
+  - advanced/post-processing: `/api/reconcile`, `/api/conformal`
+  - dashboard + profiles: `/api/dashboard/state`, `/dashboard`, `/api/modelfiles*`
+  - trust/XAI: `/api/xai/*` routes for explanation, trust breakdown, model cards, calibration,
+    alerts, cache controls, and dashboard history views
+  - agent discovery + RPC: `/.well-known/agent-card.json`, `/.well-known/agent.json`, `/a2a`
 - A2A JSON-RPC methods currently implemented:
   - `message/send`
   - `message/stream` (SSE)
@@ -354,8 +349,13 @@ tollama/
   - installed model capabilities
   - available model capabilities
   - runner statuses
-- CLI command surface today:
-  - `serve`, `quickstart`, `pull`, `list`, `ps`, `show`, `rm`, `run`, `info`, `config`, `modelfile`
+- CLI command surface today includes:
+  - top-level commands: `serve`, `open`, `dashboard`, `pull`, `info`, `doctor`, `list`, `ps`,
+    `show`, `explain`, `rm`, `run`, `quickstart`, `benchmark`, `export`, `quantize`
+  - subcommand groups: `config`, `runtime`, `routing`, `modelfile`, `dev`, `xai`
+  - XAI subcommands: `explain-decision`, `trust-score`, `model-card`, `record-outcome`,
+    `history`, `connectors-health`, `calibration`, `gate-decision`, `batch-analyze`,
+    `alerts-configure`, `alerts-check`
 - CLI behavior includes:
   - warning output for forecast responses that include `warnings[]`
   - covariates capability summaries in `tollama info`
@@ -401,9 +401,12 @@ tollama/
   - schema/validation failure scenarios
   - strict vs best-effort compatibility behavior
   - Chronos/Granite/TimesFM/Uni2TS adapter wiring via mocks/helpers
-- Baseline checks currently pass:
+- Baseline gates remain:
   - `ruff check .`
   - `pytest -q` (heavy integration tests stay opt-in)
+- Current workspace verification notes:
+  - repository-wide Ruff cleanup is still pending for existing `UP038` findings
+  - full `pytest -q` requires a Python 3.11+ environment consistent with `pyproject.toml`
 - Optional real-model integration matrix was re-validated on `2026-02-17`:
   - pass: `chronos2`, `granite-ttm-r2`, `timesfm-2.5-200m`, `moirai-2.0-R-small`,
     `sundial-base-128m`
@@ -555,7 +558,8 @@ Phase F - Product hardening:
   - default base URL `http://localhost:11435`, default timeout `10s`
   - optional API key auth header support
   - endpoint coverage: health/version, tags/ps/info, show/pull/delete,
-    forecast/auto-forecast/analyze/what-if/pipeline/compare, validate
+    forecast/auto-forecast/analyze/generate/counterfactual/scenario-tree/report/what-if/
+    pipeline/compare plus trust/XAI helper routes used by MCP tools
   - HTTP/status/request failures mapped into typed exceptions with category metadata
     (`INVALID_REQUEST`, `DAEMON_UNREACHABLE`, `MODEL_MISSING`, `LICENSE_REQUIRED`,
     `PERMISSION_DENIED`, `TIMEOUT`, `INTERNAL_ERROR`)
@@ -570,8 +574,11 @@ Phase F - Product hardening:
   - `tollama_forecast` is non-streaming and validates request via `ForecastRequest`
   - `tollama_auto_forecast` validates request via `AutoForecastRequest`
   - `tollama_analyze` validates request via `AnalyzeRequest`
+  - `tollama_generate`, `tollama_counterfactual`, `tollama_scenario_tree`, and `tollama_report`
+    validate canonical request schemas before HTTP dispatch
   - `tollama_what_if` validates request via `WhatIfRequest`
   - `tollama_pipeline` validates request via `PipelineRequest`
+  - XAI/trust tools dispatch through the shared client to `/api/xai/*` routes
   - tool failures are emitted as JSON payload with `{error:{category,exit_code,message}}`
 - Optional dependency bundle added in `pyproject.toml`:
   - `.[mcp]` with `mcp>=1.0`
@@ -643,6 +650,7 @@ Phase F - Product hardening:
 - `[x]` `Granite`, `timesfm`, and `uni2ts` shipment markers now reflect implementation state.
 - `[x]` Endpoint inventory in section 11 is aligned with current API routes.
 - `[x]` Phased checklist in section 15 reflects current delivery status.
-- `[x]` Baseline verification state (`ruff check .`, `pytest -q`) is reflected from latest passing run.
+- `[x]` Baseline verification notes now reflect current repo constraints (`ruff` debt remaining,
+  `pytest` requiring Python 3.11+).
 - `[x]` Optional real-model integration matrix status is reflected with date and outcomes.
 - `[x]` Migration notes in section 2 remain aligned with active repository layout.

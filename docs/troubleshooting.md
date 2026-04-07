@@ -283,7 +283,8 @@ tollama runtime list --json
 Safe remediation (if rebuild did not complete cleanly):
 ```bash
 # Rebuild only the affected runtime family
-# Examples: torch, timesfm, uni2ts, sundial, toto, lag_llama, patchtst, tide
+# Examples: torch, timesfm, uni2ts, sundial, toto, lag_llama, patchtst, tide,
+# nhits, nbeatsx, timer, timemixer, forecastpfn
 tollama runtime update <family>
 
 # Or refresh all currently installed runtime families

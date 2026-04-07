@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, StrictInt, StrictStr, ValidationError
 
@@ -36,10 +37,14 @@ class RoutingManifest(BaseModel):
     version: StrictInt = 1
     generated_at: StrictStr | None = None
     run_id: StrictStr | None = None
+    eval_ref: StrictStr | None = None
+    forecast_id: StrictStr | None = None
     source: StrictStr | None = None
     routing: RoutingDefaults = Field(default_factory=RoutingDefaults)
     policy: StrictStr | None = None
     caveats: list[StrictStr] = Field(default_factory=list)
+    preprocessing_metadata: dict[str, Any] = Field(default_factory=dict)
+    routing_rationale: dict[str, dict[str, Any]] = Field(default_factory=dict)
 
 
 def get_routing_manifest_path(paths: TollamaPaths) -> Path:
@@ -61,14 +66,30 @@ def load_routing_manifest(*, paths: TollamaPaths | None = None) -> RoutingManife
     for candidate in candidates:
         if not candidate.exists():
             continue
-        payload = json.loads(candidate.read_text(encoding="utf-8"))
         try:
-            coerced = _coerce_manifest_payload(payload=payload, source_path=candidate)
-            return RoutingManifest.model_validate(coerced)
-        except ValidationError as exc:
-            raise ValueError(f"invalid routing manifest in {candidate}: {exc}") from exc
+            return load_routing_manifest_from_path(candidate)
+        except ValueError as exc:
+            raise ValueError(str(exc)) from exc
 
     return None
+
+
+def load_routing_manifest_from_path(path: str | Path) -> RoutingManifest:
+    """Load and normalize a routing manifest or benchmark result from a specific path."""
+    candidate = Path(path).expanduser()
+    if not candidate.exists():
+        raise ValueError(f"routing manifest not found: {candidate}")
+
+    try:
+        payload = json.loads(candidate.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError) as exc:
+        raise ValueError(f"unable to read routing manifest {candidate}: {exc}") from exc
+
+    try:
+        coerced = _coerce_manifest_payload(payload=payload, source_path=candidate)
+        return RoutingManifest.model_validate(coerced)
+    except ValidationError as exc:
+        raise ValueError(f"invalid routing manifest in {candidate}: {exc}") from exc
 
 
 def save_routing_manifest(
@@ -127,6 +148,8 @@ def _coerce_manifest_payload(*, payload: object, source_path: Path) -> dict[str,
             "version": 1,
             "generated_at": payload.get("generated_at"),
             "run_id": payload.get("run_id"),
+            "eval_ref": payload.get("eval_ref") or payload.get("run_id"),
+            "forecast_id": payload.get("forecast_id"),
             "source": f"benchmark_result:{source_path}",
             "routing": {
                 "default": recommendation.get("default"),
@@ -135,6 +158,11 @@ def _coerce_manifest_payload(*, payload: object, source_path: Path) -> dict[str,
             },
             "policy": recommendation.get("policy"),
             "caveats": recommendation.get("caveats", []),
+            "preprocessing_metadata": payload.get("preprocessing_metadata", {}),
+            "routing_rationale": (
+                payload.get("routing_rationale")
+                or recommendation.get("rationale", {})
+            ),
         }
 
     if _looks_like_routing_defaults(payload):

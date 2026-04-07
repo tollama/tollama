@@ -81,7 +81,8 @@ class ForecastDecomposer:
         Parameters
         ----------
         method : str
-            Decomposition method: "stl", "classical_additive", "classical_multiplicative", "moving_average"
+            Decomposition method: "stl", "classical_additive",
+            "classical_multiplicative", "moving_average"
         period : int, optional
             Seasonal period. Auto-detected if None.
         robust : bool

@@ -43,6 +43,12 @@ Authorization: Bearer <api-key>
 | GET | `/api/events` | SSE event stream |
 | GET | `/metrics` | Prometheus metrics (optional dependency) |
 
+### Dashboard
+
+| Method | Path | Purpose |
+|---|---|---|
+| GET | `/api/dashboard/state` | Aggregated dashboard bootstrap payload with partial-failure warnings |
+
 ### Modelfiles
 
 | Method | Path | Purpose |
@@ -126,6 +132,7 @@ Authorization: Bearer <api-key>
 | DELETE | `/api/xai/cache/invalidate` | Clear trust cache |
 | GET | `/api/xai/dashboard/agents` | List registered trust agents |
 | POST | `/api/xai/dashboard/trust` | Trust dashboard aggregation |
+| POST | `/api/xai/dashboard/history` | Trust history and trend snapshots |
 
 ### A2A
 
@@ -203,6 +210,14 @@ into a unified Decision Explanation.
 | `report_type` | string | no | `decision` or `explanation` (default: `decision`) |
 | `format` | string | no | Output format: `json` or `markdown` (default: `json`) |
 
+### `POST /api/xai/dashboard/history`
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `domains` | array of string | no | Filter to specific trust domains |
+| `limit` | integer | no | Maximum history rows per domain (default: `50`, max: `500`) |
+| `include_stats` | boolean | no | Include aggregated stats and trend summary |
+
 ---
 
 ## Forecast Request Schema
@@ -253,6 +268,11 @@ into a unified Decision Explanation.
 | `names` | array of string | — | Metrics to compute. Options: `"mape"`, `"mase"`, `"mae"`, `"rmse"`, `"smape"`, `"wape"`, `"rmsse"`, `"pinball"` |
 | `mase_seasonality` | integer ≥ 1 | `1` | Seasonality lag used for MASE normalization |
 
+Shared primitive formulas for `mae`, `mase`, `smape`, and `rmsse` follow
+`ts_autopilot.evaluation.metrics` in `tollama-eval`. The forecast API wraps
+those formulas with best-effort request-time behavior: overlap trimming,
+warning emission, and macro aggregation across series with defined values.
+
 #### `ResponseOptions`
 
 | Field | Type | Default | Description |
@@ -279,7 +299,7 @@ into a unified Decision Explanation.
 | `model` | string | yes | Model name used for the forecast |
 | `forecasts` | array of `SeriesForecast` | yes | One entry per input series |
 | `warnings` | array of string | no | Covariate drops, compatibility notices |
-| `metrics` | object | no | Accuracy metrics per series (only when `parameters.metrics` is set) |
+| `metrics` | object | no | Accuracy metrics per series plus `aggregate` macro averages over defined series (only when `parameters.metrics` is set) |
 | `timing` | object | no | `model_load_ms`, `inference_ms`, `total_ms` |
 | `explanation` | object | no | Explainability summaries (model-dependent) |
 | `narrative` | object | no | Natural-language summary (only when `response_options.narrative=true`) |

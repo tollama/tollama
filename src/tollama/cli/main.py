@@ -1,4 +1,4 @@
-"""Typer-based CLI for the tollama forecast decision trust layer."""
+"""Typer-based CLI for the tollama forecasting core."""
 
 from __future__ import annotations
 
@@ -45,13 +45,15 @@ from .client import (
 from .dev import dev_app
 from .info import collect_info
 
-app = typer.Typer(help="Ollama-style command-line interface for tollama.")
+app = typer.Typer(help="Ollama-style command-line interface for the tollama core.")
 config_app = typer.Typer(help="Manage local tollama defaults in ~/.tollama/config.json.")
 runtime_app = typer.Typer(help="Manage per-family isolated runner environments.")
+routing_app = typer.Typer(help="Manage benchmark-backed routing defaults.")
 modelfile_app = typer.Typer(help="Manage TSModelfile forecast profiles.")
 xai_app = typer.Typer(help="XAI explainability, trust scoring, and model card generation.")
 app.add_typer(config_app, name="config")
 app.add_typer(runtime_app, name="runtime")
+app.add_typer(routing_app, name="routing")
 app.add_typer(modelfile_app, name="modelfile")
 app.add_typer(dev_app, name="dev")
 app.add_typer(xai_app, name="xai")
@@ -471,6 +473,72 @@ def config_init(
     except OSError as exc:
         _exit_with_message(f"Error: unable to write {config_path}: {exc}", code=1)
     typer.echo(f"Wrote default config to {config_path}")
+
+
+@routing_app.command("show")
+def routing_show(
+    source: str | None = typer.Argument(
+        None,
+        help="Optional path to a Core `result.json` or `routing.json` artifact.",
+    ),
+    json_output: bool = typer.Option(False, "--json", help="Print compact JSON."),
+) -> None:
+    """Show the effective or explicitly provided routing manifest."""
+    from tollama.core.routing import (
+        get_routing_manifest_path,
+        load_routing_manifest,
+        load_routing_manifest_from_path,
+    )
+
+    paths = TollamaPaths.default()
+    try:
+        manifest = (
+            load_routing_manifest_from_path(source)
+            if source is not None
+            else load_routing_manifest(paths=paths)
+        )
+    except ValueError as exc:
+        _exit_with_message(f"Error: {exc}", code=1)
+
+    if manifest is None:
+        _exit_with_message("no routing manifest found", code=1)
+
+    payload = manifest.model_dump(mode="json", exclude_none=True)
+    if json_output:
+        typer.echo(json.dumps(payload, separators=(",", ":"), sort_keys=True))
+        return
+
+    typer.echo(_style_text("Routing manifest:", bold=True))
+    typer.echo(json.dumps(payload, indent=2, sort_keys=True))
+    if source is not None:
+        typer.echo(f"Loaded from: {Path(source).expanduser()}")
+    else:
+        typer.echo(f"Resolved save path: {get_routing_manifest_path(paths)}")
+
+
+@routing_app.command("apply")
+def routing_apply(
+    source: str = typer.Argument(
+        ...,
+        help="Path to a Core `result.json` or `routing.json` artifact to apply.",
+    ),
+    path: str | None = typer.Option(
+        None,
+        "--path",
+        help="Destination path. Defaults to ~/.tollama/routing.json.",
+    ),
+) -> None:
+    """Apply a benchmark artifact as the active local routing manifest."""
+    from tollama.core.routing import load_routing_manifest_from_path, save_routing_manifest
+
+    try:
+        manifest = load_routing_manifest_from_path(source)
+    except ValueError as exc:
+        _exit_with_message(f"Error: {exc}", code=1)
+
+    target = save_routing_manifest(manifest, paths=TollamaPaths.default(), path=path)
+    typer.echo(_style_text(f"Applied routing manifest to {target}", fg=_COLOR_SUCCESS))
+    typer.echo(json.dumps(manifest.routing.model_dump(mode="json", exclude_none=True), indent=2))
 
 
 @app.command("info")
@@ -1015,7 +1083,7 @@ def quickstart(
         help="Progress display mode: auto, on, or off.",
     ),
 ) -> None:
-    """Pull a model, run demo forecast, and print next-step commands."""
+    """Pull a model, run a demo forecast, and print Core next-step commands."""
     show_progress = _resolve_progress_enabled(progress)
     client = _make_client(base_url=base_url, timeout=timeout)
 
@@ -1068,10 +1136,15 @@ def quickstart(
     typer.echo("")
     typer.echo(_style_text("Next steps:", bold=True))
     typer.echo("  1. tollama list")
-    typer.echo("  2. tollama run mock --input examples/request.json --no-stream")
     typer.echo(
-        "  3. python -c \"from tollama import Tollama; "
-        "print(Tollama().models('available'))\"",
+        "  2. tollama benchmark examples/benchmark_data.json "
+        f"--models {model} --horizon 4 --folds 1 --output artifacts/benchmarks/demo",
+    )
+    typer.echo(
+        "  3. tollama routing apply artifacts/benchmarks/demo/result.json",
+    )
+    typer.echo(
+        "  4. tollama routing show",
     )
 
 
@@ -1079,7 +1152,7 @@ def quickstart(
 def benchmark(
     dataset: str = typer.Argument(
         ...,
-        help="Path to a JSON file containing series data with actuals.",
+        help="Path to a JSON file containing benchmark series data.",
     ),
     horizon: int = typer.Option(96, "--horizon", min=1, help="Forecast horizon."),
     models: str | None = typer.Option(
@@ -1093,7 +1166,7 @@ def benchmark(
     output: str | None = typer.Option(
         None,
         "--output",
-        help="Directory to save JSON results.",
+        help="Directory to save Core benchmark artifacts.",
     ),
     base_url: str = typer.Option(
         DEFAULT_BASE_URL,
@@ -1108,8 +1181,9 @@ def benchmark(
     """Run all models against a dataset and compare accuracy/latency."""
     from tollama.core.benchmark import (
         format_benchmark_table,
+        format_operator_summary,
         run_benchmark,
-        save_benchmark_results,
+        save_benchmark_bundle,
     )
     from tollama.core.schemas import ForecastRequest, ForecastResponse, SeriesInput
 
@@ -1199,12 +1273,17 @@ def benchmark(
 
     typer.echo("")
     typer.echo(format_benchmark_table(summary))
+    typer.echo("")
+    typer.echo(format_operator_summary(summary))
 
     if output:
-        out_path = save_benchmark_results(summary, Path(output))
-        typer.echo(
-            _style_text(f"\nResults saved to {out_path}", fg=_COLOR_SUCCESS)
-        )
+        artifact_paths = save_benchmark_bundle(summary, Path(output))
+        typer.echo(_style_text(f"\nArtifacts saved to {Path(output)}", fg=_COLOR_SUCCESS))
+        typer.echo(f"  - result.json: {artifact_paths['result']}")
+        typer.echo(f"  - routing.json: {artifact_paths['routing_manifest']}")
+        typer.echo(f"  - leaderboard.csv: {artifact_paths['leaderboard']}")
+        typer.echo(f"  - summary.md: {artifact_paths['operator_summary']}")
+        typer.echo(f"  - legacy summary: {artifact_paths['legacy_summary']}")
 
 
 @app.command("export")

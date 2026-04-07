@@ -1,0 +1,52 @@
+{
+  "version": 1,
+  "generated_at": "2026-04-06T12:00:00+00:00",
+  "run_id": "core-benchmark-ops-hourly-demo-20260406T120000Z",
+  "eval_ref": "core-benchmark-ops-hourly-demo-20260406T120000Z",
+  "forecast_id": "core-routing-candidate:core-benchmark-ops-hourly-demo-20260406T120000Z:chronos2",
+  "source": "tollama.core.benchmark",
+  "routing": {
+    "default": "chronos2",
+    "fast_path": "timesfm-2.5-200m",
+    "high_accuracy": "chronos2"
+  },
+  "policy": "Use default for general workloads; route latency-sensitive requests to fast_path; route accuracy-critical requests to high_accuracy.",
+  "caveats": [
+    "Routing recommendation is only as good as the benchmark dataset and fold design.",
+    "Latency can shift with hardware, daemon warm-up, and runner cache state."
+  ],
+  "preprocessing_metadata": {
+    "available": false,
+    "source": "benchmark_input",
+    "note": "No structured preprocessing metadata was attached to this Core benchmark run."
+  },
+  "routing_rationale": {
+    "default": {
+      "model": "chronos2",
+      "reason": "Best balanced benchmark profile for general workloads.",
+      "primary_metric": "mase",
+      "primary_metric_value": 0.84,
+      "latency_ms": 220.0,
+      "quality_rank": 1,
+      "latency_rank": 4
+    },
+    "fast_path": {
+      "model": "timesfm-2.5-200m",
+      "reason": "Lowest observed latency among successful benchmark runs.",
+      "primary_metric": "mase",
+      "primary_metric_value": 0.95,
+      "latency_ms": 72.0,
+      "quality_rank": 4,
+      "latency_rank": 1
+    },
+    "high_accuracy": {
+      "model": "chronos2",
+      "reason": "Best MASE among successful benchmark runs.",
+      "primary_metric": "mase",
+      "primary_metric_value": 0.84,
+      "latency_ms": 220.0,
+      "quality_rank": 1,
+      "latency_rank": 4
+    }
+  }
+}

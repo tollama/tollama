@@ -54,7 +54,8 @@ If publishing wheels/containers, keep this artifact in the release bundle.
 
 ### 2.4 Source provenance checks for non-PyPI pins
 
-`runner_timesfm` currently uses a Git commit pin (`timesfm[torch] @ git+...`).
+`runner_timesfm` currently uses a source-archive commit pin
+(`timesfm[torch,xreg] @ https://github.com/google-research/timesfm/archive/<commit>.tar.gz`).
 Before release:
 
 - Verify upstream license at that exact commit.
@@ -79,6 +80,19 @@ installed.
 - Validate auto-bootstrap runtime flow from a clean `TOLLAMA_HOME`.
 - Confirm `/api/info` redaction and capability visibility are stable.
 - Smoke test pull/list/show/run/ps/rm lifecycle end-to-end.
+- Validate the concrete-solution path:
+  - `bash examples/core_concrete_solution_demo.sh` syntax is clean.
+  - `python scripts/e2e_realdata/export_core_solution_input.py --help` works.
+  - `examples/core_solution_hourly_input.json` still matches the hourly-demand Core profile.
+  - `examples/core_solution_expected_output/` still matches the current Core artifact contract.
+  - the concrete-solution smoke tests pass:
+    - `tests/test_core_demo_script.py`
+    - `tests/test_checked_in_core_solution_input.py`
+    - `tests/test_checked_in_core_solution_expected_output.py`
+    - `tests/test_concrete_solution_demo_script.py`
+    - `tests/test_e2e_realdata_export_core_solution_input.py`
+    - `tests/test_core_benchmark_artifacts.py`
+    - `tests/test_routing.py`
 
 ## 5) Release decision record
 

@@ -2,9 +2,13 @@
 
 ## Install / Setup
 
-Install tollama, start the daemon, then verify with a demo forecast:
+Install tollama, start the daemon, then verify with the Core forecast path:
 ```bash
 python -m pip install tollama
+
+# recommended Core install: preprocessing + benchmark tooling
+python -m pip install "tollama[eval,preprocess]"
+
 # dev
 python -m pip install -e ".[dev]"
 
@@ -42,35 +46,6 @@ chronos2-small   torch    1.23 GB   2025-01-14T08:00:00Z
 Show raw metadata for one installed model:
 ```bash
 tollama show chronos2
-```
-
-Explain model capabilities, license, limits, and recommended use cases:
-```bash
-tollama explain chronos2
-tollama explain chronos2 --json
-```
-
-Example output (`tollama explain mock`):
-```
-mock
-family: mock
-installed: yes
-source: - @ -
-
-license
-  type: MIT
-  acceptance required: no
-
-limits
-  max_horizon: -
-  max_context: -
-
-capabilities
-  past_covariates_numeric: no
-  ...
-
-recommended use cases
-  - Fast local smoke tests and integration checks.
 ```
 
 Pull a model from the registry into local storage:
@@ -119,6 +94,41 @@ Extend timeout for large models or slow first-run loads:
 ```bash
 tollama run moirai-2.0-R-small --input examples/moirai_2p0_request.json --timeout 600 --no-stream
 ```
+
+---
+
+## Benchmarking
+
+Run a small local benchmark on the sample dataset:
+```bash
+tollama benchmark examples/benchmark_data.json --models mock --horizon 4 --folds 1
+```
+
+Save JSON output for later comparison or routing work:
+```bash
+tollama benchmark examples/benchmark_data.json --models mock --horizon 4 --folds 1 --output artifacts/benchmarks/demo
+```
+
+`--output` writes a Core bundle with `result.json`, `routing.json`,
+`leaderboard.csv`, and a legacy `benchmark_<fingerprint>.json`.
+
+Use `docs/tsfm-routing-defaults.md` when you want to turn benchmark results into
+`default`, `fast_path`, and `high_accuracy` routing policy.
+
+Apply a saved benchmark result as the active local routing manifest:
+```bash
+tollama routing apply artifacts/benchmarks/demo/result.json
+tollama routing show
+```
+
+One-command shortcut for the full Core loop after the daemon is up:
+```bash
+bash examples/core_workflow_demo.sh
+```
+
+If you are new to Tollama, stop here first. Validate `serve`, `quickstart`,
+`benchmark`, and `routing apply` before using secondary surfaces like dashboards,
+exports, or developer tooling.
 
 ---
 
@@ -250,6 +260,9 @@ tollama benchmark examples/benchmark_data.json --horizon 96 --models chronos2,mo
 tollama benchmark examples/benchmark_data.json --output results/
 ```
 
+With `--output`, use `results/result.json` as the main Core benchmark artifact and
+`results/routing.json` as the direct routing-manifest input.
+
 ---
 
 ## Export & Quantize
@@ -266,6 +279,39 @@ Quantize a pulled model for reduced memory usage:
 tollama quantize chronos2
 tollama quantize chronos2 --precision int8
 tollama quantize chronos2 --precision int4
+```
+
+---
+
+## Secondary / Advanced Surfaces
+
+Explain model capabilities, license, limits, and recommended use cases:
+```bash
+tollama explain chronos2
+tollama explain chronos2 --json
+```
+
+Example output (`tollama explain mock`):
+```
+mock
+family: mock
+installed: yes
+source: - @ -
+
+license
+  type: MIT
+  acceptance required: no
+
+limits
+  max_horizon: -
+  max_context: -
+
+capabilities
+  past_covariates_numeric: no
+  ...
+
+recommended use cases
+  - Fast local smoke tests and integration checks.
 ```
 
 ---

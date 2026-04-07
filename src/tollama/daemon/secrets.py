@@ -268,7 +268,10 @@ def create_secrets_backend(
     if backend_type == "file":
         path = cfg.get("path") or os.environ.get("TOLLAMA_SECRETS_FILE", "")
         if not path:
-            raise ValueError("File secrets backend requires 'path' config or TOLLAMA_SECRETS_FILE env var")
+            raise ValueError(
+                "File secrets backend requires 'path' config or "
+                "TOLLAMA_SECRETS_FILE env var"
+            )
         return FileSecretsBackend(path)
 
     if backend_type == "vault":

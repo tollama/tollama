@@ -75,6 +75,12 @@ tollama config set routing.fast_path nhits
 tollama config set routing.high_accuracy nbeatsx
 ```
 
+For the Core CLI path, `tollama benchmark ... --output <dir>` now writes:
+
+- `result.json` with benchmark summary plus `routing_recommendation`
+- `routing.json` with the direct manifest consumed by Tollama routing helpers
+- `leaderboard.csv` for quick review
+
 Then select routing mode per request (model omitted on purpose):
 
 ```bash

@@ -1,18 +1,44 @@
 """
 tests/test_xai.py — Comprehensive tests for Tollama XAI modules
 
-Tests all v3.8 XAI components across all 5 repositories.
+Exercises in-repo XAI components and, when available, optional sibling-repo
+integrations from the original multi-repo workspace.
 """
 
-import os
+import importlib
 import sys
-
-# Add source paths — resolve to TollamaAI-Github root
-_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-sys.path.insert(0, os.path.join(_REPO_ROOT, "tollama", "src"))
+from pathlib import Path
 
 import numpy as np
+import pytest
 
+# Add source path for this repository and keep optional sibling-repo discovery.
+_REPO_ROOT = Path(__file__).resolve().parents[1]
+_WORKSPACE_ROOT = _REPO_ROOT.parent
+sys.path.insert(0, str(_REPO_ROOT / "src"))
+
+
+def _import_external_xai_module(*candidate_paths: tuple[str, ...]):
+    """Import ``xai_integration`` from an optional sibling repository."""
+    for relative_path in candidate_paths:
+        module_dir = _WORKSPACE_ROOT.joinpath(*relative_path)
+        if not module_dir.is_dir():
+            continue
+        if not (
+            (module_dir / "xai_integration.py").is_file()
+            or (module_dir / "xai_integration" / "__init__.py").is_file()
+        ):
+            continue
+
+        module_dir_str = str(module_dir)
+        if module_dir_str not in sys.path:
+            sys.path.insert(0, module_dir_str)
+
+        sys.modules.pop("xai_integration", None)
+        return importlib.import_module("xai_integration")
+
+    searched = ", ".join(str(_WORKSPACE_ROOT.joinpath(*parts)) for parts in candidate_paths)
+    pytest.skip(f"external XAI integration not present in this workspace: {searched}")
 
 def test_explanation_engine():
     """Test 1: ExplanationEngine — end-to-end decision explanation"""
@@ -45,7 +71,11 @@ def test_explanation_engine():
         "scenarios": {
             "branches": {
                 "base": {"probability": 0.62, "value": 42.5, "conditions": ["stable macro"]},
-                "upside": {"probability": 0.24, "value": 48.0, "conditions": ["growth acceleration"]},
+                "upside": {
+                    "probability": 0.24,
+                    "value": 48.0,
+                    "conditions": ["growth acceleration"],
+                },
                 "downside": {"probability": 0.14, "value": 35.0, "conditions": ["recession"]},
             }
         },
@@ -368,11 +398,7 @@ def test_tollama_eval_xai():
     print("TEST 9: tollama-eval XAI Integration")
     print("=" * 70)
 
-    eval_path = os.path.join(_REPO_ROOT, "tollama-eval", "src", "ts_autopilot", "reporting")
-    sys.path.insert(0, eval_path)
-    if "xai_integration" in sys.modules:
-        del sys.modules["xai_integration"]
-    from xai_integration import EvalExplanationExtender
+    from tollama.xai.xai_integration import EvalExplanationExtender
 
     extender = EvalExplanationExtender()
 
@@ -405,11 +431,7 @@ def test_market_calibration_xai():
     print("TEST 10: Market Calibration Agent XAI")
     print("=" * 70)
 
-    mc_path = os.path.join(_REPO_ROOT, "Market-Calibration-Agent", "calibration")
-    sys.path.insert(0, mc_path)
-    if "xai_integration" in sys.modules:
-        del sys.modules["xai_integration"]
-    import xai_integration as mca_xai
+    mca_xai = _import_external_xai_module(("Market-Calibration-Agent", "calibration"))
 
     explainer = mca_xai.TrustScoreExplainer()
 
@@ -448,11 +470,7 @@ def test_spline_lstm_xai():
     print("TEST 11: Spline-LSTM XAI")
     print("=" * 70)
 
-    sl_path = os.path.join(_REPO_ROOT, "spline-lstm", "backend", "app")
-    sys.path.insert(0, sl_path)
-    if "xai_integration" in sys.modules:
-        del sys.modules["xai_integration"]
-    import xai_integration as sl_xai
+    sl_xai = _import_external_xai_module(("spline-lstm", "backend", "app"))
 
     explainer = sl_xai.SplineLSTMExplainer()
 
@@ -483,11 +501,10 @@ def test_coding_agent_xai():
     print("TEST 12: Coding Agent Decision Tracer")
     print("=" * 70)
 
-    ca_path = os.path.join(_REPO_ROOT, "coding-agent", "autodev")
-    sys.path.insert(0, ca_path)
-    if "xai_integration" in sys.modules:
-        del sys.modules["xai_integration"]
-    import xai_integration as ca_xai
+    ca_xai = _import_external_xai_module(
+        ("coding-agent", "autodev"),
+        ("autodev-coding-agent", "autodev"),
+    )
 
     tracer = ca_xai.AgentDecisionTracer()
 

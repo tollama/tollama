@@ -79,19 +79,32 @@ Unified covariates contract:
 }
 ```
 
-## Forecast Accuracy Metrics (MAPE, MASE, MAE, RMSE, SMAPE)
+## Forecast Accuracy Metrics (MAPE, MASE, MAE, RMSE, SMAPE, WAPE, RMSSE, Pinball)
 
 `/api/forecast` and `/v1/forecast` can optionally calculate forecast accuracy
 metrics against provided actuals:
 
 - set `series[].actuals` (length must equal `horizon`)
 - set `parameters.metrics.names` to any of
-  `["mape", "mase", "mae", "rmse", "smape"]`
+  `["mape", "mase", "mae", "rmse", "smape", "wape", "rmsse", "pinball"]`
 - optional `parameters.metrics.mase_seasonality` (default `1`)
+- `metrics.aggregate` is a macro average across series where that metric is defined
 - undefined cases are best-effort with response `warnings[]`:
   - MAPE skips when all actual values are `0`
   - MASE skips when `len(target) <= mase_seasonality` or naive denominator is `0`
   - SMAPE skips when all `|actual|+|prediction|` denominators are `0`
+  - WAPE skips when `sum(|actual|) == 0`
+  - RMSSE skips when `len(target) <= mase_seasonality` or squared naive denominator is `0`
+  - Pinball skips when quantile forecasts are missing or malformed
+
+### Metric Ownership
+
+- Shared primitive formulas for `mae`, `mase`, `smape`, and `rmsse` follow
+  `ts_autopilot.evaluation.metrics` in `tollama-eval`.
+- `tollama` owns request-time adaptation: overlap trimming, warning-driven
+  best-effort behavior, and response aggregation.
+- `mape`, `rmse`, `wape`, and `pinball` are currently Core-side runtime metrics
+  defined in `tollama.core.forecast_metrics`.
 
 ```json
 {
@@ -171,6 +184,9 @@ Compatibility snapshot:
 | TiDE | Yes | No | Yes | No |
 | N-HiTS | No | No | No | No |
 | N-BEATSx | No | No | No | No |
+| Timer | No | No | No | No |
+| TimeMixer | No | No | No | No |
+| ForecastPFN | No | No | No | No |
 
 TimesFM XReg knobs are available at `parameters.timesfm`:
 `xreg_mode`, `ridge`, `force_on_cpu`.
@@ -498,4 +514,79 @@ tollama pull nbeatsx
 
 # run forecast
 tollama run nbeatsx --input examples/request.json --no-stream
+```
+
+## Timer Forecasting
+
+Timer is integrated for inference via the dedicated `timer` runner family.
+
+- model name: `timer-base`
+- runner family: `timer`
+- install extra: `runner_timer`
+- pull behavior: pulls a Hugging Face snapshot from `thuml/timer-base-84m`
+- current runner behavior:
+  - returns `DEPENDENCY_MISSING` when optional dependencies are absent
+  - performs target-only forecasting in the current adapter path
+  - truncates long histories to the declared `max_context`
+  - returns canonical mean forecasts; quantiles are currently omitted
+
+```bash
+# install Timer runner dependencies
+python -m pip install -e ".[dev,runner_timer]"
+
+# pull model snapshot
+tollama pull timer-base
+
+# run forecast
+tollama run timer-base --input examples/request.json --no-stream
+```
+
+## TimeMixer Forecasting
+
+TimeMixer is integrated for inference via the dedicated `timemixer` runner family.
+
+- model name: `timemixer-base`
+- runner family: `timemixer`
+- install extra: `runner_timemixer`
+- pull behavior: pulls a Hugging Face snapshot from `thuml/timemixer`
+- current runner behavior:
+  - returns `DEPENDENCY_MISSING` when optional dependencies are absent
+  - runs the current target-only adapter path
+  - truncates long histories to the declared `max_context`
+  - returns canonical mean forecasts; quantiles are currently omitted
+
+```bash
+# install TimeMixer runner dependencies
+python -m pip install -e ".[dev,runner_timemixer]"
+
+# pull model snapshot
+tollama pull timemixer-base
+
+# run forecast
+tollama run timemixer-base --input examples/request.json --no-stream
+```
+
+## ForecastPFN Forecasting
+
+ForecastPFN is integrated for inference via the dedicated `forecastpfn` runner family.
+
+- model name: `forecastpfn`
+- runner family: `forecastpfn`
+- install extra: `runner_forecastpfn`
+- pull behavior: pulls a Hugging Face snapshot from `abacusai/ForecastPFN`
+- current runner behavior:
+  - returns `DEPENDENCY_MISSING` when optional dependencies are absent
+  - runs the current target-only adapter path
+  - truncates long histories to the declared `max_context`
+  - returns canonical mean forecasts; quantiles are currently omitted
+
+```bash
+# install ForecastPFN runner dependencies
+python -m pip install -e ".[dev,runner_forecastpfn]"
+
+# pull model snapshot
+tollama pull forecastpfn
+
+# run forecast
+tollama run forecastpfn --input examples/request.json --no-stream
 ```

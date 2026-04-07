@@ -282,4 +282,11 @@ The `tollama xai` subcommand group exposes XAI functionality from the CLI:
 | `tollama xai explain-decision --input <file>` | Run explanation engine on a forecast result |
 | `tollama xai trust-score --input <file>` | Compute trust score breakdown |
 | `tollama xai model-card --input <file>` | Generate EU AI Act model card |
+| `tollama xai record-outcome --input <file>` | Record realized outcomes for calibration learning |
+| `tollama xai history [domain]` | Query trust-history snapshots and trends |
+| `tollama xai connectors-health` | Check configured live/mock connector status |
 | `tollama xai calibration [agent]` | Show calibration stats for trust agents |
+| `tollama xai gate-decision --input <file>` | Evaluate trust-based execution gate decisions |
+| `tollama xai batch-analyze --input <file>` | Run concurrent trust analysis for batches |
+| `tollama xai alerts-configure --input <file>` | Configure trust alert thresholds |
+| `tollama xai alerts-check --input <file>` | Evaluate current trust state against alerts |

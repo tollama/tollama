@@ -1,0 +1,239 @@
+{
+  "artifact_kind": "tollama_core_benchmark",
+  "schema_version": 1,
+  "generated_at": "2026-04-06T12:00:00+00:00",
+  "run_id": "core-benchmark-ops-hourly-demo-20260406T120000Z",
+  "eval_ref": "core-benchmark-ops-hourly-demo-20260406T120000Z",
+  "forecast_id": "core-routing-candidate:core-benchmark-ops-hourly-demo-20260406T120000Z:chronos2",
+  "source": "tollama.core.benchmark",
+  "dataset_fingerprint": "ops-hourly-demo",
+  "horizon": 24,
+  "num_folds": 2,
+  "metric_names": [
+    "mase",
+    "mae",
+    "rmse"
+  ],
+  "quality_metric_priority": [
+    "mase",
+    "mae",
+    "rmse"
+  ],
+  "models": [
+    {
+      "model": "chronos2",
+      "metrics": {
+        "mase": 0.84,
+        "mae": 4.9,
+        "rmse": 6.3
+      },
+      "latency_ms": 220.0,
+      "folds_evaluated": 2,
+      "warnings": [],
+      "learned_weight": 0.37
+    },
+    {
+      "model": "granite-ttm-r2",
+      "metrics": {
+        "mase": 0.87,
+        "mae": 5.1,
+        "rmse": 6.5
+      },
+      "latency_ms": 110.0,
+      "folds_evaluated": 2,
+      "warnings": [],
+      "learned_weight": 0.33
+    },
+    {
+      "model": "timesfm-2.5-200m",
+      "metrics": {
+        "mase": 0.95,
+        "mae": 5.6,
+        "rmse": 7.0
+      },
+      "latency_ms": 72.0,
+      "folds_evaluated": 2,
+      "warnings": [],
+      "learned_weight": 0.14
+    },
+    {
+      "model": "moirai-2.0-R-small",
+      "metrics": {
+        "mase": 0.91,
+        "mae": 5.4,
+        "rmse": 6.8
+      },
+      "latency_ms": 180.0,
+      "folds_evaluated": 2,
+      "warnings": [],
+      "learned_weight": 0.16
+    }
+  ],
+  "leaderboard": [
+    {
+      "rank": 1,
+      "model": "chronos2",
+      "mase": 0.84,
+      "mae": 4.9,
+      "rmse": 6.3,
+      "latency_ms": 220.0,
+      "folds_evaluated": 2,
+      "learned_weight": 0.37
+    },
+    {
+      "rank": 2,
+      "model": "granite-ttm-r2",
+      "mase": 0.87,
+      "mae": 5.1,
+      "rmse": 6.5,
+      "latency_ms": 110.0,
+      "folds_evaluated": 2,
+      "learned_weight": 0.33
+    },
+    {
+      "rank": 3,
+      "model": "moirai-2.0-R-small",
+      "mase": 0.91,
+      "mae": 5.4,
+      "rmse": 6.8,
+      "latency_ms": 180.0,
+      "folds_evaluated": 2,
+      "learned_weight": 0.16
+    },
+    {
+      "rank": 4,
+      "model": "timesfm-2.5-200m",
+      "mase": 0.95,
+      "mae": 5.6,
+      "rmse": 7.0,
+      "latency_ms": 72.0,
+      "folds_evaluated": 2,
+      "learned_weight": 0.14
+    }
+  ],
+  "learned_weights": {
+    "chronos2": 0.37,
+    "granite-ttm-r2": 0.33,
+    "timesfm-2.5-200m": 0.14,
+    "moirai-2.0-R-small": 0.16
+  },
+  "routing_recommendation": {
+    "default": "chronos2",
+    "fast_path": "timesfm-2.5-200m",
+    "high_accuracy": "chronos2",
+    "policy": "Use default for general workloads; route latency-sensitive requests to fast_path; route accuracy-critical requests to high_accuracy.",
+    "ranking": [
+      {
+        "model": "chronos2",
+        "quality_rank": 1,
+        "latency_rank": 4,
+        "balanced_score": 1.9,
+        "primary_metric": "mase",
+        "primary_metric_value": 0.84,
+        "latency_ms": 220.0
+      },
+      {
+        "model": "granite-ttm-r2",
+        "quality_rank": 2,
+        "latency_rank": 2,
+        "balanced_score": 2.0,
+        "primary_metric": "mase",
+        "primary_metric_value": 0.87,
+        "latency_ms": 110.0
+      },
+      {
+        "model": "moirai-2.0-R-small",
+        "quality_rank": 3,
+        "latency_rank": 3,
+        "balanced_score": 3.0,
+        "primary_metric": "mase",
+        "primary_metric_value": 0.91,
+        "latency_ms": 180.0
+      },
+      {
+        "model": "timesfm-2.5-200m",
+        "quality_rank": 4,
+        "latency_rank": 1,
+        "balanced_score": 3.1,
+        "primary_metric": "mase",
+        "primary_metric_value": 0.95,
+        "latency_ms": 72.0
+      }
+    ],
+    "caveats": [
+      "Routing recommendation is only as good as the benchmark dataset and fold design.",
+      "Latency can shift with hardware, daemon warm-up, and runner cache state."
+    ],
+    "rationale": {
+      "default": {
+        "model": "chronos2",
+        "reason": "Best balanced benchmark profile for general workloads.",
+        "primary_metric": "mase",
+        "primary_metric_value": 0.84,
+        "latency_ms": 220.0,
+        "quality_rank": 1,
+        "latency_rank": 4
+      },
+      "fast_path": {
+        "model": "timesfm-2.5-200m",
+        "reason": "Lowest observed latency among successful benchmark runs.",
+        "primary_metric": "mase",
+        "primary_metric_value": 0.95,
+        "latency_ms": 72.0,
+        "quality_rank": 4,
+        "latency_rank": 1
+      },
+      "high_accuracy": {
+        "model": "chronos2",
+        "reason": "Best MASE among successful benchmark runs.",
+        "primary_metric": "mase",
+        "primary_metric_value": 0.84,
+        "latency_ms": 220.0,
+        "quality_rank": 1,
+        "latency_rank": 4
+      }
+    }
+  },
+  "preprocessing_metadata": {
+    "available": false,
+    "source": "benchmark_input",
+    "note": "No structured preprocessing metadata was attached to this Core benchmark run."
+  },
+  "routing_rationale": {
+    "default": {
+      "model": "chronos2",
+      "reason": "Best balanced benchmark profile for general workloads.",
+      "primary_metric": "mase",
+      "primary_metric_value": 0.84,
+      "latency_ms": 220.0,
+      "quality_rank": 1,
+      "latency_rank": 4
+    },
+    "fast_path": {
+      "model": "timesfm-2.5-200m",
+      "reason": "Lowest observed latency among successful benchmark runs.",
+      "primary_metric": "mase",
+      "primary_metric_value": 0.95,
+      "latency_ms": 72.0,
+      "quality_rank": 4,
+      "latency_rank": 1
+    },
+    "high_accuracy": {
+      "model": "chronos2",
+      "reason": "Best MASE among successful benchmark runs.",
+      "primary_metric": "mase",
+      "primary_metric_value": 0.84,
+      "latency_ms": 220.0,
+      "quality_rank": 1,
+      "latency_rank": 4
+    }
+  },
+  "artifact_mapping": {
+    "result_json": "result.json",
+    "routing_manifest": "routing.json",
+    "leaderboard_csv": "leaderboard.csv",
+    "operator_summary_md": "summary.md",
+    "legacy_summary_json": "benchmark_ops-hourly-demo.json",
+    "rich_eval_artifacts": "Use tollama-eval for results.json, details.json, and report.html."
+  }
+}

@@ -227,7 +227,6 @@ class DecisionPolicyExplainer:
         forecast_result: dict[str, Any],
     ) -> dict[str, Any]:
         """Evaluate a single escalation rule."""
-        rule_type = rule.get("type", "threshold")
         field = rule.get("field", "confidence")
         operator = rule.get("operator", "lt")
         value = rule.get("value", 0)

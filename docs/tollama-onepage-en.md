@@ -114,6 +114,6 @@ lives in `model-registry/registry.yaml`, and covariate compatibility lives in
 | Item | Current Status | Goal |
 |------|:--------------:|------|
 | **Auto model comparison / selection** | ✅ Basic impl (`/api/compare`, `/api/auto-forecast`) | Advanced best-model routing based on data characteristics |
-| **Auto data preprocessing** | ❌ Not implemented | Missing value interpolation, resampling, outlier removal handled by the platform |
+| **Auto data preprocessing** | ⚠️ Basic pipeline exists (`preprocess/pipeline.py`, ingest normalization) | Harden defaults for interpolation, resampling, and outlier handling |
 | **Fine-tuning / ensemble** | ⚠️ Ensemble only (`ensemble.py`) | Add domain-adaptation fine-tuning workflow |
 | **Local + cloud execution** | ⚠️ Dockerfile exists, local-centric | K8s manifests, docker-compose, cloud deployment guide |

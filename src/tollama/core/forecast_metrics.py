@@ -1,4 +1,11 @@
-"""Forecast accuracy metrics calculated against per-series actuals."""
+"""Runtime forecast metrics calculated against per-series actuals.
+
+This module is the request/response wrapper around Tollama Core metric semantics.
+Reusable primitive formulas live in ``tollama-eval`` for shared benchmarking
+metrics like MAE, MASE, SMAPE, and RMSSE. This layer adapts those semantics to
+the forecast API by trimming to overlapping horizons, returning best-effort
+warnings instead of raising, and emitting macro aggregates across defined series.
+"""
 
 from __future__ import annotations
 
@@ -40,7 +47,7 @@ def compute_forecast_metrics(
     request: ForecastRequest,
     response: ForecastResponse,
 ) -> tuple[ForecastMetrics | None, list[str]]:
-    """Compute requested metrics with best-effort handling for undefined values."""
+    """Compute request-time metrics with best-effort handling for undefined values."""
     metrics_parameters = request.parameters.metrics
     if metrics_parameters is None:
         return None, []

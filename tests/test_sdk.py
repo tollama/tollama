@@ -267,10 +267,12 @@ def test_auto_forecast_accepts_series_dict_and_returns_typed_payload() -> None:
         series={"target": [1.0, 2.0, 3.0, 4.0], "freq": "D"},
         horizon=3,
         strategy="auto",
+        mode="high_accuracy",
     )
 
     request = captured["request"]
     assert request.horizon == 3
+    assert request.mode == "high_accuracy"
     assert request.series[0].id == "series_0"
     assert request.ensemble_method == "mean"
     assert response.selection.chosen_model == "mock"
@@ -714,6 +716,7 @@ def test_workflow_chaining_preserves_typed_results() -> None:
 
         def auto_forecast(self, request: AutoForecastRequest) -> AutoForecastResponse:
             assert request.horizon == 2
+            assert request.mode == "fast_path"
             return AutoForecastResponse.model_validate(
                 {
                     "strategy": "auto",
@@ -751,7 +754,7 @@ def test_workflow_chaining_preserves_typed_results() -> None:
         workflow = (
             sdk.workflow(series={"target": [1.0, 2.0, 3.0], "freq": "D"})
             .analyze(parameters={"max_lag": 2})
-            .auto_forecast(horizon=2)
+            .auto_forecast(horizon=2, mode="fast_path")
         )
 
     assert workflow.analysis is not None

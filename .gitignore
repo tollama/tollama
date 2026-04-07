@@ -32,6 +32,7 @@ htmlcov/
 .DS_Store
 .idea/
 .vscode/
+.claude/
 
 # Development scratch scripts
 reproduce_*.py
@@ -45,3 +46,25 @@ artifacts/realdata/
 data/raw/
 hf_data/
 lightning_logs/
+
+# Environments
+.env
+.env.*
+!.env.example
+
+# General Logs
+*.log
+
+# ML Models and Weights
+*.ckpt
+*.safetensors
+*.pt
+*.pth
+*.bin
+
+# Custom directories
+@generated_runs/
+
+# MacOS System files
+._*
+.AppleDouble

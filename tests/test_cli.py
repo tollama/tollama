@@ -108,6 +108,78 @@ def test_open_command_launches_browser(monkeypatch) -> None:
     assert "http://127.0.0.1:11435/dashboard" in _result_stdout(result)
 
 
+def test_routing_show_reads_core_result_payload(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("TOLLAMA_HOME", str(tmp_path / "home"))
+    artifact = tmp_path / "result.json"
+    artifact.write_text(
+        json.dumps(
+            {
+                "generated_at": "2026-04-06T00:00:00Z",
+                "run_id": "core-demo",
+                "eval_ref": "core-demo",
+                "forecast_id": "core-routing-candidate:core-demo:chronos2",
+                "routing_rationale": {
+                    "default": {"model": "chronos2", "reason": "balanced winner"}
+                },
+                "routing_recommendation": {
+                    "default": "chronos2",
+                    "fast_path": "timesfm-2.5-200m",
+                    "high_accuracy": "moirai-2.0-R-small",
+                    "policy": "demo policy",
+                    "caveats": ["synthetic benchmark"],
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    runner = _new_runner()
+    result = runner.invoke(app, ["routing", "show", str(artifact), "--json"])
+
+    assert result.exit_code == 0
+    payload = json.loads(_result_stdout(result))
+    assert payload["eval_ref"] == "core-demo"
+    assert payload["forecast_id"] == "core-routing-candidate:core-demo:chronos2"
+    assert payload["routing"]["default"] == "chronos2"
+    assert payload["routing"]["fast_path"] == "timesfm-2.5-200m"
+
+
+def test_routing_apply_writes_default_manifest(monkeypatch, tmp_path) -> None:
+    home = tmp_path / "routing-home"
+    monkeypatch.setenv("TOLLAMA_HOME", str(home))
+    artifact = tmp_path / "result.json"
+    artifact.write_text(
+        json.dumps(
+            {
+                "generated_at": "2026-04-06T00:00:00Z",
+                "run_id": "core-demo",
+                "eval_ref": "core-demo",
+                "forecast_id": "core-routing-candidate:core-demo:chronos2",
+                "routing_recommendation": {
+                    "default": "chronos2",
+                    "fast_path": "timesfm-2.5-200m",
+                    "high_accuracy": "moirai-2.0-R-small",
+                    "policy": "demo policy",
+                    "caveats": ["synthetic benchmark"],
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    runner = _new_runner()
+    result = runner.invoke(app, ["routing", "apply", str(artifact)])
+
+    assert result.exit_code == 0
+    manifest_path = home / "routing.json"
+    assert manifest_path.exists()
+    payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    assert payload["eval_ref"] == "core-demo"
+    assert payload["forecast_id"] == "core-routing-candidate:core-demo:chronos2"
+    assert payload["routing"]["default"] == "chronos2"
+    assert "Applied routing manifest" in _result_stdout(result)
+
+
 def test_open_command_fails_when_browser_cannot_open(monkeypatch) -> None:
     monkeypatch.setattr("tollama.cli.main.webbrowser.open", lambda *_args, **_kwargs: False)
     runner = _new_runner()
@@ -621,7 +693,9 @@ def test_quickstart_pulls_model_and_runs_demo_forecast(monkeypatch) -> None:
     output = _result_stdout(result)
     assert "tollama quickstart complete" in output
     assert "Next steps:" in output
-    assert "tollama run mock --input examples/request.json --no-stream" in output
+    assert "tollama benchmark examples/benchmark_data.json --models mock" in output
+    assert "tollama routing apply artifacts/benchmarks/demo/result.json" in output
+    assert "tollama routing show" in output
 
 
 def test_quickstart_prints_daemon_guidance_when_unreachable(monkeypatch) -> None:
@@ -640,6 +714,96 @@ def test_quickstart_prints_daemon_guidance_when_unreachable(monkeypatch) -> None
     stderr = _result_stderr(result)
     assert "unable to reach tollama daemon at http://daemon.test" in stderr
     assert "tollama serve" in stderr
+
+
+def test_benchmark_prints_operator_summary_and_summary_artifact(
+    monkeypatch, tmp_path: Path
+) -> None:
+    from tollama.core.benchmark import BenchmarkSummary, ModelBenchmarkResult
+
+    dataset_path = tmp_path / "benchmark.json"
+    dataset_path.write_text(
+        json.dumps(
+            {
+                "series": [
+                    {
+                        "id": "demo",
+                        "freq": "D",
+                        "timestamps": [
+                            "2026-01-01",
+                            "2026-01-02",
+                            "2026-01-03",
+                            "2026-01-04",
+                            "2026-01-05",
+                            "2026-01-06",
+                        ],
+                        "target": [10.0, 11.0, 12.0, 13.0, 14.0, 15.0],
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    output_dir = tmp_path / "artifacts"
+
+    class _FakeClient:
+        def forecast(self, payload: dict[str, object], *, stream: bool) -> dict[str, object]:
+            del payload, stream
+            raise AssertionError("forecast_fn should not be called when run_benchmark is stubbed")
+
+    monkeypatch.setattr(
+        "tollama.cli.main._make_client",
+        lambda **_kwargs: _FakeClient(),
+    )
+
+    def _fake_run_benchmark(**_kwargs: object) -> BenchmarkSummary:
+        return BenchmarkSummary(
+            dataset_fingerprint="demo-cli",
+            horizon=2,
+            num_folds=2,
+            metric_names=["mase", "mae", "rmse"],
+            learned_weights={"accurate": 0.7, "fast": 0.3},
+            models=[
+                ModelBenchmarkResult(
+                    model="accurate",
+                    metrics={"mase": 0.8, "mae": 1.0, "rmse": 1.3},
+                    latency_ms=220.0,
+                    folds_evaluated=2,
+                ),
+                ModelBenchmarkResult(
+                    model="fast",
+                    metrics={"mase": 1.1, "mae": 1.4, "rmse": 1.8},
+                    latency_ms=50.0,
+                    folds_evaluated=2,
+                ),
+            ],
+        )
+
+    monkeypatch.setattr("tollama.core.benchmark.run_benchmark", _fake_run_benchmark)
+    runner = _new_runner()
+    result = runner.invoke(
+        app,
+        [
+            "benchmark",
+            str(dataset_path),
+            "--models",
+            "accurate,fast",
+            "--horizon",
+            "2",
+            "--folds",
+            "2",
+            "--output",
+            str(output_dir),
+        ],
+    )
+
+    assert result.exit_code == 0
+    output = _result_stdout(result)
+    assert "Recommendation summary:" in output
+    assert "default: accurate" in output
+    assert "fast_path: fast" in output
+    assert "summary.md:" in output
+    assert (output_dir / "summary.md").exists()
 
 
 def test_run_auto_pulls_when_model_not_installed(monkeypatch, tmp_path: Path) -> None:

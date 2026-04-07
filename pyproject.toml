@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "tollama"
 version = "0.1.0"
-description = "Unified local-first platform for serving and using time series foundation models through one API, CLI, and SDK."
+description = "Local-first time series forecasting core for preprocessing, benchmarking, and routing models through one API, CLI, and SDK."
 readme = "README.md"
 requires-python = ">=3.11"
 license = { file = "LICENSE" }
@@ -66,6 +66,7 @@ dev = [
   "pytest>=8.0",
   "pytest-asyncio>=0.23",
   "pytest-cov>=5.0",
+  "pytest-httpx>=0.30,<1.0",
   "ruff>=0.6.0",
 ]
 mcp = [
@@ -98,7 +99,7 @@ runner_timesfm = [
   "numpy>=1.26,<3.0",
   "pandas>=2.0,<3.0",
   "huggingface_hub>=0.20,<2.0",
-  "timesfm[torch] @ git+https://github.com/google-research/timesfm.git@2dcc66fbfe2155adba1af66aa4d564a0ee52f61e",
+  "timesfm[torch,xreg] @ https://github.com/google-research/timesfm/archive/2dcc66fbfe2155adba1af66aa4d564a0ee52f61e.tar.gz",
 ]
 runner_uni2ts = [
   "uni2ts>=2.0.0",
@@ -174,6 +175,9 @@ runner_forecastpfn = [
 preprocess = [
   "scipy>=1.11,<2.0",
   "numpy>=1.26,<3.0",
+]
+eval = [
+  "tollama-eval>=0.2.0,<0.3.0",
 ]
 tui = [
   "textual>=0.47,<9.0",
