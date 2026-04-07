@@ -199,6 +199,8 @@ def test_get_tollama_tools_returns_preconfigured_tools(langchain_tools) -> None:
         "tollama_recommend",
         "tollama_health",
         "tollama_models",
+        "tollama_show",
+        "tollama_pull",
     ]
     for tool in tools:
         assert tool.base_url == "http://daemon.test"
@@ -218,6 +220,8 @@ def test_tool_descriptions_include_usage_guidance(langchain_tools) -> None:
     compare_tool = langchain_tools.TollamaCompareTool()
     recommend_tool = langchain_tools.TollamaRecommendTool()
     models_tool = langchain_tools.TollamaModelsTool()
+    show_tool = langchain_tools.TollamaShowTool()
+    pull_tool = langchain_tools.TollamaPullTool()
     health_tool = langchain_tools.TollamaHealthTool()
 
     assert "request" in forecast_tool.description
@@ -269,6 +273,14 @@ def test_tool_descriptions_include_usage_guidance(langchain_tools) -> None:
     assert "available" in models_tool.description
     assert "Example:" in models_tool.description
 
+    assert "metadata" in show_tool.description
+    assert "model" in show_tool.description
+    assert "Example:" in show_tool.description
+
+    assert "pull endpoint" in pull_tool.description
+    assert "accept_license" in pull_tool.description
+    assert "Example:" in pull_tool.description
+
     assert "status" in health_tool.description
     assert "Example:" in health_tool.description
 
@@ -299,6 +311,53 @@ def test_tollama_models_tool_success(monkeypatch, langchain_tools) -> None:
 
     assert payload["mode"] == "available"
     assert payload["items"] == [{"name": "mock", "mode": "available"}]
+
+
+def test_tollama_show_tool_success(monkeypatch, langchain_tools) -> None:
+    class _FakeClient:
+        def show(self, model: str) -> dict[str, Any]:
+            return {"name": model, "family": "mock"}
+
+    monkeypatch.setattr("tollama.skill.langchain._make_client", lambda **_: _FakeClient())
+    tool = langchain_tools.TollamaShowTool()
+
+    payload = tool._run(model="mock")
+
+    assert payload["name"] == "mock"
+    assert payload["family"] == "mock"
+
+
+def test_tollama_show_tool_invalid_request_maps_to_invalid_request(langchain_tools) -> None:
+    tool = langchain_tools.TollamaShowTool()
+
+    payload = tool._run(model=123)  # type: ignore[arg-type]
+
+    assert payload["error"]["category"] == "INVALID_REQUEST"
+    assert payload["error"]["exit_code"] == 2
+
+
+def test_tollama_pull_tool_success(monkeypatch, langchain_tools) -> None:
+    class _FakeClient:
+        def pull(self, model: str, *, accept_license: bool = False) -> dict[str, Any]:
+            return {"status": "success", "model": model, "accept_license": accept_license}
+
+    monkeypatch.setattr("tollama.skill.langchain._make_client", lambda **_: _FakeClient())
+    tool = langchain_tools.TollamaPullTool()
+
+    payload = tool._run(model="mock", accept_license=True)
+
+    assert payload["status"] == "success"
+    assert payload["model"] == "mock"
+    assert payload["accept_license"] is True
+
+
+def test_tollama_pull_tool_invalid_request_maps_to_invalid_request(langchain_tools) -> None:
+    tool = langchain_tools.TollamaPullTool()
+
+    payload = tool._run(model="mock", accept_license="yes")  # type: ignore[arg-type]
+
+    assert payload["error"]["category"] == "INVALID_REQUEST"
+    assert payload["error"]["exit_code"] == 2
 
 
 def test_tollama_forecast_tool_success(monkeypatch, langchain_tools) -> None:
@@ -1207,6 +1266,43 @@ async def test_tollama_models_tool_arun_uses_async_client(monkeypatch, langchain
 
     assert payload["mode"] == "available"
     assert payload["items"] == [{"name": "mock", "mode": "available"}]
+
+
+@pytest.mark.asyncio
+async def test_tollama_show_tool_arun_uses_async_client(monkeypatch, langchain_tools) -> None:
+    class _FakeAsyncClient:
+        async def show(self, model: str) -> dict[str, Any]:
+            return {"name": model, "family": "mock"}
+
+    monkeypatch.setattr(
+        "tollama.skill.langchain._make_async_client",
+        lambda **_: _FakeAsyncClient(),
+    )
+    tool = langchain_tools.TollamaShowTool()
+
+    payload = await tool._arun(model="mock")
+
+    assert payload["name"] == "mock"
+    assert payload["family"] == "mock"
+
+
+@pytest.mark.asyncio
+async def test_tollama_pull_tool_arun_uses_async_client(monkeypatch, langchain_tools) -> None:
+    class _FakeAsyncClient:
+        async def pull(self, model: str, *, accept_license: bool = False) -> dict[str, Any]:
+            return {"status": "success", "model": model, "accept_license": accept_license}
+
+    monkeypatch.setattr(
+        "tollama.skill.langchain._make_async_client",
+        lambda **_: _FakeAsyncClient(),
+    )
+    tool = langchain_tools.TollamaPullTool()
+
+    payload = await tool._arun(model="mock", accept_license=True)
+
+    assert payload["status"] == "success"
+    assert payload["model"] == "mock"
+    assert payload["accept_license"] is True
 
 
 @pytest.mark.asyncio

@@ -43,9 +43,9 @@ flow = t.workflow(my_data).analyze().auto_forecast(horizon=30).what_if(scenarios
 
 | Interface | Description |
 |-----------|------------|
-| **HTTP API** | 43+ endpoints — forecast, analysis, comparison, what-if, report |
-| **Python SDK** | `Tollama` class with 16 methods, DataFrame conversion, chained workflow |
-| **CLI** | `tollama pull` → `tollama run` — Ollama-style workflow |
+| **HTTP API** | Forecasting, analysis, comparison, report, ingest, and XAI routes. Canonical inventory lives in `docs/api-reference.md` |
+| **Python SDK** | `Tollama` class with forecast / analyze / report / workflow helpers |
+| **CLI** | `tollama pull` → `tollama run` — Ollama-style workflow plus diagnostics and runtime tooling |
 | **Dashboard** | Web (Chart.js) + TUI (Textual) — model monitoring, forecast visualization |
 
 ## Value for AI Agents — MCP, A2A, Skills
@@ -54,10 +54,10 @@ AI agents can **invoke TSFMs as tools the moment they need a forecast.**
 
 | Integration | Description |
 |------------|------------|
-| **MCP Server** | 15 tools — forecast, analyze, compare, what-if, report, etc. |
+| **MCP Server** | Forecast / analyze / compare / what-if / report oriented tool surface |
 | **A2A Protocol** | JSON-RPC based agent-to-agent communication with task queue |
-| **LangChain** | 13 natively integrated tools |
-| **CrewAI / AutoGen / Smolagents** | Per-framework adapters |
+| **LangChain** | Native wrappers for forecasting and structured analysis workflows |
+| **CrewAI / AutoGen / Smolagents** | Per-framework adapters built from shared specs |
 | **OpenClaw Skill** | OpenAI tool schema + shell scripts |
 
 ## TSFM Platform Dashboard
@@ -77,7 +77,7 @@ Manage the entire platform at a glance through web and terminal TUI dashboards.
 ┌────────────────────────────────────────────────────────┐
 │  Developers: CLI / SDK / HTTP API / Dashboard          │
 ├────────────────────────────────────────────────────────┤
-│  AI Agents: MCP (15 tools) / A2A / LangChain / ...    │
+│  AI Agents: MCP / A2A / LangChain / ...               │
 ├────────────────────────────────────────────────────────┤
 │  TSFM Platform Daemon (tollamad)                       │
 │  Forecast · Analysis · Compare · What-if · Pipeline    │
@@ -85,22 +85,27 @@ Manage the entire platform at a glance through web and terminal TUI dashboards.
 ├──────┬──────┬──────┬──────┬──────┬──────┬──────────────┤
 │      │ stdio JSON-lines protocol      │              │
 │      ▼      ▼      ▼      ▼      ▼      ▼              │
-│   torch  timesfm  uni2ts  sundial  toto  mock          │
-│   (Chronos, Granite)                                   │
+│   family-specific runner processes (torch, timesfm, ...)│
 │   Independent venv per family — zero dependency clash   │
 └────────────────────────────────────────────────────────┘
 ```
 
 ## Supported Models
 
-| Model | Provider | Covariates |
-|-------|----------|:----------:|
-| Chronos-2 | Amazon | Past + Future |
-| Granite TTM R2 | IBM | Past + Future |
-| TimesFM 2.5-200M | Google | Past + Future |
-| Moirai 2.0-R Small | Salesforce | Past + Future |
-| Sundial Base 128M | THUML | Target only |
-| Toto Open Base 1.0 | Datadog | Past only |
+TSFMs and neural baselines sit behind the same forecast contract. The
+human-facing guide lives in `docs/models.md`, the machine-readable registry
+lives in `model-registry/registry.yaml`, and covariate compatibility lives in
+`docs/covariates.md`.
+
+---
+
+## Canonical References
+
+- HTTP endpoint inventory: `docs/api-reference.md`
+- Agent tool inventory: `docs/agent-tools.md`
+- Model / family guide: `docs/models.md`
+- Covariates contract: `docs/covariates.md`
+- Machine-readable registry: `model-registry/registry.yaml`
 
 ---
 

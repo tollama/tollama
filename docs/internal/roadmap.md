@@ -1,6 +1,6 @@
 # tollama roadmap (worker-per-model-family)
 
-Last updated: 2026-02-21
+Last updated: 2026-04-07
 
 Status legend:
 - `[x]` implemented
@@ -10,6 +10,12 @@ Status legend:
 This roadmap is implementation-aware for the repository under
 `src/tollama/*` and still tracks
 the optional future `packages/*` split as a migration phase.
+
+Canonical inventories live in:
+- `docs/api-reference.md` for HTTP endpoints
+- `docs/agent-tools.md` for agent tool surfaces
+- `docs/models.md` and `model-registry/registry.yaml` for model and family coverage
+- `docs/covariates.md` for the covariates contract and compatibility matrix
 
 ## 0) Product goals [~]
 ### Current implementation status
@@ -29,10 +35,8 @@ the optional future `packages/*` split as a migration phase.
 - TSModelfile profile management is available via daemon + CLI.
 - Ollama-style model lifecycle is available (`pull`, `list`, `show`, `ps`, `rm`) via HTTP and CLI.
 - Forecast routing uses model-family worker selection from installed manifests.
-- Multi-family adapters are shipped:
-  - torch runner: Chronos-2 + Granite TTM
-  - timesfm runner: TimesFM 2.5
-  - uni2ts runner: Moirai
+- Multi-family adapters are shipped; current family coverage is tracked in
+  `model-registry/registry.yaml` and `src/tollama/core/runtime_bootstrap.py`.
 - Unified covariates contract is implemented with `past_covariates`, `future_covariates`,
   `parameters.covariates_mode`, compatibility preflight, and response `warnings`.
 - Optional API-key auth is available through `config.auth.api_keys`.
@@ -80,10 +84,11 @@ the optional future `packages/*` split as a migration phase.
 ### Current implementation status
 - `tollamad` (`src/tollama/daemon/`) owns public HTTP API and process supervision.
 - Runners (`src/tollama/runners/`) communicate over stdio JSON lines.
-- Shared core (`src/tollama/core/`) provides schemas, protocol, registry/storage/config helpers.
+- Shared core (`src/tollama/core/`) provides schemas, protocol, registry/storage/routing helpers, and deterministic domain services reused across layers.
 - CLI (`src/tollama/cli/`) provides user commands and daemon HTTP client integration.
-- Active runner implementations: `mock`, `torch`, `timesfm`, `uni2ts`, `sundial`, `toto`.
-- Additional runner implementations are shipped for `lag_llama`, `patchtst`, `tide`, `nhits`, and `nbeatsx`.
+- Registry-backed model/family coverage is tracked in `model-registry/registry.yaml`.
+- Bootstrappable family-to-extra and family-to-module mappings are tracked in
+  `src/tollama/core/runtime_bootstrap.py` and `pyproject.toml`.
 
 ### Planned work / TODO
 - Keep daemon free of heavy ML runtime imports and dependencies.
@@ -556,10 +561,7 @@ Phase F - Product hardening:
     `PERMISSION_DENIED`, `TIMEOUT`, `INTERNAL_ERROR`)
 - MCP server scaffold added under `src/tollama/mcp/`:
   - `server.py`, `tools.py`, `schemas.py`, `__main__.py`
-  - tool set:
-    `tollama_health`, `tollama_models`, `tollama_forecast`, `tollama_auto_forecast`,
-    `tollama_analyze`, `tollama_what_if`, `tollama_pipeline`, `tollama_compare`, `tollama_recommend`,
-    `tollama_pull`, `tollama_show`
+  - canonical tool inventory now lives in `docs/agent-tools.md`
   - each tool now includes rich MCP descriptions with required inputs, model-name examples,
     and invocation examples for agent discoverability
 - MCP tool behavior/contracts:
@@ -579,9 +581,7 @@ Phase F - Product hardening:
 - Agent context doc added:
   - `CLAUDE.md`
 - Optional LangChain SDK wrapper added under `src/tollama/skill/langchain.py`:
-  - `TollamaForecastTool`, `TollamaAutoForecastTool`, `TollamaAnalyzeTool`,
-    `TollamaWhatIfTool`, `TollamaPipelineTool`, `TollamaCompareTool`,
-    `TollamaRecommendTool`, `TollamaHealthTool`, `TollamaModelsTool`
+  - canonical LangChain wrapper inventory now lives in `docs/agent-tools.md`
   - `get_tollama_tools(base_url="http://127.0.0.1:11435", timeout=10.0)`
   - optional extra `.[langchain]` with `langchain-core`
   - tool descriptions now include schema guidance, model-name examples, and invocation examples
@@ -593,6 +593,10 @@ Phase F - Product hardening:
     `get_autogen_function_map(...)`, `register_autogen_tools(...)`
   - `smolagents.py`: `get_smolagents_tools(...)`
   - shared framework-neutral contracts in `framework_common.py`
+  - shared subset now includes lifecycle helpers `tollama_show` and `tollama_pull`
+  - remaining MCP-only surface (`tollama_explain` + trust/XAI tools) is now
+    treated as MCP-only by design until a shared trust/XAI contract exists
+  - current shared-subset coverage is documented in `docs/agent-tools.md`
 - Benchmark script added for SDK-vs-raw comparison:
   - `benchmarks/tollama_vs_raw.py` reports effective LOC and time-to-first-forecast
 - High-level Python SDK convenience facade added:

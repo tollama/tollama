@@ -25,6 +25,8 @@ def test_autogen_wrappers_expose_tool_specs_and_function_map() -> None:
     assert names == [
         "tollama_health",
         "tollama_models",
+        "tollama_show",
+        "tollama_pull",
         "tollama_forecast",
         "tollama_auto_forecast",
         "tollama_analyze",
@@ -32,6 +34,8 @@ def test_autogen_wrappers_expose_tool_specs_and_function_map() -> None:
         "tollama_counterfactual",
         "tollama_scenario_tree",
         "tollama_report",
+        "tollama_what_if",
+        "tollama_pipeline",
         "tollama_compare",
         "tollama_recommend",
     ]
@@ -75,8 +79,8 @@ def test_autogen_register_uses_register_function(monkeypatch: pytest.MonkeyPatch
     executor = object()
     result = register_autogen_tools(caller=caller, executor=executor)
 
-    assert result["count"] == 11
-    assert len(calls) == 11
+    assert result["count"] == 15
+    assert len(calls) == 15
     assert calls[0]["caller"] is caller
     assert calls[0]["executor"] is executor
     assert calls[0]["name"] == "tollama_health"
@@ -103,6 +107,24 @@ def test_crewai_wrapper_builds_tools_from_specs(monkeypatch: pytest.MonkeyPatch)
     tools = get_crewai_tools()
     tools_by_name = {tool.name: tool for tool in tools}
 
+    assert [tool.name for tool in tools] == [
+        "tollama_health",
+        "tollama_models",
+        "tollama_show",
+        "tollama_pull",
+        "tollama_forecast",
+        "tollama_auto_forecast",
+        "tollama_analyze",
+        "tollama_generate",
+        "tollama_counterfactual",
+        "tollama_scenario_tree",
+        "tollama_report",
+        "tollama_what_if",
+        "tollama_pipeline",
+        "tollama_compare",
+        "tollama_recommend",
+    ]
+
     recommend_payload = tools_by_name["tollama_recommend"].run(
         horizon=12,
         has_future_covariates=True,
@@ -127,6 +149,24 @@ def test_smolagents_wrapper_builds_tools_from_specs(monkeypatch: pytest.MonkeyPa
 
     tools = get_smolagents_tools()
     tools_by_name = {tool.name: tool for tool in tools}
+
+    assert [tool.name for tool in tools] == [
+        "tollama_health",
+        "tollama_models",
+        "tollama_show",
+        "tollama_pull",
+        "tollama_forecast",
+        "tollama_auto_forecast",
+        "tollama_analyze",
+        "tollama_generate",
+        "tollama_counterfactual",
+        "tollama_scenario_tree",
+        "tollama_report",
+        "tollama_what_if",
+        "tollama_pipeline",
+        "tollama_compare",
+        "tollama_recommend",
+    ]
 
     recommend_tool = tools_by_name["tollama_recommend"]
     payload = recommend_tool.forward(

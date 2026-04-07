@@ -47,9 +47,9 @@ flow = t.workflow(my_data).analyze().auto_forecast(horizon=30).what_if(scenarios
 
 | Interface      | Description                                                               |
 | -------------- | ------------------------------------------------------------------------- |
-| **HTTP API**   | 43+ endpoints — forecast, analysis, comparison, what-if, report           |
-| **Python SDK** | `Tollama` class with 16 methods, DataFrame conversion, chained workflow   |
-| **CLI**        | `tollama pull` → `tollama run` — Ollama-style workflow                    |
+| **HTTP API**   | Forecasting, analysis, comparison, report, ingest, and XAI routes; canonical inventory lives in `docs/api-reference.md` |
+| **Python SDK** | `Tollama` class with forecast, analysis, report, and chained workflow helpers |
+| **CLI**        | `tollama pull` → `tollama run` — Ollama-style workflow plus diagnostics and runtime tooling |
 | **Dashboard**  | Web (Chart.js) + TUI (Textual) — model monitoring, forecast visualization |
 
 ## Value for AI Agents — Optional Integrations
@@ -58,33 +58,20 @@ AI agents can **invoke TSFMs as tools when forecasting is part of a broader work
 
 | Integration                       | Description                                                  |
 | --------------------------------- | ------------------------------------------------------------ |
-| **MCP Server**                    | 22 tools — forecast, analyze, compare, what-if, report, trust, etc. |
+| **MCP Server**                    | Forecast, analysis, comparison, report, and trust-oriented tool surface maintained in code and integration docs |
 | **A2A Protocol**                  | JSON-RPC based agent-to-agent communication with task queue  |
-| **LangChain**                     | 13 natively integrated tools                                 |
-| **CrewAI / AutoGen / Smolagents** | Per-framework adapters                                       |
+| **LangChain**                     | Native tool wrappers for forecast and structured analysis workflows |
+| **CrewAI / AutoGen / Smolagents** | Per-framework adapters built from shared tool specs          |
 | **OpenClaw Skill**                | OpenAI tool schema + shell scripts                           |
 
 ## Supported Models
 
-Tollama ships **14 models**: 7 time series foundation models (TSFMs) and 7 neural baselines.
-**All 14 models share the exact same interface** — `tollama run`, `POST /api/forecast`, Python SDK, MCP tools — no extra configuration or training steps required regardless of model type.
+Tollama keeps TSFMs and neural baselines behind the same forecast contract.
+Use `tollama run`, `POST /api/forecast`, the Python SDK, or agent integrations
+without changing the request shape.
 
-| Model              | Provider                | Type            | Covariates    |
-| ------------------ | ----------------------- |:---------------:|:-------------:|
-| Chronos-2          | Amazon                  | TSFM            | Past + Future |
-| Granite TTM R2     | IBM                     | TSFM            | Past + Future |
-| TimesFM 2.5-200M   | Google                  | TSFM            | Past + Future |
-| Moirai 2.0-R Small | Salesforce              | TSFM            | Past + Future |
-| Sundial Base 128M  | THUML                   | TSFM            | Target only   |
-| Toto Open Base 1.0 | Datadog                 | TSFM            | Past only     |
-| Lag-Llama          | TSFM Community          | TSFM            | Target only   |
-| PatchTST           | IBM Granite             | Neural Baseline | Target only   |
-| TiDE               | Unit8 / Darts           | Neural Baseline | Past + Future |
-| N-HiTS             | Nixtla / NeuralForecast | Neural Baseline | Target only   |
-| N-BEATSx           | Nixtla / NeuralForecast | Neural Baseline | Target only   |
-| TimeMixer          | Tsinghua / THUML        | Neural Baseline | Past + Future |
-| Timer              | Tsinghua / THUML        | Neural Baseline | Target only   |
-| ForecastPFN        | PFN Research            | Neural Baseline | Target only   |
+The human-facing model guide lives in `docs/models.md`, while the
+machine-readable source of truth lives in `model-registry/registry.yaml`.
 
 Routing defaults can be driven by benchmark artifacts instead of static family heuristics.
 `benchmarks/cross_model_tsfm.py` now emits a `routing.json` manifest that Tollama can read
@@ -95,13 +82,21 @@ from `~/.tollama/routing.json` or `TOLLAMA_ROUTING_MANIFEST`.
 > - **TSFM (Time Series Foundation Model)**: Pre-trained on large, diverse time series corpora (billions of data points across multiple domains). Supports **zero-shot forecasting** — produces predictions on completely unseen data without per-dataset fine-tuning.
 > - **Neural Baseline**: Deep learning architectures that are **not** pre-trained on large diverse corpora. Tollama includes them as reference baselines for model comparison and routing benchmarks. Behind the scenes, PatchTST and TiDE load pre-trained weights for direct inference, while N-HiTS and N-BEATSx auto-fit on the provided input data then predict — all transparently within a single forecast call.
 
+## Canonical Inventories
+
+- HTTP endpoint inventory: `docs/api-reference.md`
+- Agent tool inventory: `docs/agent-tools.md`
+- Model / family guide: `docs/models.md`
+- Covariates contract and compatibility matrix: `docs/covariates.md`
+- Machine-readable model registry: `model-registry/registry.yaml`
+
 ## Overview Architecture
 
 ```
 ┌────────────────────────────────────────────────────────┐
 │  Developers: CLI / SDK / HTTP API / Dashboard          │
 ├────────────────────────────────────────────────────────┤
-│  AI Agents: MCP (15 tools) / A2A / LangChain / ...    │
+│  AI Agents: MCP / A2A / LangChain / ...               │
 ├────────────────────────────────────────────────────────┤
 │  TSFM Platform Daemon (tollamad)                       │
 │  Forecast · Analysis · Compare · What-if · Pipeline    │
@@ -109,8 +104,8 @@ from `~/.tollama/routing.json` or `TOLLAMA_ROUTING_MANIFEST`.
 ├──────┬──────┬──────┬──────┬──────┬──────┬──────────────┤
 │      │ stdio JSON-lines protocol      │              │
 │      ▼      ▼      ▼      ▼      ▼      ▼              │
-│ torch timesfm uni2ts sundial toto lag_llama patchtst tide nhits nbeatsx mock │
-│   7 TSFMs + 4 neural baselines — 11 models total       │
+│ family-specific runner processes (torch, timesfm, ...) │
+│   TSFMs + neural baselines behind isolated runtimes    │
 │   Independent venv per family — zero dependency clash   │
 └────────────────────────────────────────────────────────┘
 ```
@@ -726,28 +721,42 @@ from tollama.skill import get_tollama_tools
 tools = get_tollama_tools(base_url="http://127.0.0.1:11435", timeout=10.0)
 ```
 
+Canonical cross-framework inventory:
+
+- `docs/agent-tools.md`
+
 Provided `BaseTool` wrappers:
 
+- `TollamaHealthTool`
+- `TollamaModelsTool`
+- `TollamaShowTool`
+- `TollamaPullTool`
 - `TollamaForecastTool`
 - `TollamaAutoForecastTool`
 - `TollamaAnalyzeTool`
 - `TollamaGenerateTool`
+- `TollamaCounterfactualTool`
+- `TollamaScenarioTreeTool`
+- `TollamaReportTool`
 - `TollamaWhatIfTool`
 - `TollamaPipelineTool`
 - `TollamaCompareTool`
 - `TollamaRecommendTool`
-- `TollamaHealthTool`
-- `TollamaModelsTool`
 - `get_tollama_tools(base_url="http://127.0.0.1:11435", timeout=10.0)`
 
 Tool input contracts:
 
 - `tollama_health`: no runtime args (`{}`)
 - `tollama_models`: `{"mode": "installed"|"loaded"|"available"}`
+- `tollama_show`: `{"model": "<model-name>"}`
+- `tollama_pull`: `{"model": "<model-name>", "accept_license"?: bool}`
 - `tollama_forecast`: `{"request": <ForecastRequest-compatible dict>}`
 - `tollama_auto_forecast`: `{"request": <AutoForecastRequest-compatible dict>}`
 - `tollama_analyze`: `{"request": <AnalyzeRequest-compatible dict>}`
 - `tollama_generate`: `{"request": <GenerateRequest-compatible dict>}`
+- `tollama_counterfactual`: `{"request": <CounterfactualRequest-compatible dict>}`
+- `tollama_scenario_tree`: `{"request": <ScenarioTreeRequest-compatible dict>}`
+- `tollama_report`: `{"request": <ReportRequest-compatible dict>}`
 - `tollama_what_if`: `{"request": <WhatIfRequest-compatible dict>}`
 - `tollama_pipeline`: `{"request": <PipelineRequest-compatible dict>}`
 - `tollama_compare`: `{"request": <CompareRequest-compatible dict>}`
@@ -765,6 +774,8 @@ Tool output/error behavior:
   `AsyncTollamaClient` (no sync fallback stubs)
 - if `langchain_core` is missing, import raises:
   `pip install "tollama[langchain]"`
+- MCP-only trust/XAI tools remain documented in `docs/agent-tools.md`; they are
+  intentionally not part of the default LangChain/shared wrapper surface yet
 
 Validation test:
 
@@ -776,6 +787,10 @@ PYTHONPATH=src python -m pytest -q tests/test_langchain_skill.py
 
 These wrappers reuse the same tool contracts via
 `src/tollama/skill/framework_common.py`.
+
+Current shared-subset coverage is documented in:
+
+- `docs/agent-tools.md`
 
 ```python
 from tollama.skill import (
@@ -970,6 +985,10 @@ Automated installer (macOS/Linux):
 ```bash
 bash scripts/install_mcp.sh --base-url "http://127.0.0.1:11435"
 ```
+
+Canonical MCP and cross-framework tool inventory:
+
+- `docs/agent-tools.md`
 
 ### Implementation layout
 
