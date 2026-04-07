@@ -22,8 +22,10 @@ from tollama.core.schemas import (
     CounterfactualRequest,
     ForecastRequest,
     GenerateRequest,
+    PipelineRequest,
     ReportRequest,
     ScenarioTreeRequest,
+    WhatIfRequest,
 )
 
 _MODEL_NAME_EXAMPLES = (
@@ -48,6 +50,15 @@ class _ToolInputBase(BaseModel):
 
 class _ModelsInput(_ToolInputBase):
     mode: Literal["installed", "loaded", "available"] = "installed"
+
+
+class _ShowInput(_ToolInputBase):
+    model: str
+
+
+class _PullInput(_ToolInputBase):
+    model: str
+    accept_license: bool = False
 
 
 class _ForecastInput(_ToolInputBase):
@@ -75,6 +86,14 @@ class _ScenarioTreeInput(_ToolInputBase):
 
 
 class _ReportInput(_ToolInputBase):
+    request: dict[str, Any]
+
+
+class _WhatIfInput(_ToolInputBase):
+    request: dict[str, Any]
+
+
+class _PipelineInput(_ToolInputBase):
     request: dict[str, Any]
 
 
@@ -133,6 +152,39 @@ def get_agent_tool_specs(
                 "additionalProperties": False,
             },
             handler=lambda **kwargs: _models_handler(client=client, **kwargs),
+        ),
+        AgentToolSpec(
+            name="tollama_show",
+            description=(
+                "Show installed or available model metadata and capabilities by model name. "
+                f"Model examples: {_MODEL_NAME_EXAMPLES}."
+            ),
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "model": {"type": "string", "minLength": 1},
+                },
+                "required": ["model"],
+                "additionalProperties": False,
+            },
+            handler=lambda **kwargs: _show_handler(client=client, **kwargs),
+        ),
+        AgentToolSpec(
+            name="tollama_pull",
+            description=(
+                "Install a model through the non-streaming pull endpoint. "
+                "Requires model. Optional accept_license=true for restricted models."
+            ),
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "model": {"type": "string", "minLength": 1},
+                    "accept_license": {"type": "boolean", "default": False},
+                },
+                "required": ["model"],
+                "additionalProperties": False,
+            },
+            handler=lambda **kwargs: _pull_handler(client=client, **kwargs),
         ),
         AgentToolSpec(
             name="tollama_forecast",
@@ -249,6 +301,40 @@ def get_agent_tool_specs(
             handler=lambda **kwargs: _report_handler(client=client, **kwargs),
         ),
         AgentToolSpec(
+            name="tollama_what_if",
+            description=(
+                "Apply scenario transforms and forecast each scenario "
+                "side-by-side with the baseline. "
+                "Requires request.model, request.horizon, request.series[], and request.scenarios."
+            ),
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "request": {"type": "object"},
+                },
+                "required": ["request"],
+                "additionalProperties": False,
+            },
+            handler=lambda **kwargs: _what_if_handler(client=client, **kwargs),
+        ),
+        AgentToolSpec(
+            name="tollama_pipeline",
+            description=(
+                "Run the end-to-end autonomous pipeline "
+                "(analyze, recommend, optional pull, auto-forecast). "
+                "Requires request.horizon and request.series[]."
+            ),
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "request": {"type": "object"},
+                },
+                "required": ["request"],
+                "additionalProperties": False,
+            },
+            handler=lambda **kwargs: _pipeline_handler(client=client, **kwargs),
+        ),
+        AgentToolSpec(
             name="tollama_compare",
             description=(
                 "Run the same forecast request over multiple models and compare outcomes. "
@@ -338,6 +424,35 @@ def _models_handler(*, client: TollamaClient, mode: str = "installed") -> dict[s
         "mode": args.mode,
         "items": items,
     }
+
+
+def _show_handler(*, client: TollamaClient, model: str) -> dict[str, Any]:
+    try:
+        args = _ShowInput(model=model)
+    except ValidationError as exc:
+        return _invalid_request_payload(str(exc))
+
+    try:
+        return client.show(args.model)
+    except TollamaClientError as exc:
+        return _client_error_payload(exc)
+
+
+def _pull_handler(
+    *,
+    client: TollamaClient,
+    model: str,
+    accept_license: bool = False,
+) -> dict[str, Any]:
+    try:
+        args = _PullInput(model=model, accept_license=accept_license)
+    except ValidationError as exc:
+        return _invalid_request_payload(str(exc))
+
+    try:
+        return client.pull(args.model, accept_license=args.accept_license)
+    except TollamaClientError as exc:
+        return _client_error_payload(exc)
 
 
 def _forecast_handler(*, client: TollamaClient, request: dict[str, Any]) -> dict[str, Any]:
@@ -447,6 +562,34 @@ def _report_handler(*, client: TollamaClient, request: dict[str, Any]) -> dict[s
 
     try:
         response = client.report(report_request)
+    except TollamaClientError as exc:
+        return _client_error_payload(exc)
+    return response.model_dump(mode="json", exclude_none=True)
+
+
+def _what_if_handler(*, client: TollamaClient, request: dict[str, Any]) -> dict[str, Any]:
+    try:
+        args = _WhatIfInput(request=request)
+        what_if_request = WhatIfRequest.model_validate(args.request)
+    except ValidationError as exc:
+        return _invalid_request_payload(str(exc))
+
+    try:
+        response = client.what_if(what_if_request)
+    except TollamaClientError as exc:
+        return _client_error_payload(exc)
+    return response.model_dump(mode="json", exclude_none=True)
+
+
+def _pipeline_handler(*, client: TollamaClient, request: dict[str, Any]) -> dict[str, Any]:
+    try:
+        args = _PipelineInput(request=request)
+        pipeline_request = PipelineRequest.model_validate(args.request)
+    except ValidationError as exc:
+        return _invalid_request_payload(str(exc))
+
+    try:
+        response = client.pipeline(pipeline_request)
     except TollamaClientError as exc:
         return _client_error_payload(exc)
     return response.model_dump(mode="json", exclude_none=True)

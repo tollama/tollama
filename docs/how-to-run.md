@@ -654,13 +654,26 @@ python -m pip install -e ".[langchain]"
 
 Available wrappers (in `src/tollama/skill/langchain.py`):
 
-- `TollamaForecastTool`
-- `TollamaAnalyzeTool`
-- `TollamaCompareTool`
-- `TollamaRecommendTool`
 - `TollamaHealthTool`
 - `TollamaModelsTool`
+- `TollamaShowTool`
+- `TollamaPullTool`
+- `TollamaForecastTool`
+- `TollamaAutoForecastTool`
+- `TollamaAnalyzeTool`
+- `TollamaGenerateTool`
+- `TollamaCounterfactualTool`
+- `TollamaScenarioTreeTool`
+- `TollamaReportTool`
+- `TollamaWhatIfTool`
+- `TollamaPipelineTool`
+- `TollamaCompareTool`
+- `TollamaRecommendTool`
 - `get_tollama_tools(base_url="http://127.0.0.1:11435", timeout=10.0)`
+
+Canonical cross-framework inventory:
+
+- `docs/agent-tools.md`
 
 Quick smoke:
 
@@ -741,8 +754,17 @@ Tool contract summary:
 
 - `tollama_health`: no args, returns daemon `health` + `version`
 - `tollama_models`: args `{"mode":"installed|loaded|available"}`
+- `tollama_show`: args `{"model": "<model-name>"}`
+- `tollama_pull`: args `{"model": "<model-name>", "accept_license"?: bool}`
 - `tollama_forecast`: args `{"request": <ForecastRequest dict>}`
+- `tollama_auto_forecast`: args `{"request": <AutoForecastRequest dict>}`
 - `tollama_analyze`: args `{"request": <AnalyzeRequest dict>}`
+- `tollama_generate`: args `{"request": <GenerateRequest dict>}`
+- `tollama_counterfactual`: args `{"request": <CounterfactualRequest dict>}`
+- `tollama_scenario_tree`: args `{"request": <ScenarioTreeRequest dict>}`
+- `tollama_report`: args `{"request": <ReportRequest dict>}`
+- `tollama_what_if`: args `{"request": <WhatIfRequest dict>}`
+- `tollama_pipeline`: args `{"request": <PipelineRequest dict>}`
 - `tollama_compare`: args `{"request": <CompareRequest dict>}`
 - `tollama_recommend`: args `{"horizon": int, ...}` for ranked model hints
 - all wrappers return structured `dict` payloads; errors use
@@ -750,6 +772,8 @@ Tool contract summary:
 - async invocations are fully implemented via `_arun` + `AsyncTollamaClient`
 - missing optional dependency hint:
   `pip install "tollama[langchain]"`
+- MCP-only trust/XAI tools are intentionally left out of the default LangChain
+  and shared-wrapper surface; see `docs/agent-tools.md`
 
 LangChain wrapper validation command:
 
@@ -760,8 +784,8 @@ PYTHONPATH=src python -m pytest -q tests/test_langchain_skill.py
 ## Additional Agent Wrappers
 
 `tollama` also provides wrapper factories for CrewAI, AutoGen, and smolagents.
-All wrappers reuse the same tool contracts
-(`health/models/forecast/analyze/compare/recommend`).
+These wrappers reuse the shared `framework_common.py` subset, whose current
+coverage is documented in `docs/agent-tools.md`.
 
 ```python
 from tollama.skill import (

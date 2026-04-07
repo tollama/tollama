@@ -52,6 +52,15 @@ class ModelsToolInput(_ToolInputBase):
     mode: Literal["installed", "loaded", "available"] = "installed"
 
 
+class ShowToolInput(_ToolInputBase):
+    model: str
+
+
+class PullToolInput(_ToolInputBase):
+    model: str
+    accept_license: bool = False
+
+
 class ForecastToolInput(_ToolInputBase):
     request: dict[str, Any]
 
@@ -244,6 +253,93 @@ class TollamaModelsTool(_TollamaBaseTool):
             "mode": args.mode,
             "items": items,
         }
+
+
+class TollamaShowTool(_TollamaBaseTool):
+    """LangChain tool that returns one model's metadata and capabilities."""
+
+    name: str = "tollama_show"
+    description: str = (
+        "Show model metadata, license, and capability details for one model name. "
+        f"Supported names include {_MODEL_NAME_EXAMPLES}. "
+        'Example: tool.invoke({"model":"chronos2"}).'
+    )
+    args_schema: type[BaseModel] = ShowToolInput
+
+    def _run(self, model: str, run_manager: Any | None = None) -> dict[str, Any]:
+        del run_manager
+        try:
+            args = ShowToolInput(model=model)
+        except ValidationError as exc:
+            return _invalid_request_payload(str(exc))
+
+        client = self._client()
+        try:
+            return client.show(args.model)
+        except TollamaClientError as exc:
+            return _client_error_payload(exc)
+
+    async def _arun(self, model: str, run_manager: Any | None = None) -> dict[str, Any]:
+        del run_manager
+        try:
+            args = ShowToolInput(model=model)
+        except ValidationError as exc:
+            return _invalid_request_payload(str(exc))
+
+        client = self._async_client()
+        try:
+            return await client.show(args.model)
+        except TollamaClientError as exc:
+            return _client_error_payload(exc)
+
+
+class TollamaPullTool(_TollamaBaseTool):
+    """LangChain tool that installs one model via the pull endpoint."""
+
+    name: str = "tollama_pull"
+    description: str = (
+        "Install one model through the non-streaming pull endpoint. "
+        "Input schema: {model: string, accept_license?: boolean}. "
+        f"Supported names include {_MODEL_NAME_EXAMPLES}. "
+        'Example: tool.invoke({"model":"chronos2"}).'
+    )
+    args_schema: type[BaseModel] = PullToolInput
+
+    def _run(
+        self,
+        model: str,
+        accept_license: bool = False,
+        run_manager: Any | None = None,
+    ) -> dict[str, Any]:
+        del run_manager
+        try:
+            args = PullToolInput(model=model, accept_license=accept_license)
+        except ValidationError as exc:
+            return _invalid_request_payload(str(exc))
+
+        client = self._client()
+        try:
+            return client.pull(args.model, accept_license=args.accept_license)
+        except TollamaClientError as exc:
+            return _client_error_payload(exc)
+
+    async def _arun(
+        self,
+        model: str,
+        accept_license: bool = False,
+        run_manager: Any | None = None,
+    ) -> dict[str, Any]:
+        del run_manager
+        try:
+            args = PullToolInput(model=model, accept_license=accept_license)
+        except ValidationError as exc:
+            return _invalid_request_payload(str(exc))
+
+        client = self._async_client()
+        try:
+            return await client.pull(args.model, accept_license=args.accept_license)
+        except TollamaClientError as exc:
+            return _client_error_payload(exc)
 
 
 class TollamaForecastTool(_TollamaBaseTool):
@@ -932,4 +1028,6 @@ def get_tollama_tools(
         TollamaRecommendTool(base_url=base_url, timeout=timeout),
         TollamaHealthTool(base_url=base_url, timeout=timeout),
         TollamaModelsTool(base_url=base_url, timeout=timeout),
+        TollamaShowTool(base_url=base_url, timeout=timeout),
+        TollamaPullTool(base_url=base_url, timeout=timeout),
     ]

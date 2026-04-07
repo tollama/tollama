@@ -4,6 +4,9 @@ Tollama daemon exposes Ollama-style and v1-style HTTP endpoints.
 
 Base URL (default): `http://127.0.0.1:11435`
 
+This page is the canonical HTTP endpoint inventory. Overview documents should
+link here instead of repeating hardcoded endpoint counts.
+
 ## Interactive API Docs
 
 - Swagger UI: `/docs`

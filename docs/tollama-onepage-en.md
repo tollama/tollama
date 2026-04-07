@@ -43,9 +43,9 @@ flow = t.workflow(my_data).analyze().auto_forecast(horizon=30).what_if(scenarios
 
 | Interface | Description |
 |-----------|------------|
-| **HTTP API** | One daemon for forecasting, comparison, analysis, reporting, dashboard, and XAI |
-| **Python SDK** | `Tollama` class with DataFrame conversion and chained workflow helpers |
-| **CLI** | `tollama pull` → `tollama run` — Ollama-style workflow |
+| **HTTP API** | Forecasting, analysis, comparison, report, ingest, and XAI routes. Canonical inventory lives in `docs/api-reference.md` |
+| **Python SDK** | `Tollama` class with forecast / analyze / report / workflow helpers |
+| **CLI** | `tollama pull` → `tollama run` — Ollama-style workflow plus diagnostics and runtime tooling |
 | **Dashboard** | Web (Chart.js) + TUI (Textual) — model monitoring, forecast visualization |
 
 ## Value for AI Agents — MCP, A2A, Skills
@@ -54,10 +54,10 @@ AI agents can **invoke TSFMs as tools the moment they need a forecast.**
 
 | Integration | Description |
 |------------|------------|
-| **MCP Server** | 22 tools — 15 forecast/orchestration tools + 7 XAI/trust tools |
+| **MCP Server** | Forecast / analyze / compare / what-if / report oriented tool surface |
 | **A2A Protocol** | JSON-RPC based agent-to-agent communication with task queue |
-| **LangChain** | 13 natively integrated tools |
-| **CrewAI / AutoGen / Smolagents** | Per-framework adapters |
+| **LangChain** | Native wrappers for forecasting and structured analysis workflows |
+| **CrewAI / AutoGen / Smolagents** | Per-framework adapters built from shared specs |
 | **OpenClaw Skill** | OpenAI tool schema + shell scripts |
 
 ## TSFM Platform Dashboard
@@ -77,38 +77,35 @@ Manage the entire platform at a glance through web and terminal TUI dashboards.
 ┌────────────────────────────────────────────────────────┐
 │  Developers: CLI / SDK / HTTP API / Dashboard          │
 ├────────────────────────────────────────────────────────┤
-│  AI Agents: MCP (22 tools) / A2A / LangChain / ...    │
+│  AI Agents: MCP / A2A / LangChain / ...               │
 ├────────────────────────────────────────────────────────┤
 │  TSFM Platform Daemon (tollamad)                       │
 │  Forecast · Analysis · Compare · What-if · Pipeline    │
 │  Auth · Rate Limiting · Prometheus · SSE               │
-├────────────────────────────────────────────────────────┤
-│  stdio JSON-lines protocol                             │
-│  torch / timesfm / uni2ts / sundial / toto / lag_llama│
-│  patchtst / tide / nhits / nbeatsx / timer            │
-│  timemixer / forecastpfn / mock                       │
+├──────┬──────┬──────┬──────┬──────┬──────┬──────────────┤
+│      │ stdio JSON-lines protocol      │              │
+│      ▼      ▼      ▼      ▼      ▼      ▼              │
+│   family-specific runner processes (torch, timesfm, ...)│
 │   Independent venv per family — zero dependency clash   │
 └────────────────────────────────────────────────────────┘
 ```
 
 ## Supported Models
 
-| Model | Provider | Covariates |
-|-------|----------|:----------:|
-| Chronos-2 | Amazon | Past + Future |
-| Granite TTM R2 | IBM | Past + Future |
-| TimesFM 2.5-200M | Google | Past + Future |
-| Moirai 2.0-R Small | Salesforce | Past + Future |
-| Sundial Base 128M | THUML | Target only |
-| Toto Open Base 1.0 | Datadog | Past only |
-| Lag-Llama | Time-Series-Foundation-Models | Target only |
-| PatchTST | IBM Granite | Target only |
-| TiDE | Tollama local runner | Past + Future |
-| N-HiTS | Tollama local runner | Target only |
-| N-BEATSx | Tollama local runner | Target only |
-| Timer Base | THUML | Target only |
-| TimeMixer Base | THUML | Target only |
-| ForecastPFN | Abacus.AI | Target only |
+TSFMs and neural baselines sit behind the same forecast contract. The
+human-facing guide lives in `docs/models.md`, the machine-readable registry
+lives in `model-registry/registry.yaml`, and covariate compatibility lives in
+`docs/covariates.md`.
+
+---
+
+## Canonical References
+
+- HTTP endpoint inventory: `docs/api-reference.md`
+- Agent tool inventory: `docs/agent-tools.md`
+- Model / family guide: `docs/models.md`
+- Covariates contract: `docs/covariates.md`
+- Machine-readable registry: `model-registry/registry.yaml`
 
 ---
 

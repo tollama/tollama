@@ -48,8 +48,8 @@ graph TD
 
     subgraph Core ["Shared Core"]
         SCHEMAS[Schemas & Protocol]
-        REGISTRY[Model Registry]
-        STORAGE[Local Storage<br/>~/.tollama/]
+        REGISTRY[Registry / Storage / Routing]
+        SERVICES[Deterministic Domain Services]
         CONFIG[Configuration]
     end
 
@@ -95,7 +95,7 @@ graph TD
     ROUTES --> SCHEMAS
     SUPER --> SCHEMAS
     ROUTES --> REGISTRY
-    ROUTES --> STORAGE
+    ROUTES --> SERVICES
     ROUTES --> CONFIG
 ```
 
@@ -105,7 +105,7 @@ graph TD
 |-------|-----------|----------------|
 | **Daemon** | `src/tollama/daemon/` | HTTP API, auth, rate limiting, runner supervision |
 | **Runners** | `src/tollama/runners/` | Model inference via stdio JSON protocol |
-| **Core** | `src/tollama/core/` | Shared schemas, protocol, registry, storage, config |
+| **Core** | `src/tollama/core/` | Shared schemas, protocol, registry/storage/routing, and deterministic services reused across daemon, CLI, SDK, and tests |
 | **CLI** | `src/tollama/cli/` | User-facing commands, daemon HTTP client |
 | **Client** | `src/tollama/client/` | Shared HTTP client (CLI, MCP, SDK) |
 | **MCP** | `src/tollama/mcp/` | MCP server and tool handlers |
@@ -117,11 +117,16 @@ graph TD
 
 - **Daemon does not import ML runtimes.** Heavy dependencies belong in runner extras.
 - **Runners do not expose HTTP.** Communication is stdio JSON lines only.
-- **Core is the shared contract layer.** All request/response types live here.
+- **Core contains the shared contracts plus reusable deterministic services.** Request/response types, protocol helpers, registry/storage/routing helpers, and dependency-light domain logic live here.
 - **Each runner family is independently installable** via optional extras
   (`runner_torch`, `runner_timesfm`, etc.).
 - **XAI layer is post-inference.** It consumes forecast results and produces
   explanations, trust scores, and decision reports — it never touches model inference.
+
+Canonical inventories live in `docs/api-reference.md` (HTTP endpoints),
+`docs/agent-tools.md` (agent tool surfaces), `docs/models.md`
+(human-facing model/family guide), and `model-registry/registry.yaml`
+(machine-readable model source of truth).
 
 ---
 

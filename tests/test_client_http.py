@@ -675,6 +675,32 @@ async def test_async_models_available_reads_api_info() -> None:
 
 
 @pytest.mark.asyncio
+async def test_async_show_returns_json_payload() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/api/show"
+        return httpx.Response(200, json={"name": "mock", "family": "mock"})
+
+    client = _async_client(httpx.MockTransport(handler))
+    payload = await client.show("mock")
+
+    assert payload["name"] == "mock"
+    assert payload["family"] == "mock"
+
+
+@pytest.mark.asyncio
+async def test_async_pull_returns_json_payload() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/api/pull"
+        return httpx.Response(200, json={"status": "success", "model": "mock"})
+
+    client = _async_client(httpx.MockTransport(handler))
+    payload = await client.pull("mock")
+
+    assert payload["status"] == "success"
+    assert payload["model"] == "mock"
+
+
+@pytest.mark.asyncio
 async def test_async_analyze_returns_typed_response() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         assert request.url.path == "/api/analyze"

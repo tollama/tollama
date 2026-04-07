@@ -14,7 +14,7 @@
 
 - `src/tollama/daemon/` owns the public HTTP API surface and runner supervision.
 - `src/tollama/runners/` owns runner implementations and stdio protocol handling.
-- `src/tollama/core/` owns shared request/response schemas and protocol primitives.
+- `src/tollama/core/` owns shared request/response schemas, protocol primitives, and deterministic domain services reused across layers.
 - `src/tollama/cli/` owns user-facing command entrypoints and daemon HTTP client code.
 - `tests/` contains unit and integration coverage for all layers.
 - Tooling and quality gates are defined in `pyproject.toml` and `.github/workflows/`.
@@ -30,7 +30,7 @@
 - Boundaries:
   - Daemon code should not implement model logic; it routes requests and maps errors.
   - Runner code should not expose HTTP endpoints; communication is stdio JSON lines only.
-  - Shared schemas/protocol types should live in `core` and be reused across daemon/runners/tests.
+  - Shared schemas/protocol types and reusable deterministic services should live in `core` and be reused across daemon/runners/tests.
   - Avoid cross-layer shortcuts that bypass `core` contracts.
 - Change scope:
   - Prefer additive, focused changes over broad refactors.
@@ -102,9 +102,11 @@ pytest -q tests/test_toto_runner.py tests/test_toto_adapter.py
   relevant docs in the same PR:
   - `README.md`
   - `CHANGELOG.md`
+  - `docs/agent-tools.md`
   - `docs/covariates.md`
   - `docs/internal/roadmap.md`
   - `docs/internal/todo-list.md`
 - Minimum expectation:
   - status markers stay consistent with implementation (`[x]`, `[~]`, `[ ]`)
-  - capability matrices and endpoint/command inventories match current behavior
+  - canonical capability and endpoint inventories match current behavior
+  - overview docs link to canonical inventories instead of duplicating drifting counts

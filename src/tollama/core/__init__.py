@@ -1,4 +1,4 @@
-"""Core types and protocol helpers for tollama."""
+"""Shared contracts and deterministic core services for tollama."""
 
 from .config import (
     ConfigFileError,

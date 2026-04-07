@@ -1,7 +1,28 @@
 # Model Guides
 
-This page collects model-family setup and forecasting examples that were previously
-in `README.md`.
+This page is the canonical human-facing model and family guide. The
+machine-readable source of truth is `model-registry/registry.yaml`, and overview
+docs should link here instead of repeating model counts or long support tables.
+
+## Registry-Backed Model Inventory
+
+| Model | Family | Source | Covariates |
+|---|---|---|---|
+| `mock` | `mock` | `tollama/mock-runner` | Target only |
+| `chronos2` | `torch` | `amazon/chronos-2` | Past + Future |
+| `granite-ttm-r2` | `torch` | `ibm-granite/granite-timeseries-ttm-r2` | Past + Future |
+| `timesfm-2.5-200m` | `timesfm` | `google/timesfm-2.5-200m-pytorch` | Past + Future |
+| `moirai-2.0-R-small` | `uni2ts` | `Salesforce/moirai-2.0-R-small` | Past + Future |
+| `sundial-base-128m` | `sundial` | `thuml/sundial-base-128m` | Target only |
+| `toto-open-base-1.0` | `toto` | `Datadog/Toto-Open-Base-1.0` | Past only |
+| `lag-llama` | `lag_llama` | `time-series-foundation-models/Lag-Llama` | Target only |
+| `patchtst` | `patchtst` | `ibm-granite/granite-timeseries-patchtst` | Target only |
+| `tide` | `tide` | `tollama/tide-runner` | Past + Future |
+| `nhits` | `nhits` | `tollama/nhits-runner` | Target only |
+| `nbeatsx` | `nbeatsx` | `tollama/nbeatsx-runner` | Target only |
+| `timer-base` | `timer` | `thuml/Timer` | Target only |
+| `timemixer-base` | `timemixer` | `thuml/timemixer` | Target only |
+| `forecastpfn` | `forecastpfn` | `abacusai/ForecastPFN` | Target only |
 
 ## Chronos2 Forecasting
 

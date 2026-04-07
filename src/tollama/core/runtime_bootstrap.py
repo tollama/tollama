@@ -1,11 +1,11 @@
 """Per-family virtual environment bootstrap for runner dependency isolation.
 
-Each runner family (
-    torch, timesfm, uni2ts, sundial, toto, lag_llama, patchtst, tide, nhits, nbeatsx
-) can be installed into its own virtualenv under ``~/.tollama/runtimes/<family>/venv/``.
-This
-keeps heavyweight and potentially conflicting ML dependencies from interfering
-with one another.
+Each bootstrappable runner family can be installed into its own virtualenv
+under ``~/.tollama/runtimes/<family>/venv/``. The exact family-to-extra and
+family-to-module mappings live in ``FAMILY_EXTRAS`` and
+``FAMILY_RUNNER_MODULES`` below, which avoids stale hardcoded family lists in
+the module docstring. This keeps heavyweight and potentially conflicting ML
+dependencies from interfering with one another.
 
 The bootstrap is *lazy* by default: when the daemon needs a runner that has no
 valid venv yet, it creates one on-the-fly.  Users can also trigger it eagerly
