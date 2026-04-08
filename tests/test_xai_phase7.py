@@ -5,11 +5,13 @@ live geo/reg connectors, CLI XAI commands.
 from __future__ import annotations
 
 import asyncio
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
 import pytest
 
+from tollama.xai.connectors import live as live_connectors
 from tollama.xai.connectors.assembler import AsyncPayloadAssembler
 from tollama.xai.connectors.helpers import build_default_async_connector_registry
 from tollama.xai.connectors.live import (
@@ -125,10 +127,13 @@ class TestAsyncPayloadAssembler:
     def test_assemble_no_connector_raises(self):
         registry = AsyncConnectorRegistry()
         assembler = AsyncPayloadAssembler(registry)
-        with pytest.raises(ConnectorFetchError):
+        with pytest.raises(ConnectorFetchError) as exc_info:
             asyncio.run(
                 assembler.assemble("missing", "x")
             )
+        assert exc_info.value.error.error_type == "not_found"
+        assert exc_info.value.error.domain == "missing"
+        assert "No async connector" in exc_info.value.error.message
 
 
 # ── Async Connector Protocol Conformance ──────────────────────────
@@ -150,6 +155,463 @@ class TestAsyncProtocolConformance:
 
     def test_async_regulatory_satisfies_protocol(self):
         assert isinstance(AsyncHttpRegulatoryConnector(base_url="http://test"), AsyncDataConnector)
+
+
+class TestAsyncConnectorFetchWiring:
+    @pytest.mark.parametrize(
+        ("connector", "identifier", "endpoint", "source_type", "id_key"),
+        [
+            (
+                AsyncHttpFinancialConnector(base_url="http://test"),
+                "AAPL",
+                "instruments",
+                "equity_market",
+                "instrument_id",
+            ),
+            (
+                AsyncHttpNewsConnector(base_url="http://test"),
+                "story-1",
+                "stories",
+                "news_feed",
+                "story_id",
+            ),
+            (
+                AsyncHttpSupplyChainConnector(base_url="http://test"),
+                "net-1",
+                "networks",
+                "supply_chain_iot",
+                "network_id",
+            ),
+            (
+                AsyncHttpGeopoliticalConnector(base_url="http://test"),
+                "kr",
+                "regions",
+                "country_risk",
+                "region_id",
+            ),
+            (
+                AsyncHttpRegulatoryConnector(base_url="http://test"),
+                "eu",
+                "jurisdictions",
+                "compliance",
+                "jurisdiction_id",
+            ),
+        ],
+    )
+    def test_fetch_forwards_connector_metadata(
+        self,
+        monkeypatch,
+        connector,
+        identifier: str,
+        endpoint: str,
+        source_type: str,
+        id_key: str,
+    ) -> None:
+        captured: dict[str, Any] = {}
+
+        async def _fake_async_fetch(**kwargs: Any) -> ConnectorResult:
+            captured.update(kwargs)
+            return ConnectorResult(
+                domain=kwargs["domain"],
+                payload={kwargs["id_key"]: kwargs["identifier"]},
+                source_id=kwargs["identifier"],
+                source_type=kwargs["source_type"],
+            )
+
+        monkeypatch.setattr(live_connectors, "_async_fetch", _fake_async_fetch)
+
+        result = asyncio.run(connector.fetch(identifier, {}))
+
+        assert result.domain == connector.domain
+        assert captured["base_url"] == "http://test"
+        assert captured["identifier"] == identifier
+        assert captured["endpoint"] == endpoint
+        assert captured["source_type"] == source_type
+        assert captured["connector_name"] == connector.connector_name
+        assert captured["id_key"] == id_key
+
+
+class TestAsyncFetchHelper:
+    def test_async_fetch_builds_url_and_auth_headers(self, monkeypatch) -> None:
+        captured: dict[str, Any] = {}
+
+        class _FakeResponse:
+            headers: dict[str, str] = {}
+
+            def raise_for_status(self) -> None:
+                return None
+
+            def json(self) -> dict[str, Any]:
+                return {"ok": True}
+
+        class _FakeAsyncClient:
+            def __init__(self, *, timeout: float) -> None:
+                captured["timeout"] = timeout
+
+            async def __aenter__(self) -> _FakeAsyncClient:
+                return self
+
+            async def __aexit__(self, exc_type, exc, tb) -> None:
+                return None
+
+            async def get(
+                self, url: str, headers: dict[str, str],
+            ) -> _FakeResponse:
+                captured["url"] = url
+                captured["headers"] = headers
+                return _FakeResponse()
+
+        monkeypatch.setattr(live_connectors.httpx, "AsyncClient", _FakeAsyncClient)
+
+        result = asyncio.run(
+            live_connectors._async_fetch(
+                base_url="http://test",
+                endpoint="stories",
+                identifier="story-1",
+                domain="news",
+                source_type="news_feed",
+                connector_name="async_http_news",
+                id_key="story_id",
+                api_key="secret",
+                timeout=12.5,
+            )
+        )
+
+        assert captured["timeout"] == 12.5
+        assert captured["url"] == "http://test/stories/story-1"
+        assert captured["headers"] == {"Authorization": "Bearer secret"}
+        assert result.domain == "news"
+        assert result.source_type == "news_feed"
+        assert result.payload["story_id"] == "story-1"
+        assert result.metadata["connector"] == "async_http_news"
+        assert result.metadata["base_url"] == "http://test"
+
+
+class TestSyncConnectorFetchWiring:
+    @pytest.mark.parametrize(
+        ("connector", "identifier", "endpoint", "source_type", "id_key"),
+        [
+            (
+                live_connectors.HttpSupplyChainConnector(
+                    base_url="http://test",
+                    api_key="secret",
+                    timeout=12.5,
+                ),
+                "net-1",
+                "networks",
+                "supply_chain_iot",
+                "network_id",
+            ),
+            (
+                HttpGeopoliticalConnector(
+                    base_url="http://test",
+                    api_key="secret",
+                    timeout=12.5,
+                ),
+                "kr",
+                "regions",
+                "country_risk",
+                "region_id",
+            ),
+            (
+                HttpRegulatoryConnector(
+                    base_url="http://test",
+                    api_key="secret",
+                    timeout=12.5,
+                ),
+                "eu",
+                "jurisdictions",
+                "compliance",
+                "jurisdiction_id",
+            ),
+        ],
+    )
+    def test_fetch_forwards_connector_metadata(
+        self,
+        monkeypatch,
+        connector,
+        identifier: str,
+        endpoint: str,
+        source_type: str,
+        id_key: str,
+    ) -> None:
+        captured: dict[str, Any] = {}
+
+        class _FakeResponse:
+            headers: dict[str, str] = {}
+
+            def raise_for_status(self) -> None:
+                return None
+
+            def json(self) -> dict[str, Any]:
+                return {"ok": True}
+
+        class _FakeClient:
+            def __init__(self, *, timeout: float) -> None:
+                captured["timeout"] = timeout
+
+            def __enter__(self) -> _FakeClient:
+                return self
+
+            def __exit__(self, exc_type, exc, tb) -> None:
+                return None
+
+            def get(self, url: str, headers: dict[str, str]) -> _FakeResponse:
+                captured["url"] = url
+                captured["headers"] = headers
+                return _FakeResponse()
+
+        monkeypatch.setattr(live_connectors.httpx, "Client", _FakeClient)
+
+        result = connector.fetch(identifier, {})
+
+        assert captured["timeout"] == 12.5
+        assert captured["url"] == f"http://test/{endpoint}/{identifier}"
+        assert captured["headers"] == {"Authorization": "Bearer secret"}
+        assert result.domain == connector.domain
+        assert result.source_type == source_type
+        assert result.payload[id_key] == identifier
+        assert result.metadata["connector"] == connector.connector_name
+        assert result.metadata["base_url"] == "http://test"
+
+
+class TestRetryingSyncConnectorFetchWiring:
+    @pytest.mark.parametrize(
+        ("connector", "identifier", "endpoint", "source_type", "id_key"),
+        [
+            (
+                live_connectors.HttpFinancialConnector(
+                    base_url="http://test",
+                    api_key="secret",
+                    timeout=12.5,
+                    max_retries=2,
+                    retry_base_delay=0.25,
+                ),
+                "AAPL",
+                "instruments",
+                "equity_market",
+                "instrument_id",
+            ),
+            (
+                live_connectors.HttpNewsConnector(
+                    base_url="http://test",
+                    api_key="secret",
+                    timeout=12.5,
+                    max_retries=2,
+                    retry_base_delay=0.25,
+                ),
+                "story-1",
+                "stories",
+                "news_feed",
+                "story_id",
+            ),
+        ],
+    )
+    def test_fetch_success_forwards_connector_metadata(
+        self,
+        monkeypatch,
+        connector,
+        identifier: str,
+        endpoint: str,
+        source_type: str,
+        id_key: str,
+    ) -> None:
+        captured: dict[str, Any] = {}
+
+        class _FakeResponse:
+            headers = {"Age": "7", "X-RateLimit-Remaining": "50"}
+            status_code = 200
+            reason_phrase = "OK"
+
+            def raise_for_status(self) -> None:
+                return None
+
+            def json(self) -> dict[str, Any]:
+                return {"ok": True}
+
+        class _FakeClient:
+            def __init__(self, *, timeout: float) -> None:
+                captured["timeout"] = timeout
+
+            def __enter__(self) -> _FakeClient:
+                return self
+
+            def __exit__(self, exc_type, exc, tb) -> None:
+                return None
+
+            def get(self, url: str, headers: dict[str, str]) -> _FakeResponse:
+                captured["url"] = url
+                captured["headers"] = headers
+                return _FakeResponse()
+
+        monkeypatch.setattr(live_connectors.httpx, "Client", _FakeClient)
+
+        result = connector.fetch(identifier, {})
+
+        assert captured["timeout"] == 12.5
+        assert captured["url"] == f"http://test/{endpoint}/{identifier}"
+        assert captured["headers"] == {"Authorization": "Bearer secret"}
+        assert result.domain == connector.domain
+        assert result.source_type == source_type
+        assert result.payload[id_key] == identifier
+        assert result.freshness_seconds == 7.0
+        assert result.metadata["connector"] == connector.connector_name
+        assert result.metadata["base_url"] == "http://test"
+        assert result.metadata["attempt"] == 1
+
+    def test_fetch_retries_then_succeeds(self, monkeypatch) -> None:
+        connector = live_connectors.HttpFinancialConnector(
+            base_url="http://test",
+            timeout=3.0,
+            max_retries=2,
+            retry_base_delay=0.25,
+        )
+        attempts = {"count": 0}
+        slept: list[float] = []
+
+        class _FakeResponse:
+            headers: dict[str, str] = {}
+            status_code = 200
+            reason_phrase = "OK"
+
+            def raise_for_status(self) -> None:
+                return None
+
+            def json(self) -> dict[str, Any]:
+                return {"ok": True}
+
+        class _FakeClient:
+            def __init__(self, *, timeout: float) -> None:
+                assert timeout == 3.0
+
+            def __enter__(self) -> _FakeClient:
+                return self
+
+            def __exit__(self, exc_type, exc, tb) -> None:
+                return None
+
+            def get(self, url: str, headers: dict[str, str]) -> _FakeResponse:
+                attempts["count"] += 1
+                if attempts["count"] == 1:
+                    raise live_connectors.httpx.ReadTimeout(
+                        "timeout",
+                        request=live_connectors.httpx.Request("GET", url),
+                    )
+                return _FakeResponse()
+
+        monkeypatch.setattr(live_connectors.httpx, "Client", _FakeClient)
+        monkeypatch.setattr(live_connectors.time, "sleep", slept.append)
+
+        result = connector.fetch("AAPL", {})
+
+        assert attempts["count"] == 2
+        assert slept == [0.25]
+        assert result.metadata["attempt"] == 2
+        assert result.payload["instrument_id"] == "AAPL"
+
+
+class TestHealthCheckWiring:
+    @pytest.mark.parametrize(
+        ("connector", "expected_url"),
+        [
+            (
+                live_connectors.HttpFinancialConnector(
+                    base_url="http://test",
+                    timeout=1.0,
+                ),
+                "http://test/api/v1/financial/health",
+            ),
+            (
+                live_connectors.HttpNewsConnector(
+                    base_url="http://test",
+                    timeout=1.0,
+                ),
+                "http://test/api/v1/news/health",
+            ),
+        ],
+    )
+    def test_health_check_returns_available_for_fast_success(
+        self,
+        monkeypatch,
+        connector,
+        expected_url: str,
+    ) -> None:
+        captured: dict[str, Any] = {}
+        base_time = datetime(2026, 1, 1, tzinfo=UTC)
+        timestamps = [
+            base_time,
+            base_time + timedelta(milliseconds=100),
+        ]
+
+        class _FakeDateTime:
+            @classmethod
+            def now(cls, tz):
+                return timestamps.pop(0)
+
+        class _FakeResponse:
+            status_code = 200
+
+        class _FakeClient:
+            def __init__(self, *, timeout: float) -> None:
+                captured["timeout"] = timeout
+
+            def __enter__(self) -> _FakeClient:
+                return self
+
+            def __exit__(self, exc_type, exc, tb) -> None:
+                return None
+
+            def get(self, url: str) -> _FakeResponse:
+                captured["url"] = url
+                return _FakeResponse()
+
+        monkeypatch.setattr(live_connectors.httpx, "Client", _FakeClient)
+        monkeypatch.setattr(live_connectors, "datetime", _FakeDateTime)
+
+        result = connector.health_check()
+
+        assert captured["timeout"] == 1.0
+        assert captured["url"] == expected_url
+        assert result == {"status": "available", "latency_ms": 100.0}
+
+    def test_health_check_returns_degraded_for_slow_success(self, monkeypatch) -> None:
+        connector = live_connectors.HttpFinancialConnector(
+            base_url="http://test",
+            timeout=1.0,
+        )
+        base_time = datetime(2026, 1, 1, tzinfo=UTC)
+        timestamps = [
+            base_time,
+            base_time + timedelta(milliseconds=700),
+        ]
+
+        class _FakeDateTime:
+            @classmethod
+            def now(cls, tz):
+                return timestamps.pop(0)
+
+        class _FakeResponse:
+            status_code = 200
+
+        class _FakeClient:
+            def __init__(self, *, timeout: float) -> None:
+                assert timeout == 1.0
+
+            def __enter__(self) -> _FakeClient:
+                return self
+
+            def __exit__(self, exc_type, exc, tb) -> None:
+                return None
+
+            def get(self, url: str) -> _FakeResponse:
+                return _FakeResponse()
+
+        monkeypatch.setattr(live_connectors.httpx, "Client", _FakeClient)
+        monkeypatch.setattr(live_connectors, "datetime", _FakeDateTime)
+
+        result = connector.health_check()
+
+        assert result == {"status": "degraded", "latency_ms": 700.0}
 
 
 # ── Live Geopolitical + Regulatory Connectors ──────────────────────

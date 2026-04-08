@@ -21,6 +21,9 @@ Domain-specific cache TTL:
 from __future__ import annotations
 
 import os
+from collections.abc import Iterable
+from dataclasses import dataclass
+from typing import Any
 
 from tollama.xai.connectors.assembler import AsyncPayloadAssembler, PayloadAssembler
 from tollama.xai.connectors.registry import AsyncConnectorRegistry, ConnectorRegistry
@@ -45,13 +48,65 @@ _CONNECTOR_RETRY_BASE_DELAY_DEFAULT = 0.5
 # Domain-specific cache TTL defaults (seconds)
 CACHE_TTL_NEWS = 300.0  # 5 minutes — news changes less frequently
 CACHE_TTL_FINANCIAL = 60.0  # 1 minute — financial data more volatile
+_TRUE_ENV_VALUES = frozenset({"true", "1", "yes"})
+_CACHE_TTL_BY_DOMAIN = {
+    "news": ("TOLLAMA_CACHE_TTL_NEWS", CACHE_TTL_NEWS),
+    "financial_market": ("TOLLAMA_CACHE_TTL_FINANCIAL", CACHE_TTL_FINANCIAL),
+}
+
+
+@dataclass(frozen=True)
+class _LiveConnectorSettings:
+    timeout: float
+    max_retries: int
+    retry_base_delay: float
+
+
+def _env_float_with_fallback(
+    name: str,
+    *,
+    default: float,
+    minimum: float | None = None,
+) -> float:
+    raw = os.environ.get(name, "")
+    if not raw:
+        return default
+    try:
+        value = float(raw)
+    except ValueError:
+        return default
+    return max(value, minimum) if minimum is not None else value
+
+
+def _env_int_with_fallback(
+    name: str,
+    *,
+    default: int,
+    minimum: int | None = None,
+) -> int:
+    raw = os.environ.get(name, "")
+    if not raw:
+        return default
+    try:
+        value = int(raw)
+    except ValueError:
+        return default
+    return max(value, minimum) if minimum is not None else value
+
+
+def _register_connectors(
+    registry: ConnectorRegistry | AsyncConnectorRegistry,
+    connectors: Iterable[Any],
+) -> None:
+    for connector in connectors:
+        registry.register(connector)
 
 
 def _use_live_connectors() -> bool:
     """Check if live connectors should be used instead of mocks."""
     return os.environ.get(
         "TOLLAMA_USE_LIVE_CONNECTORS", "false",
-    ).lower() in ("true", "1", "yes")
+    ).lower() in _TRUE_ENV_VALUES
 
 
 def _news_agent_url() -> str:
@@ -72,35 +127,105 @@ def _financial_agent_api_key() -> str | None:
 
 def _connector_timeout() -> float:
     """Per-request timeout in seconds."""
-    raw = os.environ.get("TOLLAMA_CONNECTOR_TIMEOUT", "")
-    if raw:
-        try:
-            return max(float(raw), 1.0)
-        except ValueError:
-            pass
-    return _CONNECTOR_TIMEOUT_DEFAULT
+    return _env_float_with_fallback(
+        "TOLLAMA_CONNECTOR_TIMEOUT",
+        default=_CONNECTOR_TIMEOUT_DEFAULT,
+        minimum=1.0,
+    )
 
 
 def _connector_max_retries() -> int:
     """Max retry attempts for retryable errors."""
-    raw = os.environ.get("TOLLAMA_CONNECTOR_MAX_RETRIES", "")
-    if raw:
-        try:
-            return max(int(raw), 0)
-        except ValueError:
-            pass
-    return _CONNECTOR_MAX_RETRIES_DEFAULT
+    return _env_int_with_fallback(
+        "TOLLAMA_CONNECTOR_MAX_RETRIES",
+        default=_CONNECTOR_MAX_RETRIES_DEFAULT,
+        minimum=0,
+    )
 
 
 def _connector_retry_base_delay() -> float:
     """Base delay between retries in seconds."""
-    raw = os.environ.get("TOLLAMA_CONNECTOR_RETRY_BASE_DELAY", "")
-    if raw:
-        try:
-            return max(float(raw), 0.0)
-        except ValueError:
-            pass
-    return _CONNECTOR_RETRY_BASE_DELAY_DEFAULT
+    return _env_float_with_fallback(
+        "TOLLAMA_CONNECTOR_RETRY_BASE_DELAY",
+        default=_CONNECTOR_RETRY_BASE_DELAY_DEFAULT,
+        minimum=0.0,
+    )
+
+
+def _live_connector_settings() -> _LiveConnectorSettings:
+    return _LiveConnectorSettings(
+        timeout=_connector_timeout(),
+        max_retries=_connector_max_retries(),
+        retry_base_delay=_connector_retry_base_delay(),
+    )
+
+
+def _sync_primary_connectors() -> tuple[Any, ...]:
+    if _use_live_connectors():
+        from tollama.xai.connectors.live import HttpFinancialConnector, HttpNewsConnector
+
+        settings = _live_connector_settings()
+        return (
+            HttpFinancialConnector(
+                base_url=_financial_agent_url(),
+                api_key=_financial_agent_api_key(),
+                timeout=settings.timeout,
+                max_retries=settings.max_retries,
+                retry_base_delay=settings.retry_base_delay,
+            ),
+            HttpNewsConnector(
+                base_url=_news_agent_url(),
+                api_key=_news_agent_api_key(),
+                timeout=settings.timeout,
+                max_retries=settings.max_retries,
+                retry_base_delay=settings.retry_base_delay,
+            ),
+        )
+    return (MockFinancialConnector(), MockNewsConnector())
+
+
+def _shared_mock_connectors() -> tuple[Any, ...]:
+    return (
+        MockSupplyChainConnector(),
+        MockGeopoliticalConnector(),
+        MockRegulatoryConnector(),
+    )
+
+
+def _async_connectors() -> tuple[Any, ...]:
+    from tollama.xai.connectors.live import (
+        AsyncHttpFinancialConnector,
+        AsyncHttpGeopoliticalConnector,
+        AsyncHttpNewsConnector,
+        AsyncHttpRegulatoryConnector,
+        AsyncHttpSupplyChainConnector,
+    )
+
+    timeout = _connector_timeout()
+    if _use_live_connectors():
+        primary_connectors = (
+            AsyncHttpFinancialConnector(
+                base_url=_financial_agent_url(),
+                api_key=_financial_agent_api_key(),
+                timeout=timeout,
+            ),
+            AsyncHttpNewsConnector(
+                base_url=_news_agent_url(),
+                api_key=_news_agent_api_key(),
+                timeout=timeout,
+            ),
+        )
+    else:
+        primary_connectors = (
+            AsyncHttpFinancialConnector(base_url=_FALLBACK_URL_DEFAULT),
+            AsyncHttpNewsConnector(base_url=_FALLBACK_URL_DEFAULT),
+        )
+
+    return primary_connectors + (
+        AsyncHttpSupplyChainConnector(base_url=_FALLBACK_URL_DEFAULT),
+        AsyncHttpGeopoliticalConnector(base_url=_FALLBACK_URL_DEFAULT),
+        AsyncHttpRegulatoryConnector(base_url=_FALLBACK_URL_DEFAULT),
+    )
 
 
 def cache_ttl_for_domain(domain: str) -> float:
@@ -108,13 +233,12 @@ def cache_ttl_for_domain(domain: str) -> float:
 
     Reads from environment variables first, falls back to built-in defaults.
     """
-    if domain == "news":
-        raw = os.environ.get("TOLLAMA_CACHE_TTL_NEWS", "")
-        return float(raw) if raw else CACHE_TTL_NEWS
-    if domain == "financial_market":
-        raw = os.environ.get("TOLLAMA_CACHE_TTL_FINANCIAL", "")
-        return float(raw) if raw else CACHE_TTL_FINANCIAL
-    return 0.0
+    ttl_config = _CACHE_TTL_BY_DOMAIN.get(domain)
+    if ttl_config is None:
+        return 0.0
+    env_name, default = ttl_config
+    raw = os.environ.get(env_name, "")
+    return float(raw) if raw else default
 
 
 def build_default_connector_registry() -> ConnectorRegistry:
@@ -127,39 +251,8 @@ def build_default_connector_registry() -> ConnectorRegistry:
     Timeout, retry, and cache settings are read from environment variables.
     """
     registry = ConnectorRegistry()
-    timeout = _connector_timeout()
-    max_retries = _connector_max_retries()
-    retry_base_delay = _connector_retry_base_delay()
-
-    if _use_live_connectors():
-        from tollama.xai.connectors.live import HttpFinancialConnector, HttpNewsConnector
-
-        registry.register(
-            HttpFinancialConnector(
-                base_url=_financial_agent_url(),
-                api_key=_financial_agent_api_key(),
-                timeout=timeout,
-                max_retries=max_retries,
-                retry_base_delay=retry_base_delay,
-            )
-        )
-        registry.register(
-            HttpNewsConnector(
-                base_url=_news_agent_url(),
-                api_key=_news_agent_api_key(),
-                timeout=timeout,
-                max_retries=max_retries,
-                retry_base_delay=retry_base_delay,
-            )
-        )
-    else:
-        registry.register(MockFinancialConnector())
-        registry.register(MockNewsConnector())
-
-    # Other domains always use mocks (no live agents yet)
-    registry.register(MockSupplyChainConnector())
-    registry.register(MockGeopoliticalConnector())
-    registry.register(MockRegulatoryConnector())
+    _register_connectors(registry, _sync_primary_connectors())
+    _register_connectors(registry, _shared_mock_connectors())
     return registry
 
 
@@ -175,50 +268,8 @@ def build_default_async_connector_registry() -> AsyncConnectorRegistry:
     async HTTP connectors pointing at the external agents.  All other domains
     use async HTTP connectors against the fallback URL.
     """
-    from tollama.xai.connectors.live import (
-        AsyncHttpFinancialConnector,
-        AsyncHttpGeopoliticalConnector,
-        AsyncHttpNewsConnector,
-        AsyncHttpRegulatoryConnector,
-        AsyncHttpSupplyChainConnector,
-    )
-
     registry = AsyncConnectorRegistry()
-    timeout = _connector_timeout()
-
-    if _use_live_connectors():
-        registry.register(
-            AsyncHttpFinancialConnector(
-                base_url=_financial_agent_url(),
-                api_key=_financial_agent_api_key(),
-                timeout=timeout,
-            )
-        )
-        registry.register(
-            AsyncHttpNewsConnector(
-                base_url=_news_agent_url(),
-                api_key=_news_agent_api_key(),
-                timeout=timeout,
-            )
-        )
-    else:
-        registry.register(
-            AsyncHttpFinancialConnector(base_url=_FALLBACK_URL_DEFAULT),
-        )
-        registry.register(
-            AsyncHttpNewsConnector(base_url=_FALLBACK_URL_DEFAULT),
-        )
-
-    # Other domains always use fallback URL
-    registry.register(
-        AsyncHttpSupplyChainConnector(base_url=_FALLBACK_URL_DEFAULT),
-    )
-    registry.register(
-        AsyncHttpGeopoliticalConnector(base_url=_FALLBACK_URL_DEFAULT),
-    )
-    registry.register(
-        AsyncHttpRegulatoryConnector(base_url=_FALLBACK_URL_DEFAULT),
-    )
+    _register_connectors(registry, _async_connectors())
     return registry
 
 

@@ -8,7 +8,11 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from tollama.xai.connectors.protocol import ConnectorError, ConnectorFetchError
+from tollama.xai.connectors.protocol import (
+    ConnectorError,
+    ConnectorFetchError,
+    ConnectorResult,
+)
 from tollama.xai.connectors.registry import AsyncConnectorRegistry, ConnectorRegistry
 from tollama.xai.trust_contract import TrustEvidence
 
@@ -20,6 +24,41 @@ class AssemblyResult(BaseModel):
     trust_context: dict[str, Any]
     evidence: TrustEvidence
     connector_name: str = Field(min_length=1)
+
+
+def _missing_connector_error(
+    *,
+    domain: str,
+    identifier: str,
+    connector_label: str,
+) -> ConnectorFetchError:
+    return ConnectorFetchError(
+        ConnectorError(
+            domain=domain,
+            source_id=identifier,
+            error_type="not_found",
+            message=f"No {connector_label} for domain={domain!r}, identifier={identifier!r}",
+            retryable=False,
+        )
+    )
+
+
+def _build_assembly_result(
+    *,
+    result: ConnectorResult,
+    connector_name: str,
+) -> AssemblyResult:
+    return AssemblyResult(
+        payload=result.payload,
+        trust_context={"domain": result.domain, "source_type": result.source_type},
+        evidence=TrustEvidence(
+            source_type=result.source_type,
+            source_ids=[result.source_id],
+            freshness_seconds=result.freshness_seconds,
+            attributes=result.metadata,
+        ),
+        connector_name=connector_name,
+    )
 
 
 class PayloadAssembler:
@@ -41,30 +80,14 @@ class PayloadAssembler:
         ctx = context or {}
         connector = self.registry.get(domain, identifier, ctx)
         if connector is None:
-            raise ConnectorFetchError(
-                ConnectorError(
-                    domain=domain,
-                    source_id=identifier,
-                    error_type="not_found",
-                    message=(
-                        f"No connector for "
-                        f"domain={domain!r}, identifier={identifier!r}"
-                    ),
-                    retryable=False,
-                )
+            raise _missing_connector_error(
+                domain=domain,
+                identifier=identifier,
+                connector_label="connector",
             )
 
-        result = connector.fetch(identifier, ctx)
-
-        return AssemblyResult(
-            payload=result.payload,
-            trust_context={"domain": result.domain, "source_type": result.source_type},
-            evidence=TrustEvidence(
-                source_type=result.source_type,
-                source_ids=[result.source_id],
-                freshness_seconds=result.freshness_seconds,
-                attributes=result.metadata,
-            ),
+        return _build_assembly_result(
+            result=connector.fetch(identifier, ctx),
             connector_name=connector.connector_name,
         )
 
@@ -88,30 +111,14 @@ class AsyncPayloadAssembler:
         ctx = context or {}
         connector = self.registry.get(domain, identifier, ctx)
         if connector is None:
-            raise ConnectorFetchError(
-                ConnectorError(
-                    domain=domain,
-                    source_id=identifier,
-                    error_type="not_found",
-                    message=(
-                        f"No async connector for "
-                        f"domain={domain!r}, identifier={identifier!r}"
-                    ),
-                    retryable=False,
-                )
+            raise _missing_connector_error(
+                domain=domain,
+                identifier=identifier,
+                connector_label="async connector",
             )
 
-        result = await connector.fetch(identifier, ctx)
-
-        return AssemblyResult(
-            payload=result.payload,
-            trust_context={"domain": result.domain, "source_type": result.source_type},
-            evidence=TrustEvidence(
-                source_type=result.source_type,
-                source_ids=[result.source_id],
-                freshness_seconds=result.freshness_seconds,
-                attributes=result.metadata,
-            ),
+        return _build_assembly_result(
+            result=await connector.fetch(identifier, ctx),
             connector_name=connector.connector_name,
         )
 

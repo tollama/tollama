@@ -139,6 +139,16 @@ def _map_network_error(
     )
 
 
+def _map_request_exception(
+    domain: str,
+    identifier: str,
+    exc: httpx.RequestError | httpx.HTTPStatusError,
+) -> ConnectorFetchError:
+    if isinstance(exc, httpx.RequestError):
+        return _map_network_error(domain, identifier, exc)
+    return _map_http_error(domain, identifier, exc)
+
+
 def _should_retry(
     exc: Exception,
     attempt: int,
@@ -155,7 +165,248 @@ def _should_retry(
     return False
 
 
-class HttpFinancialConnector:
+def _build_request_headers(api_key: str | None) -> dict[str, str]:
+    if not api_key:
+        return {}
+    return {"Authorization": f"Bearer {api_key}"}
+
+
+def _build_resource_url(
+    base_url: str,
+    endpoint: str,
+    identifier: str,
+) -> str:
+    return f"{base_url}/{endpoint}/{identifier}"
+
+
+def _request_sync_resource(
+    *,
+    base_url: str,
+    endpoint: str,
+    identifier: str,
+    headers: dict[str, str],
+    timeout: float,
+) -> httpx.Response:
+    with httpx.Client(timeout=timeout) as client:
+        response = client.get(
+            _build_resource_url(base_url, endpoint, identifier),
+            headers=headers,
+        )
+        response.raise_for_status()
+    return response
+
+
+async def _request_async_resource(
+    *,
+    base_url: str,
+    endpoint: str,
+    identifier: str,
+    headers: dict[str, str],
+    timeout: float,
+) -> httpx.Response:
+    async with httpx.AsyncClient(timeout=timeout) as client:
+        response = await client.get(
+            _build_resource_url(base_url, endpoint, identifier),
+            headers=headers,
+        )
+        response.raise_for_status()
+    return response
+
+
+def _build_connector_result(
+    *,
+    response: httpx.Response,
+    domain: str,
+    source_id: str,
+    source_type: str,
+    id_key: str,
+    connector_name: str,
+    base_url: str,
+    metadata_extras: dict[str, Any] | None = None,
+) -> ConnectorResult:
+    payload = response.json()
+    payload.setdefault(id_key, source_id)
+
+    metadata: dict[str, Any] = {
+        "connector": connector_name,
+        "base_url": base_url,
+    }
+    if metadata_extras:
+        metadata.update(metadata_extras)
+
+    return ConnectorResult(
+        domain=domain,
+        payload=payload,
+        source_id=source_id,
+        source_type=source_type,
+        freshness_seconds=_extract_freshness(response),
+        metadata=metadata,
+    )
+
+
+def _retrying_sync_fetch(
+    *,
+    base_url: str,
+    endpoint: str,
+    identifier: str,
+    domain: str,
+    source_type: str,
+    connector_name: str,
+    id_key: str,
+    api_key: str | None,
+    timeout: float,
+    max_retries: int,
+    retry_base_delay: float,
+    rate_limit_warning_label: str,
+    retry_log_label: str,
+) -> ConnectorResult:
+    headers = _build_request_headers(api_key)
+
+    last_exc: httpx.RequestError | httpx.HTTPStatusError | None = None
+    for attempt in range(max_retries + 1):
+        try:
+            response = _request_sync_resource(
+                base_url=base_url,
+                endpoint=endpoint,
+                identifier=identifier,
+                headers=headers,
+                timeout=timeout,
+            )
+            rate_info = _extract_rate_limit_info(response)
+            if rate_info.get("remaining", 999) < 10:
+                _log.warning(
+                    "%s rate limit low: %s",
+                    rate_limit_warning_label,
+                    rate_info,
+                )
+            return _build_connector_result(
+                response=response,
+                domain=domain,
+                source_id=identifier,
+                source_type=source_type,
+                id_key=id_key,
+                connector_name=connector_name,
+                base_url=base_url,
+                metadata_extras={
+                    "attempt": attempt + 1,
+                    **({"rate_limit": rate_info} if rate_info else {}),
+                },
+            )
+        except (httpx.RequestError, httpx.HTTPStatusError) as exc:
+            last_exc = exc
+            if _should_retry(exc, attempt, max_retries):
+                delay = retry_base_delay * (2 ** attempt)
+                _log.info(
+                    "Retrying %s fetch %s (attempt %d, delay %.1fs)",
+                    retry_log_label,
+                    identifier,
+                    attempt + 1,
+                    delay,
+                )
+                time.sleep(delay)
+                continue
+            break
+
+    if last_exc is not None:
+        raise _map_request_exception(domain, identifier, last_exc)
+    raise ConnectorFetchError(  # pragma: no cover
+        ConnectorError(
+            domain=domain,
+            source_id=identifier,
+            error_type="internal",
+            message=str(last_exc),
+            retryable=False,
+        )
+    )
+
+
+def _sync_health_check(
+    *,
+    base_url: str,
+    health_path: str,
+    timeout: float,
+) -> dict[str, Any]:
+    try:
+        with httpx.Client(timeout=timeout) as client:
+            start = datetime.now(UTC)
+            response = client.get(f"{base_url}/{health_path}")
+            latency_ms = (datetime.now(UTC) - start).total_seconds() * 1000
+    except (httpx.TimeoutException, httpx.ConnectError):
+        return {"status": "unavailable", "latency_ms": None}
+
+    if response.status_code == 200:
+        threshold = timeout * 500
+        status = "degraded" if latency_ms > threshold else "available"
+    else:
+        status = "unavailable"
+    return {"status": status, "latency_ms": round(latency_ms, 1)}
+
+
+class _HttpConnectorBase:
+    def __init__(
+        self,
+        base_url: str,
+        api_key: str | None = None,
+        timeout: float = 10.0,
+    ) -> None:
+        self._base_url = base_url.rstrip("/")
+        self._api_key = api_key
+        self._timeout = timeout
+
+    def supports(self, identifier: str, context: dict[str, Any]) -> bool:
+        return True
+
+
+class _RetryingSyncHttpConnectorBase(_HttpConnectorBase):
+    connector_name: str
+    domain: str
+    _endpoint: str
+    _source_type: str
+    _id_key: str
+    _health_path: str
+    _rate_limit_warning_label: str
+    _retry_log_label: str
+
+    def __init__(
+        self,
+        base_url: str,
+        api_key: str | None = None,
+        timeout: float = 10.0,
+        max_retries: int = 2,
+        retry_base_delay: float = 0.5,
+    ) -> None:
+        super().__init__(base_url=base_url, api_key=api_key, timeout=timeout)
+        self._max_retries = max_retries
+        self._retry_base_delay = retry_base_delay
+
+    def health_check(self) -> dict[str, Any]:
+        return _sync_health_check(
+            base_url=self._base_url,
+            health_path=self._health_path,
+            timeout=self._timeout,
+        )
+
+    def fetch(
+        self, identifier: str, context: dict[str, Any],
+    ) -> ConnectorResult:
+        return _retrying_sync_fetch(
+            base_url=self._base_url,
+            endpoint=self._endpoint,
+            identifier=identifier,
+            domain=self.domain,
+            source_type=self._source_type,
+            connector_name=self.connector_name,
+            id_key=self._id_key,
+            api_key=self._api_key,
+            timeout=self._timeout,
+            max_retries=self._max_retries,
+            retry_base_delay=self._retry_base_delay,
+            rate_limit_warning_label=self._rate_limit_warning_label,
+            retry_log_label=self._retry_log_label,
+        )
+
+
+class HttpFinancialConnector(_RetryingSyncHttpConnectorBase):
     """HTTP connector for financial market data feeds.
 
     Supports configurable timeout, retry with exponential backoff,
@@ -164,115 +415,15 @@ class HttpFinancialConnector:
 
     connector_name = "http_financial"
     domain = "financial_market"
-
-    def __init__(
-        self,
-        base_url: str,
-        api_key: str | None = None,
-        timeout: float = 10.0,
-        max_retries: int = 2,
-        retry_base_delay: float = 0.5,
-    ) -> None:
-        self._base_url = base_url.rstrip("/")
-        self._api_key = api_key
-        self._timeout = timeout
-        self._max_retries = max_retries
-        self._retry_base_delay = retry_base_delay
-
-    def supports(self, identifier: str, context: dict[str, Any]) -> bool:
-        return True
-
-    def health_check(self) -> dict[str, Any]:
-        """Check health of the remote Financial-Agent service.
-
-        Returns dict with 'status' ('available', 'degraded', 'unavailable')
-        and 'latency_ms'.
-        """
-        try:
-            with httpx.Client(timeout=self._timeout) as client:
-                start = datetime.now(UTC)
-                resp = client.get(
-                    f"{self._base_url}/api/v1/financial/health",
-                )
-                latency_ms = (
-                    (datetime.now(UTC) - start).total_seconds() * 1000
-                )
-                if resp.status_code == 200:
-                    threshold = self._timeout * 500
-                    status = "degraded" if latency_ms > threshold else "available"
-                else:
-                    status = "unavailable"
-        except (httpx.TimeoutException, httpx.ConnectError):
-            return {"status": "unavailable", "latency_ms": None}
-        return {"status": status, "latency_ms": round(latency_ms, 1)}
-
-    def fetch(
-        self, identifier: str, context: dict[str, Any],
-    ) -> ConnectorResult:
-        headers: dict[str, str] = {}
-        if self._api_key:
-            headers["Authorization"] = f"Bearer {self._api_key}"
-
-        last_exc: Exception | None = None
-        for attempt in range(self._max_retries + 1):
-            try:
-                with httpx.Client(timeout=self._timeout) as client:
-                    response = client.get(
-                        f"{self._base_url}/instruments/{identifier}",
-                        headers=headers,
-                    )
-                    response.raise_for_status()
-                # Success — extract rate-limit info for logging
-                rate_info = _extract_rate_limit_info(response)
-                if rate_info.get("remaining", 999) < 10:
-                    _log.warning(
-                        "Financial connector rate limit low: %s",
-                        rate_info,
-                    )
-                data = response.json()
-                data.setdefault("instrument_id", identifier)
-                return ConnectorResult(
-                    domain=self.domain,
-                    payload=data,
-                    source_id=identifier,
-                    source_type="equity_market",
-                    freshness_seconds=_extract_freshness(response),
-                    metadata={
-                        "connector": self.connector_name,
-                        "base_url": self._base_url,
-                        "attempt": attempt + 1,
-                        **({"rate_limit": rate_info} if rate_info else {}),
-                    },
-                )
-            except (httpx.RequestError, httpx.HTTPStatusError) as exc:
-                last_exc = exc
-                if _should_retry(exc, attempt, self._max_retries):
-                    delay = self._retry_base_delay * (2 ** attempt)
-                    _log.info(
-                        "Retrying financial fetch %s (attempt %d, delay %.1fs)",
-                        identifier, attempt + 1, delay,
-                    )
-                    time.sleep(delay)
-                    continue
-                break
-
-        # Exhausted retries — raise appropriate error
-        if isinstance(last_exc, httpx.RequestError):
-            raise _map_network_error(self.domain, identifier, last_exc)
-        if isinstance(last_exc, httpx.HTTPStatusError):
-            raise _map_http_error(self.domain, identifier, last_exc)
-        raise ConnectorFetchError(  # pragma: no cover
-            ConnectorError(
-                domain=self.domain,
-                source_id=identifier,
-                error_type="internal",
-                message=str(last_exc),
-                retryable=False,
-            )
-        )
+    _endpoint = "instruments"
+    _source_type = "equity_market"
+    _id_key = "instrument_id"
+    _health_path = "api/v1/financial/health"
+    _rate_limit_warning_label = "Financial connector"
+    _retry_log_label = "financial"
 
 
-class HttpNewsConnector:
+class HttpNewsConnector(_RetryingSyncHttpConnectorBase):
     """HTTP connector for news data feeds.
 
     Supports configurable timeout, retry with exponential backoff,
@@ -281,250 +432,98 @@ class HttpNewsConnector:
 
     connector_name = "http_news"
     domain = "news"
+    _endpoint = "stories"
+    _source_type = "news_feed"
+    _id_key = "story_id"
+    _health_path = "api/v1/news/health"
+    _rate_limit_warning_label = "News connector"
+    _retry_log_label = "news"
 
-    def __init__(
-        self,
-        base_url: str,
-        api_key: str | None = None,
-        timeout: float = 10.0,
-        max_retries: int = 2,
-        retry_base_delay: float = 0.5,
-    ) -> None:
-        self._base_url = base_url.rstrip("/")
-        self._api_key = api_key
-        self._timeout = timeout
-        self._max_retries = max_retries
-        self._retry_base_delay = retry_base_delay
 
-    def supports(self, identifier: str, context: dict[str, Any]) -> bool:
-        return True
+def _sync_fetch(
+    *,
+    base_url: str,
+    endpoint: str,
+    identifier: str,
+    domain: str,
+    source_type: str,
+    connector_name: str,
+    id_key: str,
+    api_key: str | None,
+    timeout: float,
+) -> ConnectorResult:
+    headers = _build_request_headers(api_key)
+    try:
+        response = _request_sync_resource(
+            base_url=base_url,
+            endpoint=endpoint,
+            identifier=identifier,
+            headers=headers,
+            timeout=timeout,
+        )
+    except (httpx.RequestError, httpx.HTTPStatusError) as exc:
+        raise _map_request_exception(domain, identifier, exc)
 
-    def health_check(self) -> dict[str, Any]:
-        """Check health of the remote News-Agent service.
+    return _build_connector_result(
+        response=response,
+        domain=domain,
+        source_id=identifier,
+        source_type=source_type,
+        id_key=id_key,
+        connector_name=connector_name,
+        base_url=base_url,
+    )
 
-        Returns dict with 'status' ('available', 'degraded', 'unavailable')
-        and 'latency_ms'.
-        """
-        try:
-            with httpx.Client(timeout=self._timeout) as client:
-                start = datetime.now(UTC)
-                resp = client.get(
-                    f"{self._base_url}/api/v1/news/health",
-                )
-                latency_ms = (
-                    (datetime.now(UTC) - start).total_seconds() * 1000
-                )
-                if resp.status_code == 200:
-                    threshold = self._timeout * 500
-                    status = "degraded" if latency_ms > threshold else "available"
-                else:
-                    status = "unavailable"
-        except (httpx.TimeoutException, httpx.ConnectError):
-            return {"status": "unavailable", "latency_ms": None}
-        return {"status": status, "latency_ms": round(latency_ms, 1)}
 
-    def fetch(
-        self, identifier: str, context: dict[str, Any],
-    ) -> ConnectorResult:
-        headers: dict[str, str] = {}
-        if self._api_key:
-            headers["Authorization"] = f"Bearer {self._api_key}"
+class _SyncHttpConnectorBase(_HttpConnectorBase):
+    connector_name: str
+    domain: str
+    _endpoint: str
+    _source_type: str
+    _id_key: str
 
-        last_exc: Exception | None = None
-        for attempt in range(self._max_retries + 1):
-            try:
-                with httpx.Client(timeout=self._timeout) as client:
-                    response = client.get(
-                        f"{self._base_url}/stories/{identifier}",
-                        headers=headers,
-                    )
-                    response.raise_for_status()
-                rate_info = _extract_rate_limit_info(response)
-                if rate_info.get("remaining", 999) < 10:
-                    _log.warning(
-                        "News connector rate limit low: %s", rate_info,
-                    )
-                data = response.json()
-                data.setdefault("story_id", identifier)
-                return ConnectorResult(
-                    domain=self.domain,
-                    payload=data,
-                    source_id=identifier,
-                    source_type="news_feed",
-                    freshness_seconds=_extract_freshness(response),
-                    metadata={
-                        "connector": self.connector_name,
-                        "base_url": self._base_url,
-                        "attempt": attempt + 1,
-                        **({"rate_limit": rate_info} if rate_info else {}),
-                    },
-                )
-            except (httpx.RequestError, httpx.HTTPStatusError) as exc:
-                last_exc = exc
-                if _should_retry(exc, attempt, self._max_retries):
-                    delay = self._retry_base_delay * (2 ** attempt)
-                    _log.info(
-                        "Retrying news fetch %s (attempt %d, delay %.1fs)",
-                        identifier, attempt + 1, delay,
-                    )
-                    time.sleep(delay)
-                    continue
-                break
-
-        if isinstance(last_exc, httpx.RequestError):
-            raise _map_network_error(self.domain, identifier, last_exc)
-        if isinstance(last_exc, httpx.HTTPStatusError):
-            raise _map_http_error(self.domain, identifier, last_exc)
-        raise ConnectorFetchError(  # pragma: no cover
-            ConnectorError(
-                domain=self.domain,
-                source_id=identifier,
-                error_type="internal",
-                message=str(last_exc),
-                retryable=False,
-            )
+    def fetch(self, identifier: str, context: dict[str, Any]) -> ConnectorResult:
+        return _sync_fetch(
+            base_url=self._base_url,
+            endpoint=self._endpoint,
+            identifier=identifier,
+            domain=self.domain,
+            source_type=self._source_type,
+            connector_name=self.connector_name,
+            id_key=self._id_key,
+            api_key=self._api_key,
+            timeout=self._timeout,
         )
 
 
-class HttpSupplyChainConnector:
+class HttpSupplyChainConnector(_SyncHttpConnectorBase):
     """HTTP connector for supply chain data feeds."""
 
     connector_name = "http_supply_chain"
     domain = "supply_chain"
-
-    def __init__(
-        self,
-        base_url: str,
-        api_key: str | None = None,
-        timeout: float = 10.0,
-    ) -> None:
-        self._base_url = base_url.rstrip("/")
-        self._api_key = api_key
-        self._timeout = timeout
-
-    def supports(self, identifier: str, context: dict[str, Any]) -> bool:
-        return True
-
-    def fetch(self, identifier: str, context: dict[str, Any]) -> ConnectorResult:
-        headers: dict[str, str] = {}
-        if self._api_key:
-            headers["Authorization"] = f"Bearer {self._api_key}"
-        try:
-            with httpx.Client(timeout=self._timeout) as client:
-                response = client.get(
-                    f"{self._base_url}/networks/{identifier}",
-                    headers=headers,
-                )
-                response.raise_for_status()
-        except httpx.RequestError as exc:
-            raise _map_network_error(self.domain, identifier, exc)
-        except httpx.HTTPStatusError as exc:
-            raise _map_http_error(self.domain, identifier, exc)
-
-        data = response.json()
-        data.setdefault("network_id", identifier)
-        return ConnectorResult(
-            domain=self.domain,
-            payload=data,
-            source_id=identifier,
-            source_type="supply_chain_iot",
-            freshness_seconds=_extract_freshness(response),
-            metadata={"connector": self.connector_name, "base_url": self._base_url},
-        )
+    _endpoint = "networks"
+    _source_type = "supply_chain_iot"
+    _id_key = "network_id"
 
 
-class HttpGeopoliticalConnector:
+class HttpGeopoliticalConnector(_SyncHttpConnectorBase):
     """HTTP connector for geopolitical data feeds."""
 
     connector_name = "http_geopolitical"
     domain = "geopolitical"
-
-    def __init__(
-        self,
-        base_url: str,
-        api_key: str | None = None,
-        timeout: float = 10.0,
-    ) -> None:
-        self._base_url = base_url.rstrip("/")
-        self._api_key = api_key
-        self._timeout = timeout
-
-    def supports(self, identifier: str, context: dict[str, Any]) -> bool:
-        return True
-
-    def fetch(self, identifier: str, context: dict[str, Any]) -> ConnectorResult:
-        headers: dict[str, str] = {}
-        if self._api_key:
-            headers["Authorization"] = f"Bearer {self._api_key}"
-        try:
-            with httpx.Client(timeout=self._timeout) as client:
-                response = client.get(
-                    f"{self._base_url}/regions/{identifier}",
-                    headers=headers,
-                )
-                response.raise_for_status()
-        except httpx.RequestError as exc:
-            raise _map_network_error(self.domain, identifier, exc)
-        except httpx.HTTPStatusError as exc:
-            raise _map_http_error(self.domain, identifier, exc)
-
-        data = response.json()
-        data.setdefault("region_id", identifier)
-        return ConnectorResult(
-            domain=self.domain,
-            payload=data,
-            source_id=identifier,
-            source_type="country_risk",
-            freshness_seconds=_extract_freshness(response),
-            metadata={"connector": self.connector_name, "base_url": self._base_url},
-        )
+    _endpoint = "regions"
+    _source_type = "country_risk"
+    _id_key = "region_id"
 
 
-class HttpRegulatoryConnector:
+class HttpRegulatoryConnector(_SyncHttpConnectorBase):
     """HTTP connector for regulatory data feeds."""
 
     connector_name = "http_regulatory"
     domain = "regulatory"
-
-    def __init__(
-        self,
-        base_url: str,
-        api_key: str | None = None,
-        timeout: float = 10.0,
-    ) -> None:
-        self._base_url = base_url.rstrip("/")
-        self._api_key = api_key
-        self._timeout = timeout
-
-    def supports(self, identifier: str, context: dict[str, Any]) -> bool:
-        return True
-
-    def fetch(self, identifier: str, context: dict[str, Any]) -> ConnectorResult:
-        headers: dict[str, str] = {}
-        if self._api_key:
-            headers["Authorization"] = f"Bearer {self._api_key}"
-        try:
-            with httpx.Client(timeout=self._timeout) as client:
-                response = client.get(
-                    f"{self._base_url}/jurisdictions/{identifier}",
-                    headers=headers,
-                )
-                response.raise_for_status()
-        except httpx.RequestError as exc:
-            raise _map_network_error(self.domain, identifier, exc)
-        except httpx.HTTPStatusError as exc:
-            raise _map_http_error(self.domain, identifier, exc)
-
-        data = response.json()
-        data.setdefault("jurisdiction_id", identifier)
-        return ConnectorResult(
-            domain=self.domain,
-            payload=data,
-            source_id=identifier,
-            source_type="compliance",
-            freshness_seconds=_extract_freshness(response),
-            metadata={"connector": self.connector_name, "base_url": self._base_url},
-        )
+    _endpoint = "jurisdictions"
+    _source_type = "compliance"
+    _id_key = "jurisdiction_id"
 
 
 # ──────────────────────────────────────────────────────────────
@@ -545,141 +544,98 @@ async def _async_fetch(
     timeout: float,
 ) -> ConnectorResult:
     """Shared async fetch logic for all async connectors."""
-    headers: dict[str, str] = {}
-    if api_key:
-        headers["Authorization"] = f"Bearer {api_key}"
+    headers = _build_request_headers(api_key)
     try:
-        async with httpx.AsyncClient(timeout=timeout) as client:
-            response = await client.get(
-                f"{base_url}/{endpoint}/{identifier}",
-                headers=headers,
-            )
-            response.raise_for_status()
-    except httpx.RequestError as exc:
-        raise _map_network_error(domain, identifier, exc)
-    except httpx.HTTPStatusError as exc:
-        raise _map_http_error(domain, identifier, exc)
+        response = await _request_async_resource(
+            base_url=base_url,
+            endpoint=endpoint,
+            identifier=identifier,
+            headers=headers,
+            timeout=timeout,
+        )
+    except (httpx.RequestError, httpx.HTTPStatusError) as exc:
+        raise _map_request_exception(domain, identifier, exc)
 
-    data = response.json()
-    data.setdefault(id_key, identifier)
-    return ConnectorResult(
+    return _build_connector_result(
+        response=response,
         domain=domain,
-        payload=data,
         source_id=identifier,
         source_type=source_type,
-        freshness_seconds=_extract_freshness(response),
-        metadata={"connector": connector_name, "base_url": base_url},
+        id_key=id_key,
+        connector_name=connector_name,
+        base_url=base_url,
     )
 
 
-class AsyncHttpFinancialConnector:
+class _AsyncHttpConnectorBase(_HttpConnectorBase):
+    connector_name: str
+    domain: str
+    _endpoint: str
+    _source_type: str
+    _id_key: str
+
+    async def fetch(self, identifier: str, context: dict[str, Any]) -> ConnectorResult:
+        return await _async_fetch(
+            base_url=self._base_url,
+            endpoint=self._endpoint,
+            identifier=identifier,
+            domain=self.domain,
+            source_type=self._source_type,
+            connector_name=self.connector_name,
+            id_key=self._id_key,
+            api_key=self._api_key,
+            timeout=self._timeout,
+        )
+
+
+class AsyncHttpFinancialConnector(_AsyncHttpConnectorBase):
     """Async HTTP connector for financial market data feeds."""
 
     connector_name = "async_http_financial"
     domain = "financial_market"
-
-    def __init__(self, base_url: str, api_key: str | None = None, timeout: float = 10.0) -> None:
-        self._base_url = base_url.rstrip("/")
-        self._api_key = api_key
-        self._timeout = timeout
-
-    def supports(self, identifier: str, context: dict[str, Any]) -> bool:
-        return True
-
-    async def fetch(self, identifier: str, context: dict[str, Any]) -> ConnectorResult:
-        return await _async_fetch(
-            base_url=self._base_url, endpoint="instruments", identifier=identifier,
-            domain=self.domain, source_type="equity_market", connector_name=self.connector_name,
-            id_key="instrument_id", api_key=self._api_key, timeout=self._timeout,
-        )
+    _endpoint = "instruments"
+    _source_type = "equity_market"
+    _id_key = "instrument_id"
 
 
-class AsyncHttpNewsConnector:
+class AsyncHttpNewsConnector(_AsyncHttpConnectorBase):
     """Async HTTP connector for news data feeds."""
 
     connector_name = "async_http_news"
     domain = "news"
-
-    def __init__(self, base_url: str, api_key: str | None = None, timeout: float = 10.0) -> None:
-        self._base_url = base_url.rstrip("/")
-        self._api_key = api_key
-        self._timeout = timeout
-
-    def supports(self, identifier: str, context: dict[str, Any]) -> bool:
-        return True
-
-    async def fetch(self, identifier: str, context: dict[str, Any]) -> ConnectorResult:
-        return await _async_fetch(
-            base_url=self._base_url, endpoint="stories", identifier=identifier,
-            domain=self.domain, source_type="news_feed", connector_name=self.connector_name,
-            id_key="story_id", api_key=self._api_key, timeout=self._timeout,
-        )
+    _endpoint = "stories"
+    _source_type = "news_feed"
+    _id_key = "story_id"
 
 
-class AsyncHttpSupplyChainConnector:
+class AsyncHttpSupplyChainConnector(_AsyncHttpConnectorBase):
     """Async HTTP connector for supply chain data feeds."""
 
     connector_name = "async_http_supply_chain"
     domain = "supply_chain"
-
-    def __init__(self, base_url: str, api_key: str | None = None, timeout: float = 10.0) -> None:
-        self._base_url = base_url.rstrip("/")
-        self._api_key = api_key
-        self._timeout = timeout
-
-    def supports(self, identifier: str, context: dict[str, Any]) -> bool:
-        return True
-
-    async def fetch(self, identifier: str, context: dict[str, Any]) -> ConnectorResult:
-        return await _async_fetch(
-            base_url=self._base_url, endpoint="networks", identifier=identifier,
-            domain=self.domain, source_type="supply_chain_iot", connector_name=self.connector_name,
-            id_key="network_id", api_key=self._api_key, timeout=self._timeout,
-        )
+    _endpoint = "networks"
+    _source_type = "supply_chain_iot"
+    _id_key = "network_id"
 
 
-class AsyncHttpGeopoliticalConnector:
+class AsyncHttpGeopoliticalConnector(_AsyncHttpConnectorBase):
     """Async HTTP connector for geopolitical data feeds."""
 
     connector_name = "async_http_geopolitical"
     domain = "geopolitical"
-
-    def __init__(self, base_url: str, api_key: str | None = None, timeout: float = 10.0) -> None:
-        self._base_url = base_url.rstrip("/")
-        self._api_key = api_key
-        self._timeout = timeout
-
-    def supports(self, identifier: str, context: dict[str, Any]) -> bool:
-        return True
-
-    async def fetch(self, identifier: str, context: dict[str, Any]) -> ConnectorResult:
-        return await _async_fetch(
-            base_url=self._base_url, endpoint="regions", identifier=identifier,
-            domain=self.domain, source_type="country_risk", connector_name=self.connector_name,
-            id_key="region_id", api_key=self._api_key, timeout=self._timeout,
-        )
+    _endpoint = "regions"
+    _source_type = "country_risk"
+    _id_key = "region_id"
 
 
-class AsyncHttpRegulatoryConnector:
+class AsyncHttpRegulatoryConnector(_AsyncHttpConnectorBase):
     """Async HTTP connector for regulatory data feeds."""
 
     connector_name = "async_http_regulatory"
     domain = "regulatory"
-
-    def __init__(self, base_url: str, api_key: str | None = None, timeout: float = 10.0) -> None:
-        self._base_url = base_url.rstrip("/")
-        self._api_key = api_key
-        self._timeout = timeout
-
-    def supports(self, identifier: str, context: dict[str, Any]) -> bool:
-        return True
-
-    async def fetch(self, identifier: str, context: dict[str, Any]) -> ConnectorResult:
-        return await _async_fetch(
-            base_url=self._base_url, endpoint="jurisdictions", identifier=identifier,
-            domain=self.domain, source_type="compliance", connector_name=self.connector_name,
-            id_key="jurisdiction_id", api_key=self._api_key, timeout=self._timeout,
-        )
+    _endpoint = "jurisdictions"
+    _source_type = "compliance"
+    _id_key = "jurisdiction_id"
 
 
 __all__ = [

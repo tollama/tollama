@@ -105,6 +105,24 @@ class TestConnectorRegistryLiveMode:
         assert isinstance(news, HttpNewsConnector)
         assert news._base_url == "http://localhost:8090"
 
+    def test_live_mode_forwards_timeout_and_retry_settings(self):
+        env = {
+            "TOLLAMA_USE_LIVE_CONNECTORS": "true",
+            "TOLLAMA_CONNECTOR_TIMEOUT": "17",
+            "TOLLAMA_CONNECTOR_MAX_RETRIES": "4",
+            "TOLLAMA_CONNECTOR_RETRY_BASE_DELAY": "1.25",
+        }
+        with patch.dict(os.environ, env, clear=True):
+            registry = build_default_connector_registry()
+        fin = _find_by_domain(registry._connectors, "financial_market")
+        news = _find_by_domain(registry._connectors, "news")
+        assert fin._timeout == 17.0
+        assert fin._max_retries == 4
+        assert fin._retry_base_delay == 1.25
+        assert news._timeout == 17.0
+        assert news._max_retries == 4
+        assert news._retry_base_delay == 1.25
+
 
 # === Health Check ===
 
@@ -274,3 +292,14 @@ class TestAsyncRegistry:
         news = _find_by_domain(registry._connectors, "news")
         assert fin._base_url == "http://localhost:8080"
         assert news._base_url == "http://localhost:8080"
+
+    def test_async_live_registry_forwards_timeout_setting(self):
+        env = {
+            "TOLLAMA_USE_LIVE_CONNECTORS": "true",
+            "TOLLAMA_CONNECTOR_TIMEOUT": "17",
+        }
+        with patch.dict(os.environ, env, clear=True):
+            registry = build_default_async_connector_registry()
+        for connector in registry._connectors:
+            if connector.domain in {"financial_market", "news"}:
+                assert connector._timeout == 17.0
