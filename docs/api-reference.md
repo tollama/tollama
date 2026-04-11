@@ -2,6 +2,10 @@
 
 Tollama daemon exposes Ollama-style and v1-style HTTP endpoints.
 
+For the release-gated Ollama-style workflow surface, see
+`docs/ollama-workflow-parity.md`. This page remains the canonical endpoint
+inventory.
+
 Base URL (default): `http://127.0.0.1:11435`
 
 This page is the canonical HTTP endpoint inventory. Overview documents should

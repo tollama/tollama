@@ -1074,7 +1074,7 @@ def create_app(*, runner_manager: RunnerManager | None = None) -> FastAPI:
         description="Delete one installed model from local storage.",
     )
     def delete(payload: ModelDeleteRequest) -> ModelDeleteResponse:
-        _remove_model_or_404(payload.model)
+        _remove_model_or_404(app, payload.model)
         return ModelDeleteResponse(deleted=True, model=payload.model)
 
     @app.get(
@@ -1318,7 +1318,7 @@ def create_app(*, runner_manager: RunnerManager | None = None) -> FastAPI:
         description="Delete one installed model through the stable v1 route.",
     )
     def delete_model(name: str) -> V1ModelDeleteResponse:
-        _remove_model_or_404(name)
+        _remove_model_or_404(app, name)
         return V1ModelDeleteResponse(removed=True, name=name)
 
     @app.post(
@@ -3767,12 +3767,34 @@ def _install_model(*, name: str, accept_license: bool) -> dict[str, Any]:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
-def _remove_model_or_404(name: str) -> None:
+def _remove_model_or_404(app: FastAPI, name: str) -> None:
+    manifest = _find_installed_manifest(name)
+    if manifest is None:
+        raise HTTPException(status_code=404, detail=f"model {name!r} is not installed")
+
+    family = manifest.get("family")
+    if isinstance(family, str) and family:
+        tracker: LoadedModelTracker = app.state.loaded_model_tracker
+        unload_timeout = _resolve_forecast_timeout_seconds(None)
+        try:
+            runner_stopped = app.state.runner_manager.unload(
+                family=family,
+                model=name,
+                timeout=unload_timeout,
+            )
+        except RunnerError:
+            app.state.runner_manager.stop(family=family)
+            tracker.unload_runner(family)
+        else:
+            if runner_stopped:
+                tracker.unload_runner(family)
+            else:
+                tracker.unload_model(family, name)
+
     try:
         removed = remove_model(name)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-
     if not removed:
         raise HTTPException(status_code=404, detail=f"model {name!r} is not installed")
 

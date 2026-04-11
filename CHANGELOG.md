@@ -19,6 +19,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Synced TiDE, N-HiTS, and N-BEATSx capability metadata/docs with current runner behavior and made daemon covariate preflight prefer current registry capabilities over stale installed manifest copies
 - Synced raw HTTP API docs with current error body semantics (`detail`/`hint`, validation as HTTP `400`) and runtime telemetry semantics for `ForecastResponse.usage`
 - Auto-forecast routing modes now honor benchmark-backed routing manifests before falling back to heuristics
+- Added an explicit Ollama-workflow parity contract and release-gate documentation
+- `scripts/verify_daemon_api.sh` can now emit `result.json`, `summary.json`, and `summary.md` artifacts for workflow parity verification
 
 ### Added
 
@@ -69,6 +71,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- Deleting a loaded model now removes its loaded session from `/api/ps`
 - PatchTST runner adapter:
   - aligned forecast tensor input shape to model expectations (`[batch, seq, channels]`)
   - added model-config channel detection to avoid input-channel mismatch errors

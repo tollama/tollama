@@ -1,5 +1,30 @@
 # End-to-End Testing
 
+## Ollama-Workflow Release Gate
+
+Use the daemon verifier when the question is "does Tollama behave like an
+Ollama-style local workflow for forecasting?":
+
+```bash
+bash scripts/verify_daemon_api.sh --output-dir artifacts/parity/daemon-api
+```
+
+This gate focuses on:
+
+- `pull`, `list`, `show`, `run`, `ps`, `rm`
+- `GET /v1/health` and `GET /api/version`
+- `POST /api/forecast` and `POST /v1/forecast` parity on canonical forecast fields
+- loaded-model lifecycle behavior, including delete-after-load cleanup
+
+Artifacts:
+
+- `result.json`: flat list of categorized check results
+- `summary.json`: aggregate pass/fail counts
+- `summary.md`: short operator-facing report
+
+See [Ollama-Workflow Parity](ollama-workflow-parity.md) for the exact scope and
+non-goals.
+
 ## Local Model E2E (All Registered Models)
 
 Use the local helper script to run pull + forecast smoke checks across all

@@ -71,6 +71,10 @@ class LoadedModelTracker:
                 key: value for key, value in self._entries.items() if value.runner != runner
             }
 
+    def unload_model(self, runner: str, model: str) -> None:
+        with self._lock:
+            self._entries.pop((runner, model), None)
+
     def clear(self) -> None:
         with self._lock:
             self._entries.clear()

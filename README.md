@@ -41,6 +41,9 @@ tollama benchmark examples/benchmark_data.json --models mock --horizon 4 --folds
 
 For more, see [Core Workflow](docs/core-workflow.md) and [TSFM Routing Defaults](docs/tsfm-routing-defaults.md).
 
+The precise meaning of "Ollama for Time Series Forecasting" is documented in
+[Ollama-Workflow Parity](docs/ollama-workflow-parity.md).
+
 ---
 
 ## Supported Models
@@ -147,6 +150,7 @@ Tollama can **invoke TSFMs as tools when forecasting is part of a broader workfl
   - [Dashboard User Guide](docs/dashboard-user-guide.md)
 - **References & Configurations**
   - [API Reference](docs/api-reference.md)
+  - [Ollama-Workflow Parity](docs/ollama-workflow-parity.md)
   - [CLI Cheatsheet](docs/cli-cheatsheet.md)
   - [Supported Models & Setup](docs/models.md)
   - [Covariates Contract](docs/covariates.md)

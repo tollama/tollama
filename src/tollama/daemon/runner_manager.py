@@ -129,20 +129,24 @@ class RunnerManager:
             except Exception:  # noqa: BLE001
                 logger.warning("failed to evict family %r under memory pressure", family)
 
-    def unload(self, family: str, *, model: str | None = None, timeout: float) -> None:
-        """Unload one model from a family runner, or stop the family runner as fallback."""
+    def unload(self, family: str, *, model: str | None = None, timeout: float) -> bool:
+        """Unload one model from a family runner, or stop the family runner as fallback.
+
+        Returns ``True`` when the family runner had to be stopped as a fallback.
+        """
         params: dict[str, Any] = {}
         if model is not None:
             params["model"] = model
 
         try:
             self.call(family=family, method="unload", params=params, timeout=timeout)
-            return
+            return False
         except RunnerCallError as exc:
             if exc.code != -32601:
                 raise
 
         self.stop(family=family)
+        return True
 
     def stop(self, family: str | None = None) -> None:
         """Stop one family runner or all runner families."""

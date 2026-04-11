@@ -15,6 +15,7 @@ API_KEY="ci-daemon-smoke-key"
 FAILED=0
 DAEMON_STARTED_BY_SCRIPT=0
 CLEANUP_STATE=1
+OUTPUT_DIR=""
 EXPECTED_ENDPOINTS=(
   "/api/version"
   "/api/info"
@@ -57,6 +58,9 @@ EXPECTED_ENDPOINTS=(
 
 TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "$TMP_DIR"' EXIT
+CHECK_RESULTS_FILE="${TMP_DIR}/check-results.tsv"
+CURRENT_CHECK_GROUP="uncategorized"
+: > "${CHECK_RESULTS_FILE}"
 
 COLOR_BLUE=$'\033[0;34m'
 COLOR_GREEN=$'\033[0;32m'
@@ -93,6 +97,7 @@ Options:
   --skip-contract-tests    Skip pytest contract verification step
   --skip-daemon-start      Assume an external daemon is already running
   --skip-route-inventory   Skip docs/app route inventory check
+  --output-dir DIR         Write release-gate artifacts (result.json, summary.json, summary.md)
   --no-cleanup             Keep daemon-created test state
   --api-key KEY           Enable auth verification using KEY
   -h, --help              Show this message
@@ -104,6 +109,10 @@ Environment:
     python -m pytest -q tests/test_a2a_server.py tests/test_a2a_client.py
   If --skip-route-inventory is set, docs/app route inventory validation is skipped.
   By default, resources created during smoke checks are cleaned up when possible.
+  When --output-dir is set, the script writes:
+    result.json   flat list of categorized check results
+    summary.json  aggregated pass/fail counts
+    summary.md    operator-facing markdown summary
 USAGE
 }
 
@@ -190,6 +199,17 @@ send_stream_request() {
   return 0
 }
 
+record_check_result() {
+  local category="$1"
+  local status="$2"
+  local name="$3"
+  printf '%s\t%s\t%s\n' "$category" "$status" "$name" >> "${CHECK_RESULTS_FILE}"
+}
+
+set_check_group() {
+  CURRENT_CHECK_GROUP="$1"
+}
+
 assert_status() {
   local expected="$1"
   [[ "$REQUEST_STATUS" == "$expected" ]]
@@ -245,12 +265,102 @@ run_check() {
   local name="$1"
   shift
   if "$@"; then
+    record_check_result "$CURRENT_CHECK_GROUP" "pass" "$name"
     pass "$name"
-    return 0
   else
+    record_check_result "$CURRENT_CHECK_GROUP" "fail" "$name"
     fail "$name"
-    return 1
   fi
+  return 0
+}
+
+write_summary_artifacts() {
+  if [[ -z "${OUTPUT_DIR}" ]]; then
+    return 0
+  fi
+
+  mkdir -p "${OUTPUT_DIR}"
+  python - "${CHECK_RESULTS_FILE}" "${OUTPUT_DIR}" "${BASE_URL}" "${FAILED}" <<'PY'
+from __future__ import annotations
+
+import json
+import sys
+from collections import OrderedDict
+from datetime import UTC, datetime
+from pathlib import Path
+
+results_path = Path(sys.argv[1])
+output_dir = Path(sys.argv[2])
+base_url = sys.argv[3]
+failed = sys.argv[4] != "0"
+
+rows: list[dict[str, str]] = []
+category_stats: OrderedDict[str, dict[str, int]] = OrderedDict()
+failed_rows: list[dict[str, str]] = []
+
+for raw_line in results_path.read_text(encoding="utf-8").splitlines():
+    if not raw_line.strip():
+        continue
+    category, status, name = raw_line.split("\t", 2)
+    row = {
+        "category": category,
+        "name": name,
+        "status": status,
+    }
+    rows.append(row)
+    stats = category_stats.setdefault(category, {"passed": 0, "failed": 0, "total": 0})
+    stats["total"] += 1
+    if status == "pass":
+        stats["passed"] += 1
+    else:
+        stats["failed"] += 1
+        failed_rows.append(row)
+
+summary = {
+    "scope": "ollama_workflow_release_gate",
+    "status": "fail" if failed else "pass",
+    "generated_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+    "base_url": base_url,
+    "total_checks": len(rows),
+    "passed": sum(1 for row in rows if row["status"] == "pass"),
+    "failed": sum(1 for row in rows if row["status"] == "fail"),
+    "categories": category_stats,
+}
+
+(output_dir / "result.json").write_text(json.dumps(rows, indent=2) + "\n", encoding="utf-8")
+(output_dir / "summary.json").write_text(
+    json.dumps(summary, indent=2) + "\n",
+    encoding="utf-8",
+)
+
+lines = [
+    "# Daemon API Verification Summary",
+    "",
+    f"- Scope: `{summary['scope']}`",
+    f"- Status: `{summary['status']}`",
+    f"- Base URL: `{base_url}`",
+    f"- Generated at: `{summary['generated_at']}`",
+    f"- Checks: `{summary['passed']}` passed / `{summary['failed']}` failed / `{summary['total_checks']}` total",
+    "",
+    "## Categories",
+    "",
+    "| Category | Passed | Failed | Total |",
+    "| --- | ---: | ---: | ---: |",
+]
+
+for category, stats in category_stats.items():
+    lines.append(
+        f"| `{category}` | {stats['passed']} | {stats['failed']} | {stats['total']} |"
+    )
+
+if failed_rows:
+    lines.extend(["", "## Failed checks", ""])
+    for row in failed_rows:
+        lines.append(f"- `{row['category']}`: {row['name']}")
+
+(output_dir / "summary.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
+PY
+  log "Wrote verification artifacts to ${OUTPUT_DIR}"
 }
 
 # Export helper functions so they are available inside `bash -c` subshells
@@ -263,6 +373,12 @@ export BASE_URL READY_TIMEOUT_SECONDS STREAM_TIMEOUT_SECONDS TMP_DIR
 ensure_tmp_payloads() {
   cat > "${TMP_DIR}/forecast.json" <<'JSON'
 {"model":"mock","horizon":2,"quantiles":[0.1,0.9],"series":[{"id":"s1","freq":"D","timestamps":["2025-01-01","2025-01-02"],"target":[1.0,3.0]},{"id":"s2","freq":"D","timestamps":["2025-01-01","2025-01-02"],"target":[2.0,4.0]}],"options":{}}
+JSON
+  cat > "${TMP_DIR}/forecast_non_stream.json" <<'JSON'
+{"model":"mock","horizon":2,"quantiles":[0.1,0.9],"series":[{"id":"s1","freq":"D","timestamps":["2025-01-01","2025-01-02"],"target":[1.0,3.0]},{"id":"s2","freq":"D","timestamps":["2025-01-01","2025-01-02"],"target":[2.0,4.0]}],"options":{},"stream":false}
+JSON
+  cat > "${TMP_DIR}/forecast_keep_alive.json" <<'JSON'
+{"model":"mock","horizon":2,"quantiles":[0.1,0.9],"series":[{"id":"s1","freq":"D","timestamps":["2025-01-01","2025-01-02"],"target":[1.0,3.0]},{"id":"s2","freq":"D","timestamps":["2025-01-01","2025-01-02"],"target":[2.0,4.0]}],"options":{},"keep_alive":-1}
 JSON
   cat > "${TMP_DIR}/forecast_missing_series.json" <<'JSON'
 {"model":"mock","horizon":2,"series":[],"options":{}}
@@ -359,19 +475,23 @@ run_contract_tests() {
 }
 
 check_route_inventory() {
+  set_check_group "documentation"
   local missing=0
   local route
   for route in "${EXPECTED_ENDPOINTS[@]}"; do
     if ! rg -Fq "${route}" docs/api-reference.md; then
+      record_check_result "$CURRENT_CHECK_GROUP" "fail" "docs/api-reference.md missing endpoint ${route}"
       fail "docs/api-reference.md missing endpoint ${route}"
       missing=1
     fi
     if ! rg -Fq "\"${route}\"" src/tollama/daemon/app.py; then
+      record_check_result "$CURRENT_CHECK_GROUP" "fail" "src/tollama/daemon/app.py missing registered route ${route}"
       fail "src/tollama/daemon/app.py missing registered route ${route}"
       missing=1
     fi
   done
   if (( missing == 0 )); then
+    record_check_result "$CURRENT_CHECK_GROUP" "pass" "Route inventory in docs and daemon app are aligned for expected endpoints"
     pass "Route inventory in docs and daemon app are aligned for expected endpoints"
   fi
 }
@@ -386,6 +506,7 @@ cleanup_resources() {
 }
 
 check_system_endpoints() {
+  set_check_group "system"
   run_check "GET /v1/health returns ok" bash -c "
     send_request GET /v1/health NONE ${TMP_DIR}/health.json
     assert_status 200 && assert_json && assert_jq '.status==\"ok\"'
@@ -425,6 +546,7 @@ check_system_endpoints() {
 }
 
 check_runtime_dashboard() {
+  set_check_group "runtime"
   run_check "GET /api/dashboard/state returns bootstrap payload" bash -c "
     send_request GET /api/dashboard/state NONE ${TMP_DIR}/dashboard_state.json
     assert_status 200 && assert_json && assert_jq 'has(\"info\") and has(\"ps\") and has(\"usage\")'
@@ -447,6 +569,7 @@ check_runtime_dashboard() {
 }
 
 check_modelfile_endpoints() {
+  set_check_group "modelfiles"
   run_check "POST /api/modelfiles creates or updates ci-smoke profile" bash -c "
     send_request POST /api/modelfiles ${TMP_DIR}/modelfile_profile.json ${TMP_DIR}/modelfile_upsert.json
     assert_status_in 200 201
@@ -466,6 +589,7 @@ check_modelfile_endpoints() {
 }
 
 check_ingest_endpoints() {
+  set_check_group "ingest"
   run_check "POST /api/ingest/upload returns parsed series" bash -c "
     response=\"${TMP_DIR}/ingest_upload.json\"
     curl -sS --max-time \"$READY_TIMEOUT_SECONDS\" \
@@ -493,6 +617,7 @@ check_ingest_endpoints() {
 }
 
 ensure_mock_installed() {
+  set_check_group "lifecycle"
   run_check "POST /v1/models/pull installs mock model" bash -c "
     cat > ${TMP_DIR}/pull_mock.json <<'JSON'
 {\"name\":\"mock\",\"accept_license\":false}
@@ -503,6 +628,7 @@ JSON
 }
 
 check_lifecycle_endpoints() {
+  set_check_group "lifecycle"
   run_check "POST /v1/models/pull duplicate install is idempotent/conflict-safe" bash -c "
     cat > ${TMP_DIR}/pull_mock_duplicate_payload.json <<'JSON'
 {\"name\":\"mock\",\"accept_license\":false}
@@ -563,6 +689,7 @@ JSON
 }
 
 check_forecasting_endpoints() {
+  set_check_group "forecast"
   run_check "POST /api/validate accepts valid payload" bash -c "
     send_request POST /api/validate ${TMP_DIR}/forecast.json ${TMP_DIR}/validate_ok.json
     assert_status 200 && assert_json && assert_jq '.valid == true'
@@ -571,7 +698,7 @@ check_forecasting_endpoints() {
     send_request POST /api/validate ${TMP_DIR}/forecast_missing_series.json ${TMP_DIR}/validate_bad.json
     assert_status 200 && assert_jq '.valid == false'
   "
-  run_check "POST /api/forecast returns JSON forecast" bash -c "
+  run_check "POST /api/forecast default stream returns ndjson forecast envelope" bash -c "
     send_request POST /api/forecast ${TMP_DIR}/forecast.json ${TMP_DIR}/forecast.json.out
     assert_status 200 && assert_jq 'select(has(\"done\")) | .response | has(\"model\") and has(\"forecasts\")'
   "
@@ -588,13 +715,67 @@ check_forecasting_endpoints() {
     send_request POST /v1/forecast ${TMP_DIR}/forecast.json ${TMP_DIR}/v1_forecast.json
     assert_status 200 && assert_json && assert_jq 'has(\"model\") and has(\"forecasts\")'
   "
+  run_check "POST /api/forecast stream=false matches /v1/forecast canonical fields" bash -c "
+    send_request POST /api/forecast ${TMP_DIR}/forecast_non_stream.json ${TMP_DIR}/api_forecast_non_stream.json
+    [[ \"\$REQUEST_STATUS\" == \"200\" ]] || exit 1
+    send_request POST /v1/forecast ${TMP_DIR}/forecast.json ${TMP_DIR}/v1_forecast_compare.json
+    [[ \"\$REQUEST_STATUS\" == \"200\" ]] || exit 1
+    python - ${TMP_DIR}/api_forecast_non_stream.json ${TMP_DIR}/v1_forecast_compare.json <<'PY'
+from __future__ import annotations
+
+import json
+import sys
+
+def canonical(path: str) -> dict[str, object]:
+    payload = json.loads(open(path, encoding='utf-8').read())
+    usage = payload.get('usage')
+    normalized_usage = None
+    if isinstance(usage, dict):
+        normalized_usage = {
+            'runner': usage.get('runner'),
+            'device': usage.get('device'),
+        }
+    return {
+        'model': payload.get('model'),
+        'forecasts': payload.get('forecasts'),
+        'metrics': payload.get('metrics'),
+        'warnings': payload.get('warnings'),
+        'explanation': payload.get('explanation'),
+        'narrative': payload.get('narrative'),
+        'usage': normalized_usage,
+    }
+
+left = canonical(sys.argv[1])
+right = canonical(sys.argv[2])
+if left != right:
+    raise SystemExit(f'canonical forecast mismatch: {left!r} != {right!r}')
+PY
+  "
   run_check "POST /api/auto-forecast uses strategy auto for mock" bash -c "
     send_request POST /api/auto-forecast ${TMP_DIR}/auto_forecast.json ${TMP_DIR}/auto_forecast.json.out
     assert_status 200 && assert_json && assert_jq '.selection.strategy == \"auto\" and has(\"response\")'
   "
 }
 
+check_workflow_parity_end_to_end() {
+  set_check_group "workflow"
+  run_check "Ollama-style workflow keeps /api/ps in sync across run and delete" bash -c "
+    send_request POST /v1/forecast ${TMP_DIR}/forecast_keep_alive.json ${TMP_DIR}/workflow_forecast.json
+    [[ \"\$REQUEST_STATUS\" == \"200\" ]] || exit 1
+    send_request GET /api/ps NONE ${TMP_DIR}/workflow_ps_before_delete.json
+    assert_status 200 && assert_json && assert_jq '(.models | map(.model) | any(. == \"mock\"))' || exit 1
+    printf '%s\n' '{\"model\":\"mock\"}' > ${TMP_DIR}/workflow_delete_payload.json
+    send_request DELETE /api/delete ${TMP_DIR}/workflow_delete_payload.json ${TMP_DIR}/workflow_delete.json
+    assert_status 200 && assert_json || exit 1
+    send_request GET /api/ps NONE ${TMP_DIR}/workflow_ps_after_delete.json
+    assert_status 200 && assert_json && assert_jq '.models == []' || exit 1
+    send_request POST /api/show ${TMP_DIR}/workflow_delete_payload.json ${TMP_DIR}/workflow_show_after_delete.json
+    assert_status 404
+  "
+}
+
 check_analysis_endpoints() {
+  set_check_group "analysis"
   run_check "POST /api/analyze returns analysis payload" bash -c "
     send_request POST /api/analyze ${TMP_DIR}/analyze.json ${TMP_DIR}/analyze.out
     assert_status 200 && assert_json && assert_jq 'has(\"results\") and (.results|type==\"array\")'
@@ -634,6 +815,7 @@ check_analysis_endpoints() {
 }
 
 check_a2a_endpoints() {
+  set_check_group "a2a"
   run_check "GET /.well-known/agent-card.json is reachable" bash -c "
     send_request GET /.well-known/agent-card.json NONE ${TMP_DIR}/agent_card.json
     assert_status_in 200 304 503
@@ -659,6 +841,7 @@ JSON
 }
 
 check_error_contracts() {
+  set_check_group "error-contracts"
   run_check "POST /api/forecast rejects malformed JSON" bash -c "
     status=\$(printf '{\"model\":' | curl -sS --max-time \"$READY_TIMEOUT_SECONDS\" \
       -o ${TMP_DIR}/forecast_malformed.json -w '%{http_code}' \
@@ -697,6 +880,7 @@ JSON
   start_daemon
   AUTH_HEADERS=()
 
+  set_check_group "auth"
   run_check "Protected endpoint rejects request without Authorization" bash -c "
     send_request GET /api/version NONE ${TMP_DIR}/auth_no_header.json
     assert_status_in 401 403
@@ -733,6 +917,8 @@ parse_args() {
         SKIP_DAEMON_START=1; shift ;;
       --skip-route-inventory)
         RUN_ROUTE_INVENTORY_CHECK=0; shift ;;
+      --output-dir)
+        OUTPUT_DIR="$2"; shift 2 ;;
       --no-cleanup)
         CLEANUP_STATE=0; shift ;;
       --api-key)
@@ -755,6 +941,7 @@ ensure_tmp_payloads
 
 if (( SKIP_CONTRACT_TESTS == 0 )); then
   log "Running contract tests..."
+  set_check_group "contract"
   run_check "Contract tests for openapi, daemon API, A2A interfaces" run_contract_tests
 fi
 
@@ -776,6 +963,8 @@ check_ingest_endpoints
 check_lifecycle_endpoints
 ensure_mock_installed
 check_forecasting_endpoints
+check_workflow_parity_end_to_end
+ensure_mock_installed
 check_analysis_endpoints
 check_a2a_endpoints
 check_error_contracts
@@ -783,6 +972,8 @@ check_error_contracts
 if (( RUN_AUTH_CHECK == 1 )); then
   run_auth_checks
 fi
+
+write_summary_artifacts
 
 if (( FAILED == 0 )); then
   log "Daemon API verification script completed successfully."

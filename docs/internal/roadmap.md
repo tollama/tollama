@@ -1,6 +1,6 @@
 # tollama roadmap (worker-per-model-family)
 
-Last updated: 2026-04-07
+Last updated: 2026-04-11
 
 Status legend:
 - `[x]` implemented
@@ -13,6 +13,7 @@ the optional future `packages/*` split as a migration phase.
 
 Canonical inventories live in:
 - `docs/api-reference.md` for HTTP endpoints
+- `docs/ollama-workflow-parity.md` for the release-gated Ollama-style workflow contract
 - `docs/agent-tools.md` for agent tool surfaces
 - `docs/models.md` and `model-registry/registry.yaml` for model and family coverage
 - `docs/covariates.md` for the covariates contract and compatibility matrix
@@ -72,6 +73,8 @@ Canonical inventories live in:
   API keys are configured those docs endpoints require bearer auth by default
   (`TOLLAMA_DOCS_PUBLIC=1` can be used for local public-doc overrides).
 - API endpoint inventory documentation is now maintained in `docs/api-reference.md`.
+- Ollama-workflow parity scope and acceptance rules are now documented in
+  `docs/ollama-workflow-parity.md`.
 - Tutorial notebooks now include covariates, comparison, what-if, and auto-forecast
   walkthroughs with both matplotlib and plotly outputs.
 - v1 non-goals are still respected: no training/fine-tuning and no distributed scheduler.
@@ -408,6 +411,11 @@ tollama/
 - Baseline gates remain:
   - `ruff check .`
   - `pytest -q` (heavy integration tests stay opt-in)
+- Daemon workflow release gate now writes machine-readable/operator-friendly artifacts via
+  `bash scripts/verify_daemon_api.sh --output-dir <dir>`:
+  - `result.json`
+  - `summary.json`
+  - `summary.md`
 - Current workspace verification notes:
   - repository-wide Ruff cleanup is still pending for existing `UP038` findings
   - full `pytest -q` requires a Python 3.11+ environment consistent with `pyproject.toml`

@@ -64,6 +64,26 @@ def _sample_forecast_payload_with_metrics() -> dict[str, Any]:
     return payload
 
 
+def _canonical_forecast_view(payload: dict[str, Any]) -> dict[str, Any]:
+    usage = payload.get("usage")
+    normalized_usage = None
+    if isinstance(usage, dict):
+        normalized_usage = {
+            "runner": usage.get("runner"),
+            "device": usage.get("device"),
+        }
+
+    return {
+        "model": payload.get("model"),
+        "forecasts": payload.get("forecasts"),
+        "metrics": payload.get("metrics"),
+        "warnings": payload.get("warnings"),
+        "explanation": payload.get("explanation"),
+        "narrative": payload.get("narrative"),
+        "usage": normalized_usage,
+    }
+
+
 def _sample_analyze_payload() -> dict[str, Any]:
     return {
         "series": [
@@ -534,6 +554,40 @@ def test_ollama_pull_non_stream_and_delete_flow(monkeypatch, tmp_path) -> None:
 
         deleted_again = client.request("DELETE", "/api/delete", json={"model": "mock"})
         assert deleted_again.status_code == 404
+
+
+@pytest.mark.parametrize(
+    ("path", "request_kwargs"),
+    [
+        ("/api/delete", {"method": "DELETE", "json": {"model": "mock"}}),
+        ("/v1/models/mock", {"method": "DELETE"}),
+    ],
+)
+def test_delete_routes_unload_loaded_model_from_ps(
+    monkeypatch,
+    tmp_path,
+    path: str,
+    request_kwargs: dict[str, Any],
+) -> None:
+    _install_model(monkeypatch, tmp_path, "mock")
+    payload = _sample_forecast_payload()
+    payload["keep_alive"] = -1
+
+    with TestClient(create_app()) as client:
+        forecast_response = client.post("/v1/forecast", json=payload)
+        ps_before_delete = client.get("/api/ps")
+        delete_kwargs = {"json": request_kwargs["json"]} if "json" in request_kwargs else {}
+        delete_response = client.request(request_kwargs["method"], path, **delete_kwargs)
+        ps_after_delete = client.get("/api/ps")
+        show_after_delete = client.post("/api/show", json={"model": "mock"})
+
+    assert forecast_response.status_code == 200
+    assert ps_before_delete.status_code == 200
+    assert ps_before_delete.json()["models"][0]["model"] == "mock"
+    assert delete_response.status_code == 200
+    assert ps_after_delete.status_code == 200
+    assert ps_after_delete.json() == {"models": []}
+    assert show_after_delete.status_code == 404
 
 
 def test_ollama_pull_stream_returns_ndjson(monkeypatch, tmp_path) -> None:
@@ -1084,6 +1138,22 @@ def test_api_forecast_keep_alive_updates_loaded_model_tracker(monkeypatch, tmp_p
     assert len(models) == 1
     assert models[0]["model"] == "mock"
     assert models[0]["expires_at"] is None
+
+
+def test_api_forecast_stream_false_matches_v1_forecast_canonical_payload(monkeypatch, tmp_path) -> None:
+    _install_model(monkeypatch, tmp_path, "mock")
+    payload = _sample_forecast_payload()
+    payload["stream"] = False
+
+    with TestClient(create_app()) as client:
+        api_response = client.post("/api/forecast", json=payload)
+        v1_response = client.post("/v1/forecast", json=_sample_forecast_payload())
+
+    assert api_response.status_code == 200
+    assert v1_response.status_code == 200
+    assert _canonical_forecast_view(api_response.json()) == _canonical_forecast_view(
+        v1_response.json()
+    )
 
 
 def test_forecast_routes_end_to_end_to_mock_runner(monkeypatch, tmp_path) -> None:
