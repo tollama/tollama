@@ -1140,7 +1140,9 @@ def test_api_forecast_keep_alive_updates_loaded_model_tracker(monkeypatch, tmp_p
     assert models[0]["expires_at"] is None
 
 
-def test_api_forecast_stream_false_matches_v1_forecast_canonical_payload(monkeypatch, tmp_path) -> None:
+def test_api_forecast_stream_false_matches_v1_forecast_canonical_payload(
+    monkeypatch, tmp_path
+) -> None:
     _install_model(monkeypatch, tmp_path, "mock")
     payload = _sample_forecast_payload()
     payload["stream"] = False
