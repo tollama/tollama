@@ -40,6 +40,19 @@ class _MissingDependencyAdapter(_NoopAdapter):
         )
 
 
+class _RuntimeFailureAdapter(_NoopAdapter):
+    def forecast(
+        self,
+        request,
+        *,
+        model_local_dir: str | None = None,
+        model_source: dict[str, object] | None = None,
+        model_metadata: dict[str, object] | None = None,
+    ):
+        del request, model_local_dir, model_source, model_metadata
+        raise RuntimeError("xreg backend exploded")
+
+
 def test_timesfm_runner_hello_reports_supported_family() -> None:
     response = handle_request_line(
         json.dumps({"id": "req-1", "method": "hello", "params": {}}),
@@ -79,3 +92,33 @@ def test_timesfm_runner_forecast_returns_dependency_missing_error() -> None:
     assert payload["id"] == "req-2"
     assert payload["error"]["code"] == "DEPENDENCY_MISSING"
     assert "runner_timesfm" in payload["error"]["message"]
+
+
+def test_timesfm_runner_maps_unexpected_runtime_errors_to_forecast_error() -> None:
+    response = handle_request_line(
+        json.dumps(
+            {
+                "id": "req-3",
+                "method": "forecast",
+                "params": {
+                    "model": "timesfm-2.5-200m",
+                    "horizon": 2,
+                    "series": [
+                        {
+                            "id": "s1",
+                            "freq": "D",
+                            "timestamps": ["2025-01-01", "2025-01-02"],
+                            "target": [1.0, 2.0],
+                        }
+                    ],
+                    "quantiles": [0.1, 0.9],
+                    "options": {},
+                },
+            },
+        ),
+        _RuntimeFailureAdapter(),
+    )
+    payload = response.model_dump(mode="json", exclude_none=True)
+    assert payload["id"] == "req-3"
+    assert payload["error"]["code"] == "FORECAST_ERROR"
+    assert payload["error"]["message"] == "RuntimeError: xreg backend exploded"

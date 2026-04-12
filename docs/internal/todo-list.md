@@ -380,3 +380,7 @@ Canonical inventories:
     기본 `256`으로 낮춰 sparse dataset coverage를 개선
   - 반영: explicit panel key dataset scan budget 확대(`kashif/App_Flow`
     포함 10/10 starter dataset 준비 확인)
+  - 반영: `scripts/e2e_realdata_tsfm.sh` 에도 interpreter startup/runtime preflight
+    와 `scripts/e2e_realdata_runtime_diag.sh` 안내를 복구
+  - 반영: `timesfm`/`moirai` best-effort covariate runtime failure 시
+    target-only fallback + warning 동작을 runner/test/docs에 재동기화

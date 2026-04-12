@@ -15,7 +15,7 @@ from tollama.runners.timesfm_runner.adapter import (
     point_forecast_to_rows,
     truncate_target_to_max_context,
 )
-from tollama.runners.timesfm_runner.errors import AdapterInputError, DependencyMissingError
+from tollama.runners.timesfm_runner.errors import AdapterInputError
 
 
 class _FakePandas:
@@ -207,6 +207,8 @@ class _FakeTimesFMModel:
     def __init__(self) -> None:
         self.compile_kwargs: dict[str, object] | None = None
         self.covariate_kwargs: dict[str, object] | None = None
+        self.forecast_calls = 0
+        self.forecast_with_covariates_calls = 0
 
     @classmethod
     def from_pretrained(cls, model_ref: str, **kwargs):  # noqa: ANN003
@@ -218,9 +220,11 @@ class _FakeTimesFMModel:
 
     def forecast(self, *, horizon: int, inputs):  # noqa: ANN001
         del inputs
+        self.forecast_calls += 1
         return [[float(index + 1) for index in range(horizon)]]
 
     def forecast_with_covariates(self, **kwargs):  # noqa: ANN003
+        self.forecast_with_covariates_calls += 1
         self.covariate_kwargs = dict(kwargs)
         horizon = int(kwargs.get("horizon", 1))
         return ([_FakeArrayLike([float(index + 1) for index in range(horizon)])], None)
@@ -242,15 +246,16 @@ class _FakeTimesFMNaNModule:
     TimesFM_2p5_200M_torch = _FakeTimesFMNaNModel
 
 
-class _FakeTimesFMImportErrorModel(_FakeTimesFMModel):
+class _FakeTimesFMXRegFailureModel(_FakeTimesFMModel):
     def forecast_with_covariates(self, **kwargs):  # noqa: ANN003
-        del kwargs
-        raise ImportError("Did you forget to install `timesfm[xreg]`?")
+        self.forecast_with_covariates_calls += 1
+        self.covariate_kwargs = dict(kwargs)
+        raise ImportError("Failed to load the XReg module")
 
 
-class _FakeTimesFMImportErrorModule:
+class _FakeTimesFMXRegFailureModule:
     ForecastConfig = _FakeForecastConfig
-    TimesFM_2p5_200M_torch = _FakeTimesFMImportErrorModel
+    TimesFM_2p5_200M_torch = _FakeTimesFMXRegFailureModel
 
 
 def _covariate_request() -> ForecastRequest:
@@ -287,6 +292,35 @@ def _covariate_request() -> ForecastRequest:
     )
 
 
+def _strict_covariate_request() -> ForecastRequest:
+    return ForecastRequest.model_validate(
+        {
+            "model": "timesfm-2.5-200m",
+            "horizon": 2,
+            "quantiles": [],
+            "series": [
+                {
+                    "id": "s1",
+                    "freq": "D",
+                    "timestamps": ["2025-01-01", "2025-01-02", "2025-01-03"],
+                    "target": [10.0, 11.0, 12.0],
+                    "past_covariates": {"promo": [0.0, 1.0, 0.0]},
+                    "future_covariates": {"promo": [1.0, 1.0]},
+                }
+            ],
+            "options": {},
+            "parameters": {
+                "covariates_mode": "strict",
+                "timesfm": {
+                    "xreg_mode": "xreg + timesfm",
+                    "ridge": 0.25,
+                    "force_on_cpu": True,
+                },
+            },
+        },
+    )
+
+
 def test_timesfm_adapter_uses_forecast_with_covariates_and_return_backcast(monkeypatch) -> None:
     adapter = TimesFMAdapter()
     monkeypatch.setattr(
@@ -316,6 +350,50 @@ def test_timesfm_adapter_uses_forecast_with_covariates_and_return_backcast(monke
     assert model.covariate_kwargs["force_on_cpu"] is True
     assert response.warnings is not None
     assert "Ignoring categorical covariate" in response.warnings[0]
+
+
+def test_timesfm_adapter_best_effort_falls_back_to_target_only_when_xreg_fails(
+    monkeypatch,
+) -> None:
+    adapter = TimesFMAdapter()
+    monkeypatch.setattr(
+        adapter,
+        "_resolve_dependencies",
+        lambda: _TimesFMDependencies(
+            numpy=_FakeNumpy(),
+            pandas=_FakePandas(),
+            timesfm=_FakeTimesFMXRegFailureModule(),
+        ),
+    )
+
+    response = adapter.forecast(_covariate_request())
+
+    compiled_entry = next(iter(adapter._compiled_models.values()))  # noqa: SLF001
+    model = compiled_entry.model
+    assert isinstance(model, _FakeTimesFMXRegFailureModel)
+    assert model.forecast_with_covariates_calls == 1
+    assert model.forecast_calls == 1
+    assert response.forecasts[0].mean == [1.0, 2.0]
+    assert response.warnings is not None
+    assert any(
+        "TimesFM best_effort covariates fallback" in warning for warning in response.warnings
+    )
+
+
+def test_timesfm_adapter_strict_propagates_covariate_runtime_failures(monkeypatch) -> None:
+    adapter = TimesFMAdapter()
+    monkeypatch.setattr(
+        adapter,
+        "_resolve_dependencies",
+        lambda: _TimesFMDependencies(
+            numpy=_FakeNumpy(),
+            pandas=_FakePandas(),
+            timesfm=_FakeTimesFMXRegFailureModule(),
+        ),
+    )
+
+    with pytest.raises(ImportError, match="XReg"):
+        adapter.forecast(_strict_covariate_request())
 
 
 def test_timesfm_adapter_replaces_non_finite_forecasts(monkeypatch) -> None:
@@ -351,22 +429,3 @@ def test_timesfm_adapter_replaces_non_finite_forecasts(monkeypatch) -> None:
     assert response.forecasts[0].mean == [12.0, 12.0]
     assert response.warnings is not None
     assert "non-finite forecast values" in response.warnings[-1]
-
-
-def test_timesfm_adapter_maps_missing_xreg_dependencies_to_dependency_error(monkeypatch) -> None:
-    adapter = TimesFMAdapter()
-    monkeypatch.setattr(
-        adapter,
-        "_resolve_dependencies",
-        lambda: _TimesFMDependencies(
-            numpy=_FakeNumpy(),
-            pandas=_FakePandas(),
-            timesfm=_FakeTimesFMImportErrorModule(),
-        ),
-    )
-
-    with pytest.raises(
-        DependencyMissingError,
-        match="missing optional timesfm covariate dependencies",
-    ):
-        adapter.forecast(_covariate_request())

@@ -448,6 +448,10 @@ tollama/
   - updated: HuggingFace path is optional local/manual profile via
     `--gate-profile hf_optional` and `scripts/e2e_realdata_hf.sh` (PR/nightly remain strict Kaggle+M4)
   - updated: per-entry artifacts now include `status=pass|fail|skip` and `retry_count`
+  - updated: `scripts/e2e_realdata_tsfm.sh` now uses the same interpreter preflight
+    as the HF wrapper (`python -V` + `import ssl, yaml, httpx`)
+  - updated: TimesFM and Moirai `best_effort` covariate paths now degrade to
+    target-only forecasts with explicit warnings on runtime covariate-path failure
 - Phase 4 feature set was re-validated on `2026-02-19`:
   - pass: OpenClaw skill regression (`bash scripts/e2e_skills_test.sh`)
   - pass: metrics expansion live daemon checks (`/api/forecast` non-stream):

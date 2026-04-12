@@ -72,6 +72,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Fixed
 
 - Deleting a loaded model now removes its loaded session from `/api/ps`
+- Restored best-effort dynamic-covariate fallback for TimesFM and Moirai so
+  runtime XReg/covariate-path failures degrade to target-only forecasts with
+  warnings instead of hard-failing requests
+- Restored `scripts/e2e_realdata_tsfm.sh` interpreter preflight so the strict
+  real-data wrapper now matches the HF wrapper's startup/runtime diagnostics
 - PatchTST runner adapter:
   - aligned forecast tensor input shape to model expectations (`[batch, seq, channels]`)
   - added model-config channel detection to avoid input-channel mismatch errors

@@ -10,6 +10,7 @@ import pytest
 from tollama.core.schemas import ForecastRequest, SeriesInput
 from tollama.runners.uni2ts_runner.adapter import (
     MoiraiAdapter,
+    _Uni2TSDependencies,
     build_pandas_dataset,
     build_quantile_payload,
     generate_future_timestamps,
@@ -97,6 +98,41 @@ class _FakeForecast:
         return self.quantiles[q]
 
 
+class _FakeMoiraiModule:
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):  # noqa: ANN002, ANN003
+        del args, kwargs
+        return cls()
+
+
+class _FakePredictor:
+    def __init__(self, *, fail_on_covariates: bool) -> None:
+        self._fail_on_covariates = fail_on_covariates
+
+    def predict(self, dataset):  # noqa: ANN001
+        if self._fail_on_covariates and getattr(dataset, "num_feat_dynamic_real", 0) > 0:
+            raise RuntimeError("tensor size mismatch in covariate path")
+        return iter(
+            [
+                _FakeForecast(
+                    mean=[13.0, 14.0],
+                    quantiles={
+                        0.1: [12.0, 13.0],
+                        0.9: [14.0, 15.0],
+                    },
+                )
+            ],
+        )
+
+
+class _FakeMoiraiForecast:
+    def __init__(self, **kwargs):  # noqa: ANN003
+        self.kwargs = kwargs
+
+    def create_predictor(self, *, batch_size: int):  # noqa: ARG002
+        return _FakePredictor(fail_on_covariates=True)
+
+
 def _series(length: int) -> SeriesInput:
     start = datetime(2025, 1, 1, tzinfo=UTC)
     return SeriesInput.model_validate(
@@ -124,6 +160,28 @@ def _forecast_request(*, options: dict[str, object]) -> ForecastRequest:
                 }
             ],
             "options": options,
+        },
+    )
+
+
+def _covariate_forecast_request(*, covariates_mode: str = "best_effort") -> ForecastRequest:
+    return ForecastRequest.model_validate(
+        {
+            "model": "moirai-2.0-R-small",
+            "horizon": 2,
+            "quantiles": [0.1, 0.9],
+            "series": [
+                {
+                    "id": "s1",
+                    "freq": "D",
+                    "timestamps": ["2025-01-01", "2025-01-02", "2025-01-03"],
+                    "target": [10.0, 11.0, 12.0],
+                    "past_covariates": {"promo": [0.0, 1.0, 0.0]},
+                    "future_covariates": {"promo": [1.0, 1.0]},
+                }
+            ],
+            "options": {},
+            "parameters": {"covariates_mode": covariates_mode},
         },
     )
 
@@ -259,3 +317,42 @@ def test_forecast_rejects_unsupported_options_before_model_loading(monkeypatch) 
 
     with pytest.raises(AdapterInputError, match="num_samples"):
         adapter.forecast(_forecast_request(options={"num_samples": 20}))
+
+
+def test_moirai_best_effort_falls_back_to_target_only_when_covariates_fail(monkeypatch) -> None:
+    adapter = MoiraiAdapter()
+    monkeypatch.setattr(
+        adapter,
+        "_resolve_dependencies",
+        lambda: _Uni2TSDependencies(
+            pandas=_FakePandas(),
+            numpy=_FakeNumpy(),
+            pandas_dataset_cls=_CapturingPandasDataset,
+            moirai_forecast_cls=_FakeMoiraiForecast,
+            moirai_module_cls=_FakeMoiraiModule,
+        ),
+    )
+
+    response = adapter.forecast(_covariate_forecast_request())
+
+    assert response.forecasts[0].mean == [13.0, 14.0]
+    assert response.warnings is not None
+    assert any("Moirai best_effort covariates fallback" in warning for warning in response.warnings)
+
+
+def test_moirai_strict_propagates_covariate_runtime_failures(monkeypatch) -> None:
+    adapter = MoiraiAdapter()
+    monkeypatch.setattr(
+        adapter,
+        "_resolve_dependencies",
+        lambda: _Uni2TSDependencies(
+            pandas=_FakePandas(),
+            numpy=_FakeNumpy(),
+            pandas_dataset_cls=_CapturingPandasDataset,
+            moirai_forecast_cls=_FakeMoiraiForecast,
+            moirai_module_cls=_FakeMoiraiModule,
+        ),
+    )
+
+    with pytest.raises(RuntimeError, match="tensor size mismatch"):
+        adapter.forecast(_covariate_forecast_request(covariates_mode="strict"))

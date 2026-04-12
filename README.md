@@ -65,6 +65,10 @@ The precise meaning of "Ollama for Time Series Forecasting" is documented in
 | Timer              | Tsinghua / THUML        | Neural Baseline | Target only   |
 | ForecastPFN        | PFN Research            | Neural Baseline | Target only   |
 
+TimesFM 2.5 and Moirai keep dynamic covariates in practical best-effort mode:
+when `parameters.covariates_mode` remains at the default `best_effort`, runtime
+covariate-path failures degrade to target-only forecasts with warnings.
+
 > **TSFM vs Neural Baseline — what's the difference?**
 >
 > - **TSFM (Time Series Foundation Model)**: Pre-trained on large, diverse time series corpora (billions of data points across multiple domains). Supports **zero-shot forecasting** — produces predictions on completely unseen data without per-dataset fine-tuning.

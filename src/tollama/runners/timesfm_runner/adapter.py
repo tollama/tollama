@@ -72,6 +72,19 @@ class _TimesFMCovariatePayload:
     warnings: list[str]
 
 
+def _format_best_effort_covariate_warning(*, model_label: str, exc: Exception) -> str:
+    detail = str(exc).strip()
+    if detail:
+        return (
+            f"{model_label} best_effort covariates fallback: dropped dynamic covariates after "
+            f"{exc.__class__.__name__}: {detail}"
+        )
+    return (
+        f"{model_label} best_effort covariates fallback: dropped dynamic covariates after "
+        f"{exc.__class__.__name__}"
+    )
+
+
 class TimesFMAdapter:
     """Adapter that maps canonical request/response to TimesFM 2.5 inference."""
 
@@ -170,11 +183,13 @@ class TimesFMAdapter:
                     ridge=ridge_value,
                     force_on_cpu=force_on_cpu,
                 )
-            except ImportError as exc:
-                raise DependencyMissingError(
-                    "missing optional timesfm covariate dependencies "
-                    "(timesfm[xreg]); install them with `pip install -e \".[dev,runner_timesfm]\"`",
-                ) from exc
+            except Exception as exc:
+                if request.parameters.covariates_mode != "best_effort":
+                    raise
+                covariate_payload.warnings.append(
+                    _format_best_effort_covariate_warning(model_label="TimesFM", exc=exc),
+                )
+                forecast_output = compiled.model.forecast(horizon=request.horizon, inputs=inputs)
         else:
             forecast_output = compiled.model.forecast(horizon=request.horizon, inputs=inputs)
         point_forecast, quantile_forecast = _split_forecast_output(forecast_output)

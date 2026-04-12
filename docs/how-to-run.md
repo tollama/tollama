@@ -526,6 +526,7 @@ Alternative wrapper:
 ```bash
 bash scripts/e2e_realdata_tsfm.sh pr all http://127.0.0.1:11435 artifacts/realdata/wrapper false
 # Set PYTHON_BIN=/path/to/python if you need to force a specific interpreter
+# Set PYTHON_SKIP_PROBE=1 only if you intentionally want to bypass startup/runtime preflight
 ```
 
 Each run writes:

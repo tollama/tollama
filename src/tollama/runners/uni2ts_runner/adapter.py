@@ -57,6 +57,19 @@ class _DatasetBuildResult:
     past_feat_dynamic_real_dim: int
 
 
+def _format_best_effort_covariate_warning(*, model_label: str, exc: Exception) -> str:
+    detail = str(exc).strip()
+    if detail:
+        return (
+            f"{model_label} best_effort covariates fallback: dropped dynamic covariates after "
+            f"{exc.__class__.__name__}: {detail}"
+        )
+    return (
+        f"{model_label} best_effort covariates fallback: dropped dynamic covariates after "
+        f"{exc.__class__.__name__}"
+    )
+
+
 class MoiraiAdapter:
     """Adapter that maps canonical request/response to Moirai probabilistic inference."""
 
@@ -129,6 +142,7 @@ class MoiraiAdapter:
             batch_size=batch_size,
         )
 
+        warnings: list[str] = []
         dataset_result = build_pandas_dataset(
             series_list=request.series,
             pandas_module=dependencies.pandas,
@@ -136,30 +150,33 @@ class MoiraiAdapter:
             pandas_dataset_cls=dependencies.pandas_dataset_cls,
             horizon=request.horizon,
         )
-        dataset = dataset_result.dataset
-        ordered_series = dataset_result.ordered_series
-        feat_dynamic_real_dim = dataset_result.feat_dynamic_real_dim
-        past_feat_dynamic_real_dim = dataset_result.past_feat_dynamic_real_dim
-        if hasattr(dataset, "num_feat_dynamic_real"):
-            value = getattr(dataset, "num_feat_dynamic_real")
-            if isinstance(value, int):
-                feat_dynamic_real_dim = value
-        if hasattr(dataset, "num_past_feat_dynamic_real"):
-            value = getattr(dataset, "num_past_feat_dynamic_real")
-            if isinstance(value, int):
-                past_feat_dynamic_real_dim = value
-
-        moirai_model = dependencies.moirai_forecast_cls(
-            module=module,
-            prediction_length=predictor_config.prediction_length,
-            context_length=predictor_config.context_length,
-            target_dim=1,
-            feat_dynamic_real_dim=feat_dynamic_real_dim,
-            past_feat_dynamic_real_dim=past_feat_dynamic_real_dim,
-        )
-        predictor = moirai_model.create_predictor(batch_size=predictor_config.batch_size)
-        forecast_iter = predictor.predict(dataset)
-        forecasts = list(forecast_iter)
+        try:
+            ordered_series, forecasts = _predict_with_dataset(
+                dependencies=dependencies,
+                module=module,
+                predictor_config=predictor_config,
+                dataset_result=dataset_result,
+            )
+        except Exception as exc:
+            if (
+                request.parameters.covariates_mode != "best_effort"
+                or not _series_have_dynamic_covariates(request.series)
+            ):
+                raise
+            warnings.append(_format_best_effort_covariate_warning(model_label="Moirai", exc=exc))
+            target_only_dataset_result = build_pandas_dataset(
+                series_list=_drop_dynamic_covariates(request.series),
+                pandas_module=dependencies.pandas,
+                numpy_module=dependencies.numpy,
+                pandas_dataset_cls=dependencies.pandas_dataset_cls,
+                horizon=request.horizon,
+            )
+            ordered_series, forecasts = _predict_with_dataset(
+                dependencies=dependencies,
+                module=module,
+                predictor_config=predictor_config,
+                dataset_result=target_only_dataset_result,
+            )
         if len(forecasts) != len(ordered_series):
             raise AdapterInputError(
                 "Moirai predictor returned a different number of series forecasts than requested",
@@ -203,6 +220,7 @@ class MoiraiAdapter:
                 "horizon": request.horizon,
                 "context_length": context_length,
             },
+            warnings=warnings or None,
         )
 
     def _get_or_load_module(
@@ -341,6 +359,54 @@ def build_pandas_dataset(
         pandas_dataset_cls=pandas_dataset_cls,
         horizon=horizon,
     )
+
+
+def _predict_with_dataset(
+    *,
+    dependencies: _Uni2TSDependencies,
+    module: Any,
+    predictor_config: _PredictorConfig,
+    dataset_result: _DatasetBuildResult,
+) -> tuple[list[SeriesInput], list[Any]]:
+    dataset = dataset_result.dataset
+    feat_dynamic_real_dim = dataset_result.feat_dynamic_real_dim
+    past_feat_dynamic_real_dim = dataset_result.past_feat_dynamic_real_dim
+    if hasattr(dataset, "num_feat_dynamic_real"):
+        value = getattr(dataset, "num_feat_dynamic_real")
+        if isinstance(value, int):
+            feat_dynamic_real_dim = value
+    if hasattr(dataset, "num_past_feat_dynamic_real"):
+        value = getattr(dataset, "num_past_feat_dynamic_real")
+        if isinstance(value, int):
+            past_feat_dynamic_real_dim = value
+
+    moirai_model = dependencies.moirai_forecast_cls(
+        module=module,
+        prediction_length=predictor_config.prediction_length,
+        context_length=predictor_config.context_length,
+        target_dim=1,
+        feat_dynamic_real_dim=feat_dynamic_real_dim,
+        past_feat_dynamic_real_dim=past_feat_dynamic_real_dim,
+    )
+    predictor = moirai_model.create_predictor(batch_size=predictor_config.batch_size)
+    forecasts = list(predictor.predict(dataset))
+    return dataset_result.ordered_series, forecasts
+
+
+def _series_have_dynamic_covariates(series_list: Sequence[SeriesInput]) -> bool:
+    return any(series.past_covariates or series.future_covariates for series in series_list)
+
+
+def _drop_dynamic_covariates(series_list: Sequence[SeriesInput]) -> list[SeriesInput]:
+    return [
+        series.model_copy(
+            update={
+                "past_covariates": None,
+                "future_covariates": None,
+            },
+        )
+        for series in series_list
+    ]
 
 
 def build_pandas_dataset_with_horizon(

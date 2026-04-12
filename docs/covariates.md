@@ -77,6 +77,9 @@ For static covariates specifically:
   - sequence format: `past + future`.
 - Past-only numeric covariates are carried forward with the last observed value over horizon.
 - Categorical covariates are ignored in `best_effort` with warnings; `strict` rejects.
+- If the numeric covariate/XReg path fails at runtime in `best_effort`, Tollama
+  falls back to a target-only TimesFM forecast and returns a warning instead of
+  failing the request.
 - Covariate path compiles with `ForecastConfig(return_backcast=True, ...)`.
 
 TimesFM knobs live under `parameters.timesfm`:
@@ -91,6 +94,9 @@ TimesFM knobs live under `parameters.timesfm`:
 - Past-only numeric covariates map to `past_feat_dynamic_real`.
 - Dataset includes horizon rows with `target=NaN` and known-future feature values.
 - Categorical covariates are unsupported.
+- If numeric covariate execution fails at runtime in `best_effort`, Tollama
+  retries the forecast without dynamic covariates and returns a warning instead
+  of failing the request.
 
 ### Sundial (sundial runner)
 

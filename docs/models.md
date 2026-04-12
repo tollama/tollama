@@ -268,6 +268,10 @@ curl -s http://localhost:11435/api/forecast \
   -d @examples/timesfm_2p5_request.json
 ```
 
+In `parameters.covariates_mode="best_effort"`, runtime XReg/covariate-path
+failures degrade to a target-only TimesFM forecast with a warning instead of
+failing the request.
+
 ## Uni2TS/Moirai Forecasting (separate uni2ts runner family)
 
 ```bash
@@ -293,6 +297,10 @@ curl -s http://localhost:11435/api/forecast \
   -H 'content-type: application/json' \
   -d @examples/moirai_2p0_request.json
 ```
+
+In `parameters.covariates_mode="best_effort"`, runtime dynamic-covariate
+failures degrade to a target-only Moirai forecast with a warning instead of
+failing the request.
 
 ## Sundial Forecasting (separate sundial runner family)
 
