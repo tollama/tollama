@@ -1,66 +1,66 @@
-"""Run 6-model real-data E2E gate + benchmark matrix."""
+"""Run real-data E2E gate + benchmark matrices."""
 
 from __future__ import annotations
 
 import argparse
+import importlib
 import json
 import sys
 from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 from time import perf_counter, sleep
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from tollama.client import TollamaClient
-from tollama.client.exceptions import DaemonHTTPError, TollamaClientError
+if TYPE_CHECKING:
+    from tollama.client import TollamaClient
 
 if __package__ in {None, ""}:
     _THIS_DIR = Path(__file__).resolve().parent
     if str(_THIS_DIR) not in sys.path:
         sys.path.append(str(_THIS_DIR))
+    import benchmark_report as benchmark_report  # noqa: PLC0414
+    import model_policy as model_policy  # noqa: PLC0414
     import payload_builder as payload_builder  # noqa: PLC0414
-    import prepare_data as prepare_data  # noqa: PLC0414
     import summarize_report as summarize_report  # noqa: PLC0414
     import validate_results as validate_results  # noqa: PLC0414
 else:
-    from . import payload_builder, prepare_data, summarize_report, validate_results
-
-SUPPORTED_MODELS = [
-    "chronos2",
-    "granite-ttm-r2",
-    "timesfm-2.5-200m",
-    "moirai-2.0-R-small",
-    "sundial-base-128m",
-    "toto-open-base-1.0",
-]
-
-# Per-model context caps for accuracy optimisation.  Models that support
-# longer context windows benefit from receiving more history than the
-# harness-level --context-cap (which controls data *preparation*).  The
-# _truncate_series_for_model helper trims each payload to the cap that
-# matches the model's architecture.
-MODEL_CONTEXT_CAPS: dict[str, int] = {
-    "chronos2": 1024,
-    "granite-ttm-r2": 512,  # adapter further truncates to context_length
-    "moirai-2.0-R-small": 512,  # small variant works best with shorter context
-    "timesfm-2.5-200m": 1024,  # model's max_context
-    "sundial-base-128m": 2048,  # conservative subset of 2880
-    "toto-open-base-1.0": 2048,  # conservative subset of 4096
-}
-
-SCENARIOS = [
-    "benchmark_target_only",
-    "contract_best_effort_covariates",
-    "contract_strict_covariates",
-]
+    from . import (
+        benchmark_report,
+        model_policy,
+        payload_builder,
+        summarize_report,
+        validate_results,
+    )
 
 RETRYABLE_STATUS_CODES = {502, 503}
 RETRY_ATTEMPTS = 3
 RETRY_BACKOFF_SECONDS = (2.0, 5.0)
+STARTER_HF_CATALOG_NAME = "hf_dataset_catalog_starter.yaml"
+
+
+def _load_client_runtime() -> tuple[type[Any], type[Exception], type[Exception]]:
+    from tollama.client import TollamaClient
+    from tollama.client.exceptions import DaemonHTTPError, TollamaClientError
+
+    return TollamaClient, DaemonHTTPError, TollamaClientError
+
+
+def _create_client(*, base_url: str, timeout: float) -> Any:
+    client_cls, _, _ = _load_client_runtime()
+    return client_cls(base_url=base_url, timeout=timeout)
+
+
+def _load_prepare_data_module() -> Any:
+    if __package__ in {None, ""}:
+        if str(_THIS_DIR) not in sys.path:
+            sys.path.append(str(_THIS_DIR))
+        return importlib.import_module("prepare_data")
+    return importlib.import_module(f"{__package__}.prepare_data")
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Run real-data E2E matrix for TSFM models.")
+    parser = argparse.ArgumentParser(description="Run real-data E2E matrix for forecast models.")
     parser.add_argument("--mode", choices=("pr", "nightly", "local"), required=True)
     parser.add_argument(
         "--gate-profile",
@@ -74,7 +74,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--model",
         default="all",
-        help="Model name, comma-separated list, or 'all'.",
+        help="Model name, comma-separated list, or alias: all, hf_all, neural.",
     )
     parser.add_argument(
         "--base-url",
@@ -84,7 +84,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--output-dir",
         required=True,
-        help="Output directory for result.json, summary.md, and raw responses.",
+        help="Output directory for result.json, summaries, reports, and raw responses.",
     )
     parser.add_argument(
         "--catalog-path",
@@ -99,6 +99,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--timeout-seconds", type=float, default=900.0)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--context-cap", type=int, default=2048)
+    parser.add_argument(
+        "--max-series-per-dataset",
+        type=int,
+        default=None,
+        help="Optional deterministic cap overriding the mode-based sample count.",
+    )
     parser.add_argument(
         "--allow-kaggle-fallback",
         action="store_true",
@@ -122,22 +128,40 @@ def main(argv: list[str] | None = None) -> int:
     raw_dir = output_dir / "raw"
     raw_dir.mkdir(parents=True, exist_ok=True)
 
+    catalog_path = Path(args.catalog_path).resolve()
     run_id = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
-    selected_models = _resolve_models(args.model)
     started_at = _now_iso()
+    prepare_data = _load_prepare_data_module()
 
-    client = TollamaClient(base_url=args.base_url, timeout=float(args.timeout_seconds))
+    try:
+        selected_models = _resolve_models(args.model)
+    except ValueError as exc:
+        print(str(exc))
+        return 2
+
+    client = _create_client(base_url=args.base_url, timeout=float(args.timeout_seconds))
 
     try:
         _ = client.health()
-    except TollamaClientError as exc:
-        return _write_infra_failure(
-            output_dir=output_dir,
+    except _load_client_runtime()[2] as exc:
+        payload = _build_result_payload(
             run_id=run_id,
             mode=args.mode,
+            base_url=args.base_url,
+            gate_profile=args.gate_profile,
+            catalog_path=catalog_path,
+            models=selected_models,
+            datasets=[],
+            messages=[f"daemon health check failed: {exc}"],
             started_at=started_at,
-            detail=f"daemon health check failed: {exc}",
+            finished_at=_now_iso(),
+            entries=[],
+            max_series_per_dataset=args.max_series_per_dataset,
+            infra_error=f"daemon health check failed: {exc}",
         )
+        _write_artifacts(output_dir=output_dir, result_payload=payload)
+        print(f"daemon health check failed: {exc}")
+        return 2
 
     creds_present = prepare_data.has_kaggle_credentials()
     policy = prepare_data.kaggle_policy_for_mode(
@@ -146,16 +170,35 @@ def main(argv: list[str] | None = None) -> int:
         allow_local_fallback=args.allow_kaggle_fallback,
     )
     if policy.hard_fail_on_missing and not policy.include_kaggle:
-        return _write_infra_failure(
-            output_dir=output_dir,
+        detail = policy.message or "kaggle credentials missing"
+        payload = _build_result_payload(
             run_id=run_id,
             mode=args.mode,
+            base_url=args.base_url,
+            gate_profile=args.gate_profile,
+            catalog_path=catalog_path,
+            models=selected_models,
+            datasets=[],
+            messages=[detail],
             started_at=started_at,
-            detail=policy.message or "kaggle credentials missing",
+            finished_at=_now_iso(),
+            entries=[],
+            max_series_per_dataset=args.max_series_per_dataset,
+            infra_error=detail,
         )
+        _write_artifacts(output_dir=output_dir, result_payload=payload)
+        print(detail)
+        return 2
 
     try:
-        catalog = prepare_data.load_dataset_catalog(Path(args.catalog_path))
+        catalog = prepare_data.load_dataset_catalog(
+            catalog_path,
+            require_unique_hf_ids=_require_unique_hf_ids(catalog_path),
+        )
+        _validate_dataset_catalog(
+            catalog,
+            require_unique_hf_ids=_require_unique_hf_ids(catalog_path),
+        )
         dataset_kinds = {
             str(item["name"]): str(item["kind"])
             for item in catalog["datasets"]
@@ -163,22 +206,35 @@ def main(argv: list[str] | None = None) -> int:
         }
         prepared = prepare_data.prepare_datasets(
             mode=args.mode,
-            catalog_path=Path(args.catalog_path),
+            catalog_path=catalog_path,
             cache_dir=Path(args.cache_dir),
             include_kaggle=policy.include_kaggle,
             require_kaggle=policy.hard_fail_on_missing,
             seed=int(args.seed),
             context_cap=int(args.context_cap),
             timeout_seconds=max(int(args.timeout_seconds), 30),
+            max_series_per_dataset=args.max_series_per_dataset,
         )
     except Exception as exc:  # noqa: BLE001
-        return _write_infra_failure(
-            output_dir=output_dir,
+        detail = f"dataset preparation failed: {exc}"
+        payload = _build_result_payload(
             run_id=run_id,
             mode=args.mode,
+            base_url=args.base_url,
+            gate_profile=args.gate_profile,
+            catalog_path=catalog_path,
+            models=selected_models,
+            datasets=[],
+            messages=[detail],
             started_at=started_at,
-            detail=f"dataset preparation failed: {exc}",
+            finished_at=_now_iso(),
+            entries=[],
+            max_series_per_dataset=args.max_series_per_dataset,
+            infra_error=detail,
         )
+        _write_artifacts(output_dir=output_dir, result_payload=payload)
+        print(detail)
+        return 2
 
     entries: list[dict[str, Any]] = []
 
@@ -191,6 +247,7 @@ def main(argv: list[str] | None = None) -> int:
                         run_id=run_id,
                         mode=args.mode,
                         dataset="-",
+                        series_id=None,
                         scenario="preflight_pull",
                         model=model,
                         status="fail",
@@ -207,9 +264,11 @@ def main(argv: list[str] | None = None) -> int:
                 )
                 continue
 
+        enabled_scenarios = _scenarios_for_model(model)
         for dataset_name, series_list in prepared.datasets.items():
             dataset_kind = dataset_kinds.get(dataset_name, "")
             for series in series_list:
+                series_id = _series_id(series)
                 horizon = len(series.get("actuals", []))
                 if horizon <= 0:
                     status = _status_for_data_issue(
@@ -221,6 +280,7 @@ def main(argv: list[str] | None = None) -> int:
                             run_id=run_id,
                             mode=args.mode,
                             dataset=dataset_name,
+                            series_id=series_id,
                             scenario="preflight_series",
                             model=model,
                             status=status,
@@ -237,7 +297,7 @@ def main(argv: list[str] | None = None) -> int:
                     )
                     continue
 
-                for scenario in SCENARIOS:
+                for scenario in enabled_scenarios:
                     try:
                         payload = _build_payload(
                             scenario=scenario,
@@ -256,6 +316,7 @@ def main(argv: list[str] | None = None) -> int:
                                 run_id=run_id,
                                 mode=args.mode,
                                 dataset=dataset_name,
+                                series_id=series_id,
                                 scenario=scenario,
                                 model=model,
                                 status=status,
@@ -271,8 +332,8 @@ def main(argv: list[str] | None = None) -> int:
                             )
                         )
                         continue
-                    expected_status = _expected_status(scenario=scenario, model=model)
 
+                    expected_status = _expected_status(scenario=scenario, model=model)
                     started = _now_iso()
                     call_started = perf_counter()
                     (
@@ -302,6 +363,7 @@ def main(argv: list[str] | None = None) -> int:
                         run_id=run_id,
                         mode=args.mode,
                         dataset=dataset_name,
+                        series_id=series_id,
                         scenario=scenario,
                         model=model,
                         status=status,
@@ -317,7 +379,7 @@ def main(argv: list[str] | None = None) -> int:
                     )
                     entries.append(entry)
 
-                    safe_series_id = _sanitize_artifact_filename(str(series["id"]))
+                    safe_series_id = _sanitize_artifact_filename(series_id)
                     _write_json(
                         raw_dir / model / dataset_name / scenario / f"{safe_series_id}.json",
                         {
@@ -327,30 +389,31 @@ def main(argv: list[str] | None = None) -> int:
                             "exception": exception_detail,
                             "retry_count": retry_count,
                             "entry": entry,
-                            "series_id": series["id"],
+                            "series_id": series_id,
                             "series_id_sanitized": safe_series_id,
                         },
                     )
 
     finished_at = _now_iso()
-    result_payload = {
-        "run_id": run_id,
-        "mode": args.mode,
-        "models": selected_models,
-        "datasets": sorted(prepared.datasets.keys()),
-        "messages": [message for message in prepared.messages if message],
-        "started_at": started_at,
-        "finished_at": finished_at,
-        "entries": entries,
-    }
-    _write_json(output_dir / "result.json", result_payload)
-
-    summary_payload = summarize_report.summarize_entries(entries)
-    _write_json(output_dir / "summary.json", summary_payload)
-    (output_dir / "summary.md").write_text(
-        summarize_report.render_markdown(summary_payload),
-        encoding="utf-8",
+    messages = [message for message in prepared.messages if message]
+    if policy.message:
+        messages.append(policy.message)
+    result_payload = _build_result_payload(
+        run_id=run_id,
+        mode=args.mode,
+        base_url=args.base_url,
+        gate_profile=args.gate_profile,
+        catalog_path=catalog_path,
+        models=selected_models,
+        datasets=sorted(prepared.datasets.keys()),
+        messages=messages,
+        started_at=started_at,
+        finished_at=finished_at,
+        entries=entries,
+        max_series_per_dataset=args.max_series_per_dataset,
+        infra_error=None,
     )
+    _write_artifacts(output_dir=output_dir, result_payload=result_payload)
 
     failed_count = sum(1 for item in entries if item.get("status") == "fail")
     print(f"run_id={run_id} entries={len(entries)} failed={failed_count}")
@@ -362,8 +425,8 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def _truncate_series_for_model(series: dict[str, Any], model: str) -> dict[str, Any]:
-    """Return a copy of *series* with target/timestamps trimmed to the model's context cap."""
-    cap = MODEL_CONTEXT_CAPS.get(model, 512)
+    """Return a copy of *series* trimmed to the model-specific context cap."""
+    cap = model_policy.context_cap_for_model(model)
     truncated = dict(series)
     truncated["target"] = list(series["target"][-cap:])
     truncated["timestamps"] = list(series["timestamps"][-cap:])
@@ -380,7 +443,7 @@ def _build_payload(
 ) -> dict[str, Any]:
     trimmed = _truncate_series_for_model(series, model)
 
-    if scenario == "benchmark_target_only":
+    if scenario == model_policy.BENCHMARK_TARGET_ONLY:
         return payload_builder.build_target_only_request(
             model=model,
             series=trimmed,
@@ -388,7 +451,7 @@ def _build_payload(
             timeout_seconds=timeout_seconds,
         )
 
-    if scenario == "contract_best_effort_covariates":
+    if scenario == model_policy.CONTRACT_BEST_EFFORT:
         return payload_builder.build_covariate_request(
             model=model,
             series=trimmed,
@@ -397,7 +460,7 @@ def _build_payload(
             timeout_seconds=timeout_seconds,
         )
 
-    if scenario == "contract_strict_covariates":
+    if scenario == model_policy.CONTRACT_STRICT:
         return payload_builder.build_covariate_request(
             model=model,
             series=trimmed,
@@ -410,46 +473,86 @@ def _build_payload(
 
 
 def _expected_status(*, scenario: str, model: str) -> int:
-    if scenario == "contract_strict_covariates":
+    if scenario == model_policy.CONTRACT_STRICT:
         return payload_builder.expected_status_for_strict_covariates(model)
     return 200
 
 
 def _resolve_models(raw: str) -> list[str]:
-    normalized = raw.strip().lower()
-    if normalized == "all":
-        return list(SUPPORTED_MODELS)
+    return model_policy.resolve_models(raw)
 
-    selected = [item.strip() for item in raw.split(",") if item.strip()]
-    if not selected:
-        raise ValueError("--model must be a model name, comma-separated list, or 'all'")
 
-    unknown = [item for item in selected if item not in SUPPORTED_MODELS]
-    if unknown:
-        raise ValueError(f"unsupported model(s): {', '.join(unknown)}")
-    return selected
+def _scenarios_for_model(model: str) -> list[str]:
+    return model_policy.scenarios_for_model(model)
+
+
+def _require_unique_hf_ids(catalog_path: Path) -> bool:
+    return catalog_path.name == STARTER_HF_CATALOG_NAME
+
+
+def _validate_dataset_catalog(
+    catalog: dict[str, Any],
+    *,
+    require_unique_hf_ids: bool,
+) -> None:
+    datasets = catalog.get("datasets")
+    if not isinstance(datasets, list) or not datasets:
+        raise ValueError("dataset catalog must contain a non-empty datasets list")
+
+    seen_names: set[str] = set()
+    seen_hf_ids: set[str] = set()
+    for item in datasets:
+        if not isinstance(item, dict):
+            raise ValueError("each dataset catalog entry must be a mapping")
+
+        name = item.get("name")
+        if not isinstance(name, str) or not name.strip():
+            raise ValueError("dataset catalog entry missing name")
+        if name in seen_names:
+            raise ValueError(f"duplicate dataset name: {name}")
+        seen_names.add(name)
+
+        kind = item.get("kind")
+        if not isinstance(kind, str) or not kind.strip():
+            raise ValueError(f"dataset {name!r} missing kind")
+
+        horizon = item.get("horizon")
+        if not isinstance(horizon, int) or horizon <= 0:
+            raise ValueError(f"dataset {name!r} has invalid horizon")
+
+        if kind == "huggingface_dataset":
+            for field in ("hf_id", "timestamp_column", "target_column"):
+                value = item.get(field)
+                if not isinstance(value, str) or not value.strip():
+                    raise ValueError(f"dataset {name!r} missing {field}")
+            hf_id = str(item["hf_id"]).strip()
+            if require_unique_hf_ids:
+                if hf_id in seen_hf_ids:
+                    raise ValueError(f"duplicate hf_id: {hf_id}")
+                seen_hf_ids.add(hf_id)
 
 
 def _call_forecast_once(
     *,
-    client: TollamaClient,
+    client: Any,
     payload: dict[str, Any],
 ) -> tuple[int | None, dict[str, Any] | None, str | None]:
+    _, daemon_http_error, tollama_client_error = _load_client_runtime()
     try:
         response_payload = client.forecast(payload, stream=False)
         if not isinstance(response_payload, dict):
             return None, None, "forecast response is not a JSON object"
         return 200, response_payload, None
-    except DaemonHTTPError as exc:
+    except daemon_http_error as exc:
         status = exc.status_code if isinstance(exc.status_code, int) else None
         return status, {"detail": exc.detail}, str(exc)
-    except TollamaClientError as exc:
+    except tollama_client_error as exc:
         return None, None, str(exc)
 
 
 def _call_forecast_with_retry(
     *,
-    client: TollamaClient,
+    client: Any,
     payload: dict[str, Any],
     max_attempts: int = RETRY_ATTEMPTS,
     backoff_seconds: tuple[float, ...] = RETRY_BACKOFF_SECONDS,
@@ -495,9 +598,10 @@ def _is_retryable_failure(*, http_status: int | None, exception_detail: str | No
 
 
 def _pull_model(*, client: TollamaClient, model: str) -> str | None:
+    _, _, tollama_client_error = _load_client_runtime()
     try:
         response = client.pull_model(name=model, stream=False, accept_license=True)
-    except TollamaClientError as exc:
+    except tollama_client_error as exc:
         return str(exc)
 
     if not isinstance(response, dict):
@@ -510,6 +614,7 @@ def _build_entry(
     run_id: str,
     mode: str,
     dataset: str,
+    series_id: str | None,
     scenario: str,
     model: str,
     status: str,
@@ -527,6 +632,7 @@ def _build_entry(
         "run_id": run_id,
         "mode": mode,
         "dataset": dataset,
+        "series_id": series_id,
         "scenario": scenario,
         "model": model,
         "status": status,
@@ -542,58 +648,90 @@ def _build_entry(
     }
 
 
+def _build_result_payload(
+    *,
+    run_id: str,
+    mode: str,
+    base_url: str,
+    gate_profile: str,
+    catalog_path: Path,
+    models: list[str],
+    datasets: list[str],
+    messages: list[str],
+    started_at: str,
+    finished_at: str,
+    entries: list[dict[str, Any]],
+    max_series_per_dataset: int | None,
+    infra_error: str | None,
+) -> dict[str, Any]:
+    return {
+        "run_id": run_id,
+        "mode": mode,
+        "base_url": base_url,
+        "gate_profile": gate_profile,
+        "catalog_path": str(catalog_path),
+        "max_series_per_dataset": max_series_per_dataset,
+        "scenario_policy": model_policy.scenario_policy_summary(),
+        "models": models,
+        "datasets": datasets,
+        "messages": messages,
+        "started_at": started_at,
+        "finished_at": finished_at,
+        "infra_error": infra_error,
+        "entries": entries,
+    }
+
+
 def _status_for_data_issue(*, gate_profile: str, dataset_kind: str) -> str:
     if gate_profile == "hf_optional" and dataset_kind == "huggingface_dataset":
         return "skip"
     return "fail"
 
 
-def _write_infra_failure(
-    *,
-    output_dir: Path,
-    run_id: str,
-    mode: str,
-    started_at: str,
-    detail: str,
-) -> int:
-    finished_at = _now_iso()
-    payload = {
-        "run_id": run_id,
-        "mode": mode,
-        "models": [],
-        "datasets": [],
-        "messages": [detail],
-        "started_at": started_at,
-        "finished_at": finished_at,
-        "entries": [],
-    }
-    _write_json(output_dir / "result.json", payload)
-    _write_json(
-        output_dir / "summary.json",
-        {
-            "gate_pass": False,
-            "total_entries": 0,
-            "total_failed": 1,
-            "total_skipped": 0,
-            "models": {},
-            "infra_error": detail,
-        },
+def _write_artifacts(*, output_dir: Path, result_payload: dict[str, Any]) -> None:
+    infra_error = result_payload.get("infra_error")
+    _write_json(output_dir / "result.json", result_payload)
+
+    summary_payload = summarize_report.summarize_entries(
+        [
+            entry
+            for entry in result_payload.get("entries", [])
+            if isinstance(entry, dict)
+        ]
     )
-    (output_dir / "summary.md").write_text(
-        "# Real-Data E2E Summary\n\n"
-        f"- Gate pass: **False**\n"
-        f"- Infra error: **{detail}**\n",
+    if isinstance(infra_error, str) and infra_error.strip():
+        summary_payload["infra_error"] = infra_error
+        summary_payload["gate_pass"] = False
+        summary_payload["total_failed"] = max(int(summary_payload.get("total_failed", 0)), 1)
+    _write_json(output_dir / "summary.json", summary_payload)
+
+    summary_markdown = summarize_report.render_markdown(summary_payload)
+    if isinstance(infra_error, str) and infra_error.strip():
+        summary_markdown += f"\n- Infra error: **{infra_error}**\n"
+    (output_dir / "summary.md").write_text(summary_markdown, encoding="utf-8")
+
+    benchmark_payload = benchmark_report.build_benchmark_report(result_payload)
+    _write_json(output_dir / "benchmark_report.json", benchmark_payload)
+    (output_dir / "benchmark_report.md").write_text(
+        benchmark_report.render_markdown(benchmark_payload),
         encoding="utf-8",
     )
-    print(detail)
-    return 2
 
 
-def _sanitize_artifact_filename(value: str) -> str:
-    sanitized = value
-    for char in ('"', ':', '<', '>', '|', '*', '?', '\\r', '\\n'):
+def _series_id(series: dict[str, Any]) -> str | None:
+    value = series.get("id")
+    if isinstance(value, str) and value:
+        return value
+    return None
+
+
+def _sanitize_artifact_filename(value: str | None) -> str:
+    sanitized = value or ""
+    for char in ('"', ":", "<", ">", "|", "*", "?", "\r", "\n"):
         sanitized = sanitized.replace(char, "_")
     sanitized = sanitized.strip()
+    if sanitized and set(sanitized) == {"_"}:
+        sanitized = ""
     return sanitized or "series"
 
 

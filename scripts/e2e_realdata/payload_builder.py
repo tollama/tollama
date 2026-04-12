@@ -2,50 +2,28 @@
 
 from __future__ import annotations
 
+import sys
 from datetime import datetime, timedelta
+from pathlib import Path
 from typing import Any
 
-# Per-model runtime options passed to the daemon via the ``options`` dict.
-# These override adapter defaults and are the primary mechanism for tuning
-# model accuracy at the E2E harness level.
-MODEL_OPTIONS: dict[str, dict[str, Any]] = {
-    "chronos2": {},
-    "granite-ttm-r2": {},
-    "moirai-2.0-R-small": {},
-    "timesfm-2.5-200m": {},
-    "sundial-base-128m": {"num_samples": 100},
-    "toto-open-base-1.0": {},
-}
-
-STRICT_EXPECTED_STATUS: dict[str, int] = {
-    "chronos2": 200,
-    "granite-ttm-r2": 400,
-    "timesfm-2.5-200m": 400,
-    "moirai-2.0-R-small": 400,
-    "sundial-base-128m": 400,
-    "toto-open-base-1.0": 400,
-}
-
-BEST_EFFORT_WARNING_REQUIRED_MODELS = {
-    "granite-ttm-r2",
-    "timesfm-2.5-200m",
-    "moirai-2.0-R-small",
-    "sundial-base-128m",
-    "toto-open-base-1.0",
-}
+if __package__ in {None, ""}:
+    _THIS_DIR = Path(__file__).resolve().parent
+    if str(_THIS_DIR) not in sys.path:
+        sys.path.append(str(_THIS_DIR))
+    import model_policy as model_policy  # noqa: PLC0414
+else:
+    from . import model_policy
 
 
 def expected_status_for_strict_covariates(model: str) -> int:
     """Return strict covariates expected status by model capability contract."""
-    try:
-        return STRICT_EXPECTED_STATUS[model]
-    except KeyError as exc:
-        raise ValueError(f"unsupported model for strict status: {model!r}") from exc
+    return model_policy.strict_expected_status_for_model(model)
 
 
 def best_effort_warning_required(model: str) -> bool:
     """Return whether best-effort covariates should emit warnings."""
-    return model in BEST_EFFORT_WARNING_REQUIRED_MODELS
+    return model_policy.best_effort_warning_required(model)
 
 
 def build_target_only_request(
@@ -64,11 +42,11 @@ def build_target_only_request(
         "horizon": horizon,
         "quantiles": [],
         "series": [request_series],
-        "options": dict(MODEL_OPTIONS.get(model, {})),
+        "options": model_policy.model_options(model),
         "timeout": timeout_seconds,
         "parameters": {
             "covariates_mode": "best_effort",
-            "metrics": {"names": ["mae", "rmse", "smape", "mape", "mase"]},
+            "metrics": {"names": list(model_policy.BENCHMARK_METRIC_NAMES)},
         },
     }
 
@@ -96,7 +74,7 @@ def build_covariate_request(
         "horizon": horizon,
         "quantiles": [],
         "series": [request_series],
-        "options": dict(MODEL_OPTIONS.get(model, {})),
+        "options": model_policy.model_options(model),
         "timeout": timeout_seconds,
         "parameters": {
             "covariates_mode": covariates_mode,
@@ -116,7 +94,13 @@ def filter_covariates_for_model(
     if model == "chronos2":
         return dict(past_covariates), dict(future_covariates)
 
-    if model in {"granite-ttm-r2", "timesfm-2.5-200m", "moirai-2.0-R-small"}:
+    if model in {
+        "granite-ttm-r2",
+        "timesfm-2.5-200m",
+        "moirai-2.0-R-small",
+        "nhits",
+        "nbeatsx",
+    }:
         filtered_past = {name: past_covariates[name] for name in numeric_keys}
         filtered_future = {
             name: values

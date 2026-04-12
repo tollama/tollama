@@ -90,7 +90,25 @@ def test_filter_covariates_for_model_applies_family_rules() -> None:
     assert sundial_past == {}
     assert sundial_future == {}
 
+    nhits_past, nhits_future = filter_covariates_for_model(
+        model="nhits",
+        past_covariates=past,
+        future_covariates=future,
+    )
+    assert set(nhits_past) == {"calendar_num"}
+    assert set(nhits_future) == {"calendar_num"}
+
+    nbeatsx_past, nbeatsx_future = filter_covariates_for_model(
+        model="nbeatsx",
+        past_covariates=past,
+        future_covariates=future,
+    )
+    assert set(nbeatsx_past) == {"calendar_num"}
+    assert set(nbeatsx_future) == {"calendar_num"}
+
 
 def test_expected_status_for_strict_covariates_mapping() -> None:
     assert expected_status_for_strict_covariates("chronos2") == 200
     assert expected_status_for_strict_covariates("timesfm-2.5-200m") == 400
+    assert expected_status_for_strict_covariates("nhits") == 400
+    assert expected_status_for_strict_covariates("nbeatsx") == 400

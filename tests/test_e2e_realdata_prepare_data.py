@@ -288,3 +288,108 @@ def test_parse_huggingface_dataset_sampling_is_deterministic(monkeypatch) -> Non
     )
 
     assert first == second
+
+
+def test_parse_huggingface_dataset_reads_snapshot_zip_with_explicit_series_ids(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    snapshot_path = tmp_path / "app_flow.zip"
+    with zipfile.ZipFile(snapshot_path, "w") as archive:
+        archive.writestr(
+            "app_zone_rpc_hour_encrypted.csv",
+            "\n".join(
+                [
+                    "time,value,app_name",
+                    "2024-01-01 00:00:00,1.0,rpc",
+                    "2024-01-01 01:00:00,2.0,rpc",
+                    "2024-01-01 02:00:00,3.0,rpc",
+                    "2024-01-01 03:00:00,4.0,rpc",
+                    "2024-01-01 04:00:00,5.0,rpc",
+                ]
+            ),
+        )
+
+    monkeypatch.setattr(
+        _MODULE,
+        "_resolve_hf_snapshot_file",
+        lambda *, hf_id, snapshot_file: snapshot_path,
+    )
+
+    series = parse_huggingface_dataset(
+        hf_id="kashif/App_Flow",
+        split_name=None,
+        timestamp_column="time",
+        target_column="value",
+        horizon=2,
+        context_cap=3,
+        max_series=1,
+        seed=42,
+        snapshot_file="app_flow.zip",
+        archive_member="app_zone_rpc_hour_encrypted.csv",
+        series_id_columns=["app_name"],
+    )
+
+    assert len(series) == 1
+    item = series[0]
+    assert item["id"].startswith("hf:app_flow_rpc_")
+    assert item["freq"] == "H"
+    assert len(item["target"]) == 3
+    assert len(item["actuals"]) == 2
+
+
+def test_parse_huggingface_dataset_expands_array_targets_from_snapshot_rows(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    snapshot_path = tmp_path / "train.parquet"
+
+    monkeypatch.setattr(
+        _MODULE,
+        "_resolve_hf_snapshot_file",
+        lambda *, hf_id, snapshot_file: snapshot_path,
+    )
+    monkeypatch.setattr(
+        _MODULE,
+        "_snapshot_column_names",
+        lambda path, *, archive_member: ["dt", "hours_sale", "store_id"],
+    )
+    monkeypatch.setattr(
+        _MODULE,
+        "_iter_snapshot_rows",
+        lambda path, *, archive_member, selected_columns: iter(
+            [
+                {
+                    "dt": "2024-01-01 00:00:00",
+                    "hours_sale": [1.0, 2.0, 3.0],
+                    "store_id": "store-1",
+                },
+                {
+                    "dt": "2024-01-01 03:00:00",
+                    "hours_sale": [4.0, 5.0, 6.0],
+                    "store_id": "store-1",
+                },
+            ]
+        ),
+    )
+
+    series = parse_huggingface_dataset(
+        hf_id="Dingdong-Inc/FreshRetailNet-50K",
+        split_name=None,
+        timestamp_column="dt",
+        target_column="hours_sale",
+        horizon=2,
+        context_cap=3,
+        max_series=1,
+        seed=42,
+        snapshot_file="data/train.parquet",
+        series_id_columns=["store_id"],
+        target_array_freq="H",
+    )
+
+    assert len(series) == 1
+    item = series[0]
+    assert item["id"].startswith("hf:freshretailnet-50k_store_1_")
+    assert item["freq"] == "H"
+    assert item["target"] == [1.0, 2.0, 3.0]
+    assert item["actuals"] == [4.0, 5.0]

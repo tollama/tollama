@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import base64
 import csv
+import io
 import os
 import random
+import re
 import shutil
 import urllib.error
 import urllib.request
@@ -45,6 +47,16 @@ class PreparedDataResult:
 
 def sample_size_for_mode(mode: str) -> int:
     """Return the deterministic sample size for the selected run mode."""
+    return resolve_sample_size(mode)
+
+
+def resolve_sample_size(mode: str, *, max_series_per_dataset: int | None = None) -> int:
+    """Return the deterministic per-dataset sample size for one run."""
+    if max_series_per_dataset is not None:
+        if max_series_per_dataset <= 0:
+            raise ValueError("max_series_per_dataset must be positive")
+        return int(max_series_per_dataset)
+
     normalized = mode.strip().lower()
     if normalized not in SAMPLE_SIZE_BY_MODE:
         raise ValueError(f"unsupported mode: {mode!r}")
@@ -103,7 +115,11 @@ def kaggle_policy_for_mode(
     )
 
 
-def load_dataset_catalog(path: Path) -> dict[str, Any]:
+def load_dataset_catalog(
+    path: Path,
+    *,
+    require_unique_hf_ids: bool = False,
+) -> dict[str, Any]:
     """Load and minimally validate the YAML dataset catalog."""
     payload = yaml.safe_load(path.read_text(encoding="utf-8"))
     if not isinstance(payload, dict):
@@ -113,6 +129,9 @@ def load_dataset_catalog(path: Path) -> dict[str, Any]:
     if not isinstance(datasets, list) or not datasets:
         raise ValueError("dataset catalog must contain a non-empty datasets list")
 
+    seen_names: set[str] = set()
+    seen_hf_ids: set[str] = set()
+
     for item in datasets:
         if not isinstance(item, dict):
             raise ValueError("each dataset catalog entry must be a mapping")
@@ -120,6 +139,36 @@ def load_dataset_catalog(path: Path) -> dict[str, Any]:
             raise ValueError("dataset catalog entry missing name")
         if not isinstance(item.get("kind"), str) or not item["kind"].strip():
             raise ValueError("dataset catalog entry missing kind")
+
+        name = str(item["name"]).strip()
+        if name in seen_names:
+            raise ValueError(f"duplicate dataset name: {name}")
+        seen_names.add(name)
+
+        kind = str(item["kind"]).strip()
+        horizon = item.get("horizon")
+        if not isinstance(horizon, int) or horizon <= 0:
+            raise ValueError(f"dataset {name!r} has invalid horizon")
+
+        if kind == "huggingface_dataset":
+            for field in ("hf_id", "timestamp_column", "target_column"):
+                value = item.get(field)
+                if not isinstance(value, str) or not value.strip():
+                    raise ValueError(f"dataset {name!r} missing {field}")
+            hf_id = str(item["hf_id"]).strip()
+            if require_unique_hf_ids:
+                if hf_id in seen_hf_ids:
+                    raise ValueError(f"duplicate hf_id: {hf_id}")
+                seen_hf_ids.add(hf_id)
+        elif kind == "open_m4_daily":
+            for field in ("train_url", "test_url"):
+                value = item.get(field)
+                if not isinstance(value, str) or not value.strip():
+                    raise ValueError(f"dataset {name!r} missing {field}")
+        elif kind == "kaggle_hourly_energy":
+            value = item.get("kaggle_dataset")
+            if not isinstance(value, str) or not value.strip():
+                raise ValueError(f"dataset {name!r} missing kaggle_dataset")
     return payload
 
 
@@ -133,10 +182,14 @@ def prepare_datasets(
     seed: int = 42,
     context_cap: int = 512,
     timeout_seconds: int = 120,
+    max_series_per_dataset: int | None = None,
 ) -> PreparedDataResult:
     """Fetch and normalize configured datasets for the selected mode."""
     catalog = load_dataset_catalog(catalog_path)
-    sample_size = sample_size_for_mode(mode)
+    sample_size = resolve_sample_size(
+        mode,
+        max_series_per_dataset=max_series_per_dataset,
+    )
 
     datasets: dict[str, list[dict[str, Any]]] = {}
     messages: list[str] = []
@@ -175,7 +228,35 @@ def prepare_datasets(
             target_column = str(item["target_column"])
             split_name_value = item.get("split")
             split_name = str(split_name_value) if isinstance(split_name_value, str) else None
-            
+            snapshot_file_value = item.get("snapshot_file")
+            snapshot_file = (
+                str(snapshot_file_value).strip()
+                if isinstance(snapshot_file_value, str) and snapshot_file_value.strip()
+                else None
+            )
+            archive_member_value = item.get("archive_member")
+            archive_member = (
+                str(archive_member_value).strip()
+                if isinstance(archive_member_value, str) and archive_member_value.strip()
+                else None
+            )
+            target_array_freq_value = item.get("target_array_freq")
+            target_array_freq = (
+                str(target_array_freq_value).strip()
+                if isinstance(target_array_freq_value, str) and target_array_freq_value.strip()
+                else None
+            )
+            raw_series_id_columns = item.get("series_id_columns")
+            series_id_columns = None
+            if isinstance(raw_series_id_columns, list):
+                normalized_columns = [
+                    str(column).strip()
+                    for column in raw_series_id_columns
+                    if isinstance(column, str) and str(column).strip()
+                ]
+                if normalized_columns:
+                    series_id_columns = normalized_columns
+
             try:
                 datasets[name] = parse_huggingface_dataset(
                     hf_id=hf_id,
@@ -186,6 +267,10 @@ def prepare_datasets(
                     context_cap=context_cap,
                     max_series=sample_size,
                     seed=seed,
+                    snapshot_file=snapshot_file,
+                    archive_member=archive_member,
+                    series_id_columns=series_id_columns,
+                    target_array_freq=target_array_freq,
                 )
             except Exception as exc:
                 reason = f"skipped dataset {name}: failed to load or parse from HuggingFace ({exc})"
@@ -223,6 +308,15 @@ def prepare_datasets(
     return PreparedDataResult(datasets=datasets, messages=messages)
 
 
+def _hf_row_scan_limit(*, required_rows: int, max_series: int, explicit_series_ids: bool) -> int:
+    baseline = max(required_rows * max_series * 20, 20_000)
+    if not explicit_series_ids:
+        return baseline
+    # Explicit panel keys often interleave many series in timestamp order, so
+    # the first contiguous window may not appear until far deeper in the file.
+    return max(baseline, required_rows * max_series * 1200, 300_000)
+
+
 def parse_huggingface_dataset(
     *,
     hf_id: str,
@@ -233,8 +327,42 @@ def parse_huggingface_dataset(
     context_cap: int,
     max_series: int,
     seed: int,
+    snapshot_file: str | None = None,
+    archive_member: str | None = None,
+    series_id_columns: list[str] | None = None,
+    target_array_freq: str | None = None,
 ) -> list[dict[str, Any]]:
     """Parse a HuggingFace dataset into normalized request series."""
+    if snapshot_file is not None:
+        snapshot_path = _resolve_hf_snapshot_file(hf_id=hf_id, snapshot_file=snapshot_file)
+        available_cols = _snapshot_column_names(
+            snapshot_path,
+            archive_member=archive_member,
+        )
+        rows = _iter_snapshot_rows(
+            snapshot_path,
+            archive_member=archive_member,
+            selected_columns=_selected_snapshot_columns(
+                timestamp_column=timestamp_column,
+                target_column=target_column,
+                series_id_columns=series_id_columns,
+            ),
+        )
+        return _parse_hf_rows(
+            rows=rows,
+            available_cols=available_cols,
+            hf_id=hf_id,
+            resolved_split=f"snapshot:{snapshot_file}",
+            timestamp_column=timestamp_column,
+            target_column=target_column,
+            horizon=horizon,
+            context_cap=context_cap,
+            max_series=max_series,
+            seed=seed,
+            series_id_columns=series_id_columns,
+            target_array_freq=target_array_freq,
+        )
+
     try:
         import datasets as hf_datasets
     except ModuleNotFoundError:
@@ -261,29 +389,83 @@ def parse_huggingface_dataset(
         resolved_split = resolved_split or "default"
 
     available_cols = list(getattr(split_data, "column_names", []))
+    return _parse_hf_rows(
+        rows=split_data,
+        available_cols=available_cols,
+        hf_id=hf_id,
+        resolved_split=resolved_split,
+        timestamp_column=timestamp_column,
+        target_column=target_column,
+        horizon=horizon,
+        context_cap=context_cap,
+        max_series=max_series,
+        seed=seed,
+        series_id_columns=series_id_columns,
+        target_array_freq=target_array_freq,
+    )
+
+
+def _parse_hf_rows(
+    *,
+    rows: Any,
+    available_cols: list[str],
+    hf_id: str,
+    resolved_split: str,
+    timestamp_column: str,
+    target_column: str,
+    horizon: int,
+    context_cap: int,
+    max_series: int,
+    seed: int,
+    series_id_columns: list[str] | None = None,
+    target_array_freq: str | None = None,
+) -> list[dict[str, Any]]:
     if available_cols and (
         timestamp_column not in available_cols or target_column not in available_cols
     ):
         raise RuntimeError(
             f"columns {timestamp_column!r}/{target_column!r} not in {available_cols}"
         )
+    if series_id_columns:
+        missing_series_columns = [
+            column
+            for column in series_id_columns
+            if available_cols and column not in available_cols
+        ]
+        if missing_series_columns:
+            raise RuntimeError(
+                f"series id columns {missing_series_columns!r} not in {available_cols}"
+            )
 
     required_rows = context_cap + horizon
     candidates: list[dict[str, Any]] = []
     parsed_rows: list[tuple[datetime, float, dict[str, str | None]]] = []
-    series_id_candidates = _hf_series_id_candidates(
-        available_cols,
-        timestamp_column=timestamp_column,
-        target_column=target_column,
+    resolved_series_id_columns = list(series_id_columns or [])
+    series_id_column: str | None = None
+    series_id_candidates = (
+        resolved_series_id_columns
+        if resolved_series_id_columns
+        else _hf_series_id_candidates(
+            available_cols,
+            timestamp_column=timestamp_column,
+            target_column=target_column,
+        )
     )
-    series_id_value_counts: dict[str, dict[str, int]] = {
-        column: {} for column in series_id_candidates
-    }
+    series_id_value_counts: dict[str, dict[str, int]] = (
+        {}
+        if resolved_series_id_columns
+        else {column: {} for column in series_id_candidates}
+    )
     chunk_index = 0
     # Scan enough rows to produce stable deterministic candidates while staying bounded.
-    row_limit = max(required_rows * max_series * 20, 20_000)
+    row_limit = _hf_row_scan_limit(
+        required_rows=required_rows,
+        max_series=max_series,
+        explicit_series_ids=bool(series_id_columns),
+    )
+    array_step = _step_for_freq(target_array_freq) if target_array_freq is not None else None
 
-    for row_idx, item in enumerate(split_data):
+    for row_idx, item in enumerate(rows):
         if row_idx >= row_limit:
             break
         try:
@@ -291,13 +473,11 @@ def parse_huggingface_dataset(
                 continue
 
             ts_raw = item.get(timestamp_column)
-            target_raw = item.get(target_column)
-            if ts_raw is None or target_raw is None:
+            if ts_raw is None:
                 continue
 
-            parsed_dt = _parse_timestamp(str(ts_raw))
-            parsed_value = _parse_float(str(target_raw))
-            if parsed_dt is None or parsed_value is None:
+            parsed_dt = _parse_timestamp_value(ts_raw)
+            if parsed_dt is None:
                 continue
 
             series_values: dict[str, str | None] = {}
@@ -311,10 +491,17 @@ def parse_huggingface_dataset(
                     series_values[column] = None
                     continue
                 series_values[column] = normalized_series_value
-                counts = series_id_value_counts[column]
-                counts[normalized_series_value] = counts.get(normalized_series_value, 0) + 1
+                if not resolved_series_id_columns:
+                    counts = series_id_value_counts[column]
+                    counts[normalized_series_value] = counts.get(normalized_series_value, 0) + 1
 
-            parsed_rows.append((parsed_dt, parsed_value, series_values))
+            target_points = _extract_target_points(
+                raw=item.get(target_column),
+                parsed_dt=parsed_dt,
+                array_step=array_step,
+            )
+            for target_dt, parsed_value in target_points:
+                parsed_rows.append((target_dt, parsed_value, dict(series_values)))
         except Exception:
             continue
 
@@ -324,20 +511,29 @@ def parse_huggingface_dataset(
             f"{len(parsed_rows)} < {required_rows}"
         )
 
-    series_id_column = _select_hf_series_id_column(
-        series_id_value_counts,
-        required_rows=required_rows,
-    )
-
     grouped_rows: dict[str, list[tuple[datetime, float]]] = {}
-    for parsed_dt, parsed_value, series_values in parsed_rows:
-        series_key = "__single__"
-        if series_id_column is not None:
-            candidate_series_key = series_values.get(series_id_column)
-            if candidate_series_key is None:
+    if resolved_series_id_columns:
+        for parsed_dt, parsed_value, series_values in parsed_rows:
+            series_key = _compose_series_key(
+                series_values=series_values,
+                series_id_columns=resolved_series_id_columns,
+            )
+            if series_key is None:
                 continue
-            series_key = candidate_series_key
-        grouped_rows.setdefault(series_key, []).append((parsed_dt, parsed_value))
+            grouped_rows.setdefault(series_key, []).append((parsed_dt, parsed_value))
+    else:
+        series_id_column = _select_hf_series_id_column(
+            series_id_value_counts,
+            required_rows=required_rows,
+        )
+        for parsed_dt, parsed_value, series_values in parsed_rows:
+            series_key = "__single__"
+            if series_id_column is not None:
+                candidate_series_key = series_values.get(series_id_column)
+                if candidate_series_key is None:
+                    continue
+                series_key = candidate_series_key
+            grouped_rows.setdefault(series_key, []).append((parsed_dt, parsed_value))
 
     for series_key in sorted(grouped_rows):
         series_rows = grouped_rows[series_key]
@@ -360,7 +556,7 @@ def parse_huggingface_dataset(
 
                 series_suffix = (
                     f"_{_sanitize_series_component(series_key)}"
-                    if series_id_column is not None
+                    if resolved_series_id_columns or series_id_column is not None
                     else ""
                 )
                 candidates.append(
@@ -399,7 +595,7 @@ def parse_huggingface_dataset(
 
                 series_suffix = (
                     f"_{_sanitize_series_component(series_key)}"
-                    if series_id_column is not None
+                    if resolved_series_id_columns or series_id_column is not None
                     else ""
                 )
                 candidates.append(
@@ -424,6 +620,208 @@ def parse_huggingface_dataset(
         )
 
     return _sample_series(candidates, max_series=max_series, seed=seed)
+
+
+def _selected_snapshot_columns(
+    *,
+    timestamp_column: str,
+    target_column: str,
+    series_id_columns: list[str] | None,
+) -> list[str]:
+    ordered = [timestamp_column, target_column, *(series_id_columns or [])]
+    unique: list[str] = []
+    seen: set[str] = set()
+    for column in ordered:
+        if column not in seen:
+            seen.add(column)
+            unique.append(column)
+    return unique
+
+
+def _resolve_hf_snapshot_file(*, hf_id: str, snapshot_file: str) -> Path:
+    repo_dir = (
+        Path.home()
+        / ".cache"
+        / "huggingface"
+        / "hub"
+        / f"datasets--{hf_id.replace('/', '--')}"
+    )
+    snapshots_dir = repo_dir / "snapshots"
+    if not snapshots_dir.is_dir():
+        raise RuntimeError(f"no cached snapshots found for {hf_id}")
+
+    main_ref = repo_dir / "refs" / "main"
+    if main_ref.is_file():
+        revision = main_ref.read_text(encoding="utf-8").strip()
+        preferred = snapshots_dir / revision / snapshot_file
+        if preferred.exists():
+            return preferred
+
+    snapshot_dirs = sorted(path for path in snapshots_dir.iterdir() if path.is_dir())
+    for snapshot_dir in reversed(snapshot_dirs):
+        candidate = snapshot_dir / snapshot_file
+        if candidate.exists():
+            return candidate
+    raise RuntimeError(f"snapshot file {snapshot_file!r} not found for {hf_id}")
+
+
+def _snapshot_column_names(snapshot_path: Path, *, archive_member: str | None) -> list[str]:
+    suffix = snapshot_path.suffix.lower()
+    if archive_member is not None or suffix == ".zip":
+        member_name = _resolve_zip_member(snapshot_path, archive_member=archive_member)
+        with zipfile.ZipFile(snapshot_path) as archive:
+            with archive.open(member_name) as handle:
+                text_handle = io.TextIOWrapper(handle, encoding="utf-8", errors="ignore")
+                reader = csv.DictReader(text_handle)
+                return list(reader.fieldnames or [])
+
+    if suffix == ".csv":
+        with snapshot_path.open("r", encoding="utf-8", errors="ignore", newline="") as handle:
+            reader = csv.DictReader(handle)
+            return list(reader.fieldnames or [])
+
+    if suffix == ".parquet":
+        import pyarrow.parquet as pq
+
+        return list(pq.ParquetFile(snapshot_path).schema_arrow.names)
+
+    raise RuntimeError(f"unsupported snapshot file format: {snapshot_path.suffix}")
+
+
+def _iter_snapshot_rows(
+    snapshot_path: Path,
+    *,
+    archive_member: str | None,
+    selected_columns: list[str] | None,
+):
+    suffix = snapshot_path.suffix.lower()
+    if archive_member is not None or suffix == ".zip":
+        member_name = _resolve_zip_member(snapshot_path, archive_member=archive_member)
+        with zipfile.ZipFile(snapshot_path) as archive:
+            with archive.open(member_name) as handle:
+                text_handle = io.TextIOWrapper(handle, encoding="utf-8", errors="ignore")
+                reader = csv.DictReader(text_handle)
+                for row in reader:
+                    if selected_columns is None:
+                        yield row
+                    else:
+                        yield {column: row.get(column) for column in selected_columns}
+        return
+
+    if suffix == ".csv":
+        with snapshot_path.open("r", encoding="utf-8", errors="ignore", newline="") as handle:
+            reader = csv.DictReader(handle)
+            for row in reader:
+                if selected_columns is None:
+                    yield row
+                else:
+                    yield {column: row.get(column) for column in selected_columns}
+        return
+
+    if suffix == ".parquet":
+        import pyarrow.parquet as pq
+
+        parquet_file = pq.ParquetFile(snapshot_path)
+        columns = selected_columns or None
+        for batch in parquet_file.iter_batches(columns=columns, batch_size=50_000):
+            payload = batch.to_pydict()
+            column_names = list(payload.keys())
+            if not column_names:
+                continue
+            row_count = len(payload[column_names[0]])
+            for index in range(row_count):
+                yield {column: payload[column][index] for column in column_names}
+        return
+
+    raise RuntimeError(f"unsupported snapshot file format: {snapshot_path.suffix}")
+
+
+def _resolve_zip_member(snapshot_path: Path, *, archive_member: str | None) -> str:
+    with zipfile.ZipFile(snapshot_path) as archive:
+        if archive_member is not None:
+            if archive_member not in archive.namelist():
+                raise RuntimeError(
+                    f"archive member {archive_member!r} not found in {snapshot_path.name!r}"
+                )
+            return archive_member
+
+        csv_members = [name for name in archive.namelist() if name.lower().endswith(".csv")]
+        if len(csv_members) == 1:
+            return csv_members[0]
+        raise RuntimeError(
+            f"archive member required for {snapshot_path.name!r}; available={csv_members[:20]}"
+        )
+
+
+def _parse_timestamp_value(raw: Any) -> datetime | None:
+    if raw is None:
+        return None
+    if isinstance(raw, datetime):
+        return raw.replace(tzinfo=None) if raw.tzinfo else raw
+    return _parse_timestamp(str(raw))
+
+
+def _extract_target_points(
+    *,
+    raw: Any,
+    parsed_dt: datetime,
+    array_step: timedelta | None,
+) -> list[tuple[datetime, float]]:
+    if array_step is None:
+        parsed_value = _coerce_float_value(raw)
+        if parsed_value is None:
+            return []
+        return [(parsed_dt, parsed_value)]
+
+    parsed_values = _parse_float_sequence(raw)
+    return [
+        (parsed_dt + (array_step * index), value)
+        for index, value in enumerate(parsed_values)
+    ]
+
+
+def _coerce_float_value(raw: Any) -> float | None:
+    if raw is None or isinstance(raw, bool):
+        return None
+    if isinstance(raw, (int, float)):
+        try:
+            return float(raw)
+        except (TypeError, ValueError):
+            return None
+    return _parse_float(str(raw))
+
+
+def _parse_float_sequence(raw: Any) -> list[float]:
+    if raw is None or isinstance(raw, (str, bytes, bytearray)):
+        return []
+    if hasattr(raw, "tolist"):
+        try:
+            raw = raw.tolist()
+        except Exception:
+            return []
+    if not isinstance(raw, (list, tuple)):
+        return []
+
+    parsed: list[float] = []
+    for item in raw:
+        value = _coerce_float_value(item)
+        if value is not None:
+            parsed.append(value)
+    return parsed
+
+
+def _compose_series_key(
+    *,
+    series_values: Mapping[str, str | None],
+    series_id_columns: list[str],
+) -> str | None:
+    parts: list[str] = []
+    for column in series_id_columns:
+        value = series_values.get(column)
+        if value is None:
+            return None
+        parts.append(value)
+    return "|".join(parts)
 
 
 def _hf_series_id_candidates(
@@ -663,7 +1061,7 @@ def _choose_value_column(columns: list[str], timestamp_column: str | None) -> st
 
 
 def _parse_float(raw: str) -> float | None:
-    text = raw.strip()
+    text = raw.strip().replace(",", "")
     if not text or text.lower() in {"nan", "na", "null", "none"}:
         return None
     try:
@@ -735,15 +1133,49 @@ def _infer_frequency_from_datetimes(points: list[datetime]) -> str:
         return "D"
 
     median_seconds = float(median(deltas))
-    if 1800.0 <= median_seconds <= 5400.0:
+    canonical_freqs = (
+        (1.0, "S"),
+        (60.0, "MIN"),
+        (30.0 * 60.0, "30MIN"),
+        (60.0 * 60.0, "H"),
+        (24.0 * 60.0 * 60.0, "D"),
+        (7.0 * 24.0 * 60.0 * 60.0, "W"),
+        (30.0 * 24.0 * 60.0 * 60.0, "M"),
+    )
+    for seconds, freq in canonical_freqs:
+        tolerance = max(1.0, seconds * 0.25)
+        if abs(median_seconds - seconds) <= tolerance:
+            return freq
+
+    if median_seconds < 30.0 * 60.0:
+        return "MIN"
+    if median_seconds < 12.0 * 60.0 * 60.0:
         return "H"
-    if 64800.0 <= median_seconds <= 108000.0:
+    if median_seconds < 5.0 * 24.0 * 60.0 * 60.0:
         return "D"
-    return "D"
+    if median_seconds < 14.0 * 24.0 * 60.0 * 60.0:
+        return "W"
+    return "M"
 
 
 def _step_for_freq(freq: str) -> timedelta:
-    return timedelta(hours=1) if freq.strip().upper().startswith("H") else timedelta(days=1)
+    match = re.fullmatch(r"\s*(\d+)?\s*([A-Za-z]+)\s*", freq or "")
+    if match is None:
+        return timedelta(days=1)
+
+    multiplier = int(match.group(1) or "1")
+    token = match.group(2).strip().upper()
+    if token.startswith("S"):
+        return timedelta(seconds=multiplier)
+    if token in {"T", "MIN", "MINS", "MINUTE", "MINUTES"}:
+        return timedelta(minutes=multiplier)
+    if token.startswith("H"):
+        return timedelta(hours=multiplier)
+    if token.startswith("W"):
+        return timedelta(weeks=multiplier)
+    if token in {"M", "MS", "ME", "MONTH", "MONTHS"}:
+        return timedelta(days=30 * multiplier)
+    return timedelta(days=multiplier)
 
 
 def _deduplicate_timestamps(
@@ -751,12 +1183,9 @@ def _deduplicate_timestamps(
 ) -> list[tuple[datetime, float]]:
     """Remove duplicate timestamps, keeping the first occurrence.
 
-    Some HuggingFace datasets contain rows with identical timestamps (e.g.
-    FreshRetailNet panel data where multiple records share the same time).
-    Duplicate timestamps cause the daemon to reject the series with
-    "timestamps must be strictly increasing".  Keeping the first occurrence
-    after a stable sort preserves temporal order and eliminates the
-    duplicates.
+    Some HuggingFace datasets contain rows with identical timestamps. Keeping the
+    first occurrence after a stable sort preserves temporal order and prevents
+    non-increasing timestamp rejections downstream.
     """
     seen: set[datetime] = set()
     deduped: list[tuple[datetime, float]] = []

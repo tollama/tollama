@@ -525,13 +525,16 @@ Alternative wrapper:
 
 ```bash
 bash scripts/e2e_realdata_tsfm.sh pr all http://127.0.0.1:11435 artifacts/realdata/wrapper false
+# Set PYTHON_BIN=/path/to/python if you need to force a specific interpreter
 ```
 
 Each run writes:
 
 - `result.json`: raw scenario/model run entries
 - `summary.json`: aggregated pass/fail + latency/metric summary
-- `summary.md`: human-readable real-data summary
+- `summary.md`: human-readable leaderboard
+- `benchmark_report.json`: detailed benchmark-only report with dataset/model breakdowns
+- `benchmark_report.md`: human-readable benchmark report
 - `raw/`: per-request payload/response captures
 
 `--gate-profile strict` is the CI default. For optional HuggingFace local runs use
@@ -547,14 +550,22 @@ python scripts/e2e_realdata/gather_hf_datasets.py \
   --rejections-output scripts/e2e_realdata/hf_dataset_rejections.json
 ```
 
-Run the local optional profile:
+Run the local optional HF starter profile. This lane covers 11 models:
+the 6 TSFMs in the strict matrix plus `lag-llama`, `patchtst`, `tide`, `nhits`,
+and `nbeatsx`. It uses the curated 10-dataset starter catalog, prefers cached
+HF snapshot files when present, samples 1 series per dataset, and the wrapper
+defaults dataset preparation to `HF_STARTER_CONTEXT_CAP=256`. When a starter
+dataset declares explicit `series_id_columns`, the parser now scans deeper into
+interleaved panel snapshots so datasets such as `kashif/App_Flow` can still
+produce deterministic windows.
 
 ```bash
 python scripts/e2e_realdata/run_tsfm_realdata.py \
   --mode local \
-  --model all \
-  --catalog-path scripts/e2e_realdata/hf_dataset_catalog.yaml \
+  --model hf_all \
+  --catalog-path scripts/e2e_realdata/hf_dataset_catalog_starter.yaml \
   --gate-profile hf_optional \
+  --max-series-per-dataset 1 \
   --allow-kaggle-fallback \
   --output-dir artifacts/realdata/hf-local
 ```
@@ -563,7 +574,29 @@ Wrapper script:
 
 ```bash
 bash scripts/e2e_realdata_hf.sh all http://127.0.0.1:11435 artifacts/realdata/hf-local
+# Set PYTHON_BIN=/path/to/python if you need to force a specific interpreter
+# Set HF_STARTER_CONTEXT_CAP=<n> if you need a different dataset-prep window
+# Set PYTHON_SKIP_PROBE=1 only if you intentionally want to bypass startup/runtime preflight
 ```
+
+HF starter runs emit the standard `result.json`, `summary.json`, `summary.md`,
+and `raw/` artifacts plus mandatory `benchmark_report.json` and
+`benchmark_report.md` outputs containing benchmark rows, model leaderboards,
+dataset breakdowns, failure classifications, and separate contract summaries.
+
+If the wrapper hangs during interpreter startup or imports, run:
+
+```bash
+bash scripts/e2e_realdata_runtime_diag.sh
+# Or force an interpreter:
+PYTHON_BIN=/path/to/python bash scripts/e2e_realdata_runtime_diag.sh
+# To capture a stack sample for timed out imports:
+CAPTURE_STACK_SAMPLE_ON_TIMEOUT=1 bash scripts/e2e_realdata_runtime_diag.sh
+```
+
+The real-data wrappers preflight the chosen interpreter with `python -V` and
+`import ssl, yaml, httpx` before starting the harness. If no candidate passes,
+the wrapper fails fast and points to the diagnostics helper instead of hanging.
 
 ## Shell Completion
 

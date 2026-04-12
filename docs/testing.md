@@ -87,8 +87,10 @@ bash scripts/e2e_realdata_tsfm.sh pr all http://127.0.0.1:11435 artifacts/realda
 # 5th arg=true enables explicit local fallback when Kaggle credentials are missing
 ```
 
-Artifacts include `result.json`, `summary.json`, `summary.md`, and raw per-call payloads.
-`result.json` entries now carry `status` (`pass`/`fail`/`skip`) and `retry_count`.
+Artifacts include `result.json`, `summary.json`, `summary.md`,
+`benchmark_report.json`, `benchmark_report.md`, and raw per-call payloads.
+`result.json` entries now carry `status` (`pass`/`fail`/`skip`), `retry_count`,
+`series_id`, `scenario_policy`, and `max_series_per_dataset`.
 
 ## HuggingFace Datasets (Optional Local Benchmark)
 
@@ -102,14 +104,15 @@ python scripts/e2e_realdata/gather_hf_datasets.py \
   --rejections-output scripts/e2e_realdata/hf_dataset_rejections.json
 ```
 
-Then run HF local evaluation with optional gate profile:
+Then run the curated starter lane with optional gate profile:
 
 ```bash
 python scripts/e2e_realdata/run_tsfm_realdata.py \
   --mode local \
-  --model all \
-  --catalog-path scripts/e2e_realdata/hf_dataset_catalog.yaml \
+  --model hf_all \
+  --catalog-path scripts/e2e_realdata/hf_dataset_catalog_starter.yaml \
   --gate-profile hf_optional \
+  --max-series-per-dataset 1 \
   --allow-kaggle-fallback \
   --output-dir artifacts/realdata/hf-local
 ```
@@ -118,4 +121,9 @@ Convenience wrapper:
 
 ```bash
 bash scripts/e2e_realdata_hf.sh all http://127.0.0.1:11435 artifacts/realdata/hf-local
+# Set HF_STARTER_CONTEXT_CAP=<n> if you need a different dataset-prep window
 ```
+
+This starter lane covers the 6 TSFMs plus `lag-llama`, `patchtst`, `tide`,
+`nhits`, and `nbeatsx`, and emits the richer benchmark report artifacts in
+addition to the gate summary.

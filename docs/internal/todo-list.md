@@ -367,3 +367,16 @@ Canonical inventories:
   - 추가: `scripts/e2e_realdata_hf.sh` (`--gate-profile hf_optional` 기본)
   - 반영: `run_tsfm_realdata.py` 상태 확장(`pass|fail|skip`) + transient retry/backoff + `retry_count`
   - 반영: PR/nightly CI는 `--gate-profile strict`로 Kaggle+M4 게이팅 유지
+- [x] (P1) HuggingFace starter benchmark lane 확장
+  - 기준 일자: `2026-04-12`
+  - 추가: `scripts/e2e_realdata/model_policy.py` (6 TSFMs + 5 neural baselines 정책)
+  - 추가: `scripts/e2e_realdata/benchmark_report.py`
+  - 추가: `scripts/e2e_realdata/hf_dataset_catalog_starter.yaml` (10 unique HF datasets)
+  - 반영: `run_tsfm_realdata.py`에 `hf_all`, `neural`, `--max-series-per-dataset`
+  - 반영: HF starter 결과물 `benchmark_report.json`, `benchmark_report.md`
+  - 반영: starter catalog가 cached HF snapshot CSV/ZIP/Parquet, composite
+    series ID, array target, 확장 frequency inference를 사용하도록 강화
+  - 반영: `scripts/e2e_realdata_hf.sh` 가 starter dataset prep context를
+    기본 `256`으로 낮춰 sparse dataset coverage를 개선
+  - 반영: explicit panel key dataset scan budget 확대(`kashif/App_Flow`
+    포함 10/10 starter dataset 준비 확인)

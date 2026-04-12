@@ -1,0 +1,95 @@
+datasets:
+  - name: Ehsanrs2_Forex_Factory_Calendar_r01
+    kind: huggingface_dataset
+    hf_id: Ehsanrs2/Forex_Factory_Calendar
+    freq: H
+    horizon: 24
+    timestamp_column: DateTime
+    target_column: Actual
+    snapshot_file: forex_factory_cache.csv
+  - name: Dingdong-Inc_FreshRetailNet-50K_r02
+    kind: huggingface_dataset
+    hf_id: Dingdong-Inc/FreshRetailNet-50K
+    freq: H
+    horizon: 24
+    timestamp_column: dt
+    target_column: hours_sale
+    snapshot_file: data/train.parquet
+    series_id_columns:
+      - city_id
+      - store_id
+      - product_id
+    target_array_freq: H
+  - name: Dingdong-Inc_FreshRetailNet-LT_r03
+    kind: huggingface_dataset
+    hf_id: Dingdong-Inc/FreshRetailNet-LT
+    freq: H
+    horizon: 24
+    timestamp_column: dt
+    target_column: hours_sale
+    snapshot_file: data/train.parquet
+    series_id_columns:
+      - city_id
+      - store_id
+      - product_id
+    target_array_freq: H
+  - name: kashif_App_Flow_r04
+    kind: huggingface_dataset
+    hf_id: kashif/App_Flow
+    freq: H
+    horizon: 24
+    timestamp_column: time
+    target_column: value
+    snapshot_file: app_zone_rpc_hour_encrypted.zip
+    archive_member: app_zone_rpc_hour_encrypted.csv
+    series_id_columns:
+      - app_name
+  - name: ym0v0my_Time_series_dataset_r05
+    kind: huggingface_dataset
+    hf_id: ym0v0my/Time_series_dataset
+    freq: H
+    horizon: 24
+    timestamp_column: date
+    target_column: OT
+    snapshot_file: all_six_datasets.zip
+    archive_member: all_six_datasets/traffic/traffic.csv
+  - name: mohammadtaghizadeh_Dollar_Rial_Price_Dataset_r06
+    kind: huggingface_dataset
+    hf_id: mohammadtaghizadeh/Dollar_Rial_Price_Dataset
+    freq: D
+    horizon: 24
+    timestamp_column: Date
+    target_column: Close
+    snapshot_file: Dollar_Rial_Price_Dataset.csv
+  - name: Ammok_apple_stock_price_from_1980-2021_r07
+    kind: huggingface_dataset
+    hf_id: Ammok/apple_stock_price_from_1980-2021
+    freq: D
+    horizon: 24
+    timestamp_column: Date
+    target_column: Close
+    snapshot_file: AAPL.csv
+  - name: patrickfleith_controlled-anomalies-time-series-dataset_r08
+    kind: huggingface_dataset
+    hf_id: patrickfleith/controlled-anomalies-time-series-dataset
+    freq: S
+    horizon: 24
+    timestamp_column: timestamp
+    target_column: y
+    snapshot_file: data.csv
+  - name: Oumar199_Nalohou_climatic_time_series_r09
+    kind: huggingface_dataset
+    hf_id: Oumar199/Nalohou_climatic_time_series
+    freq: 30MIN
+    horizon: 24
+    timestamp_column: DateUTC
+    target_column: T_meteo
+    snapshot_file: train_set_1_recomp.csv
+  - name: CanariaView_GlobalCopperDemandForecastingDataset_r10
+    kind: huggingface_dataset
+    hf_id: CanariaView/GlobalCopperDemandForecastingDataset
+    freq: M
+    horizon: 24
+    timestamp_column: Date
+    target_column: HSI_value
+    snapshot_file: CanariaView_GlobalCopperDemandForecastingDataset.csv

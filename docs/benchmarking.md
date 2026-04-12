@@ -28,3 +28,27 @@ PYTHONPATH=src python benchmarks/cross_model_tsfm.py \
 ```
 
 See `docs/tsfm-routing-defaults.md` for benchmark protocol and routing-policy interpretations.
+
+## Real-Data Benchmark Reports
+
+The real-data E2E harness also emits benchmark-focused reports alongside the
+gate summary:
+
+- `benchmark_report.json`
+- `benchmark_report.md`
+
+For the curated HuggingFace starter lane:
+
+```bash
+python scripts/e2e_realdata/run_tsfm_realdata.py \
+  --mode local \
+  --model hf_all \
+  --catalog-path scripts/e2e_realdata/hf_dataset_catalog_starter.yaml \
+  --gate-profile hf_optional \
+  --max-series-per-dataset 1 \
+  --allow-kaggle-fallback \
+  --output-dir artifacts/realdata/hf-local
+```
+
+These reports include benchmark rows, model leaderboards, dataset breakdowns,
+failure classifications, and separate contract summaries.
