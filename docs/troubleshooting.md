@@ -105,6 +105,8 @@ tollama runtime install --all
 ```
 
 For Uni2TS/Moirai stack, prefer Python 3.11 if wheel/build constraints fail on newer interpreters.
+If stdlib `venv` / `ensurepip` is broken on the host interpreter, install `uv`
+and retry; Tollama falls back to `uv venv` automatically during runtime bootstrap.
 
 ## 7) Wrong frequency detected
 

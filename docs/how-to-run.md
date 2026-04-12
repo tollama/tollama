@@ -202,6 +202,10 @@ tollama run chronos2 --input examples/request.json
 # → daemon creates ~/.tollama/runtimes/torch/venv/ on first use
 ```
 
+If stdlib `venv` / `ensurepip` fails on the host interpreter, Tollama now
+falls back to `uv venv --seed --clear ... --python <current-interpreter>` when
+`uv` is available.
+
 ### Manual install (eager)
 
 Use the `tollama runtime` CLI to pre-create venvs before they are needed:

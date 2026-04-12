@@ -75,6 +75,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Restored best-effort dynamic-covariate fallback for TimesFM and Moirai so
   runtime XReg/covariate-path failures degrade to target-only forecasts with
   warnings instead of hard-failing requests
+- Restored per-family runtime bootstrap `uv venv` fallback when stdlib
+  `venv`/`ensurepip` fails, including schema-version bump and regression tests
 - Restored `scripts/e2e_realdata_tsfm.sh` interpreter preflight so the strict
   real-data wrapper now matches the HF wrapper's startup/runtime diagnostics
 - PatchTST runner adapter:

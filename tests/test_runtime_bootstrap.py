@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import platform
+import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -13,6 +14,7 @@ from tollama.core.runtime_bootstrap import (
     FAMILY_EXTRAS,
     FAMILY_RUNNER_MODULES,
     BootstrapError,
+    _create_venv,
     _resolve_install_spec,
     ensure_family_runtime,
     get_runtime_status,
@@ -38,7 +40,7 @@ def _write_fake_state(paths: TollamaPaths, family: str, **overrides: object) -> 
         "extra": FAMILY_EXTRAS[family],
         "python_version": platform.python_version(),
         "installed_at": "2026-01-01T00:00:00+00:00",
-        "schema_version": 2,
+        "schema_version": 3,
     }
     state.update(overrides)
     (family_dir / "installed.json").write_text(json.dumps(state), encoding="utf-8")
@@ -290,6 +292,55 @@ def test_pip_failure_raises_bootstrap_error(
 
     with pytest.raises(BootstrapError, match="pip install failed"):
         ensure_family_runtime("torch", paths=paths)
+
+
+@patch("tollama.core.runtime_bootstrap.subprocess.run")
+@patch("tollama.core.runtime_bootstrap.shutil.which")
+@patch("tollama.core.runtime_bootstrap.venv.create")
+def test_create_venv_falls_back_to_uv_when_stdlib_venv_fails(
+    mock_venv_create: MagicMock,
+    mock_which: MagicMock,
+    mock_run: MagicMock,
+    tmp_path: Path,
+) -> None:
+    venv_dir = tmp_path / "runtime" / "venv"
+    mock_venv_create.side_effect = RuntimeError("ensurepip crashed")
+    mock_which.return_value = "/usr/local/bin/uv"
+    mock_run.return_value = MagicMock(returncode=0, stderr="", stdout="")
+
+    _create_venv(venv_dir)
+
+    mock_run.assert_called_once_with(
+        [
+            "/usr/local/bin/uv",
+            "venv",
+            "--seed",
+            "--clear",
+            str(venv_dir),
+            "--python",
+            sys.executable,
+        ],
+        capture_output=True,
+        text=True,
+    )
+
+
+@patch("tollama.core.runtime_bootstrap.subprocess.run")
+@patch("tollama.core.runtime_bootstrap.shutil.which")
+@patch("tollama.core.runtime_bootstrap.venv.create")
+def test_create_venv_raises_when_uv_fallback_fails(
+    mock_venv_create: MagicMock,
+    mock_which: MagicMock,
+    mock_run: MagicMock,
+    tmp_path: Path,
+) -> None:
+    venv_dir = tmp_path / "runtime" / "venv"
+    mock_venv_create.side_effect = RuntimeError("ensurepip crashed")
+    mock_which.return_value = "/usr/local/bin/uv"
+    mock_run.return_value = MagicMock(returncode=2, stderr="uv venv failed", stdout="")
+
+    with pytest.raises(BootstrapError, match="uv fallback failed"):
+        _create_venv(venv_dir)
 
 
 # ---------------------------------------------------------------------------

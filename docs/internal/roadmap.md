@@ -244,6 +244,8 @@ tollama/
   - `core/runtime_bootstrap.py` handles venv creation, pip install, staleness detection.
   - `RunnerManager` integrates auto-bootstrap: when `daemon.auto_bootstrap` is enabled,
     runner subprocesses use an isolated venv Python interpreter.
+  - stdlib `venv` failures now retry through `uv venv --seed --clear ... --python <current-interpreter>`
+    when `uv` is present.
   - Staleness detection compares `tollama_version` in `installed.json` state file.
   - Manual override via `config.json` `daemon.runner_commands` takes precedence.
 - CLI `tollama runtime` subcommand group:

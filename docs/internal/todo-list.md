@@ -48,6 +48,7 @@ Canonical inventories:
   - 현재 family: `torch`, `timesfm`, `uni2ts`, `sundial`, `toto`, `lag_llama`, `patchtst`, `tide`, `nhits`, `nbeatsx`, `timer`, `timemixer`, `forecastpfn` (+ `mock`)
 - [~] (P1) 런너별 종속성 충돌 방지 정책(버전 pin, lockfile, 독립 venv) 확립
   - 현재: optional extras 분리 + family별 독립 runtime venv 자동화 구현(`~/.tollama/runtimes/<family>/venv/`, `tollama runtime install/list/update/remove`)
+  - 현재: stdlib `venv`/`ensurepip` 실패 시 `uv venv` fallback 경로 복구
   - TODO: 버전 pin/lockfile 정책과 설치 재현성 보강
 - [ ] (P2) "Python 의존 최소화" 장기 트랙 정의
   - ONNX/TensorRT/LibTorch(C++)/Rust/Go 코어화 가능성 검토

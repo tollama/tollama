@@ -95,6 +95,9 @@ covariate-path failures degrade to target-only forecasts with warnings.
 └────────────────────────────────────────────────────────┘
 ```
 
+Family runtimes auto-bootstrap on first use, and fall back to `uv venv` when
+stdlib `venv` / `ensurepip` fails on the host interpreter.
+
 ---
 
 ## Python SDK

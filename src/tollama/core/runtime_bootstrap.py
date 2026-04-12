@@ -51,7 +51,7 @@ FAMILY_EXTRAS: dict[str, str] = {
 
 # Increment when runtime state compatibility changes even without a package
 # version bump (for example, extra-name normalization or bootstrap semantics).
-_RUNTIME_STATE_SCHEMA_VERSION = 2
+_RUNTIME_STATE_SCHEMA_VERSION = 3
 
 # Families that require specific Python versions.
 # uni2ts and timesfm have build-time or runtime failures on Python 3.12+.
@@ -278,7 +278,36 @@ def _create_venv(venv_dir: Path) -> None:
     logger.debug("creating venv at %s", venv_dir)
     try:
         venv.create(str(venv_dir), with_pip=True, clear=True)
+        return
     except Exception as exc:
+        uv_binary = shutil.which("uv")
+        if uv_binary:
+            logger.warning(
+                "stdlib venv bootstrap failed for %s; retrying with uv: %s",
+                venv_dir,
+                exc,
+            )
+            cmd = [
+                uv_binary,
+                "venv",
+                "--seed",
+                "--clear",
+                str(venv_dir),
+                "--python",
+                sys.executable,
+            ]
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+            )
+            if result.returncode == 0:
+                return
+            stderr_tail = ((result.stderr or "") or (result.stdout or ""))[-2000:]
+            raise BootstrapError(
+                f"failed to create venv at {venv_dir}: {exc}\n"
+                f"uv fallback failed (exit {result.returncode}):\n{stderr_tail}"
+            ) from exc
         raise BootstrapError(f"failed to create venv at {venv_dir}: {exc}") from exc
 
 
