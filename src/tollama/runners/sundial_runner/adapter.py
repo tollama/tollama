@@ -186,13 +186,13 @@ class SundialAdapter:
         if auto_model_cls is None:
             raise DependencyMissingError(
                 "transformers package does not expose AutoModelForCausalLM; "
-                "install with `pip install -e \".[dev,runner_sundial]\"`",
+                'install with `pip install -e ".[dev,runner_sundial]"`',
             )
         from_pretrained = getattr(auto_model_cls, "from_pretrained", None)
         if not callable(from_pretrained):
             raise DependencyMissingError(
                 "transformers AutoModelForCausalLM.from_pretrained is unavailable; "
-                "install with `pip install -e \".[dev,runner_sundial]\"`",
+                'install with `pip install -e ".[dev,runner_sundial]"`',
             )
 
         if local_model_path is not None:
@@ -253,7 +253,7 @@ class SundialAdapter:
             joined = ", ".join(sorted(set(missing_packages)))
             raise DependencyMissingError(
                 "missing optional sundial runner dependencies "
-                f"({joined}); install them with `pip install -e \".[dev,runner_sundial]\"`",
+                f'({joined}); install them with `pip install -e ".[dev,runner_sundial]"`',
             )
 
         assert torch is not None

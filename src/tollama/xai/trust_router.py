@@ -247,7 +247,8 @@ class TrustRouter:
         import asyncio
 
         return await asyncio.get_event_loop().run_in_executor(
-            None, lambda: self.analyze(context=context, payload=payload),
+            None,
+            lambda: self.analyze(context=context, payload=payload),
         )
 
     async def analyze_multi_async(
@@ -287,15 +288,20 @@ class TrustRouter:
         total_weight = sum(c.weight for c in components.values()) or 1.0
         for name, comp in components.items():
             contribution = (comp.weight / total_weight) * comp.score
-            attributions.append({
-                "component": name,
-                "weight": comp.weight,
-                "score": comp.score,
-                "contribution": round(contribution, 4),
-                "impact_pct": round(
-                    contribution / trust_result.trust_score * 100, 1,
-                ) if trust_result.trust_score > 0 else 0.0,
-            })
+            attributions.append(
+                {
+                    "component": name,
+                    "weight": comp.weight,
+                    "score": comp.score,
+                    "contribution": round(contribution, 4),
+                    "impact_pct": round(
+                        contribution / trust_result.trust_score * 100,
+                        1,
+                    )
+                    if trust_result.trust_score > 0
+                    else 0.0,
+                }
+            )
 
         # Sort by absolute contribution descending
         attributions.sort(key=lambda a: abs(a["contribution"]), reverse=True)
@@ -426,62 +432,76 @@ class TrustRouter:
 
         # Gate A: Trust Score
         if trust_result.trust_score < trust_threshold:
-            gates.append({
-                "gate": "trust_score",
-                "status": "BLOCK",
-                "detail": (
-                    f"trust_score {trust_result.trust_score:.2f} "
-                    f"< threshold {trust_threshold:.2f}"
-                ),
-            })
+            gates.append(
+                {
+                    "gate": "trust_score",
+                    "status": "BLOCK",
+                    "detail": (
+                        f"trust_score {trust_result.trust_score:.2f} "
+                        f"< threshold {trust_threshold:.2f}"
+                    ),
+                }
+            )
             allowed = False
         else:
-            gates.append({
-                "gate": "trust_score",
-                "status": "PASS",
-                "detail": (
-                    f"trust_score {trust_result.trust_score:.2f} "
-                    f">= threshold {trust_threshold:.2f}"
-                ),
-            })
+            gates.append(
+                {
+                    "gate": "trust_score",
+                    "status": "PASS",
+                    "detail": (
+                        f"trust_score {trust_result.trust_score:.2f} "
+                        f">= threshold {trust_threshold:.2f}"
+                    ),
+                }
+            )
 
         # Gate B: Critical violations
         critical = [v for v in trust_result.violations if v.severity == "critical"]
         if critical:
             names = ", ".join(v.name for v in critical)
-            gates.append({
-                "gate": "constraint_violations",
-                "status": "BLOCK",
-                "detail": f"{len(critical)} critical violation(s): {names}",
-            })
+            gates.append(
+                {
+                    "gate": "constraint_violations",
+                    "status": "BLOCK",
+                    "detail": f"{len(critical)} critical violation(s): {names}",
+                }
+            )
             allowed = False
         else:
-            gates.append({
-                "gate": "constraint_violations",
-                "status": "PASS",
-                "detail": "no critical violations",
-            })
+            gates.append(
+                {
+                    "gate": "constraint_violations",
+                    "status": "PASS",
+                    "detail": "no critical violations",
+                }
+            )
 
         # Gate C: Risk Category
         if trust_result.risk_category == "RED":
-            gates.append({
-                "gate": "risk_category",
-                "status": "BLOCK",
-                "detail": "risk_category RED",
-            })
+            gates.append(
+                {
+                    "gate": "risk_category",
+                    "status": "BLOCK",
+                    "detail": "risk_category RED",
+                }
+            )
             allowed = False
         elif trust_result.risk_category == "YELLOW":
-            gates.append({
-                "gate": "risk_category",
-                "status": "WARN",
-                "detail": "risk_category YELLOW",
-            })
+            gates.append(
+                {
+                    "gate": "risk_category",
+                    "status": "WARN",
+                    "detail": "risk_category YELLOW",
+                }
+            )
         else:
-            gates.append({
-                "gate": "risk_category",
-                "status": "PASS",
-                "detail": f"risk_category {trust_result.risk_category}",
-            })
+            gates.append(
+                {
+                    "gate": "risk_category",
+                    "status": "PASS",
+                    "detail": f"risk_category {trust_result.risk_category}",
+                }
+            )
 
         return {
             "allowed": allowed,
@@ -571,10 +591,7 @@ class TrustRouter:
         is available.
         """
         matches = self.registry.resolve(context)
-        candidates = [
-            a for a in matches
-            if a.agent_name != exclude
-        ]
+        candidates = [a for a in matches if a.agent_name != exclude]
         if not candidates:
             return None
         return sorted(candidates, key=lambda a: getattr(a, "priority", 100))[0]
@@ -655,9 +672,7 @@ def _aggregate_trust_results(
     # trust_score: priority-weighted average (lower priority number = higher weight)
     inv_priorities = [1.0 / max(p, 1) for p in priorities]
     total_inv = sum(inv_priorities) or 1.0
-    agg_score = sum(
-        r.trust_score * w for r, w in zip(results, inv_priorities)
-    ) / total_inv
+    agg_score = sum(r.trust_score * w for r, w in zip(results, inv_priorities)) / total_inv
 
     # violations: merge, deduplicate by (name, severity)
     seen: set[tuple[str, str]] = set()

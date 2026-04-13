@@ -130,9 +130,7 @@ def select_auto_models(
         raise ValueError("ensemble_top_k must be >= 2")
 
     include_model_set = {
-        item.strip()
-        for item in include_models
-        if isinstance(item, str) and item.strip()
+        item.strip() for item in include_models if isinstance(item, str) and item.strip()
     }
     if not include_model_set:
         raise ValueError("include_models must include at least one installed model")
@@ -150,9 +148,7 @@ def select_auto_models(
         include_models=include_model_set,
     )
     spec_by_model = {
-        spec.name: spec
-        for spec in list_registry_models()
-        if spec.name in include_model_set
+        spec.name: spec for spec in list_registry_models() if spec.name in include_model_set
     }
 
     ranked_candidates: list[AutoCandidateScore] = []

@@ -88,9 +88,7 @@ class TollamaClient:
             payload = self.info()
             models_payload = payload.get("models") if isinstance(payload, dict) else None
             available = (
-                models_payload.get("available")
-                if isinstance(models_payload, dict)
-                else None
+                models_payload.get("available") if isinstance(models_payload, dict) else None
             )
             return _coerce_dict_list(available)
         raise InvalidRequestError(action="list models", detail=f"unsupported mode: {mode!r}")
@@ -624,8 +622,7 @@ class TollamaClient:
                 action=action,
                 detail=str(exc),
                 hint=(
-                    "Try a smaller series or increase timeout. CLI users can pass "
-                    "--timeout 600."
+                    "Try a smaller series or increase timeout. CLI users can pass --timeout 600."
                 ),
             ) from exc
         except httpx.ConnectError as exc:
@@ -633,8 +630,7 @@ class TollamaClient:
                 action=action,
                 detail=str(exc),
                 hint=(
-                    "Start the daemon with `tollama serve` and confirm the base URL "
-                    "is reachable."
+                    "Start the daemon with `tollama serve` and confirm the base URL is reachable."
                 ),
             ) from exc
         except httpx.RequestError as exc:
@@ -823,9 +819,7 @@ class AsyncTollamaClient:
             payload = await self.info()
             models_payload = payload.get("models") if isinstance(payload, dict) else None
             available = (
-                models_payload.get("available")
-                if isinstance(models_payload, dict)
-                else None
+                models_payload.get("available") if isinstance(models_payload, dict) else None
             )
             return _coerce_dict_list(available)
         raise InvalidRequestError(action="list models", detail=f"unsupported mode: {mode!r}")
@@ -1200,7 +1194,8 @@ class AsyncTollamaClient:
     # ──── XAI methods ────
 
     async def explain_decision(
-        self, payload: dict[str, Any],
+        self,
+        payload: dict[str, Any],
     ) -> dict[str, Any]:
         """Submit an explain-decision request to the XAI endpoint."""
         return await self._request_json(
@@ -1211,7 +1206,8 @@ class AsyncTollamaClient:
         )
 
     async def trust_breakdown(
-        self, payload: dict[str, Any],
+        self,
+        payload: dict[str, Any],
     ) -> dict[str, Any]:
         """Submit a trust-breakdown request to the XAI endpoint."""
         return await self._request_json(
@@ -1222,7 +1218,8 @@ class AsyncTollamaClient:
         )
 
     async def model_card(
-        self, payload: dict[str, Any],
+        self,
+        payload: dict[str, Any],
     ) -> dict[str, Any]:
         """Submit a model-card generation request to the XAI endpoint."""
         return await self._request_json(
@@ -1233,7 +1230,8 @@ class AsyncTollamaClient:
         )
 
     async def record_outcome(
-        self, payload: dict[str, Any],
+        self,
+        payload: dict[str, Any],
     ) -> dict[str, Any]:
         """Submit a prediction-outcome pair for calibration learning."""
         return await self._request_json(
@@ -1244,7 +1242,8 @@ class AsyncTollamaClient:
         )
 
     async def dashboard_history(
-        self, payload: dict[str, Any],
+        self,
+        payload: dict[str, Any],
     ) -> dict[str, Any]:
         """Fetch trust score history and trends."""
         return await self._request_json(
@@ -1255,7 +1254,8 @@ class AsyncTollamaClient:
         )
 
     async def connectors_health(
-        self, payload: dict[str, Any],
+        self,
+        payload: dict[str, Any],
     ) -> dict[str, Any]:
         """Check connector availability and health."""
         return await self._request_json(
@@ -1274,7 +1274,8 @@ class AsyncTollamaClient:
         )
 
     async def gate_decision(
-        self, payload: dict[str, Any],
+        self,
+        payload: dict[str, Any],
     ) -> dict[str, Any]:
         """Evaluate trust gates for auto-execution."""
         return await self._request_json(
@@ -1285,7 +1286,8 @@ class AsyncTollamaClient:
         )
 
     async def batch_analyze(
-        self, payload: dict[str, Any],
+        self,
+        payload: dict[str, Any],
     ) -> dict[str, Any]:
         """Submit a batch of trust analysis requests."""
         return await self._request_json(
@@ -1296,7 +1298,8 @@ class AsyncTollamaClient:
         )
 
     async def configure_alerts(
-        self, payload: dict[str, Any],
+        self,
+        payload: dict[str, Any],
     ) -> dict[str, Any]:
         """Configure trust alert thresholds."""
         return await self._request_json(
@@ -1307,7 +1310,8 @@ class AsyncTollamaClient:
         )
 
     async def check_alerts(
-        self, payload: dict[str, Any],
+        self,
+        payload: dict[str, Any],
     ) -> dict[str, Any]:
         """Check trust against configured alert thresholds."""
         return await self._request_json(
@@ -1492,8 +1496,7 @@ class AsyncTollamaClient:
                 action=action,
                 detail=str(exc),
                 hint=(
-                    "Try a smaller series or increase timeout. CLI users can pass "
-                    "--timeout 600."
+                    "Try a smaller series or increase timeout. CLI users can pass --timeout 600."
                 ),
             ) from exc
         except httpx.ConnectError as exc:
@@ -1501,8 +1504,7 @@ class AsyncTollamaClient:
                 action=action,
                 detail=str(exc),
                 hint=(
-                    "Start the daemon with `tollama serve` and confirm the base URL "
-                    "is reachable."
+                    "Start the daemon with `tollama serve` and confirm the base URL is reachable."
                 ),
             ) from exc
         except httpx.RequestError as exc:
@@ -1665,13 +1667,13 @@ def _normalize_validation_message(message: str) -> str:
     if lowered == "field required":
         return "is required"
     if lowered.startswith("input should be "):
-        return f"must be {message.strip()[len('Input should be '):]}"
+        return f"must be {message.strip()[len('Input should be ') :]}"
     if lowered.startswith("input should have "):
-        return f"must have {message.strip()[len('Input should have '):]}"
+        return f"must have {message.strip()[len('Input should have ') :]}"
     if lowered.startswith("list should have "):
-        return f"must have {message.strip()[len('List should have '):]}"
+        return f"must have {message.strip()[len('List should have ') :]}"
     if lowered.startswith("value error, "):
-        return f"is invalid: {message.strip()[len('Value error, '):]}"
+        return f"is invalid: {message.strip()[len('Value error, ') :]}"
     return f"is invalid: {message.strip()}"
 
 
@@ -1700,14 +1702,9 @@ def _default_hint_for_http_error(*, status_code: int, detail: str) -> str | None
     if status_code == 400:
         return "Fix request payload or parameters and retry."
     if status_code in {401, 403}:
-        if (
-            "license" in lowered
-            or "accept_license" in lowered
-            or "accept-license" in lowered
-        ):
+        if "license" in lowered or "accept_license" in lowered or "accept-license" in lowered:
             return (
-                "Re-run with `--accept-license`, or call "
-                "`tollama pull <model> --accept-license`."
+                "Re-run with `--accept-license`, or call `tollama pull <model> --accept-license`."
             )
         return "Provide a valid API key and retry."
     if status_code == 404:
@@ -1716,14 +1713,9 @@ def _default_hint_for_http_error(*, status_code: int, detail: str) -> str | None
             "Use `tollama info --json` to inspect available models."
         )
     if status_code == 409:
-        if (
-            "license" in lowered
-            or "accept_license" in lowered
-            or "accept-license" in lowered
-        ):
+        if "license" in lowered or "accept_license" in lowered or "accept-license" in lowered:
             return (
-                "Re-run with `--accept-license`, or call "
-                "`tollama pull <model> --accept-license`."
+                "Re-run with `--accept-license`, or call `tollama pull <model> --accept-license`."
             )
         return "Resolve the conflicting model or request state, then retry."
     if status_code in {408, 504}:

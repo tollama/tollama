@@ -29,7 +29,9 @@ def client() -> TestClient:
 
 
 def _make_stub_agent(
-    name: str, domain: str, score: float = 0.7,
+    name: str,
+    domain: str,
+    score: float = 0.7,
 ) -> Any:
     agent = MagicMock()
     agent.agent_name = name
@@ -40,27 +42,34 @@ def _make_stub_agent(
         return context.get("domain") == domain
 
     agent.supports = _supports
-    agent.analyze = MagicMock(return_value={
-        "agent_name": name,
-        "domain": domain,
-        "trust_score": score,
-        "risk_category": "GREEN",
-        "calibration_status": "moderate_trust",
-        "component_breakdown": {
-            "accuracy": {"name": "accuracy", "weight": 0.4, "score": score, "details": "stub"},
-            "freshness": {"name": "freshness", "weight": 0.3, "score": 0.9, "details": "stub"},
-            "consistency": {"name": "consistency", "weight": 0.3, "score": 0.6, "details": "stub"},
-        },
-        "violations": [],
-        "why_trusted": f"Stub agent {name}",
-        "evidence": {
-            "source_type": "stub",
-            "source_ids": [f"{name}-001"],
-            "payload_schema": "stub_v1",
-            "attributes": {},
-        },
-        "audit": {"formula_version": "stub-v1", "agent_version": "0.1.0"},
-    })
+    agent.analyze = MagicMock(
+        return_value={
+            "agent_name": name,
+            "domain": domain,
+            "trust_score": score,
+            "risk_category": "GREEN",
+            "calibration_status": "moderate_trust",
+            "component_breakdown": {
+                "accuracy": {"name": "accuracy", "weight": 0.4, "score": score, "details": "stub"},
+                "freshness": {"name": "freshness", "weight": 0.3, "score": 0.9, "details": "stub"},
+                "consistency": {
+                    "name": "consistency",
+                    "weight": 0.3,
+                    "score": 0.6,
+                    "details": "stub",
+                },
+            },
+            "violations": [],
+            "why_trusted": f"Stub agent {name}",
+            "evidence": {
+                "source_type": "stub",
+                "source_ids": [f"{name}-001"],
+                "payload_schema": "stub_v1",
+                "attributes": {},
+            },
+            "audit": {"formula_version": "stub-v1", "agent_version": "0.1.0"},
+        }
+    )
     return agent
 
 
@@ -80,8 +89,10 @@ def _make_trust_result(score: float = 0.7, risk: str = "GREEN") -> NormalizedTru
         ],
         why_trusted="Test agent",
         evidence=TrustEvidence(
-            source_type="test", source_ids=["test-001"],
-            payload_schema="test_v1", attributes={},
+            source_type="test",
+            source_ids=["test-001"],
+            payload_schema="test_v1",
+            attributes={},
         ),
         audit=TrustAudit(formula_version="test-v1", agent_version="0.1.0"),
     )
@@ -130,11 +141,17 @@ class TestNormalizedTrustResultSerialization:
 
 class TestAsyncBatchAnalyze:
     def test_batch_uses_to_summary(self, client: TestClient) -> None:
-        resp = client.post("/api/xai/batch-analyze", json={
-            "items": [
-                {"context": {"domain": "financial_market"}, "payload": {"instrument_id": "AAPL"}},
-            ],
-        })
+        resp = client.post(
+            "/api/xai/batch-analyze",
+            json={
+                "items": [
+                    {
+                        "context": {"domain": "financial_market"},
+                        "payload": {"instrument_id": "AAPL"},
+                    },
+                ],
+            },
+        )
         assert resp.status_code == 200
         body = resp.json()
         r = body["results"][0]["result"]
@@ -144,13 +161,25 @@ class TestAsyncBatchAnalyze:
         assert "trust_score" in r
 
     def test_batch_concurrent_multiple(self, client: TestClient) -> None:
-        resp = client.post("/api/xai/batch-analyze", json={
-            "items": [
-                {"context": {"domain": "financial_market"}, "payload": {"instrument_id": "AAPL"}},
-                {"context": {"domain": "financial_market"}, "payload": {"instrument_id": "MSFT"}},
-                {"context": {"domain": "financial_market"}, "payload": {"instrument_id": "GOOG"}},
-            ],
-        })
+        resp = client.post(
+            "/api/xai/batch-analyze",
+            json={
+                "items": [
+                    {
+                        "context": {"domain": "financial_market"},
+                        "payload": {"instrument_id": "AAPL"},
+                    },
+                    {
+                        "context": {"domain": "financial_market"},
+                        "payload": {"instrument_id": "MSFT"},
+                    },
+                    {
+                        "context": {"domain": "financial_market"},
+                        "payload": {"instrument_id": "GOOG"},
+                    },
+                ],
+            },
+        )
         assert resp.status_code == 200
         body = resp.json()
         assert body["count"] == 3
@@ -179,12 +208,14 @@ class TestConnectorAutoDiscovery:
         connector.connector_name = "mock_fin"
         connector.domain = "financial_market"
         connector.supports = MagicMock(return_value=True)
-        connector.fetch = MagicMock(return_value=ConnectorResult(
-            domain="financial_market",
-            payload={"instrument_id": "AAPL", "price": 150.0},
-            source_id="test-001",
-            source_type="mock",
-        ))
+        connector.fetch = MagicMock(
+            return_value=ConnectorResult(
+                domain="financial_market",
+                payload={"instrument_id": "AAPL", "price": 150.0},
+                source_id="test-001",
+                source_type="mock",
+            )
+        )
 
         conn_registry = MagicMock()
         conn_registry.get = MagicMock(return_value=connector)
@@ -226,21 +257,27 @@ class TestConnectorAutoDiscovery:
 class TestTrustTrendAlerts:
     def test_alert_on_declining_trend(self, client: TestClient) -> None:
         # Configure alert with trend detection
-        client.post("/api/xai/alerts/configure", json={
-            "thresholds": [
-                {
-                    "domain": "financial_market",
-                    "min_trust_score": 0.01,
-                    "risk_categories": [],
-                    "alert_on_trend": ["declining"],
-                },
-            ],
-        })
+        client.post(
+            "/api/xai/alerts/configure",
+            json={
+                "thresholds": [
+                    {
+                        "domain": "financial_market",
+                        "min_trust_score": 0.01,
+                        "risk_categories": [],
+                        "alert_on_trend": ["declining"],
+                    },
+                ],
+            },
+        )
         # Check — no history yet so trend is "stable", shouldn't trigger
-        resp = client.post("/api/xai/alerts/check", json={
-            "context": {"domain": "financial_market"},
-            "payload": {"instrument_id": "AAPL"},
-        })
+        resp = client.post(
+            "/api/xai/alerts/check",
+            json={
+                "context": {"domain": "financial_market"},
+                "payload": {"instrument_id": "AAPL"},
+            },
+        )
         assert resp.status_code == 200
         body = resp.json()
         assert body["trust_result"] is not None
@@ -248,15 +285,18 @@ class TestTrustTrendAlerts:
         assert "trend" in body["trust_result"]
 
     def test_alert_threshold_with_trend_field(self, client: TestClient) -> None:
-        resp = client.post("/api/xai/alerts/configure", json={
-            "thresholds": [
-                {
-                    "domain": "financial_market",
-                    "min_trust_score": 0.5,
-                    "alert_on_trend": ["declining", "stable"],
-                },
-            ],
-        })
+        resp = client.post(
+            "/api/xai/alerts/configure",
+            json={
+                "thresholds": [
+                    {
+                        "domain": "financial_market",
+                        "min_trust_score": 0.5,
+                        "alert_on_trend": ["declining", "stable"],
+                    },
+                ],
+            },
+        )
         assert resp.status_code == 200
         body = resp.json()
         assert body["thresholds"][0]["alert_on_trend"] == ["declining", "stable"]

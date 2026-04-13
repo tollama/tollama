@@ -141,8 +141,7 @@ class RedisRateLimiter(RateLimiter):
             import redis as redis_lib
         except ImportError:
             raise ImportError(
-                "redis package required for Redis rate limiting. "
-                "Install with: pip install redis"
+                "redis package required for Redis rate limiting. Install with: pip install redis"
             )
 
         self._client = redis_lib.Redis.from_url(redis_url, decode_responses=True)
@@ -203,9 +202,7 @@ def create_rate_limiter_from_env(
     tokens_per_second = rate_per_minute / 60.0
 
     # Check for Redis backend
-    backend = source.get(
-        _BACKEND_ENV, os.environ.get(_BACKEND_ENV, "memory")
-    ).strip().lower()
+    backend = source.get(_BACKEND_ENV, os.environ.get(_BACKEND_ENV, "memory")).strip().lower()
     if backend == "redis":
         redis_url = source.get(
             _REDIS_URL_ENV,
@@ -218,9 +215,7 @@ def create_rate_limiter_from_env(
                 burst=burst,
             )
         except ImportError:
-            logger.warning(
-                "Redis not available, falling back to in-memory rate limiter"
-            )
+            logger.warning("Redis not available, falling back to in-memory rate limiter")
 
     return TokenBucketRateLimiter(
         tokens_per_second=tokens_per_second,

@@ -65,6 +65,12 @@ lightning_logs/
 # Custom directories
 @generated_runs/
 
+# Coverage reports
+coverage.xml
+
+# Hypothesis test cache
+.hypothesis/
+
 # MacOS System files
 ._*
 .AppleDouble

@@ -23,9 +23,7 @@ def enrich_forecast_response(
 
     existing_timing = response.timing or ForecastTiming()
     model_load_ms = (
-        float(existing_timing.model_load_ms)
-        if existing_timing.model_load_ms is not None
-        else 0.0
+        float(existing_timing.model_load_ms) if existing_timing.model_load_ms is not None else 0.0
     )
     resolved_inference_ms = (
         float(existing_timing.inference_ms)

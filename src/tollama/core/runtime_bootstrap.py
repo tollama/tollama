@@ -370,7 +370,7 @@ def _resolve_install_spec(extra: str) -> str:
             direct_url = json.loads(direct_url_text)
             url: str = direct_url.get("url", "")
             if url.startswith("file://"):
-                project_root = url[len("file://"):]
+                project_root = url[len("file://") :]
                 return f"{project_root}[{normalized_extra}]"
     except Exception:
         pass
@@ -389,7 +389,7 @@ def _resolve_local_project_root() -> str | None:
             content = pyproject.read_text(encoding="utf-8")
         except OSError:
             return None
-        if "name = \"tollama\"" in content:
+        if 'name = "tollama"' in content:
             return str(root)
         return None
 

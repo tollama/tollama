@@ -98,8 +98,6 @@ def _toto_payload() -> dict[str, object]:
     }
 
 
-
-
 def _patchtst_payload() -> dict[str, object]:
     return {
         "model": "patchtst",
@@ -134,8 +132,6 @@ def _lag_llama_payload() -> dict[str, object]:
     }
 
 
-
-
 def _nbeatsx_payload() -> dict[str, object]:
     return {
         "model": "nbeatsx",
@@ -151,6 +147,7 @@ def _nbeatsx_payload() -> dict[str, object]:
         ],
         "options": {},
     }
+
 
 def _nhits_payload() -> dict[str, object]:
     return {
@@ -383,8 +380,6 @@ def test_missing_toto_runner_command_returns_install_hint(monkeypatch, tmp_path)
     assert "pip install -e" in detail
 
 
-
-
 def test_daemon_routes_lag_llama_family_to_runner_command_override(monkeypatch, tmp_path) -> None:
     paths = TollamaPaths(base_dir=tmp_path / ".tollama")
     monkeypatch.setenv("TOLLAMA_HOME", str(paths.base_dir))
@@ -418,7 +413,6 @@ def test_missing_lag_llama_runner_command_returns_install_hint(monkeypatch, tmp_
     detail = response.json()["detail"]
     assert "runner_lag_llama" in detail
     assert "pip install -e" in detail
-
 
 
 def test_daemon_routes_patchtst_family_to_runner_command_override(monkeypatch, tmp_path) -> None:
@@ -491,8 +485,6 @@ def test_missing_nhits_runner_command_returns_install_hint(monkeypatch, tmp_path
     assert "pip install -e" in detail
 
 
-
-
 def test_daemon_routes_nbeatsx_family_to_runner_command_override(monkeypatch, tmp_path) -> None:
     paths = TollamaPaths(base_dir=tmp_path / ".tollama")
     monkeypatch.setenv("TOLLAMA_HOME", str(paths.base_dir))
@@ -526,6 +518,7 @@ def test_missing_nbeatsx_runner_command_returns_install_hint(monkeypatch, tmp_pa
     detail = response.json()["detail"]
     assert "runner-nbeatsx" in detail
     assert "pip install -e" in detail
+
 
 def test_runner_manager_list_families_includes_expected_defaults() -> None:
     manager = RunnerManager()

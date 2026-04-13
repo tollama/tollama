@@ -113,8 +113,7 @@ class GraniteTTMAdapter:
 
         if request.horizon > loaded.prediction_length:
             raise AdapterInputError(
-                "Requested horizon exceeds model prediction_length. "
-                "Pull a different TTM revision.",
+                "Requested horizon exceeds model prediction_length. Pull a different TTM revision.",
             )
 
         if (
@@ -263,7 +262,7 @@ class GraniteTTMAdapter:
             unique = ", ".join(sorted(set(missing_packages)))
             raise DependencyMissingError(
                 "missing optional torch runner dependencies "
-                f"({unique}); install them with `pip install -e \".[dev,runner_torch]\"`",
+                f'({unique}); install them with `pip install -e ".[dev,runner_torch]"`',
             )
 
         assert torch is not None

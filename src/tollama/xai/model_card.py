@@ -118,8 +118,7 @@ class ModelCardGenerator:
         for key, value in iu.items():
             if isinstance(value, list):
                 lines.append(
-                    f"- **{key.replace('_', ' ').title()}**: "
-                    f"{', '.join(str(v) for v in value)}"
+                    f"- **{key.replace('_', ' ').title()}**: {', '.join(str(v) for v in value)}"
                 )
             elif value:
                 lines.append(f"- **{key.replace('_', ' ').title()}**: {value}")
@@ -210,12 +209,14 @@ class ModelCardGenerator:
         data_info = model_info.get("training_data", {})
         if eval_result:
             dataset_info = eval_result.get("dataset_info", {})
-            data_info.update({
-                "n_samples": dataset_info.get("n_rows"),
-                "n_features": dataset_info.get("n_cols"),
-                "frequency": dataset_info.get("frequency"),
-                "date_range": dataset_info.get("date_range"),
-            })
+            data_info.update(
+                {
+                    "n_samples": dataset_info.get("n_rows"),
+                    "n_features": dataset_info.get("n_cols"),
+                    "frequency": dataset_info.get("frequency"),
+                    "date_range": dataset_info.get("date_range"),
+                }
+            )
         return data_info
 
     def _evaluation(self, eval_result: dict[str, Any] | None) -> dict[str, Any]:
@@ -233,8 +234,7 @@ class ModelCardGenerator:
 
         return {
             "methodology": (
-                f"Expanding-window cross-validation with "
-                f"{cv_config.get('n_splits', 'N')} splits"
+                f"Expanding-window cross-validation with {cv_config.get('n_splits', 'N')} splits"
             ),
             "metrics": best.get("metrics", {}) if best else {},
             "n_models_compared": len(model_results),
@@ -243,9 +243,7 @@ class ModelCardGenerator:
             "tollama_eval_version": eval_result.get("version", ""),
         }
 
-    def _explainability(
-        self, explanation_result: dict[str, Any] | None
-    ) -> dict[str, Any]:
+    def _explainability(self, explanation_result: dict[str, Any] | None) -> dict[str, Any]:
         if not explanation_result:
             return {
                 "status": "Phase 2a: Explanation facade available",
@@ -272,12 +270,14 @@ class ModelCardGenerator:
             "Decision Policy Explanation",
         ]
         if has_trust_intelligence:
-            methods_used.extend([
-                "Trust Intelligence Pipeline (L1-L5)",
-                "SHAP Feature Attribution",
-                "Z3 Constraint Verification",
-                "Trust-Gated Decisioning",
-            ])
+            methods_used.extend(
+                [
+                    "Trust Intelligence Pipeline (L1-L5)",
+                    "SHAP Feature Attribution",
+                    "Z3 Constraint Verification",
+                    "Trust-Gated Decisioning",
+                ]
+            )
 
         result = {
             "status": (
@@ -315,9 +315,7 @@ class ModelCardGenerator:
             ),
         }
 
-    def _governance(
-        self, governance_info: dict[str, Any] | None
-    ) -> dict[str, Any]:
+    def _governance(self, governance_info: dict[str, Any] | None) -> dict[str, Any]:
         if not governance_info:
             return {
                 "status": "Phase 2a governance framework",

@@ -112,4 +112,3 @@ def _redact_value(
 def _looks_sensitive_key(key: str) -> bool:
     lowered = key.lower()
     return any(token in lowered for token in _SENSITIVE_KEY_TOKENS)
-

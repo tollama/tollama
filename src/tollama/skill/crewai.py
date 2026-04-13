@@ -10,9 +10,7 @@ from tollama.client import DEFAULT_BASE_URL, DEFAULT_TIMEOUT_SECONDS
 
 from .framework_common import AgentToolSpec, get_agent_tool_specs
 
-_CREWAI_IMPORT_HINT = (
-    'CrewAI dependency is not installed. Install with: pip install "crewai"'
-)
+_CREWAI_IMPORT_HINT = 'CrewAI dependency is not installed. Install with: pip install "crewai"'
 
 
 def get_crewai_tools(
@@ -54,9 +52,13 @@ def _build_args_schema(spec: AgentToolSpec) -> type[BaseModel]:
     for name, schema in properties.items():
         schema_dict = schema if isinstance(schema, dict) else {}
         annotation = _annotation_from_schema(schema_dict)
-        default = ... if name in required and "default" not in schema_dict else schema_dict.get(
-            "default",
-            None,
+        default = (
+            ...
+            if name in required and "default" not in schema_dict
+            else schema_dict.get(
+                "default",
+                None,
+            )
         )
         field_defs[name] = (annotation, default)
 

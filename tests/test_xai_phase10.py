@@ -25,7 +25,9 @@ def client() -> TestClient:
 
 
 def _make_stub_agent(
-    name: str, domain: str, score: float = 0.7,
+    name: str,
+    domain: str,
+    score: float = 0.7,
 ) -> Any:
     """Create a minimal stub trust agent."""
     agent = MagicMock()
@@ -37,33 +39,35 @@ def _make_stub_agent(
         return context.get("domain") == domain
 
     agent.supports = _supports
-    agent.analyze = MagicMock(return_value={
-        "agent_name": name,
-        "domain": domain,
-        "trust_score": score,
-        "risk_category": "GREEN",
-        "calibration_status": "moderate_trust",
-        "component_breakdown": {
-            "test_component": {
-                "name": "test_component",
-                "weight": 0.5,
-                "score": score,
-                "details": "stub",
+    agent.analyze = MagicMock(
+        return_value={
+            "agent_name": name,
+            "domain": domain,
+            "trust_score": score,
+            "risk_category": "GREEN",
+            "calibration_status": "moderate_trust",
+            "component_breakdown": {
+                "test_component": {
+                    "name": "test_component",
+                    "weight": 0.5,
+                    "score": score,
+                    "details": "stub",
+                },
             },
-        },
-        "violations": [],
-        "why_trusted": f"Stub agent {name}",
-        "evidence": {
-            "source_type": "stub",
-            "source_ids": [f"{name}-001"],
-            "payload_schema": "stub_v1",
-            "attributes": {},
-        },
-        "audit": {
-            "formula_version": "stub-v1",
-            "agent_version": "0.1.0",
-        },
-    })
+            "violations": [],
+            "why_trusted": f"Stub agent {name}",
+            "evidence": {
+                "source_type": "stub",
+                "source_ids": [f"{name}-001"],
+                "payload_schema": "stub_v1",
+                "attributes": {},
+            },
+            "audit": {
+                "formula_version": "stub-v1",
+                "agent_version": "0.1.0",
+            },
+        }
+    )
     return agent
 
 
@@ -77,37 +81,44 @@ class TestAsyncClientXAIMethods:
 
     def test_has_explain_decision(self) -> None:
         from tollama.client.http import AsyncTollamaClient
+
         client = AsyncTollamaClient()
         assert hasattr(client, "explain_decision")
         assert callable(client.explain_decision)
 
     def test_has_trust_breakdown(self) -> None:
         from tollama.client.http import AsyncTollamaClient
+
         client = AsyncTollamaClient()
         assert hasattr(client, "trust_breakdown")
 
     def test_has_model_card(self) -> None:
         from tollama.client.http import AsyncTollamaClient
+
         client = AsyncTollamaClient()
         assert hasattr(client, "model_card")
 
     def test_has_record_outcome(self) -> None:
         from tollama.client.http import AsyncTollamaClient
+
         client = AsyncTollamaClient()
         assert hasattr(client, "record_outcome")
 
     def test_has_dashboard_history(self) -> None:
         from tollama.client.http import AsyncTollamaClient
+
         client = AsyncTollamaClient()
         assert hasattr(client, "dashboard_history")
 
     def test_has_connectors_health(self) -> None:
         from tollama.client.http import AsyncTollamaClient
+
         client = AsyncTollamaClient()
         assert hasattr(client, "connectors_health")
 
     def test_has_cache_stats(self) -> None:
         from tollama.client.http import AsyncTollamaClient
+
         client = AsyncTollamaClient()
         assert hasattr(client, "cache_stats")
 
@@ -144,7 +155,8 @@ class TestHistoryAutoPersist:
         assert len(data["financial_market"]) == 1
 
     def test_auto_persist_saves_history_after_n_calls(
-        self, tmp_path: Path,
+        self,
+        tmp_path: Path,
     ) -> None:
         tracker = TrustHistoryTracker()
         history_path = tmp_path / "history.json"
@@ -221,7 +233,8 @@ class TestSetCacheTTL:
 class TestCacheTTLEndpoint:
     def test_put_cache_ttl(self, client: TestClient) -> None:
         response = client.put(
-            "/api/xai/cache/ttl", json={"ttl": 120.0},
+            "/api/xai/cache/ttl",
+            json={"ttl": 120.0},
         )
         assert response.status_code == 200
         body = response.json()
@@ -230,14 +243,16 @@ class TestCacheTTLEndpoint:
 
     def test_put_cache_ttl_zero_disables(self, client: TestClient) -> None:
         response = client.put(
-            "/api/xai/cache/ttl", json={"ttl": 0.0},
+            "/api/xai/cache/ttl",
+            json={"ttl": 0.0},
         )
         assert response.status_code == 200
         assert response.json()["new_ttl"] == 0.0
 
     def test_put_cache_ttl_rejects_negative(self, client: TestClient) -> None:
         response = client.put(
-            "/api/xai/cache/ttl", json={"ttl": -1.0},
+            "/api/xai/cache/ttl",
+            json={"ttl": -1.0},
         )
         assert response.status_code in (400, 422)
 
@@ -262,7 +277,9 @@ class TestEndToEndTrustPipeline:
 
         registry = TrustAgentRegistry()
         agent = _make_stub_agent(
-            "financial_market", "financial_market", score=0.75,
+            "financial_market",
+            "financial_market",
+            score=0.75,
         )
         registry.register(agent)
 
@@ -334,22 +351,28 @@ class TestEndToEndTrustPipeline:
     def test_full_pipeline_via_api(self, client: TestClient) -> None:
         """Exercise the full pipeline through FastAPI endpoints."""
         # 1. Explain decision
-        explain_resp = client.post("/api/xai/explain-decision", json={
-            "forecast_result": {
-                "model": "mock",
-                "forecasts": [{"id": "s1", "mean": [1.0, 2.0]}],
+        explain_resp = client.post(
+            "/api/xai/explain-decision",
+            json={
+                "forecast_result": {
+                    "model": "mock",
+                    "forecasts": [{"id": "s1", "mean": [1.0, 2.0]}],
+                },
             },
-        })
+        )
         assert explain_resp.status_code == 200
         assert "explanation_id" in explain_resp.json()
 
         # 2. Record outcome
-        outcome_resp = client.post("/api/xai/record-outcome", json={
-            "agent_name": "financial_market",
-            "domain": "financial_market",
-            "predicted_score": 0.8,
-            "actual_outcome": 0.75,
-        })
+        outcome_resp = client.post(
+            "/api/xai/record-outcome",
+            json={
+                "agent_name": "financial_market",
+                "domain": "financial_market",
+                "predicted_score": 0.8,
+                "actual_outcome": 0.75,
+            },
+        )
         assert outcome_resp.status_code == 200
         assert outcome_resp.json()["status"] == "recorded"
 
@@ -364,7 +387,8 @@ class TestEndToEndTrustPipeline:
 
         # 5. Update TTL
         ttl_resp = client.put(
-            "/api/xai/cache/ttl", json={"ttl": 60.0},
+            "/api/xai/cache/ttl",
+            json={"ttl": 60.0},
         )
         assert ttl_resp.status_code == 200
 

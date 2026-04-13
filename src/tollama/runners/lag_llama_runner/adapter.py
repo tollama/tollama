@@ -287,7 +287,7 @@ class LagLlamaAdapter:
             joined = ", ".join(sorted(set(missing_packages)))
             raise DependencyMissingError(
                 "missing optional lag-llama runner dependencies "
-                f"({joined}); install them with `pip install -e \".[dev,runner_lag_llama]\"`",
+                f'({joined}); install them with `pip install -e ".[dev,runner_lag_llama]"`',
             )
 
         assert pd is not None
@@ -314,11 +314,14 @@ def create_lag_llama_estimator(
 ) -> Any:
     try:
         import torch
+
         # PyTorch 2.6 defaults weights_only=True which breaks LagLlama
         _original_load = torch.load
+
         def _patched_load(*args, **kwargs):
             kwargs["weights_only"] = False
             return _original_load(*args, **kwargs)
+
         torch.load = _patched_load
     except Exception:
         pass
@@ -430,13 +433,20 @@ def load_checkpoint_hparams(ckpt_path: str) -> dict[str, Any]:
 
     try:
         from gluonts.torch.distributions.studentT import StudentTOutput
+
         if hasattr(torch.serialization, "add_safe_globals"):
             torch.serialization.add_safe_globals([StudentTOutput])
     except Exception:
         pass
 
     try:
-        checkpoint = torch.load(ckpt_path, map_location="cpu", weights_only=False)
+        # Lag-Llama checkpoints are loaded from the pulled local model store and
+        # require full-object deserialization for compatible hyper-parameter recovery.
+        checkpoint = torch.load(  # nosec B614
+            ckpt_path,
+            map_location="cpu",
+            weights_only=False,
+        )
     except Exception:  # noqa: BLE001
         return {}
     if not isinstance(checkpoint, dict):

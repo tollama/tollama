@@ -82,9 +82,7 @@ class MarketCalibrationTrustAgent:
             ),
             audit=TrustAudit(
                 formula_version=str(payload.get("formula_version", "mca-v1")),
-                generated_at=payload.get(
-                    "generated_at", datetime.now(UTC).isoformat()
-                ),
+                generated_at=payload.get("generated_at", datetime.now(UTC).isoformat()),
                 agent_version="0.1.0",
             ),
         )

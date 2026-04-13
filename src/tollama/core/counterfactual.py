@@ -75,8 +75,7 @@ def generate_counterfactual(
             continue
 
         delta = [
-            observed - expected
-            for observed, expected in zip(actual, counterfactual, strict=True)
+            observed - expected for observed, expected in zip(actual, counterfactual, strict=True)
         ]
         absolute_delta = [abs(value) for value in delta]
         total_delta = float(sum(delta))

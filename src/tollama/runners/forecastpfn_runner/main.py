@@ -46,7 +46,9 @@ def _handle_unload(request: ProtocolRequest, adapter: ForecastPFNAdapter) -> Pro
     model_name = request.params.get("model")
     if model_name is not None and (not isinstance(model_name, str) or not model_name):
         return error_response(
-            request.id, code=-32602, message="invalid params",
+            request.id,
+            code=-32602,
+            message="invalid params",
             data={"details": "model must be a non-empty string when provided"},
         )
     adapter.unload(model_name if isinstance(model_name, str) else None)
@@ -68,14 +70,19 @@ def _handle_forecast(request: ProtocolRequest, adapter: ForecastPFNAdapter) -> P
         forecast_request = ForecastRequest.model_validate(canonical_params)
     except ValidationError as exc:
         return error_response(
-            request.id, code=-32602, message="invalid params", data={"details": str(exc)},
+            request.id,
+            code=-32602,
+            message="invalid params",
+            data={"details": str(exc)},
         )
 
     try:
         started_at = time.perf_counter()
         response = adapter.forecast(
-            forecast_request, model_local_dir=model_local_dir,
-            model_source=model_source, model_metadata=model_metadata,
+            forecast_request,
+            model_local_dir=model_local_dir,
+            model_source=model_source,
+            model_metadata=model_metadata,
         )
         inference_ms = (time.perf_counter() - started_at) * 1000.0
     except DependencyMissingError as exc:
@@ -91,7 +98,9 @@ def _handle_forecast(request: ProtocolRequest, adapter: ForecastPFNAdapter) -> P
         return error_response(request.id, code="FORECAST_ERROR", message=msg)
 
     response = enrich_forecast_response(
-        response=response, runner_name=RUNNER_NAME, inference_ms=inference_ms,
+        response=response,
+        runner_name=RUNNER_NAME,
+        inference_ms=inference_ms,
     )
     return ProtocolResponse(
         id=request.id,

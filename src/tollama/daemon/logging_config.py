@@ -14,7 +14,8 @@ from typing import Any
 # ---------------------------------------------------------------------------
 
 _request_id_var: contextvars.ContextVar[str | None] = contextvars.ContextVar(
-    "tollama_request_id", default=None,
+    "tollama_request_id",
+    default=None,
 )
 
 
@@ -94,9 +95,7 @@ def configure_structured_logging(*, level: str = "INFO", json_output: bool = Tru
     if json_output:
         handler.setFormatter(StructuredJsonFormatter())
     else:
-        handler.setFormatter(
-            logging.Formatter("%(asctime)s %(levelname)s [%(name)s] %(message)s")
-        )
+        handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s [%(name)s] %(message)s"))
     root.addHandler(handler)
 
 

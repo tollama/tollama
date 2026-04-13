@@ -19,11 +19,11 @@ def _seed_project_root(root: Path) -> None:
         "\n".join(
             [
                 "[project]",
-                "name = \"tollama\"",
+                'name = "tollama"',
                 "",
                 "[project.scripts]",
-                "tollama = \"tollama.cli.main:main\"",
-                "tollamad = \"tollama.daemon.main:main\"",
+                'tollama = "tollama.cli.main:main"',
+                'tollamad = "tollama.daemon.main:main"',
                 "",
             ]
         ),
@@ -95,8 +95,7 @@ def test_dev_scaffold_with_register_updates_project_files(monkeypatch, tmp_path:
 
     pyproject = (tmp_path / "pyproject.toml").read_text(encoding="utf-8")
     assert (
-        'tollama-runner-acme-family = "tollama.runners.acme_family_runner.main:main"'
-        in pyproject
+        'tollama-runner-acme-family = "tollama.runners.acme_family_runner.main:main"' in pyproject
     )
 
     runtime_bootstrap = (tmp_path / "src" / "tollama" / "core" / "runtime_bootstrap.py").read_text(

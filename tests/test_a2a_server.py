@@ -284,9 +284,7 @@ def test_a2a_message_stream_returns_status_and_artifact_events(monkeypatch, tmp_
     assert "TaskArtifactUpdateEvent" in names
 
     status_payloads = [
-        event["data"]
-        for event in events
-        if event["event"] == "TaskStatusUpdateEvent"
+        event["data"] for event in events if event["event"] == "TaskStatusUpdateEvent"
     ]
     assert status_payloads
     assert status_payloads[-1]["status"]["state"] == "completed"

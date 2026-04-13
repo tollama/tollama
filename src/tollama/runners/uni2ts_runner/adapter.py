@@ -99,9 +99,7 @@ class MoiraiAdapter:
             self._module_cache.clear()
             return
         self._module_cache = {
-            key: value
-            for key, value in self._module_cache.items()
-            if key[0] != model_name
+            key: value for key, value in self._module_cache.items() if key[0] != model_name
         }
 
     def forecast(
@@ -291,7 +289,7 @@ class MoiraiAdapter:
             joined = ", ".join(sorted(set(missing_packages)))
             raise DependencyMissingError(
                 "missing optional uni2ts runner dependencies "
-                f"({joined}); install them with `pip install -e \".[dev,runner_uni2ts]\"`",
+                f'({joined}); install them with `pip install -e ".[dev,runner_uni2ts]"`',
             )
 
         assert np is not None
@@ -465,9 +463,9 @@ def build_pandas_dataset_with_horizon(
             raise AdapterInputError(
                 f"invalid frequency {series.freq!r} for series {series.id!r}",
             ) from exc
-        target_values = numpy_module.asarray(series.target, dtype=float).tolist() + [
-            float("nan")
-        ] * horizon
+        target_values = (
+            numpy_module.asarray(series.target, dtype=float).tolist() + [float("nan")] * horizon
+        )
         frame_payload: dict[str, list[float]] = {"target": target_values}
 
         for name in sorted(past_covariates):

@@ -80,17 +80,12 @@ def _build_profile(*, values: list[float], freq: str) -> _SeriesProfile:
         seasonal_template = _seasonal_template(residuals=residuals, period=seasonal_period)
 
     if seasonal_template:
-        seasonal_component = [
-            seasonal_template[index % seasonal_period]
-            for index in range(n_obs)
-        ]
+        seasonal_component = [seasonal_template[index % seasonal_period] for index in range(n_obs)]
     else:
         seasonal_component = [0.0 for _ in range(n_obs)]
 
     centered = [
-        value
-        - (level + slope * (index - ((n_obs - 1) / 2.0)))
-        - seasonal_component[index]
+        value - (level + slope * (index - ((n_obs - 1) / 2.0))) - seasonal_component[index]
         for index, value in enumerate(values)
     ]
     noise_std = max(_std(centered), _std(values) * 0.05, 1e-6)
@@ -169,10 +164,7 @@ def _seasonal_template(*, residuals: list[float], period: int) -> tuple[float, .
     for index, value in enumerate(residuals):
         buckets[index % period].append(value)
 
-    means = [
-        fmean(bucket) if bucket else 0.0
-        for bucket in buckets
-    ]
+    means = [fmean(bucket) if bucket else 0.0 for bucket in buckets]
     center = fmean(means) if means else 0.0
     return tuple(value - center for value in means)
 

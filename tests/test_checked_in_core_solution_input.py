@@ -11,9 +11,7 @@ from tollama.core.schemas import SeriesInput
 
 def test_checked_in_core_solution_input_matches_hourly_demand_profile() -> None:
     input_path = (
-        Path(__file__).resolve().parents[1]
-        / "examples"
-        / "core_solution_hourly_input.json"
+        Path(__file__).resolve().parents[1] / "examples" / "core_solution_hourly_input.json"
     )
 
     payload = json.loads(input_path.read_text(encoding="utf-8"))

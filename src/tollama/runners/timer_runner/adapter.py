@@ -92,12 +92,12 @@ class TimerAdapter:
         max_horizon = config.get("max_horizon", 720)
         if request.horizon > max_horizon:
             raise AdapterInputError(
-                f"requested horizon {request.horizon} exceeds "
-                f"Timer max_horizon {max_horizon}"
+                f"requested horizon {request.horizon} exceeds Timer max_horizon {max_horizon}"
             )
 
         max_context = config.get("max_context", 2880)
         repo_id = model_local_dir or config["repo_id"]
+        revision = None if model_local_dir else config.get("revision")
 
         forecasts: list[SeriesForecast] = []
         warnings: list[str] = []
@@ -106,9 +106,7 @@ class TimerAdapter:
             target = [float(v) for v in series.target]
             if len(target) > max_context:
                 target = target[-max_context:]
-                warnings.append(
-                    f"series {series.id!r}: truncated to last {max_context} points"
-                )
+                warnings.append(f"series {series.id!r}: truncated to last {max_context} points")
 
             # Timer generates via autoregressive decoding
             input_tensor = torch.tensor([target], dtype=torch.float32)
@@ -118,6 +116,7 @@ class TimerAdapter:
                 if "model" not in loaded:
                     model = AutoModelForCausalLM.from_pretrained(
                         repo_id,
+                        revision=revision,
                         trust_remote_code=True,
                     )
                     model.eval()
@@ -130,18 +129,16 @@ class TimerAdapter:
                 with torch.no_grad():
                     output = model.generate(input_tensor, max_new_tokens=request.horizon)
 
-                predicted = output[0, len(target):len(target) + request.horizon].tolist()
+                predicted = output[0, len(target) : len(target) + request.horizon].tolist()
             except Exception as exc:
-                raise ValueError(
-                    f"Timer inference failed for series {series.id!r}: {exc}"
-                ) from exc
+                raise ValueError(f"Timer inference failed for series {series.id!r}: {exc}") from exc
 
             # Pad if output is shorter than requested horizon
             if len(predicted) < request.horizon:
                 last_val = predicted[-1] if predicted else target[-1]
                 predicted.extend([last_val] * (request.horizon - len(predicted)))
 
-            mean_values = [round(float(v), 8) for v in predicted[:request.horizon]]
+            mean_values = [round(float(v), 8) for v in predicted[: request.horizon]]
 
             forecasts.append(
                 SeriesForecast(

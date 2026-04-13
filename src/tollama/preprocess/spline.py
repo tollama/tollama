@@ -120,9 +120,7 @@ class SplinePreprocessor:
         # Path 1: P-spline (scipy >= 1.11)
         if self.smoothing_method == "pspline":
             try:
-                make_smoothing_spline = getattr(
-                    interpolate_mod, "make_smoothing_spline", None
-                )
+                make_smoothing_spline = getattr(interpolate_mod, "make_smoothing_spline", None)
                 if make_smoothing_spline is not None:
                     self._spline = make_smoothing_spline(xv, yv)
                     self._fitted = True
@@ -143,9 +141,7 @@ class SplinePreprocessor:
                 # Filter knots to interior
                 knots = knots[(knots > xv[0]) & (knots < xv[-1])]
                 if len(knots) > 0:
-                    self._spline = interpolate_mod.LSQUnivariateSpline(
-                        xv, yv, knots, k=degree
-                    )
+                    self._spline = interpolate_mod.LSQUnivariateSpline(xv, yv, knots, k=degree)
                     self._fitted = True
                     return self
             except Exception:
@@ -163,9 +159,7 @@ class SplinePreprocessor:
                 logger.debug("UnivariateSpline failed, falling back to linear interp")
 
         # Path 4: Linear interpolation fallback
-        self._spline = interpolate_mod.interp1d(
-            xv, yv, kind="linear", fill_value="extrapolate"
-        )
+        self._spline = interpolate_mod.interp1d(xv, yv, kind="linear", fill_value="extrapolate")
         self._fitted = True
         return self
 

@@ -75,10 +75,7 @@ def validate_forecast_shape(payload: dict[str, Any] | None, *, horizon: int) -> 
         if not isinstance(mean, list):
             return f"forecasts[{index}].mean is missing"
         if len(mean) != horizon:
-            return (
-                f"forecasts[{index}].mean length mismatch: "
-                f"expected {horizon}, got {len(mean)}"
-            )
+            return f"forecasts[{index}].mean length mismatch: expected {horizon}, got {len(mean)}"
     return None
 
 

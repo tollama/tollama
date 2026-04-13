@@ -245,7 +245,7 @@ class PatchTSTAdapter:
             joined = ", ".join(sorted(set(missing_packages)))
             raise DependencyMissingError(
                 "missing optional patchtst runner dependencies "
-                f"({joined}); install them with `pip install -e \".[dev,runner_patchtst]\"`",
+                f'({joined}); install them with `pip install -e ".[dev,runner_patchtst]"`',
             )
 
         assert torch is not None
@@ -428,6 +428,7 @@ def _flatten_forecast_vector(value: Any) -> list[float]:
         value = value.numpy()
     if hasattr(value, "shape") and len(value.shape) >= 2:
         import numpy as np
+
         value = np.squeeze(value)
         if len(value.shape) >= 2:
             value = value[:, 0]
@@ -465,8 +466,7 @@ def _flatten_forecast_vector(value: Any) -> list[float]:
 def _cut_to_horizon(values: list[float], *, horizon: int, label: str) -> list[float]:
     if len(values) < horizon:
         raise AdapterInputError(
-            f"{label} output is shorter than requested horizon "
-            f"({len(values)} < {horizon})",
+            f"{label} output is shorter than requested horizon ({len(values)} < {horizon})",
         )
     return values[:horizon]
 

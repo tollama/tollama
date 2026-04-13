@@ -57,14 +57,10 @@ class ScenarioRationale:
             for i, details in enumerate(scenario_entries):
                 name = details.get("name", f"scenario_{i}")
                 rationale["n_scenarios"] += 1
-                rationale["scenarios"][name] = self._explain_scenario(
-                    name, details, {}
-                )
+                rationale["scenarios"][name] = self._explain_scenario(name, details, {})
 
         # Key drivers across scenarios
-        rationale["key_drivers"] = self._identify_key_drivers(
-            rationale["scenarios"]
-        )
+        rationale["key_drivers"] = self._identify_key_drivers(rationale["scenarios"])
 
         # Summary
         rationale["summary"] = self._generate_summary(rationale)
@@ -101,14 +97,12 @@ class ScenarioRationale:
             elif any(w in name.lower() for w in ["upside", "bull", "optimistic"]):
                 scenario_type = "upside"
                 rationale = (
-                    f"Upside case ({probability:.0%} probability): "
-                    f"favorable conditions materialize"
+                    f"Upside case ({probability:.0%} probability): favorable conditions materialize"
                 )
             elif any(w in name.lower() for w in ["downside", "bear", "pessimistic"]):
                 scenario_type = "downside"
                 rationale = (
-                    f"Downside case ({probability:.0%} probability): "
-                    f"adverse conditions materialize"
+                    f"Downside case ({probability:.0%} probability): adverse conditions materialize"
                 )
             else:
                 scenario_type = "alternative"
@@ -129,9 +123,7 @@ class ScenarioRationale:
 
         return {"name": name, "rationale": str(details)}
 
-    def _identify_key_drivers(
-        self, explained_scenarios: dict[str, dict]
-    ) -> list[dict[str, str]]:
+    def _identify_key_drivers(self, explained_scenarios: dict[str, dict]) -> list[dict[str, str]]:
         """Identify key drivers that differentiate scenarios."""
         drivers = []
 
@@ -143,10 +135,12 @@ class ScenarioRationale:
                     all_conditions.add(cond)
 
         for condition in list(all_conditions)[:5]:
-            drivers.append({
-                "driver": condition,
-                "impact": "Differentiates scenario outcomes",
-            })
+            drivers.append(
+                {
+                    "driver": condition,
+                    "impact": "Differentiates scenario outcomes",
+                }
+            )
 
         # Add probability spread driver
         probs = [
@@ -155,13 +149,15 @@ class ScenarioRationale:
             if s.get("probability") is not None
         ]
         if probs and max(probs) - min(probs) > 0.3:
-            drivers.append({
-                "driver": "High uncertainty spread",
-                "impact": (
-                    f"Probability range {min(probs):.0%}-{max(probs):.0%} "
-                    f"indicates significant outcome uncertainty"
-                ),
-            })
+            drivers.append(
+                {
+                    "driver": "High uncertainty spread",
+                    "impact": (
+                        f"Probability range {min(probs):.0%}-{max(probs):.0%} "
+                        f"indicates significant outcome uncertainty"
+                    ),
+                }
+            )
 
         return drivers
 
@@ -184,9 +180,7 @@ class ScenarioRationale:
                 dominant = name
 
         if dominant:
-            summary += (
-                f"Most likely: '{dominant}' ({highest_prob:.0%}). "
-            )
+            summary += f"Most likely: '{dominant}' ({highest_prob:.0%}). "
 
         if rationale["key_drivers"]:
             driver = rationale["key_drivers"][0]["driver"]

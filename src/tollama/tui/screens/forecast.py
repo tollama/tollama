@@ -15,6 +15,7 @@ try:
     from textual.screen import Screen
     from textual.widgets import Button, Input, Static, TextArea
 except Exception:  # pragma: no cover - optional dependency fallback
+
     class Screen:  # type: ignore[no-redef]
         pass
 

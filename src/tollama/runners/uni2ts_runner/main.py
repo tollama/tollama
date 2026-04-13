@@ -29,6 +29,7 @@ _FORECAST_REQUEST_FIELDS = frozenset(
     {"model", "horizon", "quantiles", "series", "options", "parameters"},
 )
 
+
 def _handle_hello(request: ProtocolRequest) -> ProtocolResponse:
     return ProtocolResponse(
         id=request.id,

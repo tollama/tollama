@@ -433,9 +433,9 @@ tollama/
   - `pytest -q` (heavy integration tests stay opt-in)
 - Incremental Python 3.11 CI quality gates now also run:
   - scoped `mypy`
-  - coverage report generation
+  - blocking coverage at the current `64%` baseline
   - `pre-commit run --all-files`
-  - `bandit -r src/tollama -x tests`
+  - `bandit -r src/tollama -x tests -ll`
   - `pip-audit`
   - compiled dev-lock freshness checks against `requirements-dev.lock`
   - checked-in `docs/openapi.json` export verification

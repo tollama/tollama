@@ -152,9 +152,7 @@ class TestAsyncTrustPipeline:
         ctx = {"domain": "test_domain"}
         payload = {"key": "value"}
 
-        result = asyncio.run(
-            router.analyze_async(context=ctx, payload=payload)
-        )
+        result = asyncio.run(router.analyze_async(context=ctx, payload=payload))
         assert result is not None
         assert result.trust_score == 0.85
         assert agent.call_count == 1
@@ -164,9 +162,7 @@ class TestAsyncTrustPipeline:
         ctx = {"domain": "test_domain"}
         payload = {"key": "value"}
 
-        result = asyncio.run(
-            router.analyze_multi_async(context=ctx, payload=payload)
-        )
+        result = asyncio.run(router.analyze_multi_async(context=ctx, payload=payload))
         assert result is not None
         assert result.trust_score == 0.85
 
@@ -174,9 +170,7 @@ class TestAsyncTrustPipeline:
         registry = TrustAgentRegistry()
         router = TrustRouter(registry)
 
-        result = asyncio.run(
-            router.analyze_async(context={"domain": "missing"}, payload={})
-        )
+        result = asyncio.run(router.analyze_async(context={"domain": "missing"}, payload={}))
         assert result is None
 
 
@@ -286,7 +280,10 @@ class TestTrustHistoryTracker:
     def test_record_with_metadata(self):
         tracker = TrustHistoryTracker()
         tracker.record(
-            "agent", "test", 0.8, "GREEN",
+            "agent",
+            "test",
+            0.8,
+            "GREEN",
             metadata={"request_id": "abc-123"},
         )
         history = tracker.get_history("test")

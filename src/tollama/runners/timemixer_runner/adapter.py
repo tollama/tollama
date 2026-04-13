@@ -81,19 +81,17 @@ class TimeMixerAdapter:
         try:
             import torch
         except ImportError as exc:
-            raise DependencyMissingError(
-                "TimeMixer runner requires torch and numpy"
-            ) from exc
+            raise DependencyMissingError("TimeMixer runner requires torch and numpy") from exc
 
         max_horizon = config.get("max_horizon", 720)
         if request.horizon > max_horizon:
             raise AdapterInputError(
-                f"requested horizon {request.horizon} exceeds "
-                f"TimeMixer max_horizon {max_horizon}"
+                f"requested horizon {request.horizon} exceeds TimeMixer max_horizon {max_horizon}"
             )
 
         max_context = config.get("max_context", 1536)
         repo_id = model_local_dir or config["repo_id"]
+        revision = None if model_local_dir else config.get("revision")
 
         forecasts: list[SeriesForecast] = []
         warnings: list[str] = []
@@ -102,9 +100,7 @@ class TimeMixerAdapter:
             target = [float(v) for v in series.target]
             if len(target) > max_context:
                 target = target[-max_context:]
-                warnings.append(
-                    f"series {series.id!r}: truncated to last {max_context} points"
-                )
+                warnings.append(f"series {series.id!r}: truncated to last {max_context} points")
 
             input_tensor = torch.tensor([target], dtype=torch.float32)
 
@@ -112,7 +108,12 @@ class TimeMixerAdapter:
                 loaded = self._loaded_models.get(model_name, {})
                 if "model" not in loaded:
                     from transformers import AutoModel
-                    model = AutoModel.from_pretrained(repo_id, trust_remote_code=True)
+
+                    model = AutoModel.from_pretrained(
+                        repo_id,
+                        revision=revision,
+                        trust_remote_code=True,
+                    )
                     model.eval()
                     if model_name not in self._loaded_models:
                         self._loaded_models[model_name] = {"config": config, "repo_id": repo_id}
@@ -126,7 +127,7 @@ class TimeMixerAdapter:
                 if hasattr(output, "predictions"):
                     predicted = output.predictions[0].tolist()
                 else:
-                    predicted = output[0, :request.horizon].tolist()
+                    predicted = output[0, : request.horizon].tolist()
             except Exception as exc:
                 raise ValueError(
                     f"TimeMixer inference failed for series {series.id!r}: {exc}"
@@ -136,7 +137,7 @@ class TimeMixerAdapter:
                 last_val = predicted[-1] if predicted else target[-1]
                 predicted.extend([last_val] * (request.horizon - len(predicted)))
 
-            mean_values = [round(float(v), 8) for v in predicted[:request.horizon]]
+            mean_values = [round(float(v), 8) for v in predicted[: request.horizon]]
 
             forecasts.append(
                 SeriesForecast(

@@ -25,8 +25,7 @@ from .supervisor import RunnerCallError, RunnerSupervisor, RunnerUnavailableErro
 logger = logging.getLogger(__name__)
 
 DEFAULT_RUNNER_COMMANDS: dict[str, tuple[str, ...]] = {
-    family: (sys.executable, "-m", module)
-    for family, module in FAMILY_RUNNER_MODULES.items()
+    family: (sys.executable, "-m", module) for family, module in FAMILY_RUNNER_MODULES.items()
 }
 
 UNIMPLEMENTED_FAMILIES = frozenset()
@@ -201,8 +200,7 @@ class RunnerManager:
                     )
                 except BootstrapError as exc:
                     logger.warning(
-                        "auto-bootstrap failed for family %r, falling back to "
-                        "default command: %s",
+                        "auto-bootstrap failed for family %r, falling back to default command: %s",
                         family,
                         exc,
                     )
@@ -236,7 +234,7 @@ class RunnerManager:
         return RunnerUnavailableError(
             "runner command "
             f"{config.command[0]!r} is not installed; install it with "
-            f"`pip install -e \".[dev,{extra_name}]\"`",
+            f'`pip install -e ".[dev,{extra_name}]"`',
         )
 
 
@@ -252,6 +250,5 @@ def _build_runner_configs(
             merged[family] = normalized
 
     return {
-        family: _RunnerConfig(family=family, command=command)
-        for family, command in merged.items()
+        family: _RunnerConfig(family=family, command=command) for family, command in merged.items()
     }

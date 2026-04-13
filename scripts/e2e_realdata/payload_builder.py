@@ -135,12 +135,10 @@ def build_mixed_calendar_covariates(
     use_hour_bucket = freq.strip().upper().startswith("H")
 
     past_numeric = [
-        float(_numeric_bucket(point, use_hour_bucket=use_hour_bucket))
-        for point in history
+        float(_numeric_bucket(point, use_hour_bucket=use_hour_bucket)) for point in history
     ]
     future_numeric = [
-        float(_numeric_bucket(point, use_hour_bucket=use_hour_bucket))
-        for point in future
+        float(_numeric_bucket(point, use_hour_bucket=use_hour_bucket)) for point in future
     ]
 
     past_categorical = [_calendar_label(point) for point in history]

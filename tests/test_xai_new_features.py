@@ -42,28 +42,32 @@ class TestGeopoliticalPayload:
 class TestGeopoliticalAgent:
     def test_green_for_stable_region(self):
         agent = GeopoliticalTrustAgent()
-        result = agent.analyze({
-            "region_id": "CH",
-            "political_stability": 0.9,
-            "sanctions_exposure": 0.05,
-            "conflict_proximity": 0.05,
-            "regulatory_alignment": 0.9,
-            "data_freshness": 0.95,
-        })
+        result = agent.analyze(
+            {
+                "region_id": "CH",
+                "political_stability": 0.9,
+                "sanctions_exposure": 0.05,
+                "conflict_proximity": 0.05,
+                "regulatory_alignment": 0.9,
+                "data_freshness": 0.95,
+            }
+        )
         assert result.risk_category == "GREEN"
         assert result.trust_score >= 0.75
         assert not result.violations
 
     def test_red_for_sanctioned_conflict_zone(self):
         agent = GeopoliticalTrustAgent()
-        result = agent.analyze({
-            "region_id": "CONFLICT-ZONE",
-            "political_stability": 0.1,
-            "sanctions_exposure": 0.85,
-            "conflict_proximity": 0.85,
-            "regulatory_alignment": 0.2,
-            "data_freshness": 0.5,
-        })
+        result = agent.analyze(
+            {
+                "region_id": "CONFLICT-ZONE",
+                "political_stability": 0.1,
+                "sanctions_exposure": 0.85,
+                "conflict_proximity": 0.85,
+                "regulatory_alignment": 0.2,
+                "data_freshness": 0.5,
+            }
+        )
         assert result.risk_category == "RED"
         critical_names = [v.name for v in result.violations if v.severity == "critical"]
         assert "sanctions_exposure_extreme" in critical_names
@@ -89,28 +93,32 @@ class TestRegulatoryPayload:
 class TestRegulatoryAgent:
     def test_green_for_compliant_entity(self):
         agent = RegulatoryTrustAgent()
-        result = agent.analyze({
-            "jurisdiction_id": "SEC-COMPLIANT",
-            "compliance_score": 0.9,
-            "enforcement_risk": 0.1,
-            "reporting_quality": 0.85,
-            "audit_recency": 0.9,
-            "data_freshness": 0.95,
-        })
+        result = agent.analyze(
+            {
+                "jurisdiction_id": "SEC-COMPLIANT",
+                "compliance_score": 0.9,
+                "enforcement_risk": 0.1,
+                "reporting_quality": 0.85,
+                "audit_recency": 0.9,
+                "data_freshness": 0.95,
+            }
+        )
         assert result.risk_category == "GREEN"
         assert result.trust_score >= 0.75
         assert not result.violations
 
     def test_red_for_noncompliant_entity(self):
         agent = RegulatoryTrustAgent()
-        result = agent.analyze({
-            "jurisdiction_id": "NONCOMPLIANT",
-            "compliance_score": 0.1,
-            "enforcement_risk": 0.9,
-            "reporting_quality": 0.15,
-            "audit_recency": 0.05,
-            "data_freshness": 0.5,
-        })
+        result = agent.analyze(
+            {
+                "jurisdiction_id": "NONCOMPLIANT",
+                "compliance_score": 0.1,
+                "enforcement_risk": 0.9,
+                "reporting_quality": 0.15,
+                "audit_recency": 0.05,
+                "data_freshness": 0.5,
+            }
+        )
         assert result.risk_category == "RED"
         critical_names = [v.name for v in result.violations if v.severity == "critical"]
         assert "compliance_critical" in critical_names

@@ -29,9 +29,7 @@ def recommend_models(
     include_model_set: set[str] | None = None
     if include_models is not None:
         include_model_set = {
-            item.strip()
-            for item in include_models
-            if isinstance(item, str) and item.strip()
+            item.strip() for item in include_models if isinstance(item, str) and item.strip()
         }
         if not include_model_set:
             raise ValueError("include_models must include at least one model name")

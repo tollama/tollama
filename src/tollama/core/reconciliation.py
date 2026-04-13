@@ -207,9 +207,7 @@ def reconcile(
     # Validate that we have at least the bottom-level series.
     missing_leaves = [lid for lid in leaf_ids if lid not in fc_map]
     if method == "bottom_up" and missing_leaves:
-        raise ReconciliationError(
-            f"bottom_up requires all leaf series; missing: {missing_leaves}"
-        )
+        raise ReconciliationError(f"bottom_up requires all leaf series; missing: {missing_leaves}")
 
     # Determine horizon from first available hierarchy series.
     horizon: int | None = None
@@ -244,7 +242,12 @@ def reconcile(
 
     elif method == "top_down":
         reconciled = _top_down(
-            y_hat, s_matrix, spec, all_ids, leaf_ids, proportions,
+            y_hat,
+            s_matrix,
+            spec,
+            all_ids,
+            leaf_ids,
+            proportions,
         )
         warnings.append("reconciliation: top_down applied")
 
@@ -338,9 +341,7 @@ def _top_down(
     # Validate proportions cover all leaves.
     missing = [lid for lid in leaf_ids if lid not in proportions]
     if missing:
-        raise ReconciliationError(
-            f"top_down proportions missing for leaves: {missing}"
-        )
+        raise ReconciliationError(f"top_down proportions missing for leaves: {missing}")
 
     # Disaggregate each root's forecast to its descendant leaves.
     bottom_reconciled = np.zeros((n_bottom, horizon), dtype=np.float64)
@@ -349,10 +350,7 @@ def _top_down(
         root_row = id_to_row[root_id]
         root_forecast = y_hat[root_row, :]
         # Find all leaves that are descendants of this root.
-        root_leaves = [
-            lid for lid in leaf_ids
-            if s_matrix[root_row, leaf_to_col[lid]] > 0
-        ]
+        root_leaves = [lid for lid in leaf_ids if s_matrix[root_row, leaf_to_col[lid]] > 0]
         for lid in root_leaves:
             col = leaf_to_col[lid]
             bottom_reconciled[col, :] = root_forecast * proportions[lid]
@@ -424,9 +422,7 @@ def _mint_shrink(y_hat: np.ndarray, s_matrix: np.ndarray) -> np.ndarray:
     # Estimate residuals as deviation from S @ bottom_hat.
     n_bottom = s_matrix.shape[1]
     # Extract bottom rows: they correspond to rows where S has a single 1.
-    bottom_mask = np.array(
-        [np.count_nonzero(s_matrix[i, :]) == 1 for i in range(n_all)]
-    )
+    bottom_mask = np.array([np.count_nonzero(s_matrix[i, :]) == 1 for i in range(n_all)])
     bottom_rows = np.where(bottom_mask)[0]
     if len(bottom_rows) != n_bottom:
         # Fallback: just pick the last n_bottom rows.
@@ -439,9 +435,7 @@ def _mint_shrink(y_hat: np.ndarray, s_matrix: np.ndarray) -> np.ndarray:
     # Shrinkage covariance estimator (Ledoit-Wolf target: diagonal).
     if horizon < 2:
         # Not enough data for covariance estimation; fall back to OLS.
-        logger.warning(
-            "mint_shrink: horizon < 2, falling back to OLS reconciliation"
-        )
+        logger.warning("mint_shrink: horizon < 2, falling back to OLS reconciliation")
         return _ols(y_hat, s_matrix)
 
     sample_cov = np.cov(residuals, rowvar=True)  # (n_all, n_all)
@@ -492,7 +486,7 @@ def _ledoit_wolf_shrinkage(
 
     # Sum of squared off-diagonal elements of sample_cov.
     delta = sample_cov - target
-    num = float(np.sum(delta ** 2))
+    num = float(np.sum(delta**2))
 
     if num < 1e-12:
         return 0.0
@@ -503,7 +497,7 @@ def _ledoit_wolf_shrinkage(
     for t in range(horizon):
         x_t = centred[:, t : t + 1]
         m_t = x_t @ x_t.T - sample_cov
-        pi_hat += float(np.sum(m_t ** 2))
+        pi_hat += float(np.sum(m_t**2))
 
     shrinkage = pi_hat / denom
     return float(np.clip(shrinkage, 0.0, 1.0))
@@ -564,9 +558,7 @@ def check_coherency(
         diff = np.abs(parent_vals - child_sum)
         max_diff = float(np.max(diff))
         if max_diff > tolerance:
-            violating_steps = [
-                int(i) for i in range(len(diff)) if diff[i] > tolerance
-            ]
+            violating_steps = [int(i) for i in range(len(diff)) if diff[i] > tolerance]
             violations.append(
                 f"{parent_id!r} != sum of children at steps {violating_steps} "
                 f"(max diff={max_diff:.6g})"

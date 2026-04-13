@@ -36,9 +36,7 @@ def build_agent_card(context: AgentCardContext) -> dict[str, object]:
                 "data quality before forecasting."
             ),
             tags=("analysis", "diagnostics", "timeseries"),
-            examples=(
-                "Analyze this historical series and summarize risks before forecasting.",
-            ),
+            examples=("Analyze this historical series and summarize risks before forecasting.",),
         ),
         _skill(
             skill_id="recommend",
@@ -59,9 +57,7 @@ def build_agent_card(context: AgentCardContext) -> dict[str, object]:
                 "historical input."
             ),
             tags=("generation", "simulation", "timeseries"),
-            examples=(
-                "Generate 5 synthetic weekly sales series using statistical method.",
-            ),
+            examples=("Generate 5 synthetic weekly sales series using statistical method.",),
         ),
     ]
 
@@ -73,9 +69,7 @@ def build_agent_card(context: AgentCardContext) -> dict[str, object]:
                     name="Forecast",
                     description="Generate forecasts for one model.",
                     tags=("forecast", "timeseries"),
-                    examples=(
-                        f"Forecast horizon 12 using model {model_example}.",
-                    ),
+                    examples=(f"Forecast horizon 12 using model {model_example}.",),
                 ),
                 _skill(
                     skill_id="auto_forecast",
@@ -84,18 +78,14 @@ def build_agent_card(context: AgentCardContext) -> dict[str, object]:
                         "Run model auto-selection and forecasting with optional ensemble strategy."
                     ),
                     tags=("auto-forecast", "model-selection", "timeseries"),
-                    examples=(
-                        "Auto-forecast horizon 24 with fallback enabled.",
-                    ),
+                    examples=("Auto-forecast horizon 24 with fallback enabled.",),
                 ),
                 _skill(
                     skill_id="compare",
                     name="Compare Models",
                     description="Run side-by-side forecasts across multiple models.",
                     tags=("compare", "evaluation", "timeseries"),
-                    examples=(
-                        "Compare mock and chronos2 for horizon 7 on the same series.",
-                    ),
+                    examples=("Compare mock and chronos2 for horizon 7 on the same series.",),
                 ),
                 _skill(
                     skill_id="what_if",
@@ -105,9 +95,7 @@ def build_agent_card(context: AgentCardContext) -> dict[str, object]:
                         "forecast outcomes."
                     ),
                     tags=("scenario", "simulation", "timeseries"),
-                    examples=(
-                        "Run a +10% demand scenario against the baseline forecast.",
-                    ),
+                    examples=("Run a +10% demand scenario against the baseline forecast.",),
                 ),
                 _skill(
                     skill_id="pipeline",
@@ -117,9 +105,7 @@ def build_agent_card(context: AgentCardContext) -> dict[str, object]:
                         "in one task."
                     ),
                     tags=("pipeline", "automation", "timeseries"),
-                    examples=(
-                        "Run full pipeline for horizon 30 with pull_if_missing=true.",
-                    ),
+                    examples=("Run full pipeline for horizon 30 with pull_if_missing=true.",),
                 ),
             ],
         )

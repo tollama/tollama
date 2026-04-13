@@ -35,8 +35,7 @@ def test_recommend_models_prefers_categorical_covariate_support() -> None:
     assert payload["recommendations"]
     assert payload["recommendations"][0]["model"] == "chronos2"
     assert all(
-        "categorical" in " ".join(item["reasons"])
-        for item in payload["recommendations"][:1]
+        "categorical" in " ".join(item["reasons"]) for item in payload["recommendations"][:1]
     )
 
 

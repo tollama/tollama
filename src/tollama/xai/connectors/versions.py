@@ -40,26 +40,36 @@ class CompatibilityResult:
 # When an agent bumps its formula_version in a breaking way, add the new
 # version here *and* keep the old one during the backward-compatible period.
 SUPPORTED_FORMULA_VERSIONS: dict[str, frozenset[str]] = {
-    "news_agent": frozenset({
-        "news-v1",
-        "news-v2",
-    }),
-    "financial_agent": frozenset({
-        "financial-v1",
-        "financial-v2",
-    }),
-    "market_calibration": frozenset({
-        "mc-v1",
-        "mc-v2",
-    }),
+    "news_agent": frozenset(
+        {
+            "news-v1",
+            "news-v2",
+        }
+    ),
+    "financial_agent": frozenset(
+        {
+            "financial-v1",
+            "financial-v2",
+        }
+    ),
+    "market_calibration": frozenset(
+        {
+            "mc-v1",
+            "mc-v2",
+        }
+    ),
     # Degraded results produced by the router itself
-    "_degraded": frozenset({
-        "degraded-v1",
-    }),
+    "_degraded": frozenset(
+        {
+            "degraded-v1",
+        }
+    ),
     # Multi-agent aggregate results
-    "_aggregate": frozenset({
-        "aggregate-v1",
-    }),
+    "_aggregate": frozenset(
+        {
+            "aggregate-v1",
+        }
+    ),
 }
 
 # Minimum agent_version tollama requires for each agent.
@@ -118,8 +128,7 @@ def check_compatibility(
             return CompatibilityResult(
                 compatible=False,
                 message=(
-                    f"Agent {agent_name!r} version {agent_version!r} "
-                    f"is below minimum {min_ver!r}."
+                    f"Agent {agent_name!r} version {agent_version!r} is below minimum {min_ver!r}."
                 ),
                 agent_name=agent_name,
                 formula_version=formula_version,

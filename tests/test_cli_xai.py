@@ -40,14 +40,10 @@ class TestXaiExplainDecision:
         fake_result = {"explanation_id": "test-1", "version": "1.0"}
 
         runner = _new_runner()
-        with patch(
-            "tollama.cli.main._make_client"
-        ) as mock_client_factory:
+        with patch("tollama.cli.main._make_client") as mock_client_factory:
             mock_client = mock_client_factory.return_value
             mock_client.explain_decision.return_value = fake_result
-            result = runner.invoke(
-                app, ["xai", "explain-decision", "--input", str(input_file)]
-            )
+            result = runner.invoke(app, ["xai", "explain-decision", "--input", str(input_file)])
 
         assert result.exit_code == 0
         output = json.loads(_result_stdout(result))
@@ -55,9 +51,7 @@ class TestXaiExplainDecision:
 
     def test_missing_input_file(self):
         runner = _new_runner()
-        result = runner.invoke(
-            app, ["xai", "explain-decision", "--input", "/tmp/nonexistent.json"]
-        )
+        result = runner.invoke(app, ["xai", "explain-decision", "--input", "/tmp/nonexistent.json"])
         assert result.exit_code != 0
 
     def test_daemon_error(self, tmp_path: Path):
@@ -66,14 +60,10 @@ class TestXaiExplainDecision:
         input_file.write_text(json.dumps(payload))
 
         runner = _new_runner()
-        with patch(
-            "tollama.cli.main._make_client"
-        ) as mock_client_factory:
+        with patch("tollama.cli.main._make_client") as mock_client_factory:
             mock_client = mock_client_factory.return_value
             mock_client.explain_decision.side_effect = RuntimeError("daemon down")
-            result = runner.invoke(
-                app, ["xai", "explain-decision", "--input", str(input_file)]
-            )
+            result = runner.invoke(app, ["xai", "explain-decision", "--input", str(input_file)])
 
         assert result.exit_code != 0
 
@@ -94,14 +84,10 @@ class TestXaiTrustScore:
         fake_result = {"overall_score": 0.75, "components": {}}
 
         runner = _new_runner()
-        with patch(
-            "tollama.cli.main._make_client"
-        ) as mock_client_factory:
+        with patch("tollama.cli.main._make_client") as mock_client_factory:
             mock_client = mock_client_factory.return_value
             mock_client.trust_breakdown.return_value = fake_result
-            result = runner.invoke(
-                app, ["xai", "trust-score", "--input", str(input_file)]
-            )
+            result = runner.invoke(app, ["xai", "trust-score", "--input", str(input_file)])
 
         assert result.exit_code == 0
         output = json.loads(_result_stdout(result))
@@ -113,14 +99,10 @@ class TestXaiTrustScore:
         input_file.write_text(json.dumps(payload))
 
         runner = _new_runner()
-        with patch(
-            "tollama.cli.main._make_client"
-        ) as mock_client_factory:
+        with patch("tollama.cli.main._make_client") as mock_client_factory:
             mock_client = mock_client_factory.return_value
             mock_client.trust_breakdown.side_effect = RuntimeError("fail")
-            result = runner.invoke(
-                app, ["xai", "trust-score", "--input", str(input_file)]
-            )
+            result = runner.invoke(app, ["xai", "trust-score", "--input", str(input_file)])
 
         assert result.exit_code != 0
 
@@ -137,14 +119,10 @@ class TestXaiModelCard:
         fake_result = {"model_name": "mock", "sections": []}
 
         runner = _new_runner()
-        with patch(
-            "tollama.cli.main._make_client"
-        ) as mock_client_factory:
+        with patch("tollama.cli.main._make_client") as mock_client_factory:
             mock_client = mock_client_factory.return_value
             mock_client.model_card.return_value = fake_result
-            result = runner.invoke(
-                app, ["xai", "model-card", "--input", str(input_file)]
-            )
+            result = runner.invoke(app, ["xai", "model-card", "--input", str(input_file)])
 
         assert result.exit_code == 0
         output = json.loads(_result_stdout(result))
@@ -158,9 +136,7 @@ class TestXaiModelCard:
         fake_result = {"content": "# Model Card\n\nMock model."}
 
         runner = _new_runner()
-        with patch(
-            "tollama.cli.main._make_client"
-        ) as mock_client_factory:
+        with patch("tollama.cli.main._make_client") as mock_client_factory:
             mock_client = mock_client_factory.return_value
             mock_client.model_card.return_value = fake_result
             result = runner.invoke(
@@ -177,14 +153,10 @@ class TestXaiModelCard:
         input_file.write_text(json.dumps(payload))
 
         runner = _new_runner()
-        with patch(
-            "tollama.cli.main._make_client"
-        ) as mock_client_factory:
+        with patch("tollama.cli.main._make_client") as mock_client_factory:
             mock_client = mock_client_factory.return_value
             mock_client.model_card.side_effect = RuntimeError("fail")
-            result = runner.invoke(
-                app, ["xai", "model-card", "--input", str(input_file)]
-            )
+            result = runner.invoke(app, ["xai", "model-card", "--input", str(input_file)])
 
         assert result.exit_code != 0
 

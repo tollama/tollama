@@ -387,7 +387,7 @@ class TotoAdapter:
             joined = ", ".join(sorted(set(missing_packages)))
             raise DependencyMissingError(
                 "missing optional toto runner dependencies "
-                f"({joined}); install them with `pip install -e \".[dev,runner_toto]\"`",
+                f'({joined}); install them with `pip install -e ".[dev,runner_toto]"`',
             )
 
         assert torch is not None
@@ -1148,7 +1148,7 @@ def _call_from_pretrained(
     if not callable(from_pretrained):
         raise DependencyMissingError(
             "toto-ts Toto class does not expose from_pretrained; "
-            "install with `pip install -e \".[dev,runner_toto]\"`",
+            'install with `pip install -e ".[dev,runner_toto]"`',
         )
 
     resolved_kwargs = dict(kwargs)

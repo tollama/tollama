@@ -6,12 +6,7 @@ import sys
 from importlib.util import module_from_spec, spec_from_file_location
 from pathlib import Path
 
-_MODULE_PATH = (
-    Path(__file__).resolve().parents[1]
-    / "scripts"
-    / "e2e_realdata"
-    / "model_policy.py"
-)
+_MODULE_PATH = Path(__file__).resolve().parents[1] / "scripts" / "e2e_realdata" / "model_policy.py"
 _MODULE_SPEC = spec_from_file_location("scripts_e2e_realdata_model_policy", _MODULE_PATH)
 assert _MODULE_SPEC is not None and _MODULE_SPEC.loader is not None
 _MODULE = module_from_spec(_MODULE_SPEC)

@@ -7,6 +7,7 @@ from collections.abc import Iterable
 try:
     from textual.widgets import DataTable
 except Exception:  # pragma: no cover - optional dependency fallback
+
     class DataTable:  # type: ignore[no-redef]
         pass
 

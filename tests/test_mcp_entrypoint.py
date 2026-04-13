@@ -36,7 +36,7 @@ def test_main_exits_with_install_hint_on_runtime_error(monkeypatch, capsys) -> N
 
     captured = capsys.readouterr()
     assert exc_info.value.code == 1
-    assert "pip install \"tollama[mcp]\"" in captured.err
+    assert 'pip install "tollama[mcp]"' in captured.err
 
 
 def test_create_server_registers_descriptions_for_all_tools(monkeypatch) -> None:

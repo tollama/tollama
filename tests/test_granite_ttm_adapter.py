@@ -34,10 +34,7 @@ class _FakeDataFrame:
         if isinstance(payload, dict):
             keys = list(payload.keys())
             length = len(next(iter(payload.values()))) if payload else 0
-            self._rows = [
-                {key: payload[key][index] for key in keys}
-                for index in range(length)
-            ]
+            self._rows = [{key: payload[key][index] for key in keys} for index in range(length)]
         else:
             self._rows = [dict(row) for row in payload]
 

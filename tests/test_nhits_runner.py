@@ -62,7 +62,7 @@ class _MissingDependencyAdapter(_CapturingAdapter):
         del request, model_local_dir, model_source, model_metadata
         raise DependencyMissingError(
             "missing optional nhits runner dependencies (neuralforecast); "
-            "install them with `pip install -e \".[dev,runner_nhits]\"`",
+            'install them with `pip install -e ".[dev,runner_nhits]"`',
         )
 
 

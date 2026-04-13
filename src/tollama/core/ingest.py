@@ -61,8 +61,7 @@ def load_series_inputs_from_data_url(
     if scheme in {"http", "https"}:
         if not allow_remote:
             raise IngestError(
-                "remote data_url is disabled for security reasons; "
-                "use a local path or file:// URL",
+                "remote data_url is disabled for security reasons; use a local path or file:// URL",
             )
         return _load_series_inputs_from_remote_url(
             data_url,
@@ -266,7 +265,7 @@ def _read_parquet(path_or_buffer: Any) -> pd.DataFrame:
     except ImportError as exc:
         raise IngestDependencyError(
             "parquet support requires optional dependency (pyarrow or fastparquet); "
-            "install with `pip install -e \".[ingest]\"`",
+            'install with `pip install -e ".[ingest]"`',
         ) from exc
 
 
@@ -282,9 +281,7 @@ def _resolve_target_column(
         return candidate
 
     excluded = {
-        column
-        for column in (timestamp_column, series_id_column, freq_column)
-        if column is not None
+        column for column in (timestamp_column, series_id_column, freq_column) if column is not None
     }
     numeric_candidates = [
         column

@@ -61,7 +61,7 @@ class _MissingDependencyAdapter(_CapturingAdapter):
         del request, model_local_dir, model_source, model_metadata
         raise DependencyMissingError(
             "missing optional lag-llama runner dependencies (lag_llama); "
-            "install them with `pip install -e \".[dev,runner_lag_llama]\"`",
+            'install them with `pip install -e ".[dev,runner_lag_llama]"`',
         )
 
 

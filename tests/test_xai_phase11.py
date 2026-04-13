@@ -29,7 +29,9 @@ def client() -> TestClient:
 
 
 def _make_stub_agent(
-    name: str, domain: str, score: float = 0.7,
+    name: str,
+    domain: str,
+    score: float = 0.7,
 ) -> Any:
     """Create a minimal stub trust agent."""
     agent = MagicMock()
@@ -41,45 +43,47 @@ def _make_stub_agent(
         return context.get("domain") == domain
 
     agent.supports = _supports
-    agent.analyze = MagicMock(return_value={
-        "agent_name": name,
-        "domain": domain,
-        "trust_score": score,
-        "risk_category": "GREEN",
-        "calibration_status": "moderate_trust",
-        "component_breakdown": {
-            "accuracy": {
-                "name": "accuracy",
-                "weight": 0.4,
-                "score": score,
-                "details": "stub",
+    agent.analyze = MagicMock(
+        return_value={
+            "agent_name": name,
+            "domain": domain,
+            "trust_score": score,
+            "risk_category": "GREEN",
+            "calibration_status": "moderate_trust",
+            "component_breakdown": {
+                "accuracy": {
+                    "name": "accuracy",
+                    "weight": 0.4,
+                    "score": score,
+                    "details": "stub",
+                },
+                "freshness": {
+                    "name": "freshness",
+                    "weight": 0.3,
+                    "score": 0.9,
+                    "details": "stub",
+                },
+                "consistency": {
+                    "name": "consistency",
+                    "weight": 0.3,
+                    "score": 0.6,
+                    "details": "stub",
+                },
             },
-            "freshness": {
-                "name": "freshness",
-                "weight": 0.3,
-                "score": 0.9,
-                "details": "stub",
+            "violations": [],
+            "why_trusted": f"Stub agent {name}",
+            "evidence": {
+                "source_type": "stub",
+                "source_ids": [f"{name}-001"],
+                "payload_schema": "stub_v1",
+                "attributes": {},
             },
-            "consistency": {
-                "name": "consistency",
-                "weight": 0.3,
-                "score": 0.6,
-                "details": "stub",
+            "audit": {
+                "formula_version": "stub-v1",
+                "agent_version": "0.1.0",
             },
-        },
-        "violations": [],
-        "why_trusted": f"Stub agent {name}",
-        "evidence": {
-            "source_type": "stub",
-            "source_ids": [f"{name}-001"],
-            "payload_schema": "stub_v1",
-            "attributes": {},
-        },
-        "audit": {
-            "formula_version": "stub-v1",
-            "agent_version": "0.1.0",
-        },
-    })
+        }
+    )
     return agent
 
 
@@ -96,13 +100,22 @@ def _make_trust_result(
         calibration_status="moderate_trust",
         component_breakdown={
             "accuracy": TrustComponent(
-                name="accuracy", weight=0.4, score=0.8, details="test",
+                name="accuracy",
+                weight=0.4,
+                score=0.8,
+                details="test",
             ),
             "freshness": TrustComponent(
-                name="freshness", weight=0.3, score=0.9, details="test",
+                name="freshness",
+                weight=0.3,
+                score=0.9,
+                details="test",
             ),
             "consistency": TrustComponent(
-                name="consistency", weight=0.3, score=0.6, details="test",
+                name="consistency",
+                weight=0.3,
+                score=0.6,
+                details="test",
             ),
         },
         violations=violations or [],
@@ -174,7 +187,9 @@ class TestGateDecision:
             risk="GREEN",
             violations=[
                 TrustViolation(
-                    name="data_gap", severity="critical", detail="missing data",
+                    name="data_gap",
+                    severity="critical",
+                    detail="missing data",
                 ),
             ],
         )
@@ -193,21 +208,27 @@ class TestGateDecision:
 
 class TestGateDecisionEndpoint:
     def test_gate_decision_endpoint(self, client: TestClient) -> None:
-        resp = client.post("/api/xai/gate-decision", json={
-            "context": {"domain": "financial_market"},
-            "payload": {"instrument_id": "AAPL"},
-            "trust_threshold": 0.3,
-        })
+        resp = client.post(
+            "/api/xai/gate-decision",
+            json={
+                "context": {"domain": "financial_market"},
+                "payload": {"instrument_id": "AAPL"},
+                "trust_threshold": 0.3,
+            },
+        )
         assert resp.status_code == 200
         body = resp.json()
         assert "allowed" in body
         assert "gates" in body
 
     def test_gate_decision_no_agent(self, client: TestClient) -> None:
-        resp = client.post("/api/xai/gate-decision", json={
-            "context": {"domain": "nonexistent_domain"},
-            "payload": {},
-        })
+        resp = client.post(
+            "/api/xai/gate-decision",
+            json={
+                "context": {"domain": "nonexistent_domain"},
+                "payload": {},
+            },
+        )
         assert resp.status_code == 200
         body = resp.json()
         assert body["allowed"] is False
@@ -230,12 +251,14 @@ class TestConnectorFedAnalysis:
         connector = MagicMock()
         connector.connector_name = "test_connector"
         connector.domain = "financial_market"
-        connector.fetch = MagicMock(return_value=ConnectorResult(
-            domain="financial_market",
-            payload={"instrument_id": "AAPL", "price": 150.0},
-            source_id="test-001",
-            source_type="mock",
-        ))
+        connector.fetch = MagicMock(
+            return_value=ConnectorResult(
+                domain="financial_market",
+                payload={"instrument_id": "AAPL", "price": 150.0},
+                source_id="test-001",
+                source_type="mock",
+            )
+        )
 
         result = router.analyze_with_connector(
             connector=connector,
@@ -259,13 +282,15 @@ class TestConnectorFedAnalysis:
         connector = MagicMock()
         connector.connector_name = "failing_connector"
         connector.domain = "financial_market"
-        connector.fetch = MagicMock(side_effect=ConnectorFetchError(
-            ConnectorError(
-                domain="financial_market",
-                error_type="timeout",
-                message="request timed out",
-            ),
-        ))
+        connector.fetch = MagicMock(
+            side_effect=ConnectorFetchError(
+                ConnectorError(
+                    domain="financial_market",
+                    error_type="timeout",
+                    message="request timed out",
+                ),
+            )
+        )
 
         result = router.analyze_with_connector(
             connector=connector,
@@ -314,20 +339,26 @@ class TestTrustFeatureAttribution:
 
 class TestTrustAttributionEndpoint:
     def test_trust_attribution_endpoint(self, client: TestClient) -> None:
-        resp = client.post("/api/xai/trust-attribution", json={
-            "context": {"domain": "financial_market"},
-            "payload": {"instrument_id": "AAPL"},
-        })
+        resp = client.post(
+            "/api/xai/trust-attribution",
+            json={
+                "context": {"domain": "financial_market"},
+                "payload": {"instrument_id": "AAPL"},
+            },
+        )
         assert resp.status_code == 200
         body = resp.json()
         assert "attributions" in body
         assert "total_score" in body
 
     def test_trust_attribution_no_agent(self, client: TestClient) -> None:
-        resp = client.post("/api/xai/trust-attribution", json={
-            "context": {"domain": "nonexistent"},
-            "payload": {},
-        })
+        resp = client.post(
+            "/api/xai/trust-attribution",
+            json={
+                "context": {"domain": "nonexistent"},
+                "payload": {},
+            },
+        )
         assert resp.status_code == 404
 
 
@@ -338,27 +369,39 @@ class TestTrustAttributionEndpoint:
 
 class TestBatchAnalyzeEndpoint:
     def test_batch_analyze_single(self, client: TestClient) -> None:
-        resp = client.post("/api/xai/batch-analyze", json={
-            "items": [
-                {
-                    "context": {"domain": "financial_market"},
-                    "payload": {"instrument_id": "AAPL"},
-                },
-            ],
-        })
+        resp = client.post(
+            "/api/xai/batch-analyze",
+            json={
+                "items": [
+                    {
+                        "context": {"domain": "financial_market"},
+                        "payload": {"instrument_id": "AAPL"},
+                    },
+                ],
+            },
+        )
         assert resp.status_code == 200
         body = resp.json()
         assert body["count"] == 1
         assert body["results"][0]["status"] == "ok"
 
     def test_batch_analyze_multiple(self, client: TestClient) -> None:
-        resp = client.post("/api/xai/batch-analyze", json={
-            "items": [
-                {"context": {"domain": "financial_market"}, "payload": {"instrument_id": "AAPL"}},
-                {"context": {"domain": "financial_market"}, "payload": {"instrument_id": "MSFT"}},
-                {"context": {"domain": "nonexistent"}, "payload": {}},
-            ],
-        })
+        resp = client.post(
+            "/api/xai/batch-analyze",
+            json={
+                "items": [
+                    {
+                        "context": {"domain": "financial_market"},
+                        "payload": {"instrument_id": "AAPL"},
+                    },
+                    {
+                        "context": {"domain": "financial_market"},
+                        "payload": {"instrument_id": "MSFT"},
+                    },
+                    {"context": {"domain": "nonexistent"}, "payload": {}},
+                ],
+            },
+        )
         assert resp.status_code == 200
         body = resp.json()
         assert body["count"] == 3
@@ -371,11 +414,14 @@ class TestBatchAnalyzeEndpoint:
         assert resp.status_code in (400, 422)
 
     def test_batch_result_has_trust_fields(self, client: TestClient) -> None:
-        resp = client.post("/api/xai/batch-analyze", json={
-            "items": [
-                {"context": {"domain": "financial_market"}, "payload": {"instrument_id": "X"}},
-            ],
-        })
+        resp = client.post(
+            "/api/xai/batch-analyze",
+            json={
+                "items": [
+                    {"context": {"domain": "financial_market"}, "payload": {"instrument_id": "X"}},
+                ],
+            },
+        )
         body = resp.json()
         r = body["results"][0]["result"]
         assert "trust_score" in r
@@ -390,15 +436,18 @@ class TestBatchAnalyzeEndpoint:
 
 class TestAlertConfiguration:
     def test_configure_alerts(self, client: TestClient) -> None:
-        resp = client.post("/api/xai/alerts/configure", json={
-            "thresholds": [
-                {
-                    "domain": "financial_market",
-                    "min_trust_score": 0.8,
-                    "risk_categories": ["RED"],
-                },
-            ],
-        })
+        resp = client.post(
+            "/api/xai/alerts/configure",
+            json={
+                "thresholds": [
+                    {
+                        "domain": "financial_market",
+                        "min_trust_score": 0.8,
+                        "risk_categories": ["RED"],
+                    },
+                ],
+            },
+        )
         assert resp.status_code == 200
         body = resp.json()
         assert body["status"] == "configured"
@@ -406,11 +455,14 @@ class TestAlertConfiguration:
 
     def test_get_alert_config(self, client: TestClient) -> None:
         # Configure first
-        client.post("/api/xai/alerts/configure", json={
-            "thresholds": [
-                {"domain": "financial_market", "min_trust_score": 0.9},
-            ],
-        })
+        client.post(
+            "/api/xai/alerts/configure",
+            json={
+                "thresholds": [
+                    {"domain": "financial_market", "min_trust_score": 0.9},
+                ],
+            },
+        )
         resp = client.get("/api/xai/alerts/config")
         assert resp.status_code == 200
         body = resp.json()
@@ -418,19 +470,25 @@ class TestAlertConfiguration:
 
     def test_check_alerts_triggers(self, client: TestClient) -> None:
         # Configure a very high threshold that should trigger
-        client.post("/api/xai/alerts/configure", json={
-            "thresholds": [
-                {
-                    "domain": "financial_market",
-                    "min_trust_score": 0.99,
-                    "risk_categories": ["RED", "YELLOW"],
-                },
-            ],
-        })
-        resp = client.post("/api/xai/alerts/check", json={
-            "context": {"domain": "financial_market"},
-            "payload": {"instrument_id": "AAPL"},
-        })
+        client.post(
+            "/api/xai/alerts/configure",
+            json={
+                "thresholds": [
+                    {
+                        "domain": "financial_market",
+                        "min_trust_score": 0.99,
+                        "risk_categories": ["RED", "YELLOW"],
+                    },
+                ],
+            },
+        )
+        resp = client.post(
+            "/api/xai/alerts/check",
+            json={
+                "context": {"domain": "financial_market"},
+                "payload": {"instrument_id": "AAPL"},
+            },
+        )
         assert resp.status_code == 200
         body = resp.json()
         assert body["alert_count"] >= 1
@@ -439,32 +497,44 @@ class TestAlertConfiguration:
 
     def test_check_alerts_no_trigger(self, client: TestClient) -> None:
         # Configure a very low threshold that shouldn't trigger
-        client.post("/api/xai/alerts/configure", json={
-            "thresholds": [
-                {
-                    "domain": "financial_market",
-                    "min_trust_score": 0.01,
-                    "risk_categories": [],
-                },
-            ],
-        })
-        resp = client.post("/api/xai/alerts/check", json={
-            "context": {"domain": "financial_market"},
-            "payload": {"instrument_id": "AAPL"},
-        })
+        client.post(
+            "/api/xai/alerts/configure",
+            json={
+                "thresholds": [
+                    {
+                        "domain": "financial_market",
+                        "min_trust_score": 0.01,
+                        "risk_categories": [],
+                    },
+                ],
+            },
+        )
+        resp = client.post(
+            "/api/xai/alerts/check",
+            json={
+                "context": {"domain": "financial_market"},
+                "payload": {"instrument_id": "AAPL"},
+            },
+        )
         assert resp.status_code == 200
         body = resp.json()
         assert body["alert_count"] == 0
 
     def test_check_alerts_no_matching_domain(self, client: TestClient) -> None:
-        client.post("/api/xai/alerts/configure", json={
-            "thresholds": [
-                {"domain": "nonexistent", "min_trust_score": 0.99},
-            ],
-        })
-        resp = client.post("/api/xai/alerts/check", json={
-            "context": {"domain": "financial_market"},
-            "payload": {"instrument_id": "AAPL"},
-        })
+        client.post(
+            "/api/xai/alerts/configure",
+            json={
+                "thresholds": [
+                    {"domain": "nonexistent", "min_trust_score": 0.99},
+                ],
+            },
+        )
+        resp = client.post(
+            "/api/xai/alerts/check",
+            json={
+                "context": {"domain": "financial_market"},
+                "payload": {"instrument_id": "AAPL"},
+            },
+        )
         assert resp.status_code == 200
         assert resp.json()["alert_count"] == 0

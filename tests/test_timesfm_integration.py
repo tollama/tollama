@@ -34,8 +34,7 @@ def test_timesfm_2p5_forecast_integration(monkeypatch, tmp_path) -> None:
                 "id": "integration-series-1",
                 "freq": "D",
                 "timestamps": [
-                    (start + timedelta(days=index)).date().isoformat()
-                    for index in range(200)
+                    (start + timedelta(days=index)).date().isoformat() for index in range(200)
                 ],
                 "target": [100.0 + float(index) for index in range(200)],
             }

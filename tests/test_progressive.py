@@ -122,9 +122,7 @@ def test_api_forecast_progressive_streams_selected_and_completed_events(
     assert "forecast.complete" in names
 
     selected_models = [
-        event["data"]["model"]
-        for event in events
-        if event["event"] == "model.selected"
+        event["data"]["model"] for event in events if event["event"] == "model.selected"
     ]
     assert selected_models
     assert called_models == selected_models

@@ -41,9 +41,7 @@ def validate_series(
         raise ValueError("timestamps and target must be 1D arrays")
 
     if len(ts) != len(tgt):
-        raise ValueError(
-            f"timestamps length ({len(ts)}) must match target length ({len(tgt)})"
-        )
+        raise ValueError(f"timestamps length ({len(ts)}) must match target length ({len(tgt)})")
 
     if len(ts) == 0:
         raise ValueError("timestamps must not be empty")
@@ -76,9 +74,7 @@ def validate_series(
         if cfg.max_gap is not None:
             gap = _max_consecutive_true(missing_mask)
             if gap > cfg.max_gap:
-                raise ValueError(
-                    f"target max missing gap {gap} exceeds limit {cfg.max_gap}"
-                )
+                raise ValueError(f"target max missing gap {gap} exceeds limit {cfg.max_gap}")
 
     # Non-constant check (on valid values)
     valid = tgt[~missing_mask]
@@ -89,6 +85,4 @@ def validate_series(
 
     # Minimum length
     if cfg.min_length is not None and len(tgt) < cfg.min_length:
-        raise ValueError(
-            f"series length {len(tgt)} is below minimum {cfg.min_length}"
-        )
+        raise ValueError(f"series length {len(tgt)} is below minimum {cfg.min_length}")

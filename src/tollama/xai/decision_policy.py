@@ -64,9 +64,7 @@ class DecisionPolicyExplainer:
         dict with policy explanation
         """
         confidence = forecast_result.get("confidence", 0.0)
-        threshold = policy_config.get(
-            "auto_execute_threshold", self.default_threshold
-        )
+        threshold = policy_config.get("auto_execute_threshold", self.default_threshold)
         audit_required = policy_config.get("audit_required", True)
 
         # Evaluate policy
@@ -118,8 +116,7 @@ class DecisionPolicyExplainer:
                     escalation_triggered = True
                     trust_blocked = True
                     escalation_reason = (
-                        f"Trust score {trust_score:.2f} below threshold "
-                        f"{trust_threshold:.2f}. "
+                        f"Trust score {trust_score:.2f} below threshold {trust_threshold:.2f}. "
                     )
                 else:
                     policy_rules_applied.append(
@@ -128,22 +125,18 @@ class DecisionPolicyExplainer:
                     )
 
             # Gate B: Constraint Violations Block
-            critical_violations = [
-                v for v in violations if v.get("severity") == "critical"
-            ]
+            critical_violations = [v for v in violations if v.get("severity") == "critical"]
             constraint_violations_count = len(critical_violations)
             if critical_violations:
                 names = ", ".join(v.get("name", "unknown") for v in critical_violations)
                 policy_rules_applied.append(
-                    f"BLOCK: {len(critical_violations)} critical "
-                    f"constraint violation(s): {names}"
+                    f"BLOCK: {len(critical_violations)} critical constraint violation(s): {names}"
                 )
                 auto_executed = False
                 escalation_triggered = True
                 trust_blocked = True
                 escalation_reason += (
-                    f"{len(critical_violations)} critical constraint "
-                    f"violation(s). "
+                    f"{len(critical_violations)} critical constraint violation(s). "
                 )
 
             # Gate C: Risk Category Escalation
@@ -167,9 +160,7 @@ class DecisionPolicyExplainer:
                 )
                 escalation_triggered = True
                 auto_executed = False
-                escalation_reason += (
-                    " Forecast value exceeds approval threshold."
-                )
+                escalation_reason += " Forecast value exceeds approval threshold."
 
         # Rule: custom escalation rules
         for rule in policy_config.get("escalation_rules", self.escalation_rules):
@@ -185,9 +176,7 @@ class DecisionPolicyExplainer:
 
         # Rule: audit requirement
         if audit_required:
-            policy_rules_applied.append(
-                "AUDIT: Decision audit trail will be recorded"
-            )
+            policy_rules_applied.append("AUDIT: Decision audit trail will be recorded")
 
         # Generate reason
         if auto_executed:
@@ -197,8 +186,7 @@ class DecisionPolicyExplainer:
             )
         else:
             reason = (
-                f"confidence {confidence:.2f} < threshold {threshold:.2f} "
-                f"→ human approval required"
+                f"confidence {confidence:.2f} < threshold {threshold:.2f} → human approval required"
             )
 
         return {

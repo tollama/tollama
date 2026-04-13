@@ -39,9 +39,7 @@ def test_save_and_load_routing_manifest(monkeypatch, tmp_path) -> None:
             "policy": "benchmark-backed defaults",
             "caveats": ["validate against production data"],
             "preprocessing_metadata": {"available": False},
-            "routing_rationale": {
-                "default": {"model": "chronos2", "reason": "balanced winner"}
-            },
+            "routing_rationale": {"default": {"model": "chronos2", "reason": "balanced winner"}},
         }
     )
 
@@ -59,9 +57,7 @@ def test_load_routing_manifest_accepts_benchmark_result_payload(monkeypatch, tmp
         "eval_ref": "20260316T000000Z",
         "forecast_id": "core-routing-candidate:20260316T000000Z:chronos2",
         "preprocessing_metadata": {"available": False},
-        "routing_rationale": {
-            "default": {"model": "chronos2", "reason": "balanced winner"}
-        },
+        "routing_rationale": {"default": {"model": "chronos2", "reason": "balanced winner"}},
         "generated_at": "2026-03-16T00:00:00Z",
         "routing_recommendation": {
             "default": "chronos2",
@@ -69,9 +65,7 @@ def test_load_routing_manifest_accepts_benchmark_result_payload(monkeypatch, tmp
             "high_accuracy": "moirai-2.0-R-small",
             "policy": "use benchmark recommendation",
             "caveats": ["synthetic benchmark"],
-            "rationale": {
-                "default": {"model": "chronos2", "reason": "balanced winner"}
-            },
+            "rationale": {"default": {"model": "chronos2", "reason": "balanced winner"}},
         },
     }
     path = tmp_path / "benchmark-result.json"

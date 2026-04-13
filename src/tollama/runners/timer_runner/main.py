@@ -73,7 +73,10 @@ def _handle_forecast(request: ProtocolRequest, adapter: TimerAdapter) -> Protoco
         forecast_request = ForecastRequest.model_validate(canonical_params)
     except ValidationError as exc:
         return error_response(
-            request.id, code=-32602, message="invalid params", data={"details": str(exc)},
+            request.id,
+            code=-32602,
+            message="invalid params",
+            data={"details": str(exc)},
         )
 
     try:
@@ -98,7 +101,9 @@ def _handle_forecast(request: ProtocolRequest, adapter: TimerAdapter) -> Protoco
         return error_response(request.id, code="FORECAST_ERROR", message=msg)
 
     response = enrich_forecast_response(
-        response=response, runner_name=RUNNER_NAME, inference_ms=inference_ms,
+        response=response,
+        runner_name=RUNNER_NAME,
+        inference_ms=inference_ms,
     )
     return ProtocolResponse(
         id=request.id,

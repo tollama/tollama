@@ -11,10 +11,7 @@ from pathlib import Path
 import pytest
 
 _MODULE_PATH = (
-    Path(__file__).resolve().parents[1]
-    / "scripts"
-    / "e2e_realdata"
-    / "run_tsfm_realdata.py"
+    Path(__file__).resolve().parents[1] / "scripts" / "e2e_realdata" / "run_tsfm_realdata.py"
 )
 _MODULE_SPEC = spec_from_file_location("scripts_e2e_realdata_run_tsfm_realdata", _MODULE_PATH)
 assert _MODULE_SPEC is not None and _MODULE_SPEC.loader is not None
@@ -38,18 +35,27 @@ def test_sanitize_artifact_filename_replaces_forbidden_characters() -> None:
 
 
 def test_status_for_data_issue_skips_hf_only_in_optional_profile() -> None:
-    assert _status_for_data_issue(
-        gate_profile="hf_optional",
-        dataset_kind="huggingface_dataset",
-    ) == "skip"
-    assert _status_for_data_issue(
-        gate_profile="hf_optional",
-        dataset_kind="open_m4_daily",
-    ) == "fail"
-    assert _status_for_data_issue(
-        gate_profile="strict",
-        dataset_kind="huggingface_dataset",
-    ) == "fail"
+    assert (
+        _status_for_data_issue(
+            gate_profile="hf_optional",
+            dataset_kind="huggingface_dataset",
+        )
+        == "skip"
+    )
+    assert (
+        _status_for_data_issue(
+            gate_profile="hf_optional",
+            dataset_kind="open_m4_daily",
+        )
+        == "fail"
+    )
+    assert (
+        _status_for_data_issue(
+            gate_profile="strict",
+            dataset_kind="huggingface_dataset",
+        )
+        == "fail"
+    )
 
 
 def test_call_forecast_with_retry_retries_retryable_status(monkeypatch) -> None:

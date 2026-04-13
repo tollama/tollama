@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 
 import uvicorn
+
 from tollama.core.env import env_or_none
 
 DEFAULT_DAEMON_HOST = "127.0.0.1"

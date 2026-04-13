@@ -452,9 +452,7 @@ def _parse_hf_rows(
         )
     )
     series_id_value_counts: dict[str, dict[str, int]] = (
-        {}
-        if resolved_series_id_columns
-        else {column: {} for column in series_id_candidates}
+        {} if resolved_series_id_columns else {column: {} for column in series_id_candidates}
     )
     chunk_index = 0
     # Scan enough rows to produce stable deterministic candidates while staying bounded.
@@ -507,8 +505,7 @@ def _parse_hf_rows(
 
     if len(parsed_rows) < required_rows:
         raise RuntimeError(
-            f"insufficient parsed rows for {hf_id}: "
-            f"{len(parsed_rows)} < {required_rows}"
+            f"insufficient parsed rows for {hf_id}: {len(parsed_rows)} < {required_rows}"
         )
 
     grouped_rows: dict[str, list[tuple[datetime, float]]] = {}
@@ -640,11 +637,7 @@ def _selected_snapshot_columns(
 
 def _resolve_hf_snapshot_file(*, hf_id: str, snapshot_file: str) -> Path:
     repo_dir = (
-        Path.home()
-        / ".cache"
-        / "huggingface"
-        / "hub"
-        / f"datasets--{hf_id.replace('/', '--')}"
+        Path.home() / ".cache" / "huggingface" / "hub" / f"datasets--{hf_id.replace('/', '--')}"
     )
     snapshots_dir = repo_dir / "snapshots"
     if not snapshots_dir.is_dir():
@@ -774,10 +767,7 @@ def _extract_target_points(
         return [(parsed_dt, parsed_value)]
 
     parsed_values = _parse_float_sequence(raw)
-    return [
-        (parsed_dt + (array_step * index), value)
-        for index, value in enumerate(parsed_values)
-    ]
+    return [(parsed_dt + (array_step * index), value) for index, value in enumerate(parsed_values)]
 
 
 def _coerce_float_value(raw: Any) -> float | None:

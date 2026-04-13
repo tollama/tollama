@@ -48,8 +48,7 @@ def merge_forecast_responses(
     for response in responses:
         if response.warnings:
             component_warnings.extend(
-                f"{response.model}: {warning}"
-                for warning in response.warnings
+                f"{response.model}: {warning}" for warning in response.warnings
             )
 
     for series_index, base_series in enumerate(base.forecasts):
@@ -174,7 +173,10 @@ def _weighted_mean(*, values: list[float], weights: list[float]) -> float:
 
 
 def _trimmed_mean(
-    *, values: list[float], weights: list[float], trim_fraction: float = 0.1,
+    *,
+    values: list[float],
+    weights: list[float],
+    trim_fraction: float = 0.1,
 ) -> float:
     """Compute weighted mean after dropping the top/bottom ``trim_fraction`` of values."""
     if len(values) < 3:
@@ -197,7 +199,10 @@ def _trimmed_mean(
 
 
 def _winsorized_mean(
-    *, values: list[float], weights: list[float], limit_fraction: float = 0.1,
+    *,
+    values: list[float],
+    weights: list[float],
+    limit_fraction: float = 0.1,
 ) -> float:
     """Compute weighted mean after clipping outlier values to boundary percentiles."""
     if len(values) < 3:

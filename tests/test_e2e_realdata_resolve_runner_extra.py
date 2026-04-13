@@ -10,10 +10,7 @@ from pathlib import Path
 import pytest
 
 _MODULE_PATH = (
-    Path(__file__).resolve().parents[1]
-    / "scripts"
-    / "e2e_realdata"
-    / "resolve_runner_extra.py"
+    Path(__file__).resolve().parents[1] / "scripts" / "e2e_realdata" / "resolve_runner_extra.py"
 )
 _MODULE_SPEC = spec_from_file_location("scripts_e2e_realdata_resolve_runner_extra", _MODULE_PATH)
 assert _MODULE_SPEC is not None and _MODULE_SPEC.loader is not None

@@ -168,7 +168,7 @@ def test_{family}_runner_forecast_returns_not_implemented_by_default() -> None:
     assert payload["error"]["code"] == "NOT_IMPLEMENTED"
 '''
 
-REGISTRY_ENTRY_TEMPLATE = '''
+REGISTRY_ENTRY_TEMPLATE = """
   - name: {model_name}
     family: {family}
     source:
@@ -188,4 +188,4 @@ REGISTRY_ENTRY_TEMPLATE = '''
       future_covariates_numeric: false
       future_covariates_categorical: false
       static_covariates: false
-'''
+"""

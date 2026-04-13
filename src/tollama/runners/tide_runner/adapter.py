@@ -47,9 +47,7 @@ class TideAdapter:
             self._model_cache.clear()
             return
         self._model_cache = {
-            key: value
-            for key, value in self._model_cache.items()
-            if key[0] != model_name
+            key: value for key, value in self._model_cache.items() if key[0] != model_name
         }
 
     def forecast(
@@ -192,7 +190,7 @@ class TideAdapter:
             joined = ", ".join(sorted(set(missing or ["darts"])))
             raise DependencyMissingError(
                 "missing optional tide runner dependencies "
-                f"({joined}); install them with `pip install -e \".[dev,runner_tide]\"`",
+                f'({joined}); install them with `pip install -e ".[dev,runner_tide]"`',
             )
 
         deps = _Dependencies(
@@ -386,8 +384,7 @@ def _timeseries_to_vector(series: Any, *, label: str, horizon: int) -> list[floa
 
     if len(flattened) < horizon:
         raise AdapterInputError(
-            f"TiDE {label} output is shorter than requested horizon "
-            f"({len(flattened)} < {horizon})",
+            f"TiDE {label} output is shorter than requested horizon ({len(flattened)} < {horizon})",
         )
     return flattened[:horizon]
 
@@ -499,9 +496,7 @@ def _resolve_runtime_config(
     defaults = _TIDE_MODELS.get(model_name, {})
     repo_id = _dict_str(model_source, "repo_id") or _string_or_none(defaults.get("repo_id"))
     revision = (
-        _dict_str(model_source, "revision")
-        or _string_or_none(defaults.get("revision"))
-        or "main"
+        _dict_str(model_source, "revision") or _string_or_none(defaults.get("revision")) or "main"
     )
     implementation = (
         _dict_str(model_metadata, "implementation")

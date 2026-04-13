@@ -36,7 +36,7 @@ class _MissingDependencyAdapter(_NoopAdapter):
     ):
         del request, model_local_dir, model_source, model_metadata
         raise DependencyMissingError(
-            "install with pip install -e \".[dev,runner_uni2ts]\"",
+            'install with pip install -e ".[dev,runner_uni2ts]"',
         )
 
 

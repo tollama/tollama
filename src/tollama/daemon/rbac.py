@@ -77,9 +77,7 @@ class RBACPolicy:
     role_permissions: dict[Role, set[str]] = field(
         default_factory=lambda: dict(_DEFAULT_PERMISSIONS)
     )
-    write_roles: set[Role] = field(
-        default_factory=lambda: set(_DEFAULT_WRITE_ROLES)
-    )
+    write_roles: set[Role] = field(default_factory=lambda: set(_DEFAULT_WRITE_ROLES))
 
 
 def load_rbac_policy(

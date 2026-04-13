@@ -142,9 +142,7 @@ class TrustHistoryTracker:
         tmp.replace(path)
 
     @classmethod
-    def load(
-        cls, path: Path, max_per_domain: int = _MAX_HISTORY_PER_DOMAIN
-    ) -> TrustHistoryTracker:
+    def load(cls, path: Path, max_per_domain: int = _MAX_HISTORY_PER_DOMAIN) -> TrustHistoryTracker:
         tracker = cls(max_per_domain=max_per_domain)
         if not path.is_file():
             return tracker

@@ -60,8 +60,7 @@ app.add_typer(dev_app, name="dev")
 app.add_typer(xai_app, name="xai")
 
 _CONFIG_KEY_PATHS: dict[str, tuple[str, str]] = {
-    key: cast(tuple[str, str], tuple(key.split(".", maxsplit=1)))
-    for key in CONFIG_KEY_DESCRIPTIONS
+    key: cast(tuple[str, str], tuple(key.split(".", maxsplit=1))) for key in CONFIG_KEY_DESCRIPTIONS
 }
 _BOOL_CONFIG_KEYS = {
     "pull.offline",
@@ -1162,7 +1161,11 @@ def benchmark(
         help="Comma-separated model names. Defaults to all installed.",
     ),
     num_folds: int = typer.Option(
-        3, "--folds", min=1, max=10, help="Walk-forward folds.",
+        3,
+        "--folds",
+        min=1,
+        max=10,
+        help="Walk-forward folds.",
     ),
     output: str | None = typer.Option(
         None,
@@ -1223,10 +1226,7 @@ def benchmark(
     else:
         try:
             installed = client.list_models()
-            model_list = [
-                m["name"] for m in installed
-                if isinstance(m, dict) and m.get("name")
-            ]
+            model_list = [m["name"] for m in installed if isinstance(m, dict) and m.get("name")]
         except RuntimeError:
             typer.echo(
                 _style_text(
@@ -1804,8 +1804,7 @@ def _render_table_with_layout(
     separator_line = (" " * _TABLE_DEFAULT_GAP).join(separator_parts)
     row_lines = [
         (" " * _TABLE_DEFAULT_GAP).join(
-            _align_cell(value, widths[idx], idx, right_align)
-            for idx, value in enumerate(row)
+            _align_cell(value, widths[idx], idx, right_align) for idx, value in enumerate(row)
         )
         for row in normalized_rows
     ]
@@ -1902,9 +1901,7 @@ def _collect_doctor_checks(
 ) -> list[dict[str, str]]:
     checks: list[dict[str, str]] = []
 
-    python_version = (
-        f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
-    )
+    python_version = f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
     for family in FAMILY_EXTRAS:
         name = f"python_constraint_{family}"
         constraint = FAMILY_PYTHON_CONSTRAINTS.get(family)
@@ -2579,7 +2576,9 @@ def runtime_install(
     ),
     all_families: bool = typer.Option(False, "--all", help="Install all runner families."),
     reinstall: bool = typer.Option(
-        False, "--reinstall", help="Force reinstall even if up-to-date.",
+        False,
+        "--reinstall",
+        help="Force reinstall even if up-to-date.",
     ),
     progress: ProgressMode = typer.Option(
         "auto",

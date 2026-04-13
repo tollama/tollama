@@ -160,7 +160,8 @@ def evaluate_fold(
 ) -> ModelFoldResult:
     """Compute metrics for one model on one fold."""
     metrics_result, warnings = compute_forecast_metrics(
-        request=request, response=response,
+        request=request,
+        response=response,
     )
     metric_values: dict[str, float] = {}
     if metrics_result is not None and metrics_result.aggregate:

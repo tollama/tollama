@@ -789,8 +789,7 @@ def _series_from_mapping(payload: Mapping[str, Any], *, default_id: str) -> dict
     if "target" not in payload:
         available = ", ".join(sorted(str(key) for key in payload)) or "<none>"
         raise ValueError(
-            "series mapping must include 'target'. "
-            f"Found keys: {available}",
+            f"series mapping must include 'target'. Found keys: {available}",
         )
 
     target_values = payload["target"]
@@ -842,8 +841,7 @@ def _series_from_pandas_dataframe(frame: pd.DataFrame) -> list[dict[str, Any]]:
     if frame.empty:
         columns = ", ".join(str(column) for column in frame.columns) or "<none>"
         raise ValueError(
-            "series DataFrame must not be empty. "
-            f"Found columns: {columns}",
+            f"series DataFrame must not be empty. Found columns: {columns}",
         )
     if "target" in frame.columns:
         return _series_from_target_dataframe(frame)

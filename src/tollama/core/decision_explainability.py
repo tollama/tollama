@@ -158,15 +158,9 @@ def _build_signal_explanation(signal: SignalTrustInput) -> SignalTrustExplanatio
             )
         )
 
-    metric_bits = [
-        f"{name}={float(value):.4f}"
-        for name, value in sorted(signal.metrics.items())
-    ]
+    metric_bits = [f"{name}={float(value):.4f}" for name, value in sorted(signal.metrics.items())]
     detail_suffix = f" ({', '.join(metric_bits)})" if metric_bits else ""
-    why_trusted = (
-        f"signal {signal.name!r} received trust_score={trust_score:.2f}"
-        f"{detail_suffix}"
-    )
+    why_trusted = f"signal {signal.name!r} received trust_score={trust_score:.2f}{detail_suffix}"
     return SignalTrustExplanation(
         name=signal.name,
         trust_score=trust_score,
@@ -595,10 +589,7 @@ def _correlation(left: list[float], right: list[float]) -> float:
         return 0.0
     left_mean = sum(left) / len(left)
     right_mean = sum(right) / len(right)
-    numerator = sum(
-        (a - left_mean) * (b - right_mean)
-        for a, b in zip(left, right, strict=True)
-    )
+    numerator = sum((a - left_mean) * (b - right_mean) for a, b in zip(left, right, strict=True))
     left_var = sum((a - left_mean) ** 2 for a in left)
     right_var = sum((b - right_mean) ** 2 for b in right)
     denom = math.sqrt(left_var * right_var)

@@ -298,7 +298,7 @@ Canonical inventories:
   - 현재: PostgreSQL connector identifier 검증 + safe SQL composition + connection pooling 도입
   - 현재: supervisor stderr drain/deque tail로 subprocess pipe deadlock 방지
   - 현재: daemon `X-Request-ID` -> supervisor request ID 전파
-  - 현재: Python 3.11 CI lane에 scoped mypy, coverage report, pre-commit, Bandit, pip-audit, lock freshness, OpenAPI artifact sync 추가
+  - 현재: Python 3.11 CI lane에 scoped mypy, blocking coverage baseline(`64%`), pre-commit, medium+ severity Bandit, pip-audit, lock freshness, OpenAPI artifact sync 추가
   - 현재: `tests/architecture/`, `tests/contract/`, `tests/property/`, `tests/conftest.py` 추가
   - 현재: ADR scaffold + initial records(`docs/adr/`) 추가
 - [x] (P1) Agentic Pipeline Endpoint 1차

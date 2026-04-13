@@ -23,8 +23,7 @@ def get_connector(config: ConnectorConfig) -> DataConnector:
     if cls is None:
         available = sorted(_REGISTRY) or ["(none registered)"]
         raise ValueError(
-            f"unknown connector backend {config.backend!r}. "
-            f"Available: {', '.join(available)}"
+            f"unknown connector backend {config.backend!r}. Available: {', '.join(available)}"
         )
     connector = cls()
     connector.connect(config)

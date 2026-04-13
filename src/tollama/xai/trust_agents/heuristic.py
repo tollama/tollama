@@ -107,9 +107,10 @@ def _build_result(
                 for name, comp in component_breakdown.items()
             }
     total_weight = sum(component.weight for component in component_breakdown.values()) or 1.0
-    trust_score = sum(
-        component.score * component.weight for component in component_breakdown.values()
-    ) / total_weight
+    trust_score = (
+        sum(component.score * component.weight for component in component_breakdown.values())
+        / total_weight
+    )
     return NormalizedTrustResult(
         agent_name=agent_name,
         domain=domain,
@@ -432,7 +433,8 @@ class FinancialMarketTrustAgent:
         )
 
     def _resolve_news_signal(
-        self, signal_ref: str,
+        self,
+        signal_ref: str,
     ) -> NormalizedTrustResult | None:
         """Run the news agent with the signal reference as story_id."""
         try:

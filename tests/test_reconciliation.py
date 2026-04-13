@@ -25,15 +25,21 @@ def simple_response() -> ForecastResponse:
         model="test",
         forecasts=[
             SeriesForecast(
-                id="total", freq="D", start_timestamp="2025-01-01",
+                id="total",
+                freq="D",
+                start_timestamp="2025-01-01",
                 mean=[100.0, 200.0, 300.0],
             ),
             SeriesForecast(
-                id="region_a", freq="D", start_timestamp="2025-01-01",
+                id="region_a",
+                freq="D",
+                start_timestamp="2025-01-01",
                 mean=[60.0, 120.0, 180.0],
             ),
             SeriesForecast(
-                id="region_b", freq="D", start_timestamp="2025-01-01",
+                id="region_b",
+                freq="D",
+                start_timestamp="2025-01-01",
                 mean=[50.0, 90.0, 130.0],
             ),
         ],

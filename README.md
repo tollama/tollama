@@ -189,8 +189,9 @@ Tollama can **invoke TSFMs as tools when forecasting is part of a broader workfl
 - Supervisor stderr is continuously drained to avoid subprocess pipe deadlocks while
   still preserving a bounded recent tail for diagnostics.
 - The Python 3.11 CI lane now carries the incremental quality/security baseline:
-  scoped mypy, coverage report generation, pre-commit, Bandit, pip-audit,
-  OpenAPI artifact verification, and compiled dev-lock freshness checks.
+  scoped mypy, blocking coverage at the current 64% baseline, pre-commit,
+  medium+ severity Bandit, pip-audit, OpenAPI artifact verification, and compiled dev-lock
+  freshness checks.
 
 ---
 

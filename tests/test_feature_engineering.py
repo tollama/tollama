@@ -74,7 +74,11 @@ def test_auto_engineer_features_with_timestamps() -> None:
     values = np.arange(10, dtype=float)
     timestamps = [f"2025-01-{i + 1:02d}" for i in range(10)]
     config = FeatureConfig(
-        calendar=True, lags=[1], rolling=[3], fourier=1, differences=True,
+        calendar=True,
+        lags=[1],
+        rolling=[3],
+        fourier=1,
+        differences=True,
     )
     features = auto_engineer_features(values, timestamps=timestamps, config=config)
     assert "lag_1" in features

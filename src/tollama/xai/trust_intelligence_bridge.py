@@ -13,7 +13,6 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 try:
-
     HAS_TRUST_INTELLIGENCE = True
 except Exception:
     HAS_TRUST_INTELLIGENCE = False

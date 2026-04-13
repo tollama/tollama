@@ -93,10 +93,7 @@ def test_registry_huggingface_entries_resolve_and_match_declared_license() -> No
                 inaccessible,
                 heading="registry upstream validation skipped inaccessible repos:",
             )
-            message = (
-                f"{message}\n\n"
-                f"{inaccessible_message}"
-            )
+            message = f"{message}\n\n{inaccessible_message}"
         pytest.fail(message)
 
     if inaccessible:

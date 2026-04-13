@@ -59,10 +59,7 @@ class _FakeTensor:
             raise AssertionError("fake tensor only supports dim=0")
         rows = _matrix(self._values)
         horizon = len(rows[0])
-        means = [
-            sum(row[column] for row in rows) / float(len(rows))
-            for column in range(horizon)
-        ]
+        means = [sum(row[column] for row in rows) / float(len(rows)) for column in range(horizon)]
         return _FakeTensor(means)
 
     def detach(self) -> _FakeTensor:

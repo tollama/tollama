@@ -84,15 +84,12 @@ class ForecastPFNAdapter:
             import numpy as np
             import torch
         except ImportError as exc:
-            raise DependencyMissingError(
-                "ForecastPFN runner requires torch and numpy"
-            ) from exc
+            raise DependencyMissingError("ForecastPFN runner requires torch and numpy") from exc
 
         max_horizon = config.get("max_horizon", 300)
         if request.horizon > max_horizon:
             raise AdapterInputError(
-                f"requested horizon {request.horizon} exceeds "
-                f"ForecastPFN max_horizon {max_horizon}"
+                f"requested horizon {request.horizon} exceeds ForecastPFN max_horizon {max_horizon}"
             )
 
         max_context = config.get("max_context", 1000)
@@ -105,9 +102,7 @@ class ForecastPFNAdapter:
             target = [float(v) for v in series.target]
             if len(target) > max_context:
                 target = target[-max_context:]
-                warnings.append(
-                    f"series {series.id!r}: truncated to last {max_context} points"
-                )
+                warnings.append(f"series {series.id!r}: truncated to last {max_context} points")
 
             input_array = np.array(target, dtype=np.float32)
 
@@ -115,6 +110,7 @@ class ForecastPFNAdapter:
                 loaded = self._loaded_models.get(model_name, {})
                 if "model" not in loaded:
                     from ForecastPFN import ForecastPFN as ForecastPFNModel
+
                     model = ForecastPFNModel()
                     if model_name not in self._loaded_models:
                         self._loaded_models[model_name] = {"config": config, "repo_id": repo_id}
@@ -128,11 +124,11 @@ class ForecastPFNAdapter:
                 if hasattr(output, "mean"):
                     predicted = output.mean.tolist()
                 elif isinstance(output, np.ndarray):
-                    predicted = output[:request.horizon].tolist()
+                    predicted = output[: request.horizon].tolist()
                 elif isinstance(output, tuple):
-                    predicted = output[0][:request.horizon].tolist()
+                    predicted = output[0][: request.horizon].tolist()
                 else:
-                    predicted = list(output)[:request.horizon]
+                    predicted = list(output)[: request.horizon]
             except Exception as exc:
                 raise ValueError(
                     f"ForecastPFN inference failed for series {series.id!r}: {exc}"
@@ -142,7 +138,7 @@ class ForecastPFNAdapter:
                 last_val = predicted[-1] if predicted else target[-1]
                 predicted.extend([last_val] * (request.horizon - len(predicted)))
 
-            mean_values = [round(float(v), 8) for v in predicted[:request.horizon]]
+            mean_values = [round(float(v), 8) for v in predicted[: request.horizon]]
 
             forecasts.append(
                 SeriesForecast(

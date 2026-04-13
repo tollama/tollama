@@ -40,6 +40,7 @@ def _import_external_xai_module(*candidate_paths: tuple[str, ...]):
     searched = ", ".join(str(_WORKSPACE_ROOT.joinpath(*parts)) for parts in candidate_paths)
     pytest.skip(f"external XAI integration not present in this workspace: {searched}")
 
+
 def test_explanation_engine():
     """Test 1: ExplanationEngine — end-to-end decision explanation"""
     print("\n" + "=" * 70)
@@ -96,11 +97,13 @@ def test_explanation_engine():
     calibration_result = {
         "trust_score": 0.81,
         "metrics": {"brier_score": 0.142, "log_loss": 0.318, "ece": 0.047},
-        "signals": [{
-            "name": "polymarket",
-            "trust_score": 0.81,
-            "metrics": {"brier_score": 0.142, "log_loss": 0.318, "ece": 0.047},
-        }],
+        "signals": [
+            {
+                "name": "polymarket",
+                "trust_score": 0.81,
+                "metrics": {"brier_score": 0.142, "log_loss": 0.318, "ece": 0.047},
+            }
+        ],
     }
 
     policy_config = {
@@ -163,15 +166,17 @@ def test_model_selection_explainer():
     from tollama.xai.model_selection import ModelSelectionExplainer
 
     explainer = ModelSelectionExplainer(primary_metric="brier_score")
-    result = explainer.explain({
-        "model_results": [
-            {"model_name": "chronos", "metrics": {"brier_score": 0.12, "mae": 0.25}},
-            {"model_name": "timesfm", "metrics": {"brier_score": 0.15, "mae": 0.22}},
-            {"model_name": "moirai", "metrics": {"brier_score": 0.18, "mae": 0.30}},
-        ],
-        "cv_config": {"strategy": "expanding-window", "n_splits": 5},
-        "best_model": "chronos",
-    })
+    result = explainer.explain(
+        {
+            "model_results": [
+                {"model_name": "chronos", "metrics": {"brier_score": 0.12, "mae": 0.25}},
+                {"model_name": "timesfm", "metrics": {"brier_score": 0.15, "mae": 0.22}},
+                {"model_name": "moirai", "metrics": {"brier_score": 0.18, "mae": 0.30}},
+            ],
+            "cv_config": {"strategy": "expanding-window", "n_splits": 5},
+            "best_model": "chronos",
+        }
+    )
 
     print(f"\n  Selected: {result['model_selected']}")
     print(f"  Why: {result['why_this_model']}")
@@ -225,15 +230,19 @@ def test_trust_breakdown():
     from tollama.xai.trust_breakdown import TrustBreakdown
 
     tb = TrustBreakdown()
-    result = tb.explain({
-        "trust_score": 0.81,
-        "metrics": {"brier_score": 0.142, "log_loss": 0.318, "ece": 0.047},
-        "signals": [{
-            "name": "polymarket",
+    result = tb.explain(
+        {
             "trust_score": 0.81,
             "metrics": {"brier_score": 0.142, "log_loss": 0.318, "ece": 0.047},
-        }],
-    })
+            "signals": [
+                {
+                    "name": "polymarket",
+                    "trust_score": 0.81,
+                    "metrics": {"brier_score": 0.142, "log_loss": 0.318, "ece": 0.047},
+                }
+            ],
+        }
+    )
 
     print(f"\n  Trust scores: {result['trust_scores']}")
     print(f"  Why trusted: {result['why_trusted']}")
@@ -435,13 +444,15 @@ def test_market_calibration_xai():
 
     explainer = mca_xai.TrustScoreExplainer()
 
-    result = explainer.explain_trust_score({
-        "market_id": "0x1a2b",
-        "current_probability": 0.74,
-        "trust_score": 0.81,
-        "metrics": {"brier_score": 0.142, "log_loss": 0.318, "ece": 0.047},
-        "tsfm_signal": {"forecast": [0.72, 0.75, 0.71]},
-    })
+    result = explainer.explain_trust_score(
+        {
+            "market_id": "0x1a2b",
+            "current_probability": 0.74,
+            "trust_score": 0.81,
+            "metrics": {"brier_score": 0.142, "log_loss": 0.318, "ece": 0.047},
+            "tsfm_signal": {"forecast": [0.72, 0.75, 0.71]},
+        }
+    )
 
     print(f"\n  Trust score: {result['trust_score']}")
     print(f"  Trust level: {result['trust_level']}")
@@ -449,13 +460,15 @@ def test_market_calibration_xai():
     print(f"  Recommendation: {result['recommendation']}")
 
     # Test drift detection
-    drift = explainer.explain_calibration_drift([
-        {"trust_score": 0.85, "timestamp": "2026-01-01"},
-        {"trust_score": 0.83, "timestamp": "2026-01-15"},
-        {"trust_score": 0.80, "timestamp": "2026-02-01"},
-        {"trust_score": 0.75, "timestamp": "2026-02-15"},
-        {"trust_score": 0.70, "timestamp": "2026-03-01"},
-    ])
+    drift = explainer.explain_calibration_drift(
+        [
+            {"trust_score": 0.85, "timestamp": "2026-01-01"},
+            {"trust_score": 0.83, "timestamp": "2026-01-15"},
+            {"trust_score": 0.80, "timestamp": "2026-02-01"},
+            {"trust_score": 0.75, "timestamp": "2026-02-15"},
+            {"trust_score": 0.70, "timestamp": "2026-03-01"},
+        ]
+    )
     print(f"\n  Drift detected: {drift['drift_detected']}")
     print(f"  Drift magnitude: {drift['drift_magnitude']}")
     print(f"  Direction: {drift['direction']}")
@@ -595,6 +608,7 @@ def main():
             failed += 1
             print(f"\n  ✗ FAILED: {test_fn.__name__}: {e}")
             import traceback
+
             traceback.print_exc()
 
     print("\n" + "=" * 70)

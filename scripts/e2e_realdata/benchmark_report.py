@@ -85,8 +85,7 @@ def render_markdown(report: dict[str, Any]) -> str:
             "",
             "| Rank | Model | Pass/Rows | Fail | Skip | Success Rate | "
             "Mean Latency (ms) | P50 (ms) | P95 (ms) | MAE | RMSE | SMAPE | MAPE | MASE |",
-            "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | "
-            "--- | --- | --- | --- |",
+            "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
         ]
     )
     leaderboard = report.get("model_leaderboard")
@@ -138,9 +137,9 @@ def render_markdown(report: dict[str, Any]) -> str:
                 continue
             metrics = _coerce_mapping(row.get("mean_metrics"))
             failure_counts = _coerce_mapping(row.get("failure_classification_counts"))
-            failure_text = ", ".join(
-                f"{key}:{value}" for key, value in sorted(failure_counts.items())
-            ) or "-"
+            failure_text = (
+                ", ".join(f"{key}:{value}" for key, value in sorted(failure_counts.items())) or "-"
+            )
             lines.append(
                 "| {dataset} | {rows} | {success_rate} | {latency} | {mae} | {rmse} | {smape} | "
                 "{mape} | {mase} | {failures} |".format(

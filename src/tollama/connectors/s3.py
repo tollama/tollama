@@ -32,8 +32,7 @@ class S3Connector(DataConnector):
             import boto3
         except ImportError as exc:
             raise ImportError(
-                "boto3 is required for S3 connector. "
-                "Install with: pip install boto3"
+                "boto3 is required for S3 connector. Install with: pip install boto3"
             ) from exc
 
         session_kwargs: dict[str, Any] = {}
@@ -70,7 +69,9 @@ class S3Connector(DataConnector):
         if not key:
             # List first file matching prefix
             resp = self._s3.list_objects_v2(
-                Bucket=self._bucket, Prefix=self._prefix, MaxKeys=1,
+                Bucket=self._bucket,
+                Prefix=self._prefix,
+                MaxKeys=1,
             )
             contents = resp.get("Contents", [])
             if not contents:
@@ -117,8 +118,7 @@ class S3Connector(DataConnector):
                 break
 
         return [
-            SeriesChunk(id=sid, timestamps=ts, values=vals)
-            for sid, (ts, vals) in by_id.items()
+            SeriesChunk(id=sid, timestamps=ts, values=vals) for sid, (ts, vals) in by_id.items()
         ]
 
     def _parse_parquet(
@@ -132,8 +132,7 @@ class S3Connector(DataConnector):
             import pyarrow.parquet as pq
         except ImportError as exc:
             raise ImportError(
-                "pyarrow is required for Parquet support. "
-                "Install with: pip install pyarrow"
+                "pyarrow is required for Parquet support. Install with: pip install pyarrow"
             ) from exc
 
         table = pq.read_table(io.BytesIO(data))
@@ -153,8 +152,7 @@ class S3Connector(DataConnector):
             by_id[sid][1].append(float(row.get(self._val_col, 0)))
 
         return [
-            SeriesChunk(id=sid, timestamps=ts, values=vals)
-            for sid, (ts, vals) in by_id.items()
+            SeriesChunk(id=sid, timestamps=ts, values=vals) for sid, (ts, vals) in by_id.items()
         ]
 
 

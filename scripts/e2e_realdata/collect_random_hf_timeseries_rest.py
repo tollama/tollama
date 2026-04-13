@@ -673,13 +673,9 @@ def _run_curl(
     )
     if completed.returncode != 0:
         stderr_text = completed.stderr.decode("utf-8", errors="replace").strip()
-        raise RuntimeError(
-            f"curl failed status={completed.returncode}: {stderr_text}"
-        )
+        raise RuntimeError(f"curl failed status={completed.returncode}: {stderr_text}")
     if max_output is not None and len(completed.stdout) > max_output:
-        raise RuntimeError(
-            f"response exceeded output cap: {len(completed.stdout)} > {max_output}"
-        )
+        raise RuntimeError(f"response exceeded output cap: {len(completed.stdout)} > {max_output}")
     return completed
 
 
@@ -688,9 +684,7 @@ def _run_curl_text(url: str) -> bytes:
     return completed.stdout
 
 
-def _run_curl_to_file(
-    output_file: Path, url: str, *, max_bytes: int | None = None
-) -> None:
+def _run_curl_to_file(output_file: Path, url: str, *, max_bytes: int | None = None) -> None:
     cmd = [
         "curl",
         "-sS",
@@ -714,9 +708,7 @@ def _run_curl_to_file(
     )
     if completed.returncode != 0:
         stderr_text = completed.stderr.decode("utf-8", errors="replace").strip()
-        raise RuntimeError(
-            f"curl download failed status={completed.returncode}: {stderr_text}"
-        )
+        raise RuntimeError(f"curl download failed status={completed.returncode}: {stderr_text}")
 
 
 def _get_content_length_via_curl(url: str) -> int | None:
@@ -795,10 +787,7 @@ def dataset_listing_url(
     page_size: int,
     cursor: str | None,
 ) -> str:
-    query = (
-        f"{HF_LIST_URL}?filter={quote(filter_query, safe=':')}"
-        f"&limit={page_size}&full=true"
-    )
+    query = f"{HF_LIST_URL}?filter={quote(filter_query, safe=':')}&limit={page_size}&full=true"
     if cursor is not None:
         query = f"{query}&cursor={quote(cursor, safe='')}"
     return query

@@ -64,9 +64,7 @@ def _load_registry_entries() -> dict[str, tuple[str | None, str | None]]:
             continue
 
         if raw_line.startswith("      install_extra: "):
-            current_install_extra = _parse_scalar(
-                stripped.removeprefix("install_extra: ")
-            )
+            current_install_extra = _parse_scalar(stripped.removeprefix("install_extra: "))
 
     if current_name is not None:
         entries[current_name] = (current_family, current_install_extra)
@@ -87,9 +85,7 @@ def resolve_runner_extra(model: str) -> str:
     if extra is not None:
         return extra
 
-    raise ValueError(
-        f"model {model!r} (family={family!r}) does not declare a runner extra"
-    )
+    raise ValueError(f"model {model!r} (family={family!r}) does not declare a runner extra")
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:

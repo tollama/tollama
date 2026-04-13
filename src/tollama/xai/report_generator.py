@@ -54,15 +54,12 @@ class DecisionReportBuilder:
             "title": config.get("title", "Forecast Decision Report"),
             "generated_at": datetime.now(UTC).isoformat(),
             "explanation_id": explanation.get("explanation_id", ""),
-
             "executive_summary": self._executive_summary(ie, pe, dpe, forecast_result),
-
             "signal_assessment": {
                 "signals_used": ie.get("signals_used", []),
                 "trust_scores": ie.get("trust_scores", {}),
                 "trust_assessment": ie.get("why_trusted", {}),
             },
-
             "model_selection": {
                 "selected_model": pe.get("model_selected", ""),
                 "rationale": pe.get("why_this_model", ""),
@@ -71,17 +68,16 @@ class DecisionReportBuilder:
                         "model": r.get("model_name"),
                         "rank": r.get("rank"),
                         "primary_metric": list(r.get("metrics", {}).values())[0]
-                        if r.get("metrics") else None,
+                        if r.get("metrics")
+                        else None,
                     }
                     for r in pe.get("model_ranking", [])[:5]
                 ],
             },
-
             "forecast_analysis": {
                 "decomposition": pe.get("forecast_decomposition", {}),
                 "scenarios": pe.get("scenarios", {}),
             },
-
             "decision_recommendation": {
                 "auto_execute_recommended": dpe.get("auto_executed", False),
                 "confidence": dpe.get("confidence", 0.0),
@@ -94,7 +90,6 @@ class DecisionReportBuilder:
                 "reason": dpe.get("reason", ""),
                 "escalation": dpe.get("escalation_reason", ""),
             },
-
             "audit_trail": {
                 "rules_applied": dpe.get("policy_rules_applied", []),
                 "human_override_available": dpe.get("human_override", True),
@@ -128,7 +123,6 @@ class DecisionReportBuilder:
                 "decision-making process for regulatory compliance "
                 "(EU AI Act, MiFID II)."
             ),
-
             "input_evidence": {
                 "signals": ie.get("signals_used", []),
                 "trust_scores": ie.get("trust_scores", {}),
@@ -136,20 +130,17 @@ class DecisionReportBuilder:
                 "trust_explanations": ie.get("why_trusted", {}),
                 "data_quality": ie.get("data_quality", {}),
             },
-
             "model_evidence": {
                 "selected": pe.get("model_selected", ""),
                 "selection_rationale": pe.get("why_this_model", ""),
                 "full_ranking": pe.get("model_ranking", []),
                 "evaluation_evidence": pe.get("eval_evidence", {}),
             },
-
             "forecast_evidence": {
                 "decomposition": pe.get("forecast_decomposition", {}),
                 "feature_importance": pe.get("feature_importance", []),
                 "scenarios": pe.get("scenarios", {}),
             },
-
             "policy_evidence": {
                 "confidence": dpe.get("confidence", 0.0),
                 "threshold": dpe.get("threshold", 0.0),
@@ -160,9 +151,7 @@ class DecisionReportBuilder:
                 "escalation_reason": dpe.get("escalation_reason", ""),
                 "human_override": dpe.get("human_override", True),
             },
-
             "model_card": model_card or {"status": "Generate with ModelCardGenerator"},
-
             "metadata": explanation.get("metadata", {}),
         }
 
@@ -193,7 +182,9 @@ class DecisionReportBuilder:
 
     def _executive_summary(
         self,
-        ie: dict, pe: dict, dpe: dict,
+        ie: dict,
+        pe: dict,
+        dpe: dict,
         forecast_result: dict | None,
     ) -> str:
         model = pe.get("model_selected", "selected model")
@@ -207,8 +198,7 @@ class DecisionReportBuilder:
         )
         if auto:
             summary += (
-                f"auto-execution (confidence: {confidence:.2f}). "
-                f"All evidence is attached below."
+                f"auto-execution (confidence: {confidence:.2f}). All evidence is attached below."
             )
         else:
             summary += (
@@ -256,8 +246,14 @@ class DecisionReportBuilder:
         lines.append(f"\n{report.get('compliance_note', '')}\n")
 
         for section_name, section_data in report.items():
-            if section_name in ("report_type", "title", "generated_at",
-                               "explanation_id", "compliance_note", "metadata"):
+            if section_name in (
+                "report_type",
+                "title",
+                "generated_at",
+                "explanation_id",
+                "compliance_note",
+                "metadata",
+            ):
                 continue
             if isinstance(section_data, dict):
                 lines.append(f"\n## {section_name.replace('_', ' ').title()}")

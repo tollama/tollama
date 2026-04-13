@@ -171,7 +171,7 @@ class TollamaHealthTool(_TollamaBaseTool):
         "Use this before forecast calls. "
         "Model choices for follow-up operations include "
         f"{_MODEL_NAME_EXAMPLES}. "
-        'Example: tool.invoke({}).'
+        "Example: tool.invoke({})."
     )
     args_schema: type[BaseModel] = HealthToolInput
 

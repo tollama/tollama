@@ -194,7 +194,7 @@ class NbeatsxAdapter:
             joined = ", ".join(sorted(set(missing or ["neuralforecast"])))
             raise DependencyMissingError(
                 "missing optional nbeatsx runner dependencies "
-                f"({joined}); install them with `pip install -e \".[dev,runner_nbeatsx]\"`",
+                f'({joined}); install them with `pip install -e ".[dev,runner_nbeatsx]"`',
             )
 
         deps = _Dependencies(
@@ -796,9 +796,7 @@ def _resolve_runtime_config(
     defaults = _NBEATSX_MODELS.get(model_name, {})
     repo_id = _dict_str(model_source, "repo_id") or _string_or_none(defaults.get("repo_id"))
     revision = (
-        _dict_str(model_source, "revision")
-        or _string_or_none(defaults.get("revision"))
-        or "main"
+        _dict_str(model_source, "revision") or _string_or_none(defaults.get("revision")) or "main"
     )
     implementation = (
         _dict_str(model_metadata, "implementation")

@@ -109,9 +109,7 @@ class A2ATaskStore:
 
         normalized_state = normalize_state(state) if state is not None else None
         min_timestamp = (
-            _parse_iso8601(status_timestamp_after)
-            if status_timestamp_after is not None
-            else None
+            _parse_iso8601(status_timestamp_after) if status_timestamp_after is not None else None
         )
         offset = _parse_page_token(page_token)
 

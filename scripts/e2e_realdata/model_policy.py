@@ -202,9 +202,7 @@ def scenario_policy_summary() -> dict[str, dict[str, list[str]]]:
         },
         CONTRACT_STRICT: {
             "models": [
-                model
-                for model in HF_STARTER_MODELS
-                if scenario_enabled(model, CONTRACT_STRICT)
+                model for model in HF_STARTER_MODELS if scenario_enabled(model, CONTRACT_STRICT)
             ]
         },
     }

@@ -5,6 +5,7 @@ from __future__ import annotations
 try:
     from textual.widgets import RichLog
 except Exception:  # pragma: no cover - optional dependency fallback
+
     class RichLog:  # type: ignore[no-redef]
         pass
 

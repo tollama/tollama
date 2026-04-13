@@ -70,14 +70,10 @@ class EvalExplanationExtender:
         )
 
         # Metric comparison matrix
-        xai["metric_comparison"] = self._build_metric_comparison(
-            model_results, primary_metric
-        )
+        xai["metric_comparison"] = self._build_metric_comparison(model_results, primary_metric)
 
         # Reproducibility proof
-        xai["reproducibility"] = self._build_reproducibility_proof(
-            eval_result, cv_config
-        )
+        xai["reproducibility"] = self._build_reproducibility_proof(eval_result, cv_config)
 
         # Narrative (natural language)
         if include_narrative:
@@ -131,13 +127,15 @@ class EvalExplanationExtender:
         evidence = []
         for i, model in enumerate(sorted_models):
             metrics = model.get("metrics", {})
-            evidence.append({
-                "rank": i + 1,
-                "model_name": model.get("model_name", ""),
-                "primary_metric_value": metrics.get(primary_metric),
-                "all_metrics": metrics,
-                "is_selected": model.get("model_name") == best_model,
-            })
+            evidence.append(
+                {
+                    "rank": i + 1,
+                    "model_name": model.get("model_name", ""),
+                    "primary_metric_value": metrics.get(primary_metric),
+                    "all_metrics": metrics,
+                    "is_selected": model.get("model_name") == best_model,
+                }
+            )
 
         winner = sorted_models[0] if sorted_models else {}
         winner_name = winner.get("model_name", best_model)
@@ -154,9 +152,7 @@ class EvalExplanationExtender:
             runner = sorted_models[1]
             runner_val = runner.get("metrics", {}).get(primary_metric, 0)
             margin = abs(winner_val - runner_val)
-            rationale += (
-                f" (margin over {runner.get('model_name', '')}: {margin:.4f})"
-            )
+            rationale += f" (margin over {runner.get('model_name', '')}: {margin:.4f})"
 
         return {
             "selected_model": winner_name,
@@ -185,13 +181,15 @@ class EvalExplanationExtender:
             "models": [],
         }
         for model in model_results:
-            comparison["models"].append({
-                "name": model.get("model_name", ""),
-                "values": {
-                    metric: model.get("metrics", {}).get(metric)
-                    for metric in sorted(all_metrics)
-                },
-            })
+            comparison["models"].append(
+                {
+                    "name": model.get("model_name", ""),
+                    "values": {
+                        metric: model.get("metrics", {}).get(metric)
+                        for metric in sorted(all_metrics)
+                    },
+                }
+            )
 
         return comparison
 
@@ -274,9 +272,7 @@ class EvalExplanationExtender:
 
         return narrative.strip()
 
-    def _to_markdown(
-        self, eval_result: dict[str, Any], xai: dict[str, Any]
-    ) -> str:
+    def _to_markdown(self, eval_result: dict[str, Any], xai: dict[str, Any]) -> str:
         """Convert to Markdown report."""
         lines = []
         lines.append("# Evaluation Explanation Report")

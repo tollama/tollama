@@ -26,6 +26,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class AttributionResult:
     """Feature attribution output for a single forecast."""
+
     temporal_importance: list[float] = field(default_factory=list)
     lag_importance: dict[int, float] = field(default_factory=dict)
     feature_importance: dict[str, float] = field(default_factory=dict)
@@ -114,9 +115,7 @@ class TemporalFeatureAttribution:
                 arr, predict_fn, forecast_horizon, exogenous, feature_names
             )
         elif self.method == "occlusion" and predict_fn is not None:
-            result = self._occlusion_sensitivity(
-                arr, predict_fn, forecast_horizon
-            )
+            result = self._occlusion_sensitivity(arr, predict_fn, forecast_horizon)
         else:
             result = self._lag_correlation(arr, forecast_horizon)
 
@@ -245,9 +244,7 @@ class TemporalFeatureAttribution:
         if total > 0:
             temporal_importance = temporal_importance / total
 
-        lag_importance = {
-            (n - 1 - t): float(temporal_importance[t]) for t in range(n)
-        }
+        lag_importance = {(n - 1 - t): float(temporal_importance[t]) for t in range(n)}
         top_indices = np.argsort(temporal_importance)[::-1][:5]
         top_periods = [
             {
@@ -289,9 +286,7 @@ class TemporalFeatureAttribution:
 
         lag_importance = {}
         for lag in range(1, min(max_lag, n // 2)):
-            acf = float(
-                np.sum(normalized[:-lag] * normalized[lag:]) / (var * (n - lag))
-            )
+            acf = float(np.sum(normalized[:-lag] * normalized[lag:]) / (var * (n - lag)))
             lag_importance[lag] = abs(acf)
 
         # Convert to temporal importance (reverse: recent lags first)

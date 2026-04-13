@@ -104,9 +104,13 @@ def _register_connectors(
 
 def _use_live_connectors() -> bool:
     """Check if live connectors should be used instead of mocks."""
-    return os.environ.get(
-        "TOLLAMA_USE_LIVE_CONNECTORS", "false",
-    ).lower() in _TRUE_ENV_VALUES
+    return (
+        os.environ.get(
+            "TOLLAMA_USE_LIVE_CONNECTORS",
+            "false",
+        ).lower()
+        in _TRUE_ENV_VALUES
+    )
 
 
 def _news_agent_url() -> str:

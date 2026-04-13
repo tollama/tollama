@@ -67,7 +67,9 @@ def _write_fake_python(paths: TollamaPaths, family: str) -> Path:
 @patch("tollama.core.runtime_bootstrap._install_extras")
 @patch("tollama.core.runtime_bootstrap._create_venv")
 def test_ensure_creates_venv_when_missing(
-    mock_create: MagicMock, mock_install: MagicMock, tmp_path: Path,
+    mock_create: MagicMock,
+    mock_install: MagicMock,
+    tmp_path: Path,
 ) -> None:
     paths = _paths(tmp_path)
 
@@ -88,7 +90,9 @@ def test_ensure_creates_venv_when_missing(
 @patch("tollama.core.runtime_bootstrap._install_extras")
 @patch("tollama.core.runtime_bootstrap._create_venv")
 def test_ensure_skips_when_valid(
-    mock_create: MagicMock, mock_install: MagicMock, tmp_path: Path,
+    mock_create: MagicMock,
+    mock_install: MagicMock,
+    tmp_path: Path,
 ) -> None:
     paths = _paths(tmp_path)
     _write_fake_state(paths, "torch")
@@ -104,7 +108,9 @@ def test_ensure_skips_when_valid(
 @patch("tollama.core.runtime_bootstrap._install_extras")
 @patch("tollama.core.runtime_bootstrap._create_venv")
 def test_ensure_reinstalls_when_version_mismatch(
-    mock_create: MagicMock, mock_install: MagicMock, tmp_path: Path,
+    mock_create: MagicMock,
+    mock_install: MagicMock,
+    tmp_path: Path,
 ) -> None:
     paths = _paths(tmp_path)
     _write_fake_state(paths, "torch", tollama_version="0.0.0-old")
@@ -124,7 +130,9 @@ def test_ensure_reinstalls_when_version_mismatch(
 @patch("tollama.core.runtime_bootstrap._install_extras")
 @patch("tollama.core.runtime_bootstrap._create_venv")
 def test_ensure_reinstalls_when_flag_set(
-    mock_create: MagicMock, mock_install: MagicMock, tmp_path: Path,
+    mock_create: MagicMock,
+    mock_install: MagicMock,
+    tmp_path: Path,
 ) -> None:
     paths = _paths(tmp_path)
     _write_fake_state(paths, "torch")
@@ -168,7 +176,9 @@ def test_python_version_check_blocks_312_for_timesfm(tmp_path: Path) -> None:
 @patch("tollama.core.runtime_bootstrap._install_extras")
 @patch("tollama.core.runtime_bootstrap._create_venv")
 def test_python_version_check_allows_311_for_uni2ts(
-    mock_create: MagicMock, mock_install: MagicMock, tmp_path: Path,
+    mock_create: MagicMock,
+    mock_install: MagicMock,
+    tmp_path: Path,
 ) -> None:
     paths = _paths(tmp_path)
 
@@ -280,7 +290,9 @@ def test_runner_command_rejects_unknown_family(tmp_path: Path) -> None:
 @patch("tollama.core.runtime_bootstrap.subprocess.run")
 @patch("tollama.core.runtime_bootstrap.venv.create")
 def test_pip_failure_raises_bootstrap_error(
-    mock_venv_create: MagicMock, mock_run: MagicMock, tmp_path: Path,
+    mock_venv_create: MagicMock,
+    mock_run: MagicMock,
+    tmp_path: Path,
 ) -> None:
     paths = _paths(tmp_path)
 

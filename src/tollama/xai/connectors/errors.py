@@ -80,8 +80,7 @@ UNKNOWN = ErrorCategory(
 # ── lookup helper ────────────────────────────────────────────
 
 _ALL_CATEGORIES: dict[str, ErrorCategory] = {
-    c.error_type: c
-    for c in [AUTH, SCHEMA, NOT_FOUND, RATE_LIMIT, INTERNAL, NETWORK, UNKNOWN]
+    c.error_type: c for c in [AUTH, SCHEMA, NOT_FOUND, RATE_LIMIT, INTERNAL, NETWORK, UNKNOWN]
 }
 
 ALL_ERROR_TYPES: frozenset[str] = frozenset(_ALL_CATEGORIES)

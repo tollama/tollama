@@ -121,11 +121,13 @@ class TrustBreakdown:
         if not signals:
             # Single signal mode
             signal_name = calibration_result.get("source", "polymarket")
-            signals = [{
-                "name": signal_name,
-                "trust_score": calibration_result.get("trust_score", 0.0),
-                "metrics": calibration_result.get("metrics", {}),
-            }]
+            signals = [
+                {
+                    "name": signal_name,
+                    "trust_score": calibration_result.get("trust_score", 0.0),
+                    "metrics": calibration_result.get("metrics", {}),
+                }
+            ]
 
         for signal in signals:
             name = signal.get("name", "unknown")
@@ -139,9 +141,7 @@ class TrustBreakdown:
             breakdowns[name] = breakdown
 
             # Natural language explanation
-            why_trusted[name] = self._generate_trust_explanation(
-                name, score, metrics, breakdown
-            )
+            why_trusted[name] = self._generate_trust_explanation(name, score, metrics, breakdown)
 
             # Recommendations
             recs = self._generate_recommendations(name, score, metrics, breakdown)
@@ -163,9 +163,7 @@ class TrustBreakdown:
         required = {"agent_name", "domain", "trust_score", "component_breakdown", "why_trusted"}
         return required.issubset(payload.keys())
 
-    def _decompose_trust_score(
-        self, metrics: dict[str, float]
-    ) -> dict[str, dict[str, Any]]:
+    def _decompose_trust_score(self, metrics: dict[str, float]) -> dict[str, dict[str, Any]]:
         """Break down trust score into component contributions."""
         breakdown = {}
 
@@ -272,25 +270,29 @@ class TrustBreakdown:
 
         for comp, info in breakdown.items():
             if info.get("assessment") == "poor":
-                recs.append({
-                    "signal": signal_name,
-                    "component": info.get("name", comp),
-                    "issue": f"{info.get('name', comp)} is poor ({info.get('value')})",
-                    "suggestion": (
-                        f"Consider reducing weight of {signal_name} signal "
-                        f"or supplementing with additional sources"
-                    ),
-                })
+                recs.append(
+                    {
+                        "signal": signal_name,
+                        "component": info.get("name", comp),
+                        "issue": f"{info.get('name', comp)} is poor ({info.get('value')})",
+                        "suggestion": (
+                            f"Consider reducing weight of {signal_name} signal "
+                            f"or supplementing with additional sources"
+                        ),
+                    }
+                )
 
         if score < self.LOW_TRUST:
-            recs.append({
-                "signal": signal_name,
-                "component": "overall",
-                "issue": f"Overall trust score very low ({score:.2f})",
-                "suggestion": (
-                    f"Signal {signal_name} should not be used as primary "
-                    f"input without additional corroboration"
-                ),
-            })
+            recs.append(
+                {
+                    "signal": signal_name,
+                    "component": "overall",
+                    "issue": f"Overall trust score very low ({score:.2f})",
+                    "suggestion": (
+                        f"Signal {signal_name} should not be used as primary "
+                        f"input without additional corroboration"
+                    ),
+                }
+            )
 
         return recs

@@ -22,7 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Added an explicit Ollama-workflow parity contract and release-gate documentation
 - `scripts/verify_daemon_api.sh` can now emit `result.json`, `summary.json`, and `summary.md` artifacts for workflow parity verification
 - Added a checked-in OpenAPI export workflow (`docs/openapi.json`) plus deterministic artifact normalization for CI drift checks
-- Added phased Python 3.11 quality gates for scoped mypy, coverage reporting, pre-commit, Bandit, pip-audit, and compiled dev-lock freshness
+- Added phased Python 3.11 quality gates for scoped mypy, blocking coverage at the initial 64% baseline, pre-commit, medium+ severity Bandit, pip-audit, and compiled dev-lock freshness
 - Extended daemon observability with additive `/health/live` and `/health/ready` probes and per-runner metrics derived from forecast timing/usage metadata
 - Centralized daemon/core/cli-owned `TOLLAMA_*` environment access under `src/tollama/core/env.py`
 

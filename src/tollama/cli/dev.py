@@ -106,7 +106,7 @@ def scaffold_runner(
     typer.echo("Next steps:")
     typer.echo("  1. Implement adapter.forecast in adapter.py.")
     typer.echo("  2. Run tests: pytest -q tests/test_" + family + "_runner.py")
-    typer.echo("  3. If you used --register, reinstall: python -m pip install -e \".[dev]\"")
+    typer.echo('  3. If you used --register, reinstall: python -m pip install -e ".[dev]"')
     typer.echo("  4. Add real model metadata/capabilities in model-registry/registry.yaml.")
 
 

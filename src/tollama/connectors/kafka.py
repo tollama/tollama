@@ -100,8 +100,7 @@ class KafkaConnector(DataConnector):
                 break
 
         return [
-            SeriesChunk(id=sid, timestamps=ts, values=vals)
-            for sid, (ts, vals) in by_id.items()
+            SeriesChunk(id=sid, timestamps=ts, values=vals) for sid, (ts, vals) in by_id.items()
         ]
 
     def stream_series(

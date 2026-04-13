@@ -643,7 +643,10 @@ def test_aggregate_most_conservative_risk_wins():
 
         def analyze(self, p):
             return NormalizedTrustResult(
-                agent_name="green", domain="d", trust_score=0.9, risk_category="GREEN",
+                agent_name="green",
+                domain="d",
+                trust_score=0.9,
+                risk_category="GREEN",
             )
 
     class RedAgent:
@@ -656,7 +659,10 @@ def test_aggregate_most_conservative_risk_wins():
 
         def analyze(self, p):
             return NormalizedTrustResult(
-                agent_name="red", domain="d", trust_score=0.3, risk_category="RED",
+                agent_name="red",
+                domain="d",
+                trust_score=0.3,
+                risk_category="RED",
             )
 
     registry = TrustAgentRegistry()
@@ -682,7 +688,9 @@ def test_aggregate_merges_violations():
 
         def analyze(self, p):
             return NormalizedTrustResult(
-                agent_name="v1", domain="d", trust_score=0.7,
+                agent_name="v1",
+                domain="d",
+                trust_score=0.7,
                 violations=[TrustViolation(name="issue_a", severity="critical")],
             )
 
@@ -696,7 +704,9 @@ def test_aggregate_merges_violations():
 
         def analyze(self, p):
             return NormalizedTrustResult(
-                agent_name="v2", domain="d", trust_score=0.6,
+                agent_name="v2",
+                domain="d",
+                trust_score=0.6,
                 violations=[
                     TrustViolation(name="issue_b", severity="warning"),
                     TrustViolation(name="issue_c", severity="critical"),
@@ -727,7 +737,9 @@ def test_aggregate_weighted_score():
 
         def analyze(self, p):
             return NormalizedTrustResult(
-                agent_name="low", domain="d", trust_score=1.0,
+                agent_name="low",
+                domain="d",
+                trust_score=1.0,
             )
 
     class HighPri:
@@ -740,7 +752,9 @@ def test_aggregate_weighted_score():
 
         def analyze(self, p):
             return NormalizedTrustResult(
-                agent_name="high", domain="d", trust_score=0.5,
+                agent_name="high",
+                domain="d",
+                trust_score=0.5,
             )
 
     registry = TrustAgentRegistry()
@@ -767,7 +781,10 @@ def test_aggregate_disagree_triggers_human_review():
 
         def analyze(self, p):
             return NormalizedTrustResult(
-                agent_name="ag", domain="d", trust_score=0.9, risk_category="GREEN",
+                agent_name="ag",
+                domain="d",
+                trust_score=0.9,
+                risk_category="GREEN",
             )
 
     class AgY:
@@ -780,7 +797,10 @@ def test_aggregate_disagree_triggers_human_review():
 
         def analyze(self, p):
             return NormalizedTrustResult(
-                agent_name="ay", domain="d", trust_score=0.6, risk_category="YELLOW",
+                agent_name="ay",
+                domain="d",
+                trust_score=0.6,
+                risk_category="YELLOW",
             )
 
     registry = TrustAgentRegistry()
@@ -806,7 +826,9 @@ def test_analyze_multi_single_match_returns_directly():
 
         def analyze(self, p):
             return NormalizedTrustResult(
-                agent_name="solo", domain="solo_domain", trust_score=0.77,
+                agent_name="solo",
+                domain="solo_domain",
+                trust_score=0.77,
             )
 
     registry = TrustAgentRegistry()
@@ -845,7 +867,9 @@ def test_engine_multi_agent_mode():
 
         def analyze(self, p):
             return NormalizedTrustResult(
-                agent_name="x", domain="multi_test", trust_score=0.85,
+                agent_name="x",
+                domain="multi_test",
+                trust_score=0.85,
                 risk_category="GREEN",
                 component_breakdown={"cx": TrustComponent(score=0.85, weight=1.0)},
             )
@@ -860,7 +884,9 @@ def test_engine_multi_agent_mode():
 
         def analyze(self, p):
             return NormalizedTrustResult(
-                agent_name="y", domain="multi_test", trust_score=0.65,
+                agent_name="y",
+                domain="multi_test",
+                trust_score=0.65,
                 risk_category="YELLOW",
                 component_breakdown={"cy": TrustComponent(score=0.65, weight=1.0)},
             )
@@ -950,7 +976,9 @@ def test_engine_trust_payload_empty_dict_not_ignored():
 
         def analyze(self, p):
             return NormalizedTrustResult(
-                agent_name="stub", domain="stub_domain", trust_score=0.70,
+                agent_name="stub",
+                domain="stub_domain",
+                trust_score=0.70,
             )
 
     registry = TrustAgentRegistry()

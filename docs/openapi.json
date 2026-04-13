@@ -1167,8 +1167,8 @@
       "Body_forecast_upload_api_forecast_upload_post": {
         "properties": {
           "file": {
+            "contentMediaType": "application/octet-stream",
             "description": "CSV/parquet file payload to ingest and forecast.",
-            "format": "binary",
             "title": "File",
             "type": "string"
           },
@@ -1248,8 +1248,8 @@
       "Body_ingest_upload_api_ingest_upload_post": {
         "properties": {
           "file": {
+            "contentMediaType": "application/octet-stream",
             "description": "CSV/parquet file payload to ingest.",
-            "format": "binary",
             "title": "File",
             "type": "string"
           },

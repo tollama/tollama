@@ -50,7 +50,11 @@ def audit_unload(*, model: str, family: str, source_ip: str | None = None) -> No
 
 
 def audit_config_change(
-    *, key: str, old_value: Any = None, new_value: Any = None, source_ip: str | None = None,
+    *,
+    key: str,
+    old_value: Any = None,
+    new_value: Any = None,
+    source_ip: str | None = None,
 ) -> None:
     """Log a configuration change."""
     _audit_logger.info(
@@ -67,7 +71,10 @@ def audit_config_change(
 
 
 def audit_gate_decision(
-    *, model: str, decision: str, trust_score: float | None = None,
+    *,
+    model: str,
+    decision: str,
+    trust_score: float | None = None,
     source_ip: str | None = None,
 ) -> None:
     """Log a trust-gate decision."""

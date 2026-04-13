@@ -41,12 +41,10 @@ def normalize_covariates(
 
         expected_history = len(series.target)
         past_covariates = {
-            name: list(values)
-            for name, values in sorted((series.past_covariates or {}).items())
+            name: list(values) for name, values in sorted((series.past_covariates or {}).items())
         }
         future_covariates = {
-            name: list(values)
-            for name, values in sorted((series.future_covariates or {}).items())
+            name: list(values) for name, values in sorted((series.future_covariates or {}).items())
         }
 
         past_kinds: dict[str, str] = {}
@@ -239,9 +237,7 @@ def apply_covariate_capabilities(
             continue
 
         normalized_past = {
-            name: values
-            for name, values in past_covariates.items()
-            if name not in drop_past
+            name: values for name, values in past_covariates.items() if name not in drop_past
         }
         normalized_future = {
             name: values for name, values in future_covariates.items() if name not in drop_future
@@ -292,8 +288,7 @@ def _infer_freq_from_timestamps(timestamps: list[str]) -> str | None:
         import pandas as pd
     except ImportError as exc:
         raise ValueError(
-            "pandas is required to infer frequency when freq='auto'. "
-            "Install pandas>=2.0,<3.0.",
+            "pandas is required to infer frequency when freq='auto'. Install pandas>=2.0,<3.0.",
         ) from exc
 
     try:

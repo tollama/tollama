@@ -259,9 +259,7 @@ def _export_torchscript(
 
     model = _try_load_torch_model(model_dir, torch_module)
     if model is None:
-        warnings.append(
-            "could not load model weights; exporting a placeholder TorchScript module."
-        )
+        warnings.append("could not load model weights; exporting a placeholder TorchScript module.")
         model = _DummyForecastModule(512, 96, torch_module)
 
     model.eval()

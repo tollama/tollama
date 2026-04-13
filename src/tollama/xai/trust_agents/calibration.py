@@ -91,9 +91,7 @@ class CalibrationTracker:
         residuals = [r.predicted_score - r.actual_outcome for r in records]
         mean_bias = sum(residuals) / len(residuals)
         ece = self._compute_ece(records)
-        adjustments = (
-            self._compute_adjustments(records) if len(records) >= self.MIN_RECORDS else {}
-        )
+        adjustments = self._compute_adjustments(records) if len(records) >= self.MIN_RECORDS else {}
 
         return CalibrationStats(
             agent_name=agent_name,

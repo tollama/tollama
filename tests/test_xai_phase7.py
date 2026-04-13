@@ -117,9 +117,7 @@ class TestAsyncPayloadAssembler:
         registry = AsyncConnectorRegistry()
         registry.register(_FakeAsyncConnector())  # type: ignore[arg-type]
         assembler = AsyncPayloadAssembler(registry)
-        result = asyncio.run(
-            assembler.assemble("test_domain", "test-id")
-        )
+        result = asyncio.run(assembler.assemble("test_domain", "test-id"))
         assert result.payload == {"key": "value"}
         assert result.connector_name == "fake_async"
         assert result.trust_context["domain"] == "test_domain"
@@ -128,9 +126,7 @@ class TestAsyncPayloadAssembler:
         registry = AsyncConnectorRegistry()
         assembler = AsyncPayloadAssembler(registry)
         with pytest.raises(ConnectorFetchError) as exc_info:
-            asyncio.run(
-                assembler.assemble("missing", "x")
-            )
+            asyncio.run(assembler.assemble("missing", "x"))
         assert exc_info.value.error.error_type == "not_found"
         assert exc_info.value.error.domain == "missing"
         assert "No async connector" in exc_info.value.error.message
@@ -255,7 +251,9 @@ class TestAsyncFetchHelper:
                 return None
 
             async def get(
-                self, url: str, headers: dict[str, str],
+                self,
+                url: str,
+                headers: dict[str, str],
             ) -> _FakeResponse:
                 captured["url"] = url
                 captured["headers"] = headers
@@ -777,10 +775,12 @@ class TestTrustRouterCalibration:
 class TestReexports:
     def test_async_connector_registry_from_package(self):
         from tollama.xai.connectors import AsyncConnectorRegistry
+
         assert AsyncConnectorRegistry is not None
 
     def test_async_payload_assembler_from_package(self):
         from tollama.xai.connectors import AsyncPayloadAssembler
+
         assert AsyncPayloadAssembler is not None
 
     def test_build_helpers_from_package(self):
@@ -788,5 +788,6 @@ class TestReexports:
             build_default_async_assembler,
             build_default_async_connector_registry,
         )
+
         assert build_default_async_assembler is not None
         assert build_default_async_connector_registry is not None

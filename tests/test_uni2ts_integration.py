@@ -35,8 +35,7 @@ def test_moirai_forecast_integration(monkeypatch, tmp_path) -> None:
                 "id": "integration-series-1",
                 "freq": "D",
                 "timestamps": [
-                    (start + timedelta(days=index)).date().isoformat()
-                    for index in range(520)
+                    (start + timedelta(days=index)).date().isoformat() for index in range(520)
                 ],
                 "target": [100.0 + float(index) for index in range(520)],
             }

@@ -33,9 +33,11 @@ logger = logging.getLogger(__name__)
 # Data structures
 # ──────────────────────────────────────────────────────────────
 
+
 @dataclass
 class InputExplanation:
     """Input 단계 설명: 왜 이 신호를 반영했는가"""
+
     signals_used: list[str] = field(default_factory=list)
     trust_scores: dict[str, float] = field(default_factory=dict)
     trust_breakdowns: dict[str, dict[str, Any]] = field(default_factory=dict)
@@ -46,6 +48,7 @@ class InputExplanation:
 @dataclass
 class PlanExplanation:
     """Plan 단계 설명: 왜 이 모델과 시나리오를 추천했는가"""
+
     model_selected: str = ""
     why_this_model: str = ""
     model_ranking: list[dict[str, Any]] = field(default_factory=list)
@@ -58,6 +61,7 @@ class PlanExplanation:
 @dataclass
 class DecisionPolicyExplanation:
     """Decision Policy 단계 설명: 왜 이 승인/자동화 정책이 나왔는가"""
+
     auto_executed: bool = False
     confidence: float = 0.0
     threshold: float = 0.0
@@ -75,6 +79,7 @@ class DecisionPolicyExplanation:
 @dataclass
 class DecisionExplanation:
     """End-to-end Decision Explanation — /api/explain-decision 응답 구조"""
+
     explanation_id: str = ""
     timestamp: str = ""
     version: str = "0.1.0"
@@ -93,6 +98,7 @@ class DecisionExplanation:
 # ──────────────────────────────────────────────────────────────
 # Explanation Engine
 # ──────────────────────────────────────────────────────────────
+
 
 class ExplanationEngine:
     """
@@ -262,7 +268,9 @@ class ExplanationEngine:
                 "Phase 2b: trust-gated decisioning with L1-L5 pipeline integration. "
                 "Trust score, constraint violations, and risk category control "
                 "auto-execution decisions."
-            ) if has_trust else (
+            )
+            if has_trust
+            else (
                 "Phase 2a explanation is evidence repackaging, "
                 "not deep interpretability. Install trust-intelligence "
                 "for trust-gated decisioning."
@@ -273,9 +281,7 @@ class ExplanationEngine:
         if ti_metadata:
             explanation.metadata.update(ti_metadata)
 
-        logger.info(
-            "Generated decision explanation %s", explanation.explanation_id
-        )
+        logger.info("Generated decision explanation %s", explanation.explanation_id)
         return explanation
 
     def _explain_input(
@@ -305,10 +311,7 @@ class ExplanationEngine:
             # Fallback: direct passthrough
             ie.trust_scores = calibration_result.get("trust_scores", {})
             for signal, score in ie.trust_scores.items():
-                ie.why_trusted[signal] = (
-                    f"Trust Score {score:.2f} based on "
-                    f"calibration metrics"
-                )
+                ie.why_trusted[signal] = f"Trust Score {score:.2f} based on calibration metrics"
 
         # Data quality signals
         ie.data_quality = forecast_result.get("data_quality", {})
@@ -335,9 +338,7 @@ class ExplanationEngine:
             context.update(trust_context)
 
         payload = (
-            trust_payload
-            if trust_payload is not None
-            else explain_options.get("trust_payload")
+            trust_payload if trust_payload is not None else explain_options.get("trust_payload")
         )
         if payload is None and calibration_result is not None:
             payload = calibration_result
@@ -375,8 +376,7 @@ class ExplanationEngine:
         elif eval_result:
             pe.model_selected = eval_result.get("best_model", "")
             pe.why_this_model = (
-                "Selected based on lowest error metric in "
-                "expanding-window cross-validation"
+                "Selected based on lowest error metric in expanding-window cross-validation"
             )
 
         # Forecast Decomposition
@@ -385,22 +385,16 @@ class ExplanationEngine:
                 decomp = self.forecast_decomposer.decompose(time_series_data)
                 pe.forecast_decomposition = decomp
             else:
-                pe.forecast_decomposition = {
-                    "note": "Decomposition available in Phase 3+"
-                }
+                pe.forecast_decomposition = {"note": "Decomposition available in Phase 3+"}
 
         # Feature Attribution (Phase 3+)
         if include_attribution and time_series_data is not None:
             if self.feature_attribution:
-                pe.feature_importance = self.feature_attribution.compute(
-                    time_series_data
-                )
+                pe.feature_importance = self.feature_attribution.compute(time_series_data)
 
         # Scenario Rationale
         if self.scenario_rationale and "scenarios" in forecast_result:
-            pe.scenarios = self.scenario_rationale.explain(
-                forecast_result["scenarios"]
-            )
+            pe.scenarios = self.scenario_rationale.explain(forecast_result["scenarios"])
         elif "scenarios" in forecast_result:
             pe.scenarios = forecast_result["scenarios"]
 

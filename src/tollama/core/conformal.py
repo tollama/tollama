@@ -75,10 +75,7 @@ def calibrate(
     predictions = np.asarray(predictions, dtype=np.float64)
 
     if actuals.shape != predictions.shape:
-        msg = (
-            f"Shape mismatch: actuals {actuals.shape} vs "
-            f"predictions {predictions.shape}"
-        )
+        msg = f"Shape mismatch: actuals {actuals.shape} vs predictions {predictions.shape}"
         raise ValueError(msg)
 
     if actuals.size == 0:
@@ -204,9 +201,7 @@ def apply_conformal_to_response(
             merged_quantiles.update(forecast.quantiles)
         merged_quantiles.update(intervals)
 
-        updated_forecasts.append(
-            forecast.model_copy(update={"quantiles": merged_quantiles})
-        )
+        updated_forecasts.append(forecast.model_copy(update={"quantiles": merged_quantiles}))
 
     return response.model_copy(
         update={

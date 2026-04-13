@@ -16,6 +16,7 @@ from typing import Any
 @dataclass
 class ModelRank:
     """Single model's ranking entry with evidence."""
+
     model_name: str = ""
     rank: int = 0
     metrics: dict[str, float] = field(default_factory=dict)
@@ -156,9 +157,7 @@ class ModelSelectionExplainer:
             "eval_evidence": evidence,
         }
 
-    def _rank_models(
-        self, model_results: list[dict[str, Any]]
-    ) -> list[ModelRank]:
+    def _rank_models(self, model_results: list[dict[str, Any]]) -> list[ModelRank]:
         """Rank models by primary metric, annotate strengths/weaknesses."""
         # Sort by primary metric
         metric_info = self.METRIC_DESCRIPTIONS.get(self.primary_metric, {})
@@ -247,9 +246,7 @@ class ModelSelectionExplainer:
 
             if metrics[metric] == worst_val and len(values) > 1:
                 metric_name = info.get("name", metric)
-                weaknesses.append(
-                    f"Worst {metric_name} ({metrics[metric]:.4f})"
-                )
+                weaknesses.append(f"Worst {metric_name} ({metrics[metric]:.4f})")
 
         return weaknesses
 
@@ -284,8 +281,7 @@ class ModelSelectionExplainer:
             runner_val = runner.metrics.get(self.primary_metric, 0)
             margin = abs(primary_val - runner_val)
             rationale += (
-                f". Runner-up: {runner.model_name} "
-                f"({runner_val:.4f}, margin: {margin:.4f})"
+                f". Runner-up: {runner.model_name} ({runner_val:.4f}, margin: {margin:.4f})"
             )
 
         return rationale
@@ -302,9 +298,9 @@ class ModelSelectionExplainer:
             "n_splits": cv_config.get("n_splits", None),
             "n_models_evaluated": len(ranking),
             "primary_metric": self.primary_metric,
-            "primary_metric_description": self.METRIC_DESCRIPTIONS.get(
-                self.primary_metric, {}
-            ).get("explanation", ""),
+            "primary_metric_description": self.METRIC_DESCRIPTIONS.get(self.primary_metric, {}).get(
+                "explanation", ""
+            ),
             "dataset_info": eval_result.get("dataset_info", {}),
             "reproducibility": {
                 "cv_seed": cv_config.get("seed", None),

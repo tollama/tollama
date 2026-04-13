@@ -295,7 +295,7 @@ def _retrying_sync_fetch(
         except (httpx.RequestError, httpx.HTTPStatusError) as exc:
             last_exc = exc
             if _should_retry(exc, attempt, max_retries):
-                delay = retry_base_delay * (2 ** attempt)
+                delay = retry_base_delay * (2**attempt)
                 _log.info(
                     "Retrying %s fetch %s (attempt %d, delay %.1fs)",
                     retry_log_label,
@@ -387,7 +387,9 @@ class _RetryingSyncHttpConnectorBase(_HttpConnectorBase):
         )
 
     def fetch(
-        self, identifier: str, context: dict[str, Any],
+        self,
+        identifier: str,
+        context: dict[str, Any],
     ) -> ConnectorResult:
         return _retrying_sync_fetch(
             base_url=self._base_url,

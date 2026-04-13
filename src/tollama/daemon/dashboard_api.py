@@ -42,9 +42,7 @@ def create_dashboard_router(
             request=request,
         )
         warnings = [
-            warning
-            for warning in (info_warning, ps_warning, usage_warning)
-            if warning is not None
+            warning for warning in (info_warning, ps_warning, usage_warning) if warning is not None
         ]
         return DashboardStateResponse(
             info=info,

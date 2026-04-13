@@ -140,8 +140,7 @@ class VaultSecretsBackend(SecretsBackend):
             import hvac
         except ImportError:
             raise ImportError(
-                "hvac package required for Vault integration. "
-                "Install with: pip install hvac"
+                "hvac package required for Vault integration. Install with: pip install hvac"
             )
 
         client = hvac.Client(url=self._url, token=self._token)
@@ -208,8 +207,7 @@ class AWSSecretsBackend(SecretsBackend):
             import boto3
         except ImportError:
             raise ImportError(
-                "boto3 package required for AWS Secrets Manager. "
-                "Install with: pip install boto3"
+                "boto3 package required for AWS Secrets Manager. Install with: pip install boto3"
             )
 
         try:
@@ -269,8 +267,7 @@ def create_secrets_backend(
         path = cfg.get("path") or os.environ.get("TOLLAMA_SECRETS_FILE", "")
         if not path:
             raise ValueError(
-                "File secrets backend requires 'path' config or "
-                "TOLLAMA_SECRETS_FILE env var"
+                "File secrets backend requires 'path' config or TOLLAMA_SECRETS_FILE env var"
             )
         return FileSecretsBackend(path)
 

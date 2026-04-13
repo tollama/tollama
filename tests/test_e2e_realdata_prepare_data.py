@@ -34,17 +34,11 @@ def test_parse_m4_daily_files_applies_horizon_and_context(tmp_path: Path) -> Non
     test_path = tmp_path / "Daily-test.csv"
 
     train_path.write_text(
-        "V1,V2,V3,V4,V5\n"
-        "D1,1,2,3,4\n"
-        "D2,10,11,12,13\n"
-        "D3,20,21,22,23\n",
+        "V1,V2,V3,V4,V5\nD1,1,2,3,4\nD2,10,11,12,13\nD3,20,21,22,23\n",
         encoding="utf-8",
     )
     test_path.write_text(
-        "V1,V2,V3\n"
-        "D1,5,6\n"
-        "D2,14,15\n"
-        "D3,24,25\n",
+        "V1,V2,V3\nD1,5,6\nD2,14,15\nD3,24,25\n",
         encoding="utf-8",
     )
 

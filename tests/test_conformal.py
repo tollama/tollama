@@ -86,7 +86,9 @@ def test_apply_conformal_to_response() -> None:
         model="test",
         forecasts=[
             SeriesForecast(
-                id="s1", freq="D", start_timestamp="2025-01-01",
+                id="s1",
+                freq="D",
+                start_timestamp="2025-01-01",
                 mean=[10.0, 20.0, 30.0],
             ),
         ],

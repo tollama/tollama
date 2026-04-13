@@ -379,12 +379,8 @@ def normalized_result_to_legacy_metadata(
 ) -> dict[str, Any]:
     """Convert normalized trust output into legacy trust metadata."""
     result = coerce_normalized_trust_result(value)
-    weights = {
-        name: component.weight for name, component in result.component_breakdown.items()
-    }
-    components = {
-        name: component.score for name, component in result.component_breakdown.items()
-    }
+    weights = {name: component.weight for name, component in result.component_breakdown.items()}
+    components = {name: component.score for name, component in result.component_breakdown.items()}
     components["risk_category"] = result.risk_category
     components["constraint_satisfied"] = not any(
         violation.severity == "critical" for violation in result.violations
@@ -395,9 +391,8 @@ def normalized_result_to_legacy_metadata(
             "domain": result.domain,
             "version": result.audit.agent_version,
             "trust_score": result.trust_score,
-            "calibration_status": result.calibration_status or _derive_calibration_status(
-                result.trust_score
-            ),
+            "calibration_status": result.calibration_status
+            or _derive_calibration_status(result.trust_score),
             "weights": weights,
             "components": components,
             "shap_top_features": [],

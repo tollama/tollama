@@ -27,8 +27,7 @@ _FLAT_SLOPE_RATIO_THRESHOLD = 1e-3
 def analyze_series_request(request: AnalyzeRequest) -> AnalyzeResponse:
     """Analyze every input series and return canonical response payload."""
     results = [
-        analyze_series(series=series, parameters=request.parameters)
-        for series in request.series
+        analyze_series(series=series, parameters=request.parameters) for series in request.series
     ]
 
     merged_warnings: list[str] = []
@@ -166,9 +165,7 @@ def detect_seasonality(
 
     if not peaks:
         peaks = [
-            (lag, corr)
-            for lag, corr in correlations
-            if corr >= _SEASONALITY_CORRELATION_THRESHOLD
+            (lag, corr) for lag, corr in correlations if corr >= _SEASONALITY_CORRELATION_THRESHOLD
         ]
 
     ranked = sorted(peaks, key=lambda item: (-item[1], item[0]))[:top_k]
@@ -199,10 +196,7 @@ def detect_trend(values: list[float]) -> tuple[TrendAnalysis, list[str]]:
     if ss_tot <= 0.0:
         r2 = 0.0
     else:
-        ss_res = sum(
-            (value - (intercept + slope * idx)) ** 2
-            for idx, value in enumerate(values)
-        )
+        ss_res = sum((value - (intercept + slope * idx)) ** 2 for idx, value in enumerate(values))
         r2 = _clamp(1.0 - (ss_res / ss_tot))
 
     scale = max(abs(mean_y), 1.0)

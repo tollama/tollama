@@ -357,7 +357,7 @@ def _hf_requests_client_tools() -> _HFClientFactoryTools:
         from huggingface_hub.utils._http import configure_http_backend
     except ModuleNotFoundError as exc:
         raise RuntimeError(
-            "missing Hugging Face dependency; install with `pip install -e \".[dev]\"`",
+            'missing Hugging Face dependency; install with `pip install -e ".[dev]"`',
         ) from exc
 
     default_client_factory: Any | None = None
@@ -408,7 +408,7 @@ def _hf_model_info(*, repo_id: str, revision: str, token: str | None) -> Any:
         from huggingface_hub import HfApi
     except ModuleNotFoundError as exc:
         raise RuntimeError(
-            "missing Hugging Face dependency; install with `pip install -e \".[dev]\"`",
+            'missing Hugging Face dependency; install with `pip install -e ".[dev]"`',
         ) from exc
 
     client = HfApi(token=token)
@@ -429,7 +429,7 @@ def _hf_snapshot_download(
         from huggingface_hub import snapshot_download
     except ModuleNotFoundError as exc:
         raise RuntimeError(
-            "missing Hugging Face dependency; install with `pip install -e \".[dev]\"`",
+            'missing Hugging Face dependency; install with `pip install -e ".[dev]"`',
         ) from exc
 
     return snapshot_download(
@@ -448,6 +448,6 @@ def _tqdm_base_class() -> type[Any]:
         from tqdm.auto import tqdm
     except ModuleNotFoundError as exc:
         raise RuntimeError(
-            "missing tqdm dependency; install with `pip install -e \".[dev]\"`",
+            'missing tqdm dependency; install with `pip install -e ".[dev]"`',
         ) from exc
     return tqdm

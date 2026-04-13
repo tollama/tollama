@@ -56,9 +56,7 @@ class EventStream:
         normalized_events: frozenset[str] | None = None
         if event_types is not None:
             normalized_events = frozenset(
-                item.strip()
-                for item in event_types
-                if isinstance(item, str) and item.strip()
+                item.strip() for item in event_types if isinstance(item, str) and item.strip()
             )
             if not normalized_events:
                 normalized_events = None

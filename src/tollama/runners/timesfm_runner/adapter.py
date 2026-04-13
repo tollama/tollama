@@ -260,9 +260,7 @@ class TimesFMAdapter:
         model_revision = runtime.revision
         max_horizon = max(runtime.max_horizon, request_horizon)
         use_quantile_head = bool(requested_quantiles)
-        torch_compile = (
-            bool(options.get("torch_compile")) if "torch_compile" in options else False
-        )
+        torch_compile = bool(options.get("torch_compile")) if "torch_compile" in options else False
         infer_is_positive = (
             bool(options.get("infer_is_positive")) if "infer_is_positive" in options else False
         )
@@ -342,7 +340,7 @@ class TimesFMAdapter:
             joined = ", ".join(sorted(set(missing_packages)))
             raise DependencyMissingError(
                 "missing optional timesfm runner dependencies "
-                f"({joined}); install them with `pip install -e \".[dev,runner_timesfm]\"`",
+                f'({joined}); install them with `pip install -e ".[dev,runner_timesfm]"`',
             )
 
         assert np is not None
@@ -716,7 +714,7 @@ def _load_timesfm_model(
     if model_cls is None:
         raise DependencyMissingError(
             "timesfm package does not expose TimesFM_2p5_200M_torch; "
-            "install with `pip install -e \".[dev,runner_timesfm]\"`",
+            'install with `pip install -e ".[dev,runner_timesfm]"`',
         )
 
     kwargs: dict[str, Any] = {}
@@ -773,12 +771,10 @@ def _quantile_channel_index(rows: list[list[list[float]]]) -> dict[float, int]:
         offset = 1
     else:
         raise AdapterInputError(
-            "TimesFM quantile output has unsupported channel count "
-            f"({channels}); expected 9 or 10",
+            f"TimesFM quantile output has unsupported channel count ({channels}); expected 9 or 10",
         )
     return {
-        _normalize_quantile(value): index + offset
-        for index, value in enumerate(_DEFAULT_QUANTILES)
+        _normalize_quantile(value): index + offset for index, value in enumerate(_DEFAULT_QUANTILES)
     }
 
 

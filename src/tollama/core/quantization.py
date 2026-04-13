@@ -75,23 +75,33 @@ def resolve_precision_config(mode: PrecisionMode) -> PrecisionConfig:
     """Map a precision mode to concrete dtype configuration."""
     configs: dict[PrecisionMode, PrecisionConfig] = {
         "fp32": PrecisionConfig(
-            mode="fp32", compute_dtype="float32", storage_dtype="float32",
+            mode="fp32",
+            compute_dtype="float32",
+            storage_dtype="float32",
             requires_gpu=False,
         ),
         "fp16": PrecisionConfig(
-            mode="fp16", compute_dtype="float16", storage_dtype="float16",
+            mode="fp16",
+            compute_dtype="float16",
+            storage_dtype="float16",
             requires_gpu=True,
         ),
         "bf16": PrecisionConfig(
-            mode="bf16", compute_dtype="bfloat16", storage_dtype="bfloat16",
+            mode="bf16",
+            compute_dtype="bfloat16",
+            storage_dtype="bfloat16",
             requires_gpu=True,
         ),
         "int8": PrecisionConfig(
-            mode="int8", compute_dtype="float16", storage_dtype="int8",
+            mode="int8",
+            compute_dtype="float16",
+            storage_dtype="int8",
             requires_gpu=False,
         ),
         "int4": PrecisionConfig(
-            mode="int4", compute_dtype="float16", storage_dtype="int4",
+            mode="int4",
+            compute_dtype="float16",
+            storage_dtype="int4",
             requires_gpu=True,
         ),
     }
@@ -116,8 +126,7 @@ def quantize_model(
         import torch
     except ImportError as exc:
         raise RuntimeError(
-            "torch is required for model quantization. "
-            "Install with: pip install torch"
+            "torch is required for model quantization. Install with: pip install torch"
         ) from exc
 
     resolved_paths = paths or TollamaPaths.default()
@@ -219,10 +228,12 @@ def list_quantized_variants(
                 meta = json.loads(meta_path.read_text(encoding="utf-8"))
                 variants.append(meta)
             else:
-                variants.append({
-                    "target_precision": child.name.replace("quantized_", ""),
-                    "path": str(child),
-                })
+                variants.append(
+                    {
+                        "target_precision": child.name.replace("quantized_", ""),
+                        "path": str(child),
+                    }
+                )
     return variants
 
 

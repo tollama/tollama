@@ -9,9 +9,7 @@ from tollama.client import DEFAULT_BASE_URL, DEFAULT_TIMEOUT_SECONDS
 
 from .framework_common import get_agent_tool_specs
 
-_AUTOGEN_IMPORT_HINT = (
-    'AutoGen dependency is not installed. Install with: pip install "pyautogen"'
-)
+_AUTOGEN_IMPORT_HINT = 'AutoGen dependency is not installed. Install with: pip install "pyautogen"'
 
 
 def get_autogen_tool_specs(

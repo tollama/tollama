@@ -10,11 +10,7 @@ from tollama.core.routing import load_routing_manifest_from_path
 
 
 def test_checked_in_core_solution_expected_output_bundle_is_consistent() -> None:
-    bundle_dir = (
-        Path(__file__).resolve().parents[1]
-        / "examples"
-        / "core_solution_expected_output"
-    )
+    bundle_dir = Path(__file__).resolve().parents[1] / "examples" / "core_solution_expected_output"
 
     result_payload = json.loads((bundle_dir / "result.json").read_text(encoding="utf-8"))
     routing_payload = json.loads((bundle_dir / "routing.json").read_text(encoding="utf-8"))
@@ -31,8 +27,7 @@ def test_checked_in_core_solution_expected_output_bundle_is_consistent() -> None
     assert routing_payload["eval_ref"] == result_payload["eval_ref"]
     assert routing_payload["forecast_id"] == result_payload["forecast_id"]
     assert (
-        routing_payload["routing"]["default"]
-        == result_payload["routing_recommendation"]["default"]
+        routing_payload["routing"]["default"] == result_payload["routing_recommendation"]["default"]
     )
     assert routing_payload["routing_rationale"]["fast_path"]["model"] == "timesfm-2.5-200m"
 

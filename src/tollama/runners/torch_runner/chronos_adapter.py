@@ -149,7 +149,7 @@ class ChronosAdapter:
             joined = ", ".join(unique)
             raise DependencyMissingError(
                 "missing optional torch runner dependencies "
-                f"({joined}); install them with `pip install -e \".[dev,runner_torch]\"`",
+                f'({joined}); install them with `pip install -e ".[dev,runner_torch]"`',
             )
 
         assert pd is not None

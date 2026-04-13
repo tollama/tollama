@@ -22,6 +22,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class DecompositionResult:
     """Forecast decomposition output."""
+
     trend: list[float] = field(default_factory=list)
     seasonal: list[float] = field(default_factory=list)
     residual: list[float] = field(default_factory=list)
@@ -148,7 +149,7 @@ class ForecastDecomposer:
         normalized = data - mean
         max_lag = min(n // 2, 365)
         acf = np.correlate(normalized, normalized, mode="full")
-        acf = acf[n - 1:n - 1 + max_lag] / (var * n)
+        acf = acf[n - 1 : n - 1 + max_lag] / (var * n)
 
         # Find first significant peak after lag 1
         if len(acf) < 3:
@@ -169,9 +170,7 @@ class ForecastDecomposer:
             return 12  # Monthly for weekly data
         return 1
 
-    def _stl_decompose(
-        self, data: np.ndarray, period: int
-    ) -> DecompositionResult:
+    def _stl_decompose(self, data: np.ndarray, period: int) -> DecompositionResult:
         """STL decomposition."""
         try:
             from statsmodels.tsa.seasonal import STL
@@ -204,9 +203,7 @@ class ForecastDecomposer:
         method = f"classical_{model}"
         return self._build_result(data, trend, seasonal, residual, period, method)
 
-    def _moving_average_decompose(
-        self, data: np.ndarray, period: int
-    ) -> DecompositionResult:
+    def _moving_average_decompose(self, data: np.ndarray, period: int) -> DecompositionResult:
         """Simple moving average decomposition (no external deps)."""
         n = len(data)
         p = max(period, 2)
@@ -233,9 +230,7 @@ class ForecastDecomposer:
         # Residual
         residual = data - trend - seasonal
 
-        return self._build_result(
-            data, trend, seasonal, residual, period, "moving_average"
-        )
+        return self._build_result(data, trend, seasonal, residual, period, "moving_average")
 
     def _build_result(
         self,
@@ -287,10 +282,7 @@ class ForecastDecomposer:
         if dominant == "trend":
             summary += "The series is primarily trend-driven."
         elif dominant == "seasonal":
-            summary += (
-                f"Strong seasonal pattern detected "
-                f"(period={result.period})."
-            )
+            summary += f"Strong seasonal pattern detected (period={result.period})."
         else:
             summary += "High residual variance suggests noisy or regime-changing data."
 

@@ -828,14 +828,14 @@ def test_ollama_pull_options_apply_overrides_and_token(monkeypatch, tmp_path) ->
     with TestClient(create_app()) as client:
         response = client.post(
             "/api/pull",
-                json={
-                    "model": "chronos2",
-                    "stream": False,
-                    "http_proxy": "http://proxy.internal:3128",
-                    "https_proxy": "http://proxy.internal:3129",
-                    "no_proxy": "localhost,127.0.0.1",
-                    "hf_home": "/tmp/hf-cache",
-                    "token": "secret-token",
+            json={
+                "model": "chronos2",
+                "stream": False,
+                "http_proxy": "http://proxy.internal:3128",
+                "https_proxy": "http://proxy.internal:3129",
+                "no_proxy": "localhost,127.0.0.1",
+                "hf_home": "/tmp/hf-cache",
+                "token": "secret-token",
             },
         )
 
@@ -1646,7 +1646,9 @@ class _UnavailableRunnerManager:
         method: str,
         params: dict[str, Any],
         timeout: float,
+        request_id: str | None = None,
     ) -> dict[str, Any]:
+        del request_id
         raise RunnerUnavailableError(f"runner unavailable for {family}:{method}")
 
     def stop(self, family: str | None = None) -> None:
@@ -1663,7 +1665,9 @@ class _BadGatewayRunnerManager:
         method: str,
         params: dict[str, Any],
         timeout: float,
+        request_id: str | None = None,
     ) -> dict[str, Any]:
+        del request_id
         raise RunnerCallError(
             code=-32602,
             message="invalid params",
@@ -1684,7 +1688,9 @@ class _BadRequestRunnerManager:
         method: str,
         params: dict[str, Any],
         timeout: float,
+        request_id: str | None = None,
     ) -> dict[str, Any]:
+        del request_id
         raise RunnerCallError(
             code="BAD_REQUEST",
             message="Requested horizon exceeds model prediction_length.",
@@ -1707,12 +1713,14 @@ class _CapturingRunnerManager:
         method: str,
         params: dict[str, Any],
         timeout: float,
+        request_id: str | None = None,
     ) -> dict[str, Any]:
         self.captured = {
             "family": family,
             "method": method,
             "params": params,
             "timeout": timeout,
+            "request_id": request_id,
         }
         series = params["series"][0]
         return {
@@ -1838,9 +1846,7 @@ def test_forecast_uses_default_runner_timeout(monkeypatch, tmp_path) -> None:
         response = client.post("/v1/forecast", json=_sample_forecast_payload())
 
     assert response.status_code == 200
-    assert (
-        runner_manager.captured["timeout"] == daemon_app_module.DEFAULT_FORECAST_TIMEOUT_SECONDS
-    )
+    assert runner_manager.captured["timeout"] == daemon_app_module.DEFAULT_FORECAST_TIMEOUT_SECONDS
 
 
 def test_forecast_uses_env_override_for_runner_timeout(monkeypatch, tmp_path) -> None:

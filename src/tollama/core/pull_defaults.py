@@ -164,4 +164,3 @@ def _optional_nonempty_str(value: Any) -> str | None:
     if not normalized:
         return None
     return normalized
-

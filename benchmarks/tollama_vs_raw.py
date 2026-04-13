@@ -290,8 +290,7 @@ def main(argv: list[str] | None = None) -> int:
     print(render_results_table(rows))
     print("")
     print(
-        "LOC ratio (raw/sdk): "
-        f"{payload['ratios']['loc_raw_over_sdk']:.2f}x",
+        f"LOC ratio (raw/sdk): {payload['ratios']['loc_raw_over_sdk']:.2f}x",
     )
     print(
         "First forecast latency ratio (raw/sdk): "

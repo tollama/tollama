@@ -135,9 +135,7 @@ def run_benchmark(
                 if not isinstance(response, ForecastResponse):
                     response = ForecastResponse.model_validate(response)
             except Exception as exc:  # noqa: BLE001
-                model_warnings.append(
-                    f"fold {fold.fold_index}: {type(exc).__name__}: {exc}"
-                )
+                model_warnings.append(f"fold {fold.fold_index}: {type(exc).__name__}: {exc}")
                 continue
 
             fold_result = evaluate_fold(
@@ -152,9 +150,7 @@ def run_benchmark(
         model_latency = (time.perf_counter() - model_started) * 1000.0
 
         # Compute aggregate metrics for this model
-        model_fold_results = [
-            r for r in all_fold_results if r.model == model
-        ]
+        model_fold_results = [r for r in all_fold_results if r.model == model]
         if model_fold_results:
             agg = aggregate_backtest_results(
                 fold_results=model_fold_results,
@@ -221,14 +217,10 @@ def format_benchmark_table(summary: BenchmarkSummary) -> str:
     # Format
     sep = "+" + "+".join("-" * (w + 2) for w in col_widths) + "+"
     lines = [sep]
-    lines.append(
-        "| " + " | ".join(h.ljust(col_widths[i]) for i, h in enumerate(header)) + " |"
-    )
+    lines.append("| " + " | ".join(h.ljust(col_widths[i]) for i, h in enumerate(header)) + " |")
     lines.append(sep)
     for row in rows:
-        lines.append(
-            "| " + " | ".join(c.ljust(col_widths[i]) for i, c in enumerate(row)) + " |"
-        )
+        lines.append("| " + " | ".join(c.ljust(col_widths[i]) for i, c in enumerate(row)) + " |")
     lines.append(sep)
     return "\n".join(lines)
 
@@ -394,8 +386,7 @@ def build_benchmark_result_payload(
             "available": False,
             "source": "benchmark_input",
             "note": (
-                "No structured preprocessing metadata was attached to this Core "
-                "benchmark run."
+                "No structured preprocessing metadata was attached to this Core benchmark run."
             ),
         },
         "routing_rationale": routing_rationale,
@@ -442,8 +433,7 @@ def build_routing_manifest_payload(
             "available": False,
             "source": "benchmark_input",
             "note": (
-                "No structured preprocessing metadata was attached to this Core "
-                "benchmark run."
+                "No structured preprocessing metadata was attached to this Core benchmark run."
             ),
         },
         "routing_rationale": routing_rationale,

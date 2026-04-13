@@ -61,6 +61,7 @@ class _ConnectorRegistryBase(Generic[ConnectorT]):
 class ConnectorRegistry(_ConnectorRegistryBase[DataConnector]):
     """In-memory registry for data connectors."""
 
+
 class AsyncConnectorRegistry(_ConnectorRegistryBase[AsyncDataConnector]):
     """In-memory registry for async data connectors."""
 

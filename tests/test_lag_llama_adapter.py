@@ -52,7 +52,6 @@ def test_build_quantile_payload_requires_quantile_method() -> None:
         )
 
 
-
 class _EstimatorV1:
     def __init__(
         self,
@@ -131,6 +130,7 @@ def test_create_lag_llama_estimator_reports_incompatible_signature() -> None:
             context_length=8,
             num_samples=100,
         )
+
 
 def test_build_covariate_warnings_when_covariates_supplied() -> None:
     class _Series:

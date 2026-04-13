@@ -16,6 +16,7 @@ import numpy as np
 # Configuration
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class FeatureConfig:
     """Controls which feature families are extracted.
@@ -47,6 +48,7 @@ class FeatureConfig:
 # ---------------------------------------------------------------------------
 # Timestamp helpers
 # ---------------------------------------------------------------------------
+
 
 def _parse_timestamps(timestamps: np.ndarray | list[str]) -> np.ndarray:
     """Convert *timestamps* to an array of ``numpy.datetime64[s]``.
@@ -106,6 +108,7 @@ def _datetime_components(dt64: np.ndarray) -> dict[str, np.ndarray]:
 # ---------------------------------------------------------------------------
 # Feature extractors
 # ---------------------------------------------------------------------------
+
 
 def extract_calendar_features(
     timestamps: np.ndarray | list[str],
@@ -261,6 +264,7 @@ def extract_fourier_features(
 # ---------------------------------------------------------------------------
 # Master function
 # ---------------------------------------------------------------------------
+
 
 def auto_engineer_features(
     values: np.ndarray,

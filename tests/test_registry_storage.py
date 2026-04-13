@@ -144,8 +144,6 @@ def test_registry_loads_required_model_specs() -> None:
         "default_use_kv_cache": True,
     }
 
-
-
     patchtst = registry["patchtst"]
     assert patchtst.family == "patchtst"
     assert patchtst.source.repo_id == "ibm-granite/granite-timeseries-patchtst"
@@ -167,8 +165,6 @@ def test_registry_loads_required_model_specs() -> None:
             "currently ignored."
         ),
     }
-
-
 
     tide = registry["tide"]
     assert tide.family == "tide"

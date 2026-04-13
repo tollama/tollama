@@ -171,7 +171,9 @@ class TestFinancialConnectorFetch:
     def test_timeout_raises_retryable_error(self, httpx_mock):
         httpx_mock.add_exception(httpx.ReadTimeout("timeout"))
         connector = HttpFinancialConnector(
-            base_url="http://test:8091", timeout=0.1, max_retries=0,
+            base_url="http://test:8091",
+            timeout=0.1,
+            max_retries=0,
         )
         with pytest.raises(ConnectorFetchError) as exc_info:
             connector.fetch("AAPL", {})
@@ -195,7 +197,8 @@ class TestFinancialConnectorFetch:
             status_code=500,
         )
         connector = HttpFinancialConnector(
-            base_url="http://test:8091", max_retries=0,
+            base_url="http://test:8091",
+            max_retries=0,
         )
         with pytest.raises(ConnectorFetchError) as exc_info:
             connector.fetch("AAPL", {})

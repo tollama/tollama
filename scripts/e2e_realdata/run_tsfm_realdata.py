@@ -693,11 +693,7 @@ def _write_artifacts(*, output_dir: Path, result_payload: dict[str, Any]) -> Non
     _write_json(output_dir / "result.json", result_payload)
 
     summary_payload = summarize_report.summarize_entries(
-        [
-            entry
-            for entry in result_payload.get("entries", [])
-            if isinstance(entry, dict)
-        ]
+        [entry for entry in result_payload.get("entries", []) if isinstance(entry, dict)]
     )
     if isinstance(infra_error, str) and infra_error.strip():
         summary_payload["infra_error"] = infra_error

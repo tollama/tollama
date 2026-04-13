@@ -249,10 +249,13 @@ class A2AServer:
         poll_interval_ms_raw = configuration.get("pollIntervalMs")
         poll_interval_ms = 150
         if poll_interval_ms_raw is not None:
-            poll_interval_ms = _optional_non_negative_int(
-                poll_interval_ms_raw,
-                key="configuration.pollIntervalMs",
-            ) or 0
+            poll_interval_ms = (
+                _optional_non_negative_int(
+                    poll_interval_ms_raw,
+                    key="configuration.pollIntervalMs",
+                )
+                or 0
+            )
             if poll_interval_ms <= 0:
                 raise ValueError("configuration.pollIntervalMs must be a positive integer")
         poll_interval_seconds = max(poll_interval_ms / 1000.0, 0.01)
@@ -651,10 +654,7 @@ class A2AServer:
 
 
 def _format_sse_event(*, event: str, data: dict[str, Any]) -> str:
-    return (
-        f"event: {event}\n"
-        f"data: {json.dumps(data, separators=(',', ':'), sort_keys=True)}\n\n"
-    )
+    return f"event: {event}\ndata: {json.dumps(data, separators=(',', ':'), sort_keys=True)}\n\n"
 
 
 def _format_sse_comment(text: str) -> str:

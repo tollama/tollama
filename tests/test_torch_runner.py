@@ -47,7 +47,7 @@ class _MissingDependencyAdapter(_NoopAdapter):
         model_metadata: dict[str, object] | None = None,
     ):
         del request, model_local_dir, model_source, model_metadata
-        raise DependencyMissingError("install with pip install -e \".[dev,runner_torch]\"")
+        raise DependencyMissingError('install with pip install -e ".[dev,runner_torch]"')
 
 
 class _SuccessAdapter(_NoopAdapter):

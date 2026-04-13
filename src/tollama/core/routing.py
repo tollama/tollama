@@ -101,9 +101,7 @@ def save_routing_manifest(
     """Persist routing manifest atomically."""
     resolved_paths = paths or TollamaPaths.default()
     target = (
-        Path(path).expanduser()
-        if path is not None
-        else get_routing_manifest_path(resolved_paths)
+        Path(path).expanduser() if path is not None else get_routing_manifest_path(resolved_paths)
     )
     target.parent.mkdir(parents=True, exist_ok=True)
     temp_path = target.with_suffix(".tmp")
@@ -160,8 +158,7 @@ def _coerce_manifest_payload(*, payload: object, source_path: Path) -> dict[str,
             "caveats": recommendation.get("caveats", []),
             "preprocessing_metadata": payload.get("preprocessing_metadata", {}),
             "routing_rationale": (
-                payload.get("routing_rationale")
-                or recommendation.get("rationale", {})
+                payload.get("routing_rationale") or recommendation.get("rationale", {})
             ),
         }
 

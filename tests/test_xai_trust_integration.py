@@ -26,6 +26,7 @@ sys.path.insert(0, os.path.join(_REPO_ROOT, "tollama", "src"))
 # Fixtures
 # ──────────────────────────────────────────────────────────────
 
+
 @pytest.fixture
 def high_confidence_forecast():
     return {"confidence": 0.95, "model": "test_model", "forecast_value": 100}
@@ -137,6 +138,7 @@ def trust_result_red_risk():
 # Decision Policy Trust Gating
 # ──────────────────────────────────────────────────────────────
 
+
 class TestDecisionPolicyTrustGating:
     """Tests for trust gates in DecisionPolicyExplainer."""
 
@@ -165,7 +167,8 @@ class TestDecisionPolicyTrustGating:
 
         explainer = DecisionPolicyExplainer()
         result = explainer.explain(
-            high_confidence_forecast, default_policy,
+            high_confidence_forecast,
+            default_policy,
             trust_result=trust_result_critical_violations,
         )
 
@@ -182,7 +185,8 @@ class TestDecisionPolicyTrustGating:
 
         explainer = DecisionPolicyExplainer()
         result = explainer.explain(
-            high_confidence_forecast, default_policy,
+            high_confidence_forecast,
+            default_policy,
             trust_result=trust_result_red_risk,
         )
 
@@ -199,7 +203,8 @@ class TestDecisionPolicyTrustGating:
 
         explainer = DecisionPolicyExplainer()
         result = explainer.explain(
-            high_confidence_forecast, default_policy,
+            high_confidence_forecast,
+            default_policy,
             trust_result=trust_result_high_trust,
         )
 
@@ -208,9 +213,7 @@ class TestDecisionPolicyTrustGating:
         assert result["trust_score"] == 0.85
         assert any("PASS" in r and "trust_score" in r for r in result["policy_rules_applied"])
 
-    def test_no_trust_result_backward_compatible(
-        self, high_confidence_forecast, default_policy
-    ):
+    def test_no_trust_result_backward_compatible(self, high_confidence_forecast, default_policy):
         """Without trust_result, behavior is identical to pre-trust code."""
         from tollama.xai.decision_policy import DecisionPolicyExplainer
 
@@ -224,9 +227,7 @@ class TestDecisionPolicyTrustGating:
         assert result["risk_category"] is None
         assert result["constraint_violations_count"] == 0
 
-    def test_yellow_risk_warns_but_does_not_block(
-        self, high_confidence_forecast, default_policy
-    ):
+    def test_yellow_risk_warns_but_does_not_block(self, high_confidence_forecast, default_policy):
         """YELLOW risk category warns but does not block by itself."""
         from tollama.xai.decision_policy import DecisionPolicyExplainer
 
@@ -240,7 +241,9 @@ class TestDecisionPolicyTrustGating:
 
         explainer = DecisionPolicyExplainer()
         result = explainer.explain(
-            high_confidence_forecast, default_policy, trust_result=trust_result,
+            high_confidence_forecast,
+            default_policy,
+            trust_result=trust_result,
         )
 
         assert result["auto_executed"] is True
@@ -250,6 +253,7 @@ class TestDecisionPolicyTrustGating:
 # ──────────────────────────────────────────────────────────────
 # SHAP predict_fn Threading
 # ──────────────────────────────────────────────────────────────
+
 
 class TestSHAPPredictFn:
     """Tests for predict_fn threading through the bridge."""
@@ -262,26 +266,29 @@ class TestSHAPPredictFn:
         mock_pipeline.run.return_value = MagicMock(
             pipeline_version="3.0",
             trust=MagicMock(
-                trust_score=0.8, calibration_status="well_calibrated",
-                weights={}, ece=0.0, ocr=0.0,
+                trust_score=0.8,
+                calibration_status="well_calibrated",
+                weights={},
+                ece=0.0,
+                ocr=0.0,
             ),
             uncertainty=MagicMock(normalized_uncertainty=0.2),
             conformal=MagicMock(coverage_tightness=0.9, coverage_validity=True),
             shap=MagicMock(
-                shap_stability=0.95, feature_contributions=[],
+                shap_stability=0.95,
+                feature_contributions=[],
             ),
             constraints=MagicMock(
                 risk_category=MagicMock(value="GREEN"),
-                constraint_satisfied=True, violations=[],
+                constraint_satisfied=True,
+                violations=[],
             ),
         )
 
         def my_predict_fn(x):
             return x
 
-        with patch(
-            "tollama.xai.trust_intelligence_bridge.HAS_TRUST_INTELLIGENCE", True
-        ):
+        with patch("tollama.xai.trust_intelligence_bridge.HAS_TRUST_INTELLIGENCE", True):
             run_trust_pipeline(
                 mock_pipeline,
                 prediction_probability=0.8,
@@ -301,23 +308,26 @@ class TestSHAPPredictFn:
         mock_pipeline.run.return_value = MagicMock(
             pipeline_version="3.0",
             trust=MagicMock(
-                trust_score=0.8, calibration_status="well_calibrated",
-                weights={}, ece=0.0, ocr=0.0,
+                trust_score=0.8,
+                calibration_status="well_calibrated",
+                weights={},
+                ece=0.0,
+                ocr=0.0,
             ),
             uncertainty=MagicMock(normalized_uncertainty=0.2),
             conformal=MagicMock(coverage_tightness=0.9, coverage_validity=True),
             shap=MagicMock(
-                shap_stability=0.95, feature_contributions=[],
+                shap_stability=0.95,
+                feature_contributions=[],
             ),
             constraints=MagicMock(
                 risk_category=MagicMock(value="GREEN"),
-                constraint_satisfied=True, violations=[],
+                constraint_satisfied=True,
+                violations=[],
             ),
         )
 
-        with patch(
-            "tollama.xai.trust_intelligence_bridge.HAS_TRUST_INTELLIGENCE", True
-        ):
+        with patch("tollama.xai.trust_intelligence_bridge.HAS_TRUST_INTELLIGENCE", True):
             result = run_trust_pipeline(
                 mock_pipeline,
                 prediction_probability=0.8,
@@ -331,6 +341,7 @@ class TestSHAPPredictFn:
 # ──────────────────────────────────────────────────────────────
 # Engine Integration
 # ──────────────────────────────────────────────────────────────
+
 
 class TestEngineIntegration:
     """Tests for ExplanationEngine with trust pipeline integration."""
@@ -356,8 +367,11 @@ class TestEngineIntegration:
         mock_run_result = MagicMock(
             pipeline_version="3.0",
             trust=MagicMock(
-                trust_score=0.82, calibration_status="well_calibrated",
-                weights={"w1": 0.25}, ece=0.02, ocr=0.05,
+                trust_score=0.82,
+                calibration_status="well_calibrated",
+                weights={"w1": 0.25},
+                ece=0.02,
+                ocr=0.05,
             ),
             uncertainty=MagicMock(normalized_uncertainty=0.3),
             conformal=MagicMock(coverage_tightness=0.85, coverage_validity=True),
@@ -369,7 +383,8 @@ class TestEngineIntegration:
             ),
             constraints=MagicMock(
                 risk_category=MagicMock(value="GREEN"),
-                constraint_satisfied=True, violations=[],
+                constraint_satisfied=True,
+                violations=[],
             ),
         )
         mock_pipeline.run.return_value = mock_run_result
@@ -379,9 +394,7 @@ class TestEngineIntegration:
             trust_intelligence_pipeline=mock_pipeline,
         )
 
-        with patch(
-            "tollama.xai.trust_intelligence_bridge.HAS_TRUST_INTELLIGENCE", True
-        ):
+        with patch("tollama.xai.trust_intelligence_bridge.HAS_TRUST_INTELLIGENCE", True):
             result = engine.explain_decision(
                 forecast_result={"confidence": 0.9},
                 policy_config={"auto_execute_threshold": 0.85},
@@ -413,15 +426,19 @@ class TestEngineIntegration:
         mock_run_result = MagicMock(
             pipeline_version="3.0",
             trust=MagicMock(
-                trust_score=0.3, calibration_status="overconfident",
-                weights={}, ece=0.2, ocr=0.4,
+                trust_score=0.3,
+                calibration_status="overconfident",
+                weights={},
+                ece=0.2,
+                ocr=0.4,
             ),
             uncertainty=MagicMock(normalized_uncertainty=0.8),
             conformal=MagicMock(coverage_tightness=0.4, coverage_validity=False),
             shap=MagicMock(shap_stability=0.5, feature_contributions=[]),
             constraints=MagicMock(
                 risk_category=MagicMock(value="YELLOW"),
-                constraint_satisfied=True, violations=[],
+                constraint_satisfied=True,
+                violations=[],
             ),
         )
         mock_pipeline.run.return_value = mock_run_result
@@ -431,9 +448,7 @@ class TestEngineIntegration:
             trust_intelligence_pipeline=mock_pipeline,
         )
 
-        with patch(
-            "tollama.xai.trust_intelligence_bridge.HAS_TRUST_INTELLIGENCE", True
-        ):
+        with patch("tollama.xai.trust_intelligence_bridge.HAS_TRUST_INTELLIGENCE", True):
             result = engine.explain_decision(
                 forecast_result={"confidence": 0.95},
                 policy_config={"auto_execute_threshold": 0.85},
@@ -452,15 +467,19 @@ class TestEngineIntegration:
         mock_pipeline.run.return_value = MagicMock(
             pipeline_version="3.0",
             trust=MagicMock(
-                trust_score=0.8, calibration_status="well_calibrated",
-                weights={}, ece=0.0, ocr=0.0,
+                trust_score=0.8,
+                calibration_status="well_calibrated",
+                weights={},
+                ece=0.0,
+                ocr=0.0,
             ),
             uncertainty=MagicMock(normalized_uncertainty=0.2),
             conformal=MagicMock(coverage_tightness=0.9, coverage_validity=True),
             shap=MagicMock(shap_stability=0.95, feature_contributions=[]),
             constraints=MagicMock(
                 risk_category=MagicMock(value="GREEN"),
-                constraint_satisfied=True, violations=[],
+                constraint_satisfied=True,
+                violations=[],
             ),
         )
 
@@ -469,9 +488,7 @@ class TestEngineIntegration:
 
         engine = ExplanationEngine(trust_intelligence_pipeline=mock_pipeline)
 
-        with patch(
-            "tollama.xai.trust_intelligence_bridge.HAS_TRUST_INTELLIGENCE", True
-        ):
+        with patch("tollama.xai.trust_intelligence_bridge.HAS_TRUST_INTELLIGENCE", True):
             engine.explain_decision(
                 forecast_result={"confidence": 0.9},
                 predict_fn=my_model,

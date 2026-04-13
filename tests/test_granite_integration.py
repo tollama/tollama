@@ -34,8 +34,7 @@ def test_granite_ttm_forecast_integration(monkeypatch, tmp_path) -> None:
                 "id": "integration-series",
                 "freq": "D",
                 "timestamps": [
-                    (start + timedelta(days=index)).date().isoformat()
-                    for index in range(120)
+                    (start + timedelta(days=index)).date().isoformat() for index in range(120)
                 ],
                 "target": [100.0 + float(index) for index in range(120)],
             }
