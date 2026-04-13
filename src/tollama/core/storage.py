@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import os
 import re
 import shutil
 from dataclasses import dataclass
@@ -11,6 +10,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from .env import env_or_none
 from .registry import ModelSpec, get_model_spec
 
 _NAME_PATTERN = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9._-]*$")
@@ -24,7 +24,7 @@ class TollamaPaths:
 
     @classmethod
     def default(cls) -> TollamaPaths:
-        override = os.environ.get("TOLLAMA_HOME")
+        override = env_or_none("TOLLAMA_HOME")
         if override:
             return cls(base_dir=Path(override).expanduser())
         return cls(base_dir=Path.home() / ".tollama")

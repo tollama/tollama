@@ -16,10 +16,12 @@ link here instead of repeating hardcoded endpoint counts.
 - Swagger UI: `/docs`
 - ReDoc: `/redoc`
 - OpenAPI JSON: `/openapi.json`
+- Checked-in artifact: `docs/openapi.json`
 
 Auth behavior:
 - If `auth.api_keys` is configured, these docs endpoints require `Authorization: Bearer <key>`.
 - Override for local dev only: `TOLLAMA_DOCS_PUBLIC=1`.
+- Refresh the checked-in artifact with `python scripts/export_openapi.py --output docs/openapi.json`.
 
 ## Auth
 
@@ -38,6 +40,8 @@ Authorization: Bearer <api-key>
 | GET | `/api/version` | Daemon version |
 | GET | `/api/info` | Full diagnostics payload |
 | GET | `/v1/health` | Health/liveness probe |
+| GET | `/health/live` | Additive liveness alias for `/v1/health` |
+| GET | `/health/ready` | Structured readiness probe |
 
 ### Runtime / Observability
 
@@ -45,7 +49,23 @@ Authorization: Bearer <api-key>
 |---|---|---|
 | GET | `/api/usage` | Per-key usage snapshot |
 | GET | `/api/events` | SSE event stream |
-| GET | `/metrics` | Prometheus metrics (optional dependency) |
+| GET | `/metrics` | Prometheus metrics (optional dependency), including per-runner inference/load/memory series |
+
+### Request correlation
+
+- Tollama accepts and emits `X-Request-ID` on daemon responses.
+- When present, the daemon forwards that request ID into supervisor-managed runner calls so
+  runner protocol IDs can be correlated with the originating HTTP request.
+
+### Readiness semantics
+
+- `GET /v1/health` remains the simple compatibility probe and returns `{"status": "ok"}`.
+- `GET /health/live` is an additive alias for liveness checks.
+- `GET /health/ready` returns a structured payload with:
+  - runner manager readiness
+  - local disk-space readiness
+  - optional live XAI connector summary only when `TOLLAMA_USE_LIVE_CONNECTORS=1`
+- `GET /health/ready` does not probe generic ingest/data connectors under `tollama.connectors.*`.
 
 ### Dashboard
 

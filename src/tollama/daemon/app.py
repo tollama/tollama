@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import resource
 import shutil
@@ -53,6 +54,15 @@ from tollama.core.decision_schemas import (
     DecisionExplanationResponse,
 )
 from tollama.core.ensemble import EnsembleError, merge_forecast_responses
+from tollama.core.env import (
+    env_flag as core_env_flag,
+)
+from tollama.core.env import (
+    env_float as core_env_float,
+)
+from tollama.core.env import (
+    env_or_none as core_env_or_none,
+)
 from tollama.core.env_override import set_env_temporarily
 from tollama.core.explainability import generate_explanation
 from tollama.core.forecast_metrics import compute_forecast_metrics
@@ -141,6 +151,7 @@ from .auth import current_key_id, require_api_key
 from .covariates import apply_covariate_capabilities, build_covariate_profile, normalize_covariates
 from .dashboard_api import create_dashboard_router
 from .loaded_models import LoadedModelTracker, parse_keep_alive, to_utc_iso
+from .logging_config import get_request_id
 from .metering import UsageMeter, create_usage_meter, usage_unavailable_hint
 from .metrics import (
     ForecastMetricsMiddleware,
@@ -159,12 +170,15 @@ from .supervisor import (
     RunnerUnavailableError,
 )
 
+logger = logging.getLogger(__name__)
+
 DEFAULT_FORECAST_TIMEOUT_SECONDS = 300.0
 FORECAST_TIMEOUT_ENV_NAME = "TOLLAMA_FORECAST_TIMEOUT_SECONDS"
 ALLOW_REMOTE_DATA_URL_ENV_NAME = "TOLLAMA_ALLOW_REMOTE_DATA_URL"
 AUTO_ENSEMBLE_MAX_WORKERS = 4
 AUTO_FORECAST_MEMBER_TIMEOUT_SECONDS = 10.0
 DEFAULT_MODIFIED_AT = "1970-01-01T00:00:00Z"
+MIN_READY_DISK_FREE_BYTES = 100 * 1024 * 1024
 INFO_ENV_KEYS = (
     "TOLLAMA_HOME",
     "TOLLAMA_HOST",
@@ -406,6 +420,83 @@ class HealthResponse(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
 
     status: StrictStr = Field(description="Service health status value.")
+
+
+class HealthCheckResult(BaseModel):
+    """Structured health check result."""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    healthy: StrictBool = Field(description="Whether the component check passed.")
+    latency_ms: StrictFloat | None = Field(
+        default=None,
+        description="Time spent computing this health check in milliseconds.",
+    )
+    error: StrictStr | None = Field(
+        default=None,
+        description="Human-readable error message when the check failed.",
+    )
+
+
+class RunnerManagerReadiness(HealthCheckResult):
+    """Runner manager readiness summary."""
+
+    configured_runners: StrictInt = Field(description="Configured runner families known to daemon.")
+    running_runners: StrictInt = Field(description="Currently running supervised runners.")
+    restart_total: StrictInt = Field(description="Total runner restarts observed since startup.")
+
+
+class DiskReadiness(HealthCheckResult):
+    """Disk space readiness summary."""
+
+    path: StrictStr = Field(description="Filesystem path checked for daemon state storage.")
+    free_bytes: StrictInt = Field(description="Available free bytes on the checked filesystem.")
+
+
+class LiveConnectorStatus(BaseModel):
+    """One live XAI connector health entry."""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    connector_name: StrictStr = Field(description="Registered connector name.")
+    domain: StrictStr = Field(description="Connector domain.")
+    status: StrictStr = Field(description="Connector health status.")
+    latency_ms: StrictFloat | None = Field(
+        default=None,
+        description="Optional connector-specific health latency.",
+    )
+    error: StrictStr | None = Field(
+        default=None,
+        description="Connector-specific error detail when available.",
+    )
+
+
+class LiveConnectorsReadiness(HealthCheckResult):
+    """Aggregated live XAI connector readiness summary."""
+
+    enabled: StrictBool = Field(description="Whether live connector checks are enabled.")
+    checked: StrictInt = Field(description="Number of connectors checked.")
+    available: StrictInt = Field(description="Number of non-error connectors.")
+    errors: StrictInt = Field(description="Number of connectors that failed health checks.")
+    connectors: list[LiveConnectorStatus] = Field(
+        default_factory=list,
+        description="Per-connector health results.",
+    )
+
+
+class ReadyResponse(BaseModel):
+    """Daemon readiness response payload."""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    status: StrictStr = Field(description="High-level readiness status.")
+    healthy: StrictBool = Field(description="True when all required readiness checks pass.")
+    runner_manager: RunnerManagerReadiness = Field(description="Runner supervision readiness.")
+    disk: DiskReadiness = Field(description="Disk space readiness.")
+    connectors: LiveConnectorsReadiness | None = Field(
+        default=None,
+        description="Live connector readiness summary when live connectors are enabled.",
+    )
 
 
 class ModelDeleteResponse(BaseModel):
@@ -681,8 +772,7 @@ def create_app(*, runner_manager: RunnerManager | None = None) -> FastAPI:
         tags=["runtime"],
         summary="Event stream",
         description=(
-            "Subscribe to daemon event streams over SSE with optional filters "
-            "and heartbeats."
+            "Subscribe to daemon event streams over SSE with optional filters and heartbeats."
         ),
         responses={
             200: {
@@ -851,8 +941,7 @@ def create_app(*, runner_manager: RunnerManager | None = None) -> FastAPI:
         tags=["forecast", "ingest"],
         summary="Forecast from uploaded file",
         description=(
-            "Upload file data plus request JSON to run one forecast without "
-            "manual preprocessing."
+            "Upload file data plus request JSON to run one forecast without manual preprocessing."
         ),
     )
     async def forecast_upload(
@@ -1083,8 +1172,7 @@ def create_app(*, runner_manager: RunnerManager | None = None) -> FastAPI:
         tags=["models"],
         summary="List loaded models",
         description=(
-            "Return currently loaded in-memory model sessions with keep-alive "
-            "expiry metadata."
+            "Return currently loaded in-memory model sessions with keep-alive expiry metadata."
         ),
     )
     def ps() -> dict[str, list[dict[str, Any]]]:
@@ -1116,6 +1204,7 @@ def create_app(*, runner_manager: RunnerManager | None = None) -> FastAPI:
     )
 
     from tollama.xai.api import router as xai_router
+
     app.include_router(xai_router)
 
     # Shared singleton trust router — avoids rebuilding on every XAI request.
@@ -1132,6 +1221,29 @@ def create_app(*, runner_manager: RunnerManager | None = None) -> FastAPI:
     )
     def health() -> HealthResponse:
         return HealthResponse(status="ok")
+
+    @app.get(
+        "/health/live",
+        response_model=HealthResponse,
+        tags=["system"],
+        summary="Liveness probe",
+        description="Alias for the daemon liveness check used by generic health tooling.",
+    )
+    def health_live() -> HealthResponse:
+        return HealthResponse(status="ok")
+
+    @app.get(
+        "/health/ready",
+        response_model=ReadyResponse,
+        tags=["system"],
+        summary="Readiness probe",
+        description=(
+            "Return daemon readiness including runner supervision, disk space, "
+            "and optional live XAI connector health."
+        ),
+    )
+    def health_ready() -> ReadyResponse:
+        return _build_ready_response(app)
 
     @app.get(
         "/v1/models",
@@ -1424,8 +1536,7 @@ def create_app(*, runner_manager: RunnerManager | None = None) -> FastAPI:
         tags=["analysis"],
         summary="Compare models",
         description=(
-            "Run one forecast request across multiple models and aggregate "
-            "per-model outcomes."
+            "Run one forecast request across multiple models and aggregate per-model outcomes."
         ),
     )
     def compare(payload: CompareRequest, request: Request) -> CompareResponse:
@@ -1496,8 +1607,7 @@ def create_app(*, runner_manager: RunnerManager | None = None) -> FastAPI:
         tags=["analysis"],
         summary="Analyze series",
         description=(
-            "Compute descriptive analysis metrics, anomalies, and optional "
-            "narrative summaries."
+            "Compute descriptive analysis metrics, anomalies, and optional narrative summaries."
         ),
     )
     def analyze(payload: AnalyzeRequest, request: Request) -> AnalyzeResponse:
@@ -1567,7 +1677,10 @@ def create_app(*, runner_manager: RunnerManager | None = None) -> FastAPI:
                 }
 
             reconciled = reconcile(
-                response, spec, method=method, proportions=proportions,
+                response,
+                spec,
+                method=method,
+                proportions=proportions,
             )
             return reconciled.model_dump(mode="json", exclude_none=True)
         except Exception as exc:
@@ -1600,8 +1713,10 @@ def create_app(*, runner_manager: RunnerManager | None = None) -> FastAPI:
 
             response = ForecastResponse.model_validate(forecast_data)
             cal = calibrate(
-                np.array(actuals), np.array(predictions),
-                coverage=coverage, method=method,
+                np.array(actuals),
+                np.array(predictions),
+                coverage=coverage,
+                method=method,
             )
             result = apply_conformal_to_response(response, cal)
             return result.model_dump(mode="json", exclude_none=True)
@@ -1627,8 +1742,7 @@ def create_app(*, runner_manager: RunnerManager | None = None) -> FastAPI:
         tags=["analysis"],
         summary="Counterfactual forecast",
         description=(
-            "Estimate counterfactual trajectories and effect deltas after an "
-            "intervention index."
+            "Estimate counterfactual trajectories and effect deltas after an intervention index."
         ),
     )
     def counterfactual(payload: CounterfactualRequest, request: Request) -> CounterfactualResponse:
@@ -1724,8 +1838,7 @@ def create_app(*, runner_manager: RunnerManager | None = None) -> FastAPI:
         tags=["analysis"],
         summary="What-if scenarios",
         description=(
-            "Run baseline plus transformed scenario forecasts and aggregate "
-            "scenario outcomes."
+            "Run baseline plus transformed scenario forecasts and aggregate scenario outcomes."
         ),
     )
     def what_if(payload: WhatIfRequest, request: Request) -> WhatIfResponse:
@@ -2024,8 +2137,7 @@ def _execute_forecast(
     runner_payload = forecast_payload.model_copy(
         update={
             "series": [
-                series.model_copy(update={"actuals": None})
-                for series in forecast_payload.series
+                series.model_copy(update={"actuals": None}) for series in forecast_payload.series
             ],
             "parameters": forecast_payload.parameters.model_copy(update={"metrics": None}),
         },
@@ -2065,6 +2177,7 @@ def _execute_forecast(
             method="forecast",
             params=params,
             timeout=forecast_timeout_seconds,
+            request_id=get_request_id(),
         )
     except RunnerUnavailableError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
@@ -2106,8 +2219,8 @@ def _execute_forecast(
             xai_explanation = _generate_xai_explanation(forecast_payload, response)
             if xai_explanation is not None:
                 response = response.model_copy(update={"explanation": xai_explanation})
-        except Exception:  # noqa: BLE001 — XAI failure should not break forecast
-            pass
+        except Exception as exc:  # noqa: BLE001 — XAI failure should not break forecast
+            logger.debug("xai explanation generation failed", exc_info=exc)
 
     merged_warnings = _merge_warnings(response.warnings, [*request_warnings, *metrics_warnings])
     if merged_warnings:
@@ -2118,6 +2231,11 @@ def _execute_forecast(
         model_family=model_family,
         runner_roundtrip_ms=runner_roundtrip_ms,
         total_ms=_elapsed_ms(request_started_at),
+    )
+    _record_runner_metrics(
+        app=app,
+        model_family=model_family,
+        response=response,
     )
     _record_usage(
         app=app,
@@ -2315,6 +2433,37 @@ def _record_usage(
         return
 
 
+def _record_runner_metrics(
+    *,
+    app: FastAPI,
+    model_family: str,
+    response: ForecastResponse,
+) -> None:
+    metrics = _optional_prometheus_metrics(app)
+    if metrics is None:
+        return
+
+    usage = response.usage or {}
+    runner = usage.get("runner")
+    if not isinstance(runner, str) or not runner:
+        runner = f"tollama-{model_family}"
+
+    peak_memory = usage.get("peak_memory_mb")
+    if isinstance(peak_memory, (int, float)) and not isinstance(peak_memory, bool):
+        peak_memory_mb = max(float(peak_memory), 0.0)
+    else:
+        peak_memory_mb = 0.0
+
+    timing = response.timing or ForecastTiming()
+    metrics.observe_runner_response(
+        family=model_family,
+        runner=runner,
+        model_load_ms=_resolve_non_negative_ms(timing.model_load_ms, default=0.0),
+        inference_ms=_resolve_non_negative_ms(timing.inference_ms, default=0.0),
+        peak_memory_mb=peak_memory_mb,
+    )
+
+
 def _configured_routing_model_for_mode(*, app: FastAPI, mode: str) -> str | None:
     try:
         config: TollamaConfig = app.state.config_provider.get()
@@ -2341,9 +2490,7 @@ def _execute_auto_forecast(
     _unload_expired_models(app)
     manifests = list_installed()
     installed_by_name = {
-        name: manifest
-        for manifest in manifests
-        if isinstance((name := manifest.get("name")), str)
+        name: manifest for manifest in manifests if isinstance((name := manifest.get("name")), str)
     }
     installed_models = sorted(installed_by_name)
     if not installed_models:
@@ -2932,13 +3079,17 @@ def _forecast_sse_stream(
         data={"model": payload.model, "status": "loading"},
     )
     _publish_event(
-        app=app, key_id=key_id, event="forecast.stream",
+        app=app,
+        key_id=key_id,
+        event="forecast.stream",
         data={"phase": "model_loading", "model": payload.model},
     )
 
     try:
         response = _execute_forecast(
-            app, payload=payload, request=request,
+            app,
+            payload=payload,
+            request=request,
             extra_exclude={"stream"},
         )
     except HTTPException as exc:
@@ -2975,12 +3126,15 @@ def _forecast_sse_stream(
         event="done",
         data={
             "response": response.model_dump(
-                mode="json", exclude_none=True,
+                mode="json",
+                exclude_none=True,
             ),
         },
     )
     _publish_event(
-        app=app, key_id=key_id, event="forecast.stream.complete",
+        app=app,
+        key_id=key_id,
+        event="forecast.stream.complete",
         data={"model": response.model},
     )
 
@@ -3182,12 +3336,7 @@ def _parse_event_type_filter(request: Request) -> set[str] | None:
     if events_raw is not None:
         raw_values.append(events_raw)
 
-    normalized = {
-        item.strip()
-        for chunk in raw_values
-        for item in chunk.split(",")
-        if item.strip()
-    }
+    normalized = {item.strip() for chunk in raw_values for item in chunk.split(",") if item.strip()}
     return normalized or None
 
 
@@ -3474,7 +3623,7 @@ def _resolve_pull_int(
 def _resolve_pull_token(*, payload: ApiPullRequest, fields_set: set[str]) -> str | None:
     if "token" in fields_set:
         return _optional_nonempty_str(payload.token)
-    env_token = _optional_nonempty_str(os.environ.get("TOLLAMA_HF_TOKEN"))
+    env_token = _env_or_none("TOLLAMA_HF_TOKEN")
     request_token = _optional_nonempty_str(payload.token)
     return request_token or env_token
 
@@ -3587,10 +3736,7 @@ def _prepare_pull_manifest(
     if spec.license.needs_acceptance and not accepted:
         raise HTTPException(
             status_code=409,
-            detail=(
-                f"model {spec.name!r} requires license acceptance; "
-                "pass accept_license=True"
-            ),
+            detail=(f"model {spec.name!r} requires license acceptance; pass accept_license=True"),
         )
 
     resolved_existing = existing.get("resolved") if isinstance(existing, dict) else {}
@@ -3683,8 +3829,7 @@ def _http_error_hint(*, status_code: int, detail: Any) -> str | None:
             or "accept-license" in detail_text
         ):
             return (
-                "Re-run with `--accept-license`, or call "
-                "`tollama pull <model> --accept-license`."
+                "Re-run with `--accept-license`, or call `tollama pull <model> --accept-license`."
             )
         return None
 
@@ -4017,8 +4162,8 @@ def _suggest_model_candidate(
             name = manifest.get("name")
             if isinstance(name, str) and name:
                 installed_names.add(name)
-    except Exception:  # noqa: BLE001
-        pass
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("unable to enumerate installed manifests", exc_info=exc)
 
     candidates = [spec for spec in list_registry_models() if spec.name != exclude_model]
     candidates.sort(key=lambda spec: (0 if spec.name in installed_names else 1, spec.name))
@@ -4057,9 +4202,8 @@ def _validation_error_suggestions(
     )
     capabilities = model_capabilities or ModelCapabilities()
     missing_future_support = (
-        (requires_future_numeric and not capabilities.future_covariates_numeric)
-        or (requires_future_categorical and not capabilities.future_covariates_categorical)
-    )
+        requires_future_numeric and not capabilities.future_covariates_numeric
+    ) or (requires_future_categorical and not capabilities.future_covariates_categorical)
 
     if "does not support" in normalized or missing_future_support:
         if request.parameters.covariates_mode == "strict":
@@ -4134,9 +4278,8 @@ def _validation_suggestions(
         normalized_series,
     )
     missing_future_support = (
-        (requires_future_numeric and not capabilities.future_covariates_numeric)
-        or (requires_future_categorical and not capabilities.future_covariates_categorical)
-    )
+        requires_future_numeric and not capabilities.future_covariates_numeric
+    ) or (requires_future_categorical and not capabilities.future_covariates_categorical)
     if missing_future_support:
         suggestions.append(
             f"Model {request.model!r} does not support the provided future_covariates shape.",
@@ -4210,7 +4353,7 @@ def _merge_warnings(
 ) -> list[str] | None:
     merged: list[str] = []
     seen: set[str] = set()
-    for warning in (runner_warnings or []):
+    for warning in runner_warnings or []:
         if warning in seen:
             continue
         seen.add(warning)
@@ -4245,13 +4388,7 @@ def _optional_nonempty_str(value: Any) -> str | None:
 
 
 def _env_float(name: str, default: float) -> float:
-    raw = os.environ.get(name)
-    if raw is None:
-        return default
-    try:
-        return float(raw)
-    except ValueError:
-        return default
+    return core_env_float(name, default=default)
 
 
 def _optional_bool_str(value: Any) -> bool | None:
@@ -4459,17 +4596,11 @@ def _resolve_host_binding_from_env() -> str | None:
 
 
 def _env_or_none(name: str) -> str | None:
-    return _optional_nonempty_str(os.environ.get(name))
+    return core_env_or_none(name)
 
 
 def _env_flag(name: str, *, default: bool) -> bool:
-    raw = _env_or_none(name)
-    if raw is None:
-        return default
-    resolved = _optional_bool_str(raw)
-    if resolved is None:
-        return default
-    return resolved
+    return core_env_flag(name, default=default)
 
 
 def _utc_now_iso() -> str:
@@ -4650,6 +4781,159 @@ def _count_runner_restarts(app: FastAPI) -> int:
         if isinstance(restarts, float) and restarts > 0 and restarts.is_integer():
             total += int(restarts)
     return total
+
+
+def _build_ready_response(app: FastAPI) -> ReadyResponse:
+    runner_manager = _runner_manager_readiness(app)
+    disk = _disk_readiness()
+    connectors = _live_connectors_readiness()
+    healthy = runner_manager.healthy and disk.healthy and (connectors is None or connectors.healthy)
+    return ReadyResponse(
+        status="ok" if healthy else "degraded",
+        healthy=healthy,
+        runner_manager=runner_manager,
+        disk=disk,
+        connectors=connectors,
+    )
+
+
+def _runner_manager_readiness(app: FastAPI) -> RunnerManagerReadiness:
+    started_at = time.perf_counter()
+    try:
+        statuses = app.state.runner_manager.get_all_statuses()
+        configured = len(statuses)
+        running = sum(1 for status in statuses if status.get("running") is True)
+        restart_total = _count_runner_restarts(app)
+        return RunnerManagerReadiness(
+            healthy=True,
+            latency_ms=_elapsed_ms(started_at),
+            error=None,
+            configured_runners=configured,
+            running_runners=running,
+            restart_total=restart_total,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return RunnerManagerReadiness(
+            healthy=False,
+            latency_ms=_elapsed_ms(started_at),
+            error=str(exc),
+            configured_runners=0,
+            running_runners=0,
+            restart_total=0,
+        )
+
+
+def _disk_readiness() -> DiskReadiness:
+    started_at = time.perf_counter()
+    state_dir = TollamaPaths.default().base_dir
+    check_path = state_dir if state_dir.exists() else state_dir.parent
+    try:
+        usage = shutil.disk_usage(check_path)
+    except OSError as exc:
+        return DiskReadiness(
+            healthy=False,
+            latency_ms=_elapsed_ms(started_at),
+            error=str(exc),
+            path=str(check_path),
+            free_bytes=0,
+        )
+
+    free_bytes = int(usage.free)
+    healthy = free_bytes >= MIN_READY_DISK_FREE_BYTES
+    error = None
+    if not healthy:
+        error = (
+            f"free disk space below readiness threshold: {free_bytes} < {MIN_READY_DISK_FREE_BYTES}"
+        )
+    return DiskReadiness(
+        healthy=healthy,
+        latency_ms=_elapsed_ms(started_at),
+        error=error,
+        path=str(check_path),
+        free_bytes=free_bytes,
+    )
+
+
+def _live_connectors_readiness() -> LiveConnectorsReadiness | None:
+    if not core_env_flag("TOLLAMA_USE_LIVE_CONNECTORS", default=False):
+        return None
+
+    started_at = time.perf_counter()
+    try:
+        from tollama.xai.connectors.helpers import build_default_connector_registry
+
+        registry = build_default_connector_registry()
+        entries: list[LiveConnectorStatus] = []
+        available = 0
+        errors = 0
+
+        for connector in registry.connectors:
+            connector_name = str(getattr(connector, "connector_name", "unknown"))
+            domain = str(getattr(connector, "domain", "unknown"))
+            status = "available"
+            latency_ms: float | None = None
+            error: str | None = None
+
+            if hasattr(connector, "health_check") and callable(connector.health_check):
+                try:
+                    health = connector.health_check()
+                except Exception as exc:  # noqa: BLE001
+                    status = "error"
+                    error = str(exc)
+                else:
+                    raw_status = health.get("status")
+                    if isinstance(raw_status, str) and raw_status:
+                        status = raw_status
+                    raw_latency = health.get("latency_ms")
+                    if isinstance(raw_latency, (int, float)) and not isinstance(raw_latency, bool):
+                        latency_ms = float(raw_latency)
+                    raw_error = health.get("error")
+                    if isinstance(raw_error, str) and raw_error.strip():
+                        error = raw_error.strip()
+            else:
+                try:
+                    connector.supports("__health_check__", {})
+                except Exception as exc:  # noqa: BLE001
+                    status = "error"
+                    error = str(exc)
+
+            if status == "error":
+                errors += 1
+            else:
+                available += 1
+
+            entries.append(
+                LiveConnectorStatus(
+                    connector_name=connector_name,
+                    domain=domain,
+                    status=status,
+                    latency_ms=latency_ms,
+                    error=error,
+                )
+            )
+
+        healthy = errors == 0
+        return LiveConnectorsReadiness(
+            healthy=healthy,
+            latency_ms=_elapsed_ms(started_at),
+            error=None if healthy else f"{errors} connector health check(s) failed",
+            enabled=True,
+            checked=len(entries),
+            available=available,
+            errors=errors,
+            connectors=entries,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return LiveConnectorsReadiness(
+            healthy=False,
+            latency_ms=_elapsed_ms(started_at),
+            error=str(exc),
+            enabled=True,
+            checked=0,
+            available=0,
+            errors=1,
+            connectors=[],
+        )
 
 
 app = create_app()

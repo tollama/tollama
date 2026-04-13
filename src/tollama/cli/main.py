@@ -24,6 +24,7 @@ from tollama.core.config import (
     save_config,
     update_config,
 )
+from tollama.core.env import env_or_none
 from tollama.core.registry import ModelCapabilities, ModelSpec, get_model_spec, list_registry_models
 from tollama.core.runtime_bootstrap import (
     FAMILY_EXTRAS,
@@ -187,7 +188,7 @@ def serve(
     log_level: str = typer.Option("info", help="Uvicorn log level."),
 ) -> None:
     """Run the tollama daemon HTTP server."""
-    previous_binding = os.environ.get("TOLLAMA_EFFECTIVE_HOST_BINDING")
+    previous_binding = env_or_none("TOLLAMA_EFFECTIVE_HOST_BINDING")
     os.environ["TOLLAMA_EFFECTIVE_HOST_BINDING"] = f"{host}:{port}"
     try:
         uvicorn.run("tollama.daemon.app:app", host=host, port=port, log_level=log_level)
@@ -311,7 +312,7 @@ def pull(
 
     client = _make_client(base_url=base_url, timeout=timeout)
     stream = not no_stream
-    resolved_token = token if token is not None else os.environ.get("TOLLAMA_HF_TOKEN")
+    resolved_token = token if token is not None else env_or_none("TOLLAMA_HF_TOKEN")
     include_null_fields: set[str] = set()
 
     pull_insecure = insecure

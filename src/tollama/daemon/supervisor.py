@@ -11,7 +11,9 @@ import subprocess
 import sys
 import threading
 import time
+from collections import deque
 from collections.abc import Sequence
+from contextlib import suppress
 from datetime import UTC, datetime
 from typing import Any
 
@@ -98,9 +100,12 @@ class CircuitBreaker:
     @property
     def state(self) -> CircuitState:
         """Return the current circuit state, auto-transitioning OPEN → HALF_OPEN."""
-        if self._state == CircuitState.OPEN and self._opened_at is not None:
-            if time.monotonic() - self._opened_at >= self._recovery_timeout_seconds:
-                self._state = CircuitState.HALF_OPEN
+        if (
+            self._state == CircuitState.OPEN
+            and self._opened_at is not None
+            and time.monotonic() - self._opened_at >= self._recovery_timeout_seconds
+        ):
+            self._state = CircuitState.HALF_OPEN
         return self._state
 
     def check(self) -> None:
@@ -179,6 +184,11 @@ class RunnerSupervisor:
         self._last_error_message: str | None = None
         self._last_error_at: datetime | None = None
         self._stdout_buffer = bytearray()
+        self._stderr_buffer = bytearray()
+        self._stderr_lines: deque[str] = deque(maxlen=100)
+        self._stderr_thread: threading.Thread | None = None
+        self._stderr_stop = threading.Event()
+        self._stderr_lock = threading.Lock()
         self._circuit_breaker = circuit_breaker or CircuitBreaker()
         self._max_retry_attempts = max(max_retry_attempts, 1)
         self._retry_base_delay = retry_base_delay
@@ -206,6 +216,7 @@ class RunnerSupervisor:
         method: str,
         params: dict[str, Any],
         timeout: float = DEFAULT_CALL_TIMEOUT_SECONDS,
+        request_id: str | None = None,
     ) -> dict[str, Any]:
         """Call a runner method and return the result payload.
 
@@ -218,7 +229,11 @@ class RunnerSupervisor:
         # Circuit breaker check (outside lock to avoid holding lock while sleeping)
         self._circuit_breaker.check()
 
-        request = ProtocolRequest(id=self._new_request_id(), method=method, params=params)
+        request = ProtocolRequest(
+            id=self._new_request_id(request_id=request_id),
+            method=method,
+            params=params,
+        )
 
         last_unavailable: RunnerUnavailableError | None = None
         for attempt in range(self._max_retry_attempts):
@@ -402,7 +417,7 @@ class RunnerSupervisor:
             self._clear_process_locked()
 
         try:
-            self._process = subprocess.Popen(
+            self._process = subprocess.Popen(  # noqa: S603 - configured local entrypoints only
                 self._runner_command,
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
@@ -412,6 +427,9 @@ class RunnerSupervisor:
             )
             self._started_at = datetime.now(UTC)
             self._stdout_buffer.clear()
+            self._stderr_buffer.clear()
+            self._stderr_lines.clear()
+            self._start_stderr_drain_locked(self._process)
         except OSError as exc:
             self._process = None
             self._started_at = None
@@ -443,6 +461,8 @@ class RunnerSupervisor:
         if process is None:
             return
 
+        self._stop_stderr_drain_locked(process.stderr)
+
         for stream in (process.stdin, process.stdout, process.stderr):
             if stream is not None and not stream.closed:
                 stream.close()
@@ -450,32 +470,116 @@ class RunnerSupervisor:
         self._process = None
         self._started_at = None
         self._stdout_buffer.clear()
+        self._stderr_buffer.clear()
 
     def _dead_process_message(self, process: subprocess.Popen[bytes]) -> str:
         returncode = process.poll()
-        stderr = process.stderr
-        stderr_tail = ""
-        if stderr is not None:
-            try:
-                raw_stderr = stderr.read()
-                if isinstance(raw_stderr, bytes):
-                    stderr_tail = raw_stderr.decode("utf-8", errors="replace").strip()
-                else:
-                    stderr_tail = raw_stderr.strip()
-            except OSError:
-                stderr_tail = ""
+        stderr_tail = self._stderr_tail()
 
         if stderr_tail:
             return f"runner exited with code {returncode}: {stderr_tail}"
         return f"runner exited with code {returncode}"
 
-    def _new_request_id(self) -> str:
+    def _new_request_id(self, *, request_id: str | None = None) -> str:
+        if request_id is not None:
+            normalized = request_id.strip()
+            if normalized:
+                return normalized
         return generate_message_id()
 
     def _record_error_locked(self, message: str) -> None:
         normalized = message.strip()
         self._last_error_message = normalized if normalized else "runner error"
         self._last_error_at = datetime.now(UTC)
+
+    def _start_stderr_drain_locked(self, process: subprocess.Popen[bytes]) -> None:
+        stderr = process.stderr
+        if stderr is None:
+            return
+
+        self._stderr_stop = threading.Event()
+        self._stderr_thread = threading.Thread(
+            target=self._drain_stderr,
+            args=(stderr, self._stderr_stop),
+            name=f"tollama-stderr-{process.pid}",
+            daemon=True,
+        )
+        self._stderr_thread.start()
+
+    def _stop_stderr_drain_locked(self, stderr: Any) -> None:
+        self._stderr_stop.set()
+        if stderr is not None and not stderr.closed:
+            with suppress(OSError):
+                stderr.close()
+
+        thread = self._stderr_thread
+        if thread is not None and thread.is_alive():
+            thread.join(timeout=1.0)
+        self._stderr_thread = None
+
+    def _drain_stderr(self, stderr: Any, stop_event: threading.Event) -> None:
+        fileno = getattr(stderr, "fileno", None)
+        if callable(fileno):
+            try:
+                fd = fileno()
+            except (AttributeError, OSError, ValueError):
+                fd = None
+        else:
+            fd = None
+
+        if fd is None:
+            self._drain_stderr_fallback(stderr, stop_event)
+            return
+
+        while not stop_event.is_set():
+            try:
+                chunk = os.read(fd, 4096)
+            except OSError:
+                break
+            if not chunk:
+                break
+            self._append_stderr_chunk(chunk)
+        self._flush_stderr_buffer()
+
+    def _drain_stderr_fallback(self, stderr: Any, stop_event: threading.Event) -> None:
+        while not stop_event.is_set():
+            try:
+                chunk = stderr.readline()
+            except (AttributeError, OSError, ValueError):
+                break
+            if not chunk:
+                break
+            if isinstance(chunk, str):
+                payload = chunk.encode("utf-8", errors="replace")
+            else:
+                payload = bytes(chunk)
+            self._append_stderr_chunk(payload)
+        self._flush_stderr_buffer()
+
+    def _append_stderr_chunk(self, chunk: bytes) -> None:
+        with self._stderr_lock:
+            self._stderr_buffer.extend(chunk)
+            while True:
+                newline_index = self._stderr_buffer.find(b"\n")
+                if newline_index < 0:
+                    break
+                line = bytes(self._stderr_buffer[:newline_index]).decode("utf-8", errors="replace")
+                del self._stderr_buffer[: newline_index + 1]
+                self._stderr_lines.append(line.strip())
+
+    def _flush_stderr_buffer(self) -> None:
+        with self._stderr_lock:
+            if not self._stderr_buffer:
+                return
+            line = bytes(self._stderr_buffer).decode("utf-8", errors="replace").strip()
+            self._stderr_buffer.clear()
+            if line:
+                self._stderr_lines.append(line)
+
+    def _stderr_tail(self) -> str:
+        with self._stderr_lock:
+            tail = [line for line in self._stderr_lines if line]
+        return "\n".join(tail).strip()
 
 
 def _to_utc_iso(value: datetime | None) -> str | None:

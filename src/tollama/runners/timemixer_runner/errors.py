@@ -2,14 +2,10 @@
 
 from __future__ import annotations
 
+from tollama.core.errors import (
+    RunnerAdapterInputError as AdapterInputError,
+    RunnerDependencyMissingError as DependencyMissingError,
+    RunnerUnsupportedModelError as UnsupportedModelError,
+)
 
-class DependencyMissingError(RuntimeError):
-    """Raised when optional TimeMixer runner dependencies are missing."""
-
-
-class UnsupportedModelError(ValueError):
-    """Raised when a request targets an unsupported TimeMixer model."""
-
-
-class AdapterInputError(ValueError):
-    """Raised when request input is invalid for the TimeMixer adapter."""
+__all__ = ["AdapterInputError", "DependencyMissingError", "UnsupportedModelError"]

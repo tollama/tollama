@@ -1,6 +1,6 @@
 # tollama roadmap (worker-per-model-family)
 
-Last updated: 2026-04-11
+Last updated: 2026-04-13
 
 Status legend:
 - `[x]` implemented
@@ -174,6 +174,8 @@ tollama/
 ### Current implementation status
 - JSON-over-stdio line protocol is implemented in `tollama.core.protocol`.
 - Request/response primitives are implemented (`ProtocolRequest`, `ProtocolResponse`).
+- Shared runner protocol helpers now exist in `src/tollama/runners/common_protocol.py`
+  and are adopted by the runner scaffold plus current runner entrypoints.
 - Supported method set includes `capabilities`, `load`, `unload`, `forecast`, `ping`, and `hello`.
 - Active handlers today:
   - `mock`: `hello`, `forecast`
@@ -328,8 +330,8 @@ tollama/
 ## 11) Public API + CLI [x]
 ### Current implementation status
 - Implemented HTTP endpoints are maintained canonically in `docs/api-reference.md` and currently include:
-  - system + observability: `/v1/health`, `/api/version`, `/api/info`, `/api/usage`,
-    `/api/events`, `/metrics`
+  - system + observability: `/v1/health`, `/health/live`, `/health/ready`,
+    `/api/version`, `/api/info`, `/api/usage`, `/api/events`, `/metrics`
   - model lifecycle: `/api/tags`, `/api/show`, `/api/pull`, `/api/delete`, `/api/ps`,
     `/v1/models`, `/v1/models/pull`, `/v1/models/{name}`
   - forecast core: `/api/validate`, `/api/forecast`, `/api/forecast/stream`,
@@ -390,14 +392,23 @@ tollama/
 - `/api/info` provides diagnostics payload with daemon/model/runner/config/environment views.
 - Sensitive values are redacted in diagnostics payloads.
 - Runner status reports include install/running state, restart count, and last error.
+- Supervisor stderr is continuously drained and truncated into a bounded recent tail for
+  crash diagnostics, preventing subprocess stderr pipe deadlocks.
 - Forecast/pull paths map several failure classes to `400/404/409/502/503`.
 - Forecast endpoints support optional accuracy metrics
   (`mape`, `mase`, `mae`, `rmse`, `smape`, `wape`, `rmsse`, `pinball`) in response payloads.
 - Forecast responses include timing + enriched usage metadata and deterministic summary/explanation payloads.
+- Daemon forecast handling now forwards the incoming `X-Request-ID` into supervisor calls so
+  runner protocol request IDs remain correlated with the originating HTTP request when available.
+- Additive liveness/readiness probes now include `/health/live` and `/health/ready`.
+- `/health/ready` reports runner-manager state, local disk budget, and optional live XAI
+  connector summaries when `TOLLAMA_USE_LIVE_CONNECTORS=1`.
 - Daemon persists per-key usage aggregates in SQLite (`~/.tollama/usage.db`) and exposes them via
   `GET /api/usage`.
 - Optional token-bucket request limiting is available via environment configuration
   (`TOLLAMA_RATE_LIMIT_PER_MINUTE`, `TOLLAMA_RATE_LIMIT_BURST`).
+- Prometheus metrics now include per-runner inference latency, model load time, and peak
+  memory gauges derived from forecast response telemetry.
 
 ### Planned work / TODO
 - Add structured logging for routing decisions, load/unload timings, and crash recovery.
@@ -406,6 +417,13 @@ tollama/
 ## 14) Testing plan [x]
 ### Current implementation status
 - Unit and integration-style coverage exists for core schemas/protocol, daemon, CLI, supervisor, runner manager, and adapters.
+- Dedicated security/regression coverage now includes:
+  - PostgreSQL identifier validation + safe SQL composition tests
+  - supervisor stderr flood/tail preservation/request-id reuse tests
+  - architecture boundary tests for `runners -> daemon`, shared error inheritance, and
+    direct `TOLLAMA_*` environment access
+  - contract tests for protocol round-trips and checked-in OpenAPI artifact sync
+  - property tests for protocol/schema round-trips and SQL identifier validation
 - Added fast covariates-focused tests (no HF weight downloads):
   - schema/validation failure scenarios
   - strict vs best-effort compatibility behavior
@@ -413,6 +431,14 @@ tollama/
 - Baseline gates remain:
   - `ruff check .`
   - `pytest -q` (heavy integration tests stay opt-in)
+- Incremental Python 3.11 CI quality gates now also run:
+  - scoped `mypy`
+  - coverage report generation
+  - `pre-commit run --all-files`
+  - `bandit -r src/tollama -x tests`
+  - `pip-audit`
+  - compiled dev-lock freshness checks against `requirements-dev.lock`
+  - checked-in `docs/openapi.json` export verification
 - Daemon workflow release gate now writes machine-readable/operator-friendly artifacts via
   `bash scripts/verify_daemon_api.sh --output-dir <dir>`:
   - `result.json`

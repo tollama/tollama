@@ -6,6 +6,7 @@ import json
 from typing import Any
 
 import httpx
+from pydantic import ValidationError
 
 from tollama.core.schemas import (
     AnalyzeRequest,
@@ -190,7 +191,7 @@ class TollamaClient:
             )
         try:
             return ForecastResponse.model_validate(response_payload)
-        except Exception as exc:  # noqa: BLE001
+        except ValidationError as exc:
             raise InvalidRequestError(
                 action="validate forecast response",
                 detail=str(exc),
@@ -210,7 +211,7 @@ class TollamaClient:
         )
         try:
             return CompareResponse.model_validate(response_payload)
-        except Exception as exc:  # noqa: BLE001
+        except ValidationError as exc:
             raise InvalidRequestError(
                 action="validate compare response",
                 detail=str(exc),
@@ -230,7 +231,7 @@ class TollamaClient:
         )
         try:
             return AnalyzeResponse.model_validate(response_payload)
-        except Exception as exc:  # noqa: BLE001
+        except ValidationError as exc:
             raise InvalidRequestError(
                 action="validate analyze response",
                 detail=str(exc),
@@ -250,7 +251,7 @@ class TollamaClient:
         )
         try:
             return GenerateResponse.model_validate(response_payload)
-        except Exception as exc:  # noqa: BLE001
+        except ValidationError as exc:
             raise InvalidRequestError(
                 action="validate generate response",
                 detail=str(exc),
@@ -270,7 +271,7 @@ class TollamaClient:
         )
         try:
             return CounterfactualResponse.model_validate(response_payload)
-        except Exception as exc:  # noqa: BLE001
+        except ValidationError as exc:
             raise InvalidRequestError(
                 action="validate counterfactual response",
                 detail=str(exc),
@@ -290,7 +291,7 @@ class TollamaClient:
         )
         try:
             return ScenarioTreeResponse.model_validate(response_payload)
-        except Exception as exc:  # noqa: BLE001
+        except ValidationError as exc:
             raise InvalidRequestError(
                 action="validate scenario-tree response",
                 detail=str(exc),
@@ -310,7 +311,7 @@ class TollamaClient:
         )
         try:
             return ForecastReport.model_validate(response_payload)
-        except Exception as exc:  # noqa: BLE001
+        except ValidationError as exc:
             raise InvalidRequestError(
                 action="validate report response",
                 detail=str(exc),
@@ -330,7 +331,7 @@ class TollamaClient:
         )
         try:
             return AutoForecastResponse.model_validate(response_payload)
-        except Exception as exc:  # noqa: BLE001
+        except ValidationError as exc:
             raise InvalidRequestError(
                 action="validate auto-forecast response",
                 detail=str(exc),
@@ -350,7 +351,7 @@ class TollamaClient:
         )
         try:
             return WhatIfResponse.model_validate(response_payload)
-        except Exception as exc:  # noqa: BLE001
+        except ValidationError as exc:
             raise InvalidRequestError(
                 action="validate what-if response",
                 detail=str(exc),
@@ -370,7 +371,7 @@ class TollamaClient:
         )
         try:
             return PipelineResponse.model_validate(response_payload)
-        except Exception as exc:  # noqa: BLE001
+        except ValidationError as exc:
             raise InvalidRequestError(
                 action="validate pipeline response",
                 detail=str(exc),
@@ -924,7 +925,7 @@ class AsyncTollamaClient:
             )
         try:
             return ForecastResponse.model_validate(response_payload)
-        except Exception as exc:  # noqa: BLE001
+        except ValidationError as exc:
             raise InvalidRequestError(
                 action="validate forecast response",
                 detail=str(exc),
@@ -944,7 +945,7 @@ class AsyncTollamaClient:
         )
         try:
             return CompareResponse.model_validate(response_payload)
-        except Exception as exc:  # noqa: BLE001
+        except ValidationError as exc:
             raise InvalidRequestError(
                 action="validate compare response",
                 detail=str(exc),
@@ -964,7 +965,7 @@ class AsyncTollamaClient:
         )
         try:
             return AnalyzeResponse.model_validate(response_payload)
-        except Exception as exc:  # noqa: BLE001
+        except ValidationError as exc:
             raise InvalidRequestError(
                 action="validate analyze response",
                 detail=str(exc),
@@ -984,7 +985,7 @@ class AsyncTollamaClient:
         )
         try:
             return GenerateResponse.model_validate(response_payload)
-        except Exception as exc:  # noqa: BLE001
+        except ValidationError as exc:
             raise InvalidRequestError(
                 action="validate generate response",
                 detail=str(exc),
@@ -1004,7 +1005,7 @@ class AsyncTollamaClient:
         )
         try:
             return CounterfactualResponse.model_validate(response_payload)
-        except Exception as exc:  # noqa: BLE001
+        except ValidationError as exc:
             raise InvalidRequestError(
                 action="validate counterfactual response",
                 detail=str(exc),
@@ -1024,7 +1025,7 @@ class AsyncTollamaClient:
         )
         try:
             return ScenarioTreeResponse.model_validate(response_payload)
-        except Exception as exc:  # noqa: BLE001
+        except ValidationError as exc:
             raise InvalidRequestError(
                 action="validate scenario-tree response",
                 detail=str(exc),
@@ -1044,7 +1045,7 @@ class AsyncTollamaClient:
         )
         try:
             return ForecastReport.model_validate(response_payload)
-        except Exception as exc:  # noqa: BLE001
+        except ValidationError as exc:
             raise InvalidRequestError(
                 action="validate report response",
                 detail=str(exc),
@@ -1064,7 +1065,7 @@ class AsyncTollamaClient:
         )
         try:
             return AutoForecastResponse.model_validate(response_payload)
-        except Exception as exc:  # noqa: BLE001
+        except ValidationError as exc:
             raise InvalidRequestError(
                 action="validate auto-forecast response",
                 detail=str(exc),
@@ -1084,7 +1085,7 @@ class AsyncTollamaClient:
         )
         try:
             return WhatIfResponse.model_validate(response_payload)
-        except Exception as exc:  # noqa: BLE001
+        except ValidationError as exc:
             raise InvalidRequestError(
                 action="validate what-if response",
                 detail=str(exc),
@@ -1104,7 +1105,7 @@ class AsyncTollamaClient:
         )
         try:
             return PipelineResponse.model_validate(response_payload)
-        except Exception as exc:  # noqa: BLE001
+        except ValidationError as exc:
             raise InvalidRequestError(
                 action="validate pipeline response",
                 detail=str(exc),

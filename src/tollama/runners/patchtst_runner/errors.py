@@ -2,14 +2,10 @@
 
 from __future__ import annotations
 
+from tollama.core.errors import (
+    RunnerAdapterInputError as AdapterInputError,
+    RunnerDependencyMissingError as DependencyMissingError,
+    RunnerUnsupportedModelError as UnsupportedModelError,
+)
 
-class DependencyMissingError(RuntimeError):
-    """Raised when optional PatchTST runner dependencies are missing."""
-
-
-class UnsupportedModelError(RuntimeError):
-    """Raised when model metadata is insufficient for PatchTST loading."""
-
-
-class AdapterInputError(ValueError):
-    """Raised when canonical request payload cannot be mapped to PatchTST input."""
+__all__ = ["AdapterInputError", "DependencyMissingError", "UnsupportedModelError"]

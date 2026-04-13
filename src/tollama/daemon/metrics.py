@@ -89,6 +89,26 @@ class PrometheusMetrics:
             "Total runner restarts observed since daemon startup.",
             registry=self.registry,
         )
+        self._runner_inference_seconds = Histogram(
+            "tollama_runner_inference_seconds",
+            "Per-runner inference latency reported by runner responses.",
+            labelnames=("family", "runner"),
+            buckets=_LATENCY_BUCKETS,
+            registry=self.registry,
+        )
+        self._runner_model_load_seconds = Histogram(
+            "tollama_runner_model_load_seconds",
+            "Per-runner model load latency reported by runner responses.",
+            labelnames=("family", "runner"),
+            buckets=_LATENCY_BUCKETS,
+            registry=self.registry,
+        )
+        self._runner_peak_memory_mb = Gauge(
+            "tollama_runner_peak_memory_mb",
+            "Last observed peak memory usage reported by each runner.",
+            labelnames=("family", "runner"),
+            registry=self.registry,
+        )
         self._get_loaded_models = get_loaded_models
         self._get_runner_restarts = get_runner_restarts
         self._last_restart_total = 0
@@ -121,6 +141,21 @@ class PrometheusMetrics:
         if generate_latest is None:  # pragma: no cover - guarded by constructor
             return b""
         return generate_latest(self.registry)
+
+    def observe_runner_response(
+        self,
+        *,
+        family: str,
+        runner: str,
+        model_load_ms: float,
+        inference_ms: float,
+        peak_memory_mb: float,
+    ) -> None:
+        """Record additive per-runner response telemetry."""
+        labels = {"family": family, "runner": runner}
+        self._runner_model_load_seconds.labels(**labels).observe(max(model_load_ms, 0.0) / 1000.0)
+        self._runner_inference_seconds.labels(**labels).observe(max(inference_ms, 0.0) / 1000.0)
+        self._runner_peak_memory_mb.labels(**labels).set(max(peak_memory_mb, 0.0))
 
     def _observe_runner_restarts(self, total: int) -> None:
         with self._restart_lock:

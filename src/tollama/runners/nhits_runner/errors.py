@@ -2,22 +2,18 @@
 
 from __future__ import annotations
 
+from tollama.core.errors import (
+    RunnerAdapterInputError as AdapterInputError,
+    RunnerAdapterRuntimeError as AdapterRuntimeError,
+    RunnerDependencyMissingError as DependencyMissingError,
+    RunnerNotImplementedError as NotImplementedRunnerError,
+    RunnerUnsupportedModelError as UnsupportedModelError,
+)
 
-class DependencyMissingError(RuntimeError):
-    """Raised when optional N-HiTS dependencies are missing."""
-
-
-class NotImplementedRunnerError(RuntimeError):
-    """Raised when placeholder paths are reached before full N-HiTS support."""
-
-
-class AdapterInputError(ValueError):
-    """Raised when request input is invalid for the N-HiTS adapter."""
-
-
-class AdapterRuntimeError(RuntimeError):
-    """Raised when runtime inference fails after request validation."""
-
-
-class UnsupportedModelError(ValueError):
-    """Raised when model metadata/source is incompatible with N-HiTS adapter."""
+__all__ = [
+    "AdapterInputError",
+    "AdapterRuntimeError",
+    "DependencyMissingError",
+    "NotImplementedRunnerError",
+    "UnsupportedModelError",
+]

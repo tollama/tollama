@@ -1,6 +1,6 @@
 # tollama Todo List (Ollama for TSFM)
 
-기준 시점: 2026-04-07 (repo 현재 구현 반영)
+기준 시점: 2026-04-13 (repo 현재 구현 반영)
 
 우선순위:
 - `P0` = 필수(MVP)
@@ -49,7 +49,8 @@ Canonical inventories:
 - [~] (P1) 런너별 종속성 충돌 방지 정책(버전 pin, lockfile, 독립 venv) 확립
   - 현재: optional extras 분리 + family별 독립 runtime venv 자동화 구현(`~/.tollama/runtimes/<family>/venv/`, `tollama runtime install/list/update/remove`)
   - 현재: stdlib `venv`/`ensurepip` 실패 시 `uv venv` fallback 경로 복구
-  - TODO: 버전 pin/lockfile 정책과 설치 재현성 보강
+  - 현재: 개발 surface 재현성을 위한 compiled lock artifact `requirements-dev.lock` 추가 + CI freshness/install 검증 도입
+  - TODO: runner-family별 lock/install 재현성까지 확장
 - [ ] (P2) "Python 의존 최소화" 장기 트랙 정의
   - ONNX/TensorRT/LibTorch(C++)/Rust/Go 코어화 가능성 검토
   - (선택) 특정 모델용 컴파일 엔진 기반 고성능 런타임
@@ -142,11 +143,13 @@ Canonical inventories:
   - 현재: canonical 트러블슈팅 문서(`docs/troubleshooting.md`) + CLI 치트시트(`docs/cli-cheatsheet.md`) 분리
   - 현재: API 레퍼런스 문서(`docs/api-reference.md`) 추가 + OpenAPI 문서(`/docs`, `/redoc`, `/openapi.json`) 메타데이터 강화
   - 현재: API key 설정 시 docs/openapi 엔드포인트도 기본 인증 적용(`TOLLAMA_DOCS_PUBLIC=1`로 로컬 공개 가능)
+  - 현재: checked-in OpenAPI artifact `docs/openapi.json` + `scripts/export_openapi.py` 추가, CI drift 검증 도입
   - 현재: tutorial notebook 4종 추가(covariates/comparison/what-if/auto-forecast, matplotlib+plotly) 및 CI 실행 단계 추가
   - 현재: 번들 Web Dashboard 1차 추가(`/dashboard`, `/dashboard/static/*`, `/dashboard/partials/{name}`)
   - 현재: 집계 endpoint `GET /api/dashboard/state` 추가(부분 실패 시 `warnings[]` 반환)
   - 현재: Dashboard 보안/노출 제어 env 추가(`TOLLAMA_DASHBOARD`, `TOLLAMA_DASHBOARD_REQUIRE_AUTH`, `TOLLAMA_CORS_ORIGINS`)
   - 현재: CLI `tollama open`, `tollama dashboard` 및 optional `[tui]` extra + `tollama-dashboard` 스크립트 추가
+  - 현재: additive health probes `GET /health/live`, `GET /health/ready` 추가
 - [ ] (P1) "pull이 런타임까지 설치"되는 installer(런타임 venv 자동 구성) 확립
 
 ### Stage 2 (P1): "공통 전처리/공변량 표준화"
@@ -275,6 +278,8 @@ Canonical inventories:
   - 현재: `GET /metrics` 추가(옵션 의존성: `prometheus-client`)
   - 현재: `tollama_forecast_requests_total`, `tollama_forecast_latency_seconds`,
     `tollama_models_loaded`, `tollama_runner_restarts_total` 노출
+  - 현재: per-runner `tollama_runner_inference_seconds`, `tollama_runner_model_load_seconds`,
+    `tollama_runner_peak_memory_mb` 추가
   - 현재: `ForecastMetricsMiddleware`로 forecast/auto-forecast/compare 경로 계측
   - 현재: `tests/test_daemon_metrics.py` 추가(성공/실패 카운터, gauge, restart counter)
 - [x] (P1) API Key Auth 1차
@@ -289,6 +294,13 @@ Canonical inventories:
   - 현재: optional token-bucket rate limiting 추가
     (`TOLLAMA_RATE_LIMIT_PER_MINUTE`, `TOLLAMA_RATE_LIMIT_BURST`)
   - 현재: `tests/test_metering.py` 검증 추가
+- [x] (P1) Phase-1/2 품질 하드닝 1차
+  - 현재: PostgreSQL connector identifier 검증 + safe SQL composition + connection pooling 도입
+  - 현재: supervisor stderr drain/deque tail로 subprocess pipe deadlock 방지
+  - 현재: daemon `X-Request-ID` -> supervisor request ID 전파
+  - 현재: Python 3.11 CI lane에 scoped mypy, coverage report, pre-commit, Bandit, pip-audit, lock freshness, OpenAPI artifact sync 추가
+  - 현재: `tests/architecture/`, `tests/contract/`, `tests/property/`, `tests/conftest.py` 추가
+  - 현재: ADR scaffold + initial records(`docs/adr/`) 추가
 - [x] (P1) Agentic Pipeline Endpoint 1차
   - 현재: `/api/pipeline` 추가(analyze -> recommend -> optional pull -> auto-forecast)
   - 현재: `PipelineRequest`/`PipelineResponse` + `src/tollama/core/pipeline.py` 추가

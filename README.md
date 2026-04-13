@@ -173,6 +173,27 @@ Tollama can **invoke TSFMs as tools when forecasting is part of a broader workfl
 
 ---
 
+## Ops & Quality
+
+- Health endpoints:
+  - `GET /v1/health` keeps the existing simple liveness payload.
+  - `GET /health/live` is an additive liveness alias.
+  - `GET /health/ready` returns structured readiness for runner manager state,
+    local disk budget, and optional live XAI connector summary when
+    `TOLLAMA_USE_LIVE_CONNECTORS=1`.
+- Interactive API docs remain available at `/docs`, `/redoc`, and `/openapi.json`.
+  A checked-in OpenAPI artifact is kept at `docs/openapi.json` and can be refreshed
+  with `python scripts/export_openapi.py --output docs/openapi.json`.
+- The PostgreSQL connector now validates identifiers before query composition and
+  uses safe `psycopg2.sql` identifier rendering plus connection pooling.
+- Supervisor stderr is continuously drained to avoid subprocess pipe deadlocks while
+  still preserving a bounded recent tail for diagnostics.
+- The Python 3.11 CI lane now carries the incremental quality/security baseline:
+  scoped mypy, coverage report generation, pre-commit, Bandit, pip-audit,
+  OpenAPI artifact verification, and compiled dev-lock freshness checks.
+
+---
+
 ## Docker
 
 Build and run:

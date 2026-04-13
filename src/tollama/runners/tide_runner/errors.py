@@ -2,14 +2,10 @@
 
 from __future__ import annotations
 
+from tollama.core.errors import (
+    RunnerAdapterInputError as AdapterInputError,
+    RunnerDependencyMissingError as DependencyMissingError,
+    RunnerUnsupportedModelError as UnsupportedModelError,
+)
 
-class DependencyMissingError(RuntimeError):
-    """Raised when optional runner dependencies are unavailable."""
-
-
-class UnsupportedModelError(ValueError):
-    """Raised when a model cannot be mapped to this runner."""
-
-
-class AdapterInputError(ValueError):
-    """Raised when canonical request data cannot be transformed for inference."""
+__all__ = ["AdapterInputError", "DependencyMissingError", "UnsupportedModelError"]

@@ -107,11 +107,17 @@ class RunnerManager:
         method: str,
         params: dict[str, Any],
         timeout: float,
+        request_id: str | None = None,
     ) -> dict[str, Any]:
         """Call one runner method for the specified family."""
         supervisor = self._supervisor_for_family(family)
         try:
-            result = supervisor.call(method=method, params=params, timeout=timeout)
+            result = supervisor.call(
+                method=method,
+                params=params,
+                timeout=timeout,
+                request_id=request_id,
+            )
             self._memory_manager.record_usage(family)
             self._check_memory_pressure()
             return result

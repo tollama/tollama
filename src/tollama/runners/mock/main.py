@@ -3,49 +3,20 @@
 from __future__ import annotations
 
 import sys
-from collections.abc import Mapping
 from typing import Any, TextIO
 
 from pydantic import ValidationError
 
-from tollama.core.protocol import (
-    ProtocolDecodeError,
-    ProtocolErrorMessage,
-    ProtocolRequest,
-    ProtocolResponse,
-    decode_line,
-    encode_line,
-    validate_request,
-)
+from tollama.core.protocol import ProtocolRequest, ProtocolResponse
 from tollama.core.schemas import ForecastRequest, ForecastResponse, SeriesForecast
+from tollama.runners.common_protocol import dispatch_request_line, error_response, serve_runner
 
 RUNNER_NAME = "tollama-mock"
 RUNNER_VERSION = "0.1.0"
-UNKNOWN_REQUEST_ID = "unknown"
 CAPABILITIES = ("hello", "forecast")
 _FORECAST_REQUEST_FIELDS = frozenset(
     {"model", "horizon", "quantiles", "series", "options", "parameters"},
 )
-
-
-def _extract_request_id(payload: Mapping[str, Any] | None) -> str:
-    if payload is not None:
-        request_id = payload.get("id")
-        if isinstance(request_id, str) and request_id:
-            return request_id
-    return UNKNOWN_REQUEST_ID
-
-
-def _error_response(
-    request_id: str,
-    code: int,
-    message: str,
-    data: Any | None = None,
-) -> ProtocolResponse:
-    return ProtocolResponse(
-        id=request_id,
-        error=ProtocolErrorMessage(code=code, message=message, data=data),
-    )
 
 
 def _handle_hello(request: ProtocolRequest) -> ProtocolResponse:
@@ -92,7 +63,7 @@ def _handle_forecast(request: ProtocolRequest) -> ProtocolResponse:
     try:
         forecast_request = ForecastRequest.model_validate(canonical_params)
     except ValidationError as exc:
-        return _error_response(
+        return error_response(
             request.id,
             code=-32602,
             message="invalid params",
@@ -118,43 +89,17 @@ def _handle_forecast(request: ProtocolRequest) -> ProtocolResponse:
 
 
 def handle_request_line(line: str | bytes) -> ProtocolResponse:
-    payload: Mapping[str, Any] | None = None
-    request_id = UNKNOWN_REQUEST_ID
-
-    try:
-        payload = decode_line(line)
-        request_id = _extract_request_id(payload)
-        request = validate_request(payload)
-    except ProtocolDecodeError as exc:
-        return _error_response(
-            request_id,
-            code=-32600,
-            message="invalid request",
-            data={"details": str(exc)},
-        )
-
-    if request.method == "hello":
-        return _handle_hello(request)
-
-    if request.method == "forecast":
-        return _handle_forecast(request)
-
-    return _error_response(
-        request.id,
-        code=-32601,
-        message="method not found",
-        data={"method": request.method},
+    return dispatch_request_line(
+        line,
+        {
+            "hello": _handle_hello,
+            "forecast": _handle_forecast,
+        },
     )
 
 
 def serve(stdin: TextIO = sys.stdin, stdout: TextIO = sys.stdout) -> int:
-    for line in stdin:
-        if not line.strip():
-            continue
-        response = handle_request_line(line)
-        stdout.write(encode_line(response))
-        stdout.flush()
-    return 0
+    return serve_runner(handle_request_line, stdin=stdin, stdout=stdout)
 
 
 def main() -> int:

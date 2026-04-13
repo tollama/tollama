@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 
 import uvicorn
+from tollama.core.env import env_or_none
 
 DEFAULT_DAEMON_HOST = "127.0.0.1"
 DEFAULT_DAEMON_PORT = 11435
@@ -31,11 +32,11 @@ def _parse_port(value: str, *, env_name: str, raw_value: str) -> int:
 
 
 def _resolve_bind() -> tuple[str, int]:
-    host_port = os.environ.get("TOLLAMA_HOST")
+    host_port = env_or_none("TOLLAMA_HOST")
     if host_port is not None:
         return _parse_host_port(host_port)
 
-    port_value = os.environ.get("TOLLAMA_PORT")
+    port_value = env_or_none("TOLLAMA_PORT")
     if port_value is None:
         return DEFAULT_DAEMON_HOST, DEFAULT_DAEMON_PORT
     port = _parse_port(port_value, env_name="TOLLAMA_PORT", raw_value=port_value)
@@ -45,8 +46,8 @@ def _resolve_bind() -> tuple[str, int]:
 def main() -> int:
     """Run the HTTP daemon with uvicorn."""
     host, port = _resolve_bind()
-    log_level = os.environ.get("TOLLAMA_LOG_LEVEL", "info")
-    previous_binding = os.environ.get("TOLLAMA_EFFECTIVE_HOST_BINDING")
+    log_level = env_or_none("TOLLAMA_LOG_LEVEL") or "info"
+    previous_binding = env_or_none("TOLLAMA_EFFECTIVE_HOST_BINDING")
     os.environ["TOLLAMA_EFFECTIVE_HOST_BINDING"] = f"{host}:{port}"
 
     try:

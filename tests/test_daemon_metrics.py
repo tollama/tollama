@@ -84,6 +84,9 @@ def test_metrics_endpoint_exposes_prometheus_payload(monkeypatch, tmp_path) -> N
     assert "tollama_forecast_latency_seconds" in payload
     assert "tollama_models_loaded" in payload
     assert "tollama_runner_restarts_total" in payload
+    assert "tollama_runner_inference_seconds" in payload
+    assert "tollama_runner_model_load_seconds" in payload
+    assert "tollama_runner_peak_memory_mb" in payload
 
 
 @pytest.mark.skipif(
@@ -113,11 +116,23 @@ def test_metrics_track_successful_forecast_and_loaded_models(monkeypatch, tmp_pa
         metric="tollama_forecast_latency_seconds_count",
         labels='endpoint="v1_forecast",status_class="2xx"',
     )
+    runner_inference_count = _metric_value(
+        metrics_text,
+        metric="tollama_runner_inference_seconds_count",
+        labels='family="mock",runner="tollama-mock"',
+    )
     models_loaded = _metric_value(metrics_text, metric="tollama_models_loaded")
+    peak_memory = _metric_value(
+        metrics_text,
+        metric="tollama_runner_peak_memory_mb",
+        labels='family="mock",runner="tollama-mock"',
+    )
 
     assert success_count >= 1.0
     assert latency_count >= 1.0
+    assert runner_inference_count >= 1.0
     assert models_loaded >= 1.0
+    assert peak_memory >= 0.0
 
 
 @pytest.mark.skipif(

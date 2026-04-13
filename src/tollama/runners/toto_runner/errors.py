@@ -2,14 +2,10 @@
 
 from __future__ import annotations
 
+from tollama.core.errors import (
+    RunnerAdapterInputError as AdapterInputError,
+    RunnerDependencyMissingError as DependencyMissingError,
+    RunnerUnsupportedModelError as UnsupportedModelError,
+)
 
-class DependencyMissingError(RuntimeError):
-    """Raised when optional Toto runner dependencies are missing."""
-
-
-class UnsupportedModelError(ValueError):
-    """Raised when a request targets an unsupported Toto model."""
-
-
-class AdapterInputError(ValueError):
-    """Raised when request input is invalid for the Toto adapter."""
+__all__ = ["AdapterInputError", "DependencyMissingError", "UnsupportedModelError"]

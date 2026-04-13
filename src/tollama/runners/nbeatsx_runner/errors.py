@@ -2,18 +2,16 @@
 
 from __future__ import annotations
 
+from tollama.core.errors import (
+    RunnerAdapterInputError as AdapterInputError,
+    RunnerDependencyMissingError as DependencyMissingError,
+    RunnerNotImplementedError as NotImplementedRunnerError,
+    RunnerUnsupportedModelError as UnsupportedModelError,
+)
 
-class DependencyMissingError(RuntimeError):
-    """Raised when optional N-BEATSx dependencies are missing."""
-
-
-class NotImplementedRunnerError(RuntimeError):
-    """Raised when placeholder paths are reached before full N-BEATSx support."""
-
-
-class AdapterInputError(ValueError):
-    """Raised when request input is invalid for the N-BEATSx adapter."""
-
-
-class UnsupportedModelError(ValueError):
-    """Raised when model metadata/source is incompatible with N-BEATSx adapter."""
+__all__ = [
+    "AdapterInputError",
+    "DependencyMissingError",
+    "NotImplementedRunnerError",
+    "UnsupportedModelError",
+]

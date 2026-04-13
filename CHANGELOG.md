@@ -21,6 +21,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Auto-forecast routing modes now honor benchmark-backed routing manifests before falling back to heuristics
 - Added an explicit Ollama-workflow parity contract and release-gate documentation
 - `scripts/verify_daemon_api.sh` can now emit `result.json`, `summary.json`, and `summary.md` artifacts for workflow parity verification
+- Added a checked-in OpenAPI export workflow (`docs/openapi.json`) plus deterministic artifact normalization for CI drift checks
+- Added phased Python 3.11 quality gates for scoped mypy, coverage reporting, pre-commit, Bandit, pip-audit, and compiled dev-lock freshness
+- Extended daemon observability with additive `/health/live` and `/health/ready` probes and per-runner metrics derived from forecast timing/usage metadata
+- Centralized daemon/core/cli-owned `TOLLAMA_*` environment access under `src/tollama/core/env.py`
 
 ### Added
 
@@ -68,6 +72,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   - executes pull + forecast smoke coverage across all currently registered models
   - auto-generates long-context payloads for long-history families
   - uses PatchTST-specific horizon payload for stable smoke coverage
+- Shared runner protocol helpers in `src/tollama/runners/common_protocol.py` plus adoption across the scaffold and current runner entrypoints
+- Shared error hierarchy in `src/tollama/core/errors.py` with backward-compatible runner error re-export shims
+- Architecture, contract, and property-test scaffolding under `tests/architecture/`, `tests/contract/`, and `tests/property/`
+- Shared pytest fixtures and markers in `tests/conftest.py`
+- ADR scaffold and initial decision records under `docs/adr/`
+- Compiled development lock artifact at `requirements-dev.lock`
 
 ### Fixed
 
@@ -88,3 +98,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   - normalized TiDE input values to float32 to avoid MPS float64 conversion failures
 - E2E suite stability:
   - `scripts/e2e_all_families.sh` now includes full-model smoke helper execution
+- PostgreSQL connector query composition now validates identifiers, renders SQL identifiers safely, and supports pooled connections via `ThreadedConnectionPool`
+- Runner supervisor stderr is drained continuously to prevent `PIPE` deadlocks while preserving recent stderr tails for crash diagnostics
+- Daemon request IDs are now forwarded into supervisor calls so runner protocol request IDs stay correlated with the incoming HTTP request when available

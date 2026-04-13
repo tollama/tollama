@@ -73,6 +73,13 @@ class _FakeBinaryStderr:
     def read(self) -> bytes:
         return self._payload
 
+    def readline(self) -> bytes:
+        if self.closed or not self._payload:
+            return b""
+        payload = self._payload
+        self._payload = b""
+        return payload
+
 
 class _FakeBinaryProcess:
     def __init__(self) -> None:
@@ -210,7 +217,7 @@ def test_readline_with_timeout_uses_internal_buffer_before_select(monkeypatch) -
     monkeypatch.setattr("tollama.daemon.supervisor.select.select", _fake_select)
     monkeypatch.setattr(
         "tollama.daemon.supervisor.os.read",
-        lambda fd, _size: b"log line\n{\"id\":\"req\"}\n" if fd == 42 else b"",
+        lambda fd, _size: b'log line\n{"id":"req"}\n' if fd == 42 else b"",
     )
 
     first = supervisor._readline_with_timeout(process, timeout=1.0)
@@ -229,8 +236,44 @@ def test_dead_process_message_decodes_binary_stderr() -> None:
     supervisor = RunnerSupervisor(runner_command=("runner-cmd",))
     process = _FakeBinaryProcess()
     process._returncode = 1  # noqa: SLF001
-    process.stderr = _FakeBinaryStderr(b"fatal: boom\n")
+    supervisor._append_stderr_chunk(b"fatal: boom\n")  # noqa: SLF001
 
     message = supervisor._dead_process_message(process)  # noqa: SLF001
     assert "runner exited with code 1" in message
     assert "fatal: boom" in message
+
+
+def test_stderr_tail_keeps_recent_100_lines() -> None:
+    supervisor = RunnerSupervisor(runner_command=("runner-cmd",))
+
+    for index in range(120):
+        supervisor._append_stderr_chunk(f"line-{index}\n".encode())  # noqa: SLF001
+
+    tail = supervisor._stderr_tail()  # noqa: SLF001
+    assert "line-0" not in tail
+    assert "line-19" not in tail
+    assert "line-20" in tail
+    assert "line-119" in tail
+
+
+def test_runner_supervisor_call_reuses_provided_request_id(monkeypatch) -> None:
+    supervisor = RunnerSupervisor(runner_command=("runner-cmd",))
+    captured: dict[str, str] = {}
+
+    monkeypatch.setattr(supervisor, "_ensure_running_locked", lambda: object())
+
+    def _fake_call_once(_process, request, _timeout):  # noqa: ANN001, ANN202
+        captured["request_id"] = request.id
+        return {"ok": True}
+
+    monkeypatch.setattr(supervisor, "_call_once_locked", _fake_call_once)
+
+    result = supervisor.call(
+        method="forecast",
+        params={"x": 1},
+        timeout=1.0,
+        request_id="external-request-id",
+    )
+
+    assert result == {"ok": True}
+    assert captured["request_id"] == "external-request-id"
