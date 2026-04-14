@@ -65,7 +65,7 @@ httpx==0.28.1
     #   pytest-httpx
 huggingface-hub==1.10.1
     # via tollama (pyproject.toml)
-hypothesis==6.151.12
+hypothesis==6.151.14
     # via tollama (pyproject.toml)
 identify==2.6.18
     # via pre-commit
@@ -97,7 +97,7 @@ msgpack==1.1.2
     # via cachecontrol
 mutmut==3.5.0
     # via tollama (pyproject.toml)
-mypy==1.20.0
+mypy==1.20.1
     # via tollama (pyproject.toml)
 mypy-extensions==1.1.0
     # via mypy
@@ -139,11 +139,11 @@ pre-commit==4.5.1
     # via tollama (pyproject.toml)
 py-serializable==2.1.0
     # via cyclonedx-python-lib
-pydantic==2.12.5
+pydantic==2.13.0
     # via
     #   tollama (pyproject.toml)
     #   fastapi
-pydantic-core==2.41.5
+pydantic-core==2.46.0
     # via pydantic
 pygments==2.20.0
     # via
@@ -245,5 +245,5 @@ urllib3==2.6.3
     # via requests
 uvicorn==0.44.0
     # via tollama (pyproject.toml)
-virtualenv==21.2.1
+virtualenv==21.2.3
     # via pre-commit

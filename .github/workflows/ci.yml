@@ -59,7 +59,11 @@ jobs:
       - name: Verify dev lock freshness
         if: matrix.python-version == '3.11'
         run: |
-          uv pip compile pyproject.toml --extra dev -o /tmp/requirements-dev.lock
+          uv pip compile \
+            pyproject.toml \
+            --extra dev \
+            --custom-compile-command "uv pip compile pyproject.toml --extra dev -o requirements-dev.lock" \
+            -o /tmp/requirements-dev.lock
           diff -u requirements-dev.lock /tmp/requirements-dev.lock
 
       - name: Pre-commit
