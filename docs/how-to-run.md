@@ -29,6 +29,7 @@ Additional docs:
 - CLI cheat sheet: `docs/cli-cheatsheet.md`
 - API reference: `docs/api-reference.md`
 - Dashboard user guide (Web GUI + TUI): `docs/dashboard-user-guide.md`
+- macOS app guide: `docs/macos-app.md`
 
 ## Forecast Model Matrix
 
@@ -96,6 +97,23 @@ Recommended:
 - Preinstalled PyTorch wheel for your platform if you need GPU acceleration
 - Python `3.11` for stable per-family runtime bootstrap
 - Python `3.12+` may fail to resolve/install `gluonts` required by `runner_uni2ts` + `runner_toto`
+
+## macOS App (DMG)
+
+If you prefer a drag-and-drop macOS app instead of a Python-first setup:
+
+1. download the Apple Silicon DMG from GitHub Releases
+2. drag `Tollama.app` into `Applications`
+3. open the app and let it bootstrap its private runtime
+
+The app stores its own runtime and state under:
+
+- `~/Library/Application Support/Tollama/runtime`
+- `~/Library/Application Support/Tollama/state`
+- `~/Library/Logs/Tollama/daemon.log`
+
+The macOS app bundles only the Tollama core. Heavy runner extras and model
+weights are still installed on demand after launch.
 
 ## Dependency Matrix
 

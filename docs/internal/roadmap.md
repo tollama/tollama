@@ -63,6 +63,9 @@ Canonical inventories live in:
 - CLI now includes `tollama explain <model>` for human-readable capability/limit/license summaries.
 - CLI now includes `tollama open` (launch web dashboard) and `tollama dashboard`
   (launch optional Textual TUI dashboard).
+- A macOS app distribution scaffold now exists under `packaging/macos/` for a
+  signed/notarized Apple Silicon DMG with `Tollama.app`, a bundled runtime
+  wheelhouse, and a SwiftUI + `WKWebView` shell for `/dashboard`.
 - CLI now includes `tollama dev scaffold <family>` with optional `--register` for runner skeleton onboarding.
 - `/api/validate` now returns additive `suggestions[]` alongside `warnings[]` for actionable next steps.
 - SDK now supports context-manager usage plus additive chainable workflows via `Tollama.workflow(...)`,
@@ -221,6 +224,10 @@ tollama/
   - `cache/`
   - `logs/`
   - `licenses/`
+- Track app-specific layout for the macOS shell:
+  - `~/Library/Application Support/Tollama/runtime`
+  - `~/Library/Application Support/Tollama/state`
+  - `~/Library/Logs/Tollama/daemon.log`
 - Define cleanup, retention, and lifecycle rules for each directory.
 
 ## 7) Runner environments (dependency isolation) [x]

@@ -10,6 +10,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Changed
 
 - Re-centered tollama messaging around its core role as a unified TSFM platform
+- Per-family runtime auto-bootstrap now pins `tollama[runner-extra]` installs to
+  the current Tollama version when resolving from PyPI, preventing packaged
+  child runtimes from drifting away from the parent app version
 - Synced documentation with the current registry and runner surface, including
   Lag-Llama, PatchTST, TiDE, N-HiTS, N-BEATSx, Timer, TimeMixer, and ForecastPFN
 - Synced documentation with the current API surface, including dashboard bootstrap
@@ -29,6 +32,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Added
 
 - Daemon (`tollamad`) with FastAPI-based HTTP API surface
+- macOS app distribution scaffold under `packaging/macos/`:
+  - `build_dmg.sh` end-to-end DMG build/sign/notarize/checksum flow
+  - `prepare_runtime_assets.sh` bundled runtime/wheelhouse preparation
+  - `Tollama.app` SwiftUI + `WKWebView` shell with first-launch runtime bootstrap,
+    child daemon lifecycle management, demo/starter-model actions, and inline log-tail view
 - Ollama-compatible model lifecycle: `pull`, `list`, `show`, `ps`, `rm`
 - Unified forecasting endpoint (`POST /api/forecast`) with multi-family routing
 - Auto-forecast with ensemble strategies (`POST /api/auto-forecast`)

@@ -311,6 +311,12 @@ Canonical inventories:
   - 현재: `tollama quickstart` 명령 추가(daemon 확인 -> pull -> demo forecast -> next steps 출력)
   - 현재: `README.md` 상단을 설치/quickstart/SDK/agent 중심으로 재구성
   - 현재: 모델별 설치/실행 가이드를 `docs/models.md`로 분리
+- [~] (P1) macOS user-friendly app distribution 1차
+  - 현재: `packaging/macos/`에 DMG build scaffold, bundled runtime asset 준비 스크립트,
+    SwiftUI + `WKWebView` 기반 `Tollama.app` shell 추가
+  - 현재: 앱은 app-local runtime/state/log 경로를 사용하고, demo/starter-model/log/repair/reset 액션을 제공
+  - 현재: GitHub Releases용 macOS app workflow(`.github/workflows/macos-app.yml`) 추가
+  - TODO: 아이콘/브랜딩 polish, clean-machine smoke 자동화, Universal/Intel 확장 검토
 - [x] (P1) 탐색성/배포 편의 1차
   - 현재: 노트북 추가(`examples/quickstart.ipynb`, `examples/agent_demo.ipynb`)
   - 현재: 컨테이너 파일 추가(`Dockerfile` multi-stage, `.dockerignore`, `docker-compose.yml` GPU profile)
@@ -343,6 +349,7 @@ Canonical inventories:
   - 현재: python constraint/runtime/disk/token/daemon/config 체크 + 요약/종료코드 제공
 - [~] (P0) 공개 릴리스 라이선스/컴플라이언스 체크리스트 운영
   - 현재: `docs/public-release-checklist.md` 추가(업스트림 라이선스 검증/서드파티 라이선스 인벤토리/제한 라이선스 정책)
+  - 현재: macOS DMG 서명/노타리제이션/first-launch smoke gate를 체크리스트에 추가
   - TODO: 릴리스 태그마다 체크 결과(`docs/releases/`)를 남기고, `cc-by-nc-4.0` 모델 공개 정책을 최종 확정
 
 - [x] (P1) 주요 registry-backed 모델 e2e 통합 테스트 매트릭스 재검증 + 문서 동기화

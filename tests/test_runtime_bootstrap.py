@@ -427,3 +427,18 @@ def test_resolve_install_spec_uses_direct_url_when_no_local_root() -> None:
         spec = _resolve_install_spec("runner_torch")
 
     assert spec == "/opt/tollama-src[runner-torch]"
+
+
+def test_resolve_install_spec_pins_current_version_for_pypi_fallback() -> None:
+    from tollama import __version__
+
+    fake_dist = MagicMock()
+    fake_dist.read_text.return_value = None
+
+    with (
+        patch("tollama.core.runtime_bootstrap._resolve_local_project_root", return_value=None),
+        patch("importlib.metadata.distribution", return_value=fake_dist),
+    ):
+        spec = _resolve_install_spec("runner_timesfm")
+
+    assert spec == f"tollama[runner-timesfm]=={__version__}"

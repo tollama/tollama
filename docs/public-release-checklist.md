@@ -80,6 +80,13 @@ installed.
 - Validate auto-bootstrap runtime flow from a clean `TOLLAMA_HOME`.
 - Confirm `/api/info` redaction and capability visibility are stable.
 - Smoke test pull/list/show/run/ps/rm lifecycle end-to-end.
+- If publishing the macOS app DMG:
+  - build `packaging/macos/build_dmg.sh` on Apple Silicon or `macos-14`
+  - verify `codesign --verify --deep --strict` passes on `Tollama.app`
+  - verify notarization and stapling succeed for both `Tollama.app` and the DMG
+  - mount the DMG and confirm it contains only `Tollama.app` plus the `Applications` shortcut
+  - validate first-launch bootstrap on a clean user account with no preinstalled Python
+  - validate the app can attach to an existing daemon on `127.0.0.1:11435`
 - Validate the concrete-solution path:
   - `bash examples/core_concrete_solution_demo.sh` syntax is clean.
   - `python scripts/e2e_realdata/export_core_solution_input.py --help` works.
@@ -102,5 +109,6 @@ Before tagging public release, record:
 - checks run + outcomes
 - known limitations/skips
 - explicit licensing decision for restricted-license models
+- macOS signing identity / notarization result if a DMG was published
 
 A short markdown file under `docs/releases/` is sufficient.

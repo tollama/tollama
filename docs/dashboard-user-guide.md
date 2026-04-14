@@ -1,9 +1,10 @@
 # Dashboard User Guide (Web GUI + TUI)
 
-This guide explains how to use Tollama's two dashboard interfaces:
+This guide explains how to use Tollama's dashboard interfaces:
 
 - Web GUI dashboard (`/dashboard` in browser)
 - Terminal TUI dashboard (`tollama dashboard`)
+- macOS app shell (`Tollama.app`)
 
 ## 1) Prerequisites
 
@@ -75,6 +76,20 @@ Shortcuts are ignored while typing in input/textarea/select fields.
 
 - In supported browsers, an install banner appears.
 - You can install dashboard as a desktop app.
+
+### 2.6 macOS App Shell
+
+The GitHub Releases DMG bundles `Tollama.app`, which embeds the same dashboard
+inside a native macOS window.
+
+The app shell adds:
+
+- first-launch runtime bootstrap
+- child-process daemon lifecycle management
+- built-in actions for demo forecast, starter-model install, log access, repair, and reset
+- inline daemon log-tail visibility
+
+See `docs/macos-app.md` for the packaging and first-launch details.
 
 ## 3) TUI Dashboard
 

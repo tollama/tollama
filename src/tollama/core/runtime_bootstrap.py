@@ -375,7 +375,7 @@ def _resolve_install_spec(extra: str) -> str:
     except Exception:
         pass
 
-    return f"tollama[{normalized_extra}]"
+    return f"tollama[{normalized_extra}]=={_tollama_version}"
 
 
 def _resolve_local_project_root() -> str | None:

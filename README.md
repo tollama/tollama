@@ -44,6 +44,17 @@ For more, see [Core Workflow](docs/core-workflow.md) and [TSFM Routing Defaults]
 The precise meaning of "Ollama for Time Series Forecasting" is documented in
 [Ollama-Workflow Parity](docs/ollama-workflow-parity.md).
 
+### macOS App Preview
+
+If you want a more user-friendly macOS experience, use the DMG release:
+
+1. Download `Tollama-<version>-arm64.dmg` from GitHub Releases
+2. Drag `Tollama.app` into `Applications`
+3. Open the app and let it bootstrap the bundled runtime once
+
+The app embeds the web dashboard and manages a private app-local daemon under
+`~/Library/Application Support/Tollama/`. See [macOS App Guide](docs/macos-app.md).
+
 ---
 
 ## Supported Models
@@ -131,7 +142,7 @@ print(auto.selection.chosen_model)
 | **HTTP API**   | Forecasting, routing, analysis, and ingestion. See [docs/api-reference.md](docs/api-reference.md) |
 | **Python SDK** | Chainable Python workflows via the `Tollama` class.                       |
 | **CLI**        | Fast execution with `tollama pull`, `tollama serve`, `tollama run`, `tollama benchmark`. |
-| **Dashboard**  | Web / TUI for visualizing forecasts and model statuses (`tollama open` / `tollama dashboard`). |
+| **Dashboard**  | Web / TUI for visualizing forecasts and model statuses (`tollama open` / `tollama dashboard`) plus a macOS app shell for drag-and-drop distribution. |
 
 ---
 
@@ -155,6 +166,7 @@ Tollama can **invoke TSFMs as tools when forecasting is part of a broader workfl
   - [Core Workflow](docs/core-workflow.md)
   - [Concrete Solution Path](docs/concrete-solution.md)
   - [Dashboard User Guide](docs/dashboard-user-guide.md)
+  - [macOS App Guide](docs/macos-app.md)
 - **References & Configurations**
   - [API Reference](docs/api-reference.md)
   - [Ollama-Workflow Parity](docs/ollama-workflow-parity.md)
