@@ -68,7 +68,7 @@ jobs:
 
       - name: Pre-commit
         if: matrix.python-version == '3.11'
-        run: pre-commit run --all-files
+        run: SKIP=no-commit-to-branch pre-commit run --all-files
 
       - name: Security scan
         if: matrix.python-version == '3.11'
