@@ -927,7 +927,7 @@
         "description": "Response payload for auto-forecast requests.",
         "properties": {
           "response": {
-            "$ref": "#/components/schemas/ForecastResponse-Output",
+            "$ref": "#/components/schemas/ForecastResponse",
             "description": "Response."
           },
           "selection": {
@@ -1711,7 +1711,7 @@
           "response": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/ForecastResponse-Output"
+                "$ref": "#/components/schemas/ForecastResponse"
               },
               {
                 "type": "null"
@@ -1892,7 +1892,7 @@
         "description": "Response payload for intervention counterfactual requests.",
         "properties": {
           "baseline": {
-            "$ref": "#/components/schemas/ForecastResponse-Output",
+            "$ref": "#/components/schemas/ForecastResponse",
             "description": "Baseline."
           },
           "horizon": {
@@ -2236,7 +2236,7 @@
             "description": "Original forecast request"
           },
           "response": {
-            "$ref": "#/components/schemas/ForecastResponse-Input",
+            "$ref": "#/components/schemas/ForecastResponse",
             "description": "Forecast response to explain"
           },
           "selection": {
@@ -2936,27 +2936,7 @@
         "title": "ForecastMetrics",
         "type": "object"
       },
-      "ForecastNarrative-Input": {
-        "additionalProperties": false,
-        "description": "Narrative-ready summary for forecast responses.",
-        "properties": {
-          "series": {
-            "description": "Series.",
-            "items": {
-              "$ref": "#/components/schemas/SeriesForecastNarrative"
-            },
-            "minItems": 1,
-            "title": "Series",
-            "type": "array"
-          }
-        },
-        "required": [
-          "series"
-        ],
-        "title": "ForecastNarrative",
-        "type": "object"
-      },
-      "ForecastNarrative-Output": {
+      "ForecastNarrative": {
         "additionalProperties": false,
         "description": "Narrative-ready summary for forecast responses.",
         "properties": {
@@ -3027,7 +3007,7 @@
           "baseline": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/ForecastResponse-Output"
+                "$ref": "#/components/schemas/ForecastResponse"
               },
               {
                 "type": "null"
@@ -3337,7 +3317,7 @@
         "title": "ForecastRequestWithKeepAlive",
         "type": "object"
       },
-      "ForecastResponse-Input": {
+      "ForecastResponse": {
         "additionalProperties": false,
         "description": "Unified forecast response payload.",
         "properties": {
@@ -3381,112 +3361,7 @@
           "narrative": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/ForecastNarrative-Input"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "Narrative."
-          },
-          "timing": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/ForecastTiming"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "Timing."
-          },
-          "usage": {
-            "anyOf": [
-              {
-                "additionalProperties": {
-                  "$ref": "#/components/schemas/JsonValue"
-                },
-                "propertyNames": {
-                  "minLength": 1
-                },
-                "type": "object"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "Usage.",
-            "title": "Usage"
-          },
-          "warnings": {
-            "anyOf": [
-              {
-                "items": {
-                  "minLength": 1,
-                  "type": "string"
-                },
-                "type": "array"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "Warnings.",
-            "title": "Warnings"
-          }
-        },
-        "required": [
-          "forecasts",
-          "model"
-        ],
-        "title": "ForecastResponse",
-        "type": "object"
-      },
-      "ForecastResponse-Output": {
-        "additionalProperties": false,
-        "description": "Unified forecast response payload.",
-        "properties": {
-          "explanation": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/ForecastExplanation"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "Explanation."
-          },
-          "forecasts": {
-            "description": "Forecasts.",
-            "items": {
-              "$ref": "#/components/schemas/SeriesForecast"
-            },
-            "minItems": 1,
-            "title": "Forecasts",
-            "type": "array"
-          },
-          "metrics": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/ForecastMetrics"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "Metrics."
-          },
-          "model": {
-            "description": "Model.",
-            "minLength": 1,
-            "title": "Model",
-            "type": "string"
-          },
-          "narrative": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/ForecastNarrative-Output"
+                "$ref": "#/components/schemas/ForecastNarrative"
               },
               {
                 "type": "null"
@@ -4433,7 +4308,7 @@
           "profile": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/TSModelfile-Input"
+                "$ref": "#/components/schemas/TSModelfile"
               },
               {
                 "type": "null"
@@ -6235,7 +6110,7 @@
             "type": "string"
           },
           "profile": {
-            "$ref": "#/components/schemas/TSModelfile-Output",
+            "$ref": "#/components/schemas/TSModelfile",
             "description": "Resolved and validated TSModelfile profile payload."
           }
         },
@@ -6247,89 +6122,7 @@
         "title": "StoredModelfile",
         "type": "object"
       },
-      "TSModelfile-Input": {
-        "additionalProperties": false,
-        "description": "Declarative forecast profile used as request defaults.",
-        "properties": {
-          "covariate_mappings": {
-            "anyOf": [
-              {
-                "additionalProperties": {
-                  "type": "string"
-                },
-                "type": "object"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "Optional covariate alias mappings for external schema adaptation.",
-            "title": "Covariate Mappings"
-          },
-          "enabled": {
-            "default": true,
-            "description": "Whether the profile is active and should be considered by tooling.",
-            "title": "Enabled",
-            "type": "boolean"
-          },
-          "horizon": {
-            "anyOf": [
-              {
-                "exclusiveMinimum": 0.0,
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "Default forecast horizon override.",
-            "title": "Horizon"
-          },
-          "model": {
-            "description": "Default model name for this profile.",
-            "minLength": 1,
-            "title": "Model",
-            "type": "string"
-          },
-          "options": {
-            "additionalProperties": true,
-            "description": "Opaque forecast options merged into request payloads.",
-            "title": "Options",
-            "type": "object"
-          },
-          "parameters": {
-            "$ref": "#/components/schemas/ForecastParameters",
-            "description": "Default typed forecast parameters merged into requests."
-          },
-          "preprocessing": {
-            "anyOf": [
-              {
-                "additionalProperties": true,
-                "type": "object"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "Optional preprocessing metadata for external tooling.",
-            "title": "Preprocessing"
-          },
-          "quantiles": {
-            "description": "Default quantiles to request from forecast responses.",
-            "items": {
-              "type": "number"
-            },
-            "title": "Quantiles",
-            "type": "array"
-          }
-        },
-        "required": [
-          "model"
-        ],
-        "title": "TSModelfile",
-        "type": "object"
-      },
-      "TSModelfile-Output": {
+      "TSModelfile": {
         "additionalProperties": false,
         "description": "Declarative forecast profile used as request defaults.",
         "properties": {
@@ -7088,7 +6881,7 @@
         "description": "Response payload for scenario analysis requests.",
         "properties": {
           "baseline": {
-            "$ref": "#/components/schemas/ForecastResponse-Output",
+            "$ref": "#/components/schemas/ForecastResponse",
             "description": "Baseline."
           },
           "horizon": {
@@ -7150,7 +6943,7 @@
           "response": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/ForecastResponse-Output"
+                "$ref": "#/components/schemas/ForecastResponse"
               },
               {
                 "type": "null"
@@ -7859,7 +7652,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ForecastResponse-Output"
+                  "$ref": "#/components/schemas/ForecastResponse"
                 }
               }
             },
@@ -9355,7 +9148,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ForecastResponse-Output"
+                  "$ref": "#/components/schemas/ForecastResponse"
                 }
               }
             },
