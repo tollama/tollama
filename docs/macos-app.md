@@ -2,10 +2,13 @@
 
 This guide covers the user-friendly macOS app distribution for Tollama.
 
-## What ships in the DMG
+## What ships in the macOS release artifacts
 
-The macOS release artifact is a signed and notarized Apple Silicon DMG that
-contains a single `Tollama.app` bundle.
+The main consumer-facing release artifact is a signed and notarized Apple
+Silicon DMG that contains a single `Tollama.app` bundle.
+
+For install-flow testing and admin-style deployment, Tollama also supports an
+installable PKG that copies `Tollama.app` into `/Applications`.
 
 The app includes:
 
@@ -21,7 +24,7 @@ remain on-demand and install when the user pulls a model.
 On the first launch, the app:
 
 1. unpacks a private Python 3.11 runtime into `~/Library/Application Support/Tollama/runtime`
-2. creates a local venv and installs `tollama[preprocess,eval]` from the bundled wheelhouse
+2. creates a local venv and installs the bundled Tollama package spec from the wheelhouse
 3. starts `tollamad` as a child process with:
    - `TOLLAMA_HOME=~/Library/Application Support/Tollama/state`
    - `TOLLAMA_HOST=127.0.0.1:11435`
@@ -45,8 +48,8 @@ attached mode, destructive maintenance actions are disabled.
 
 ## Build inputs
 
-The DMG builder lives under `packaging/macos/` and expects a relocatable Python
-archive URL via:
+The macOS builders live under `packaging/macos/` and expect a relocatable
+Python archive URL via:
 
 ```bash
 export TOLLAMA_PYTHON_STANDALONE_URL="https://..."
@@ -56,7 +59,9 @@ Optional integrity and release-signing inputs:
 
 ```bash
 export TOLLAMA_PYTHON_STANDALONE_SHA256="..."
+export TOLLAMA_MACOS_BUNDLED_EXTRAS="preprocess"
 export MACOS_SIGNING_IDENTITY="Developer ID Application: Example, Inc. (TEAMID)"
+export MACOS_INSTALLER_SIGNING_IDENTITY="Developer ID Installer: Example, Inc. (TEAMID)"
 export APPLE_ID="release-bot@example.com"
 export APPLE_APP_SPECIFIC_PASSWORD="xxxx-xxxx-xxxx-xxxx"
 export APPLE_TEAM_ID="TEAMID"
@@ -66,6 +71,17 @@ Build locally from the repository root:
 
 ```bash
 packaging/macos/build_dmg.sh
+packaging/macos/build_pkg.sh
 ```
 
-Artifacts are written to `dist/macos/`.
+To generate both artifacts from one app-bundle build:
+
+```bash
+packaging/macos/build_release_artifacts.sh
+```
+
+Artifacts are written to `dist/macos/`:
+
+- `Tollama-<version>-arm64.dmg`
+- `Tollama-<version>-arm64.pkg`
+- `SHA256SUMS.txt`

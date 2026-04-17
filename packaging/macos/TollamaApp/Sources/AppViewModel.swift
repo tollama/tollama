@@ -251,7 +251,7 @@ final class AppViewModel: ObservableObject {
                     "--no-index",
                     "--find-links",
                     wheelhouseURL.path,
-                    "tollama[preprocess,eval]==\(AppConfig.bundleVersion)",
+                    AppConfig.bundledInstallSpec,
                 ]
             )
         }

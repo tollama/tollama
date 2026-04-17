@@ -1,6 +1,7 @@
 import Foundation
 
 struct BundledRuntimeManifest: Decodable {
+    let installSpec: String?
     let pythonArchive: String
     let starterModel: String
     let tollamaVersion: String
@@ -42,7 +43,9 @@ enum AppConfig {
         guard let data = try? Data(contentsOf: manifestURL) else {
             return nil
         }
-        return try? JSONDecoder().decode(BundledRuntimeManifest.self, from: data)
+        let decoder = JSONDecoder()
+        decoder.keyDecodingStrategy = .convertFromSnakeCase
+        return try? decoder.decode(BundledRuntimeManifest.self, from: data)
     }
 
     static var starterModel: String {
@@ -67,6 +70,10 @@ enum AppConfig {
         }
         let wheelhouseDir = runtimeManifest?.wheelhouseDir ?? "wheelhouse"
         return runtimeAssetsRoot.appendingPathComponent(wheelhouseDir, isDirectory: true)
+    }
+
+    static var bundledInstallSpec: String {
+        runtimeManifest?.installSpec ?? "tollama[preprocess,eval]==\(bundleVersion)"
     }
 
     static var appSupportRoot: URL {

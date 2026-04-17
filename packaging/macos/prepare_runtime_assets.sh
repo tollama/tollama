@@ -8,6 +8,7 @@ DOWNLOAD_DIR="$BUILD_DIR/downloads"
 PYTHON_ARCHIVE_URL="${TOLLAMA_PYTHON_STANDALONE_URL:?Set TOLLAMA_PYTHON_STANDALONE_URL to a relocatable Python 3.11 archive URL.}"
 PYTHON_ARCHIVE_SHA256="${TOLLAMA_PYTHON_STANDALONE_SHA256:-}"
 STARTER_MODEL="${TOLLAMA_STARTER_MODEL:-sundial-base-128m}"
+BUNDLED_EXTRAS="${TOLLAMA_MACOS_BUNDLED_EXTRAS:-preprocess,eval}"
 
 mkdir -p "$ASSET_DIR" "$DOWNLOAD_DIR"
 rm -rf "$ASSET_DIR"
@@ -70,13 +71,23 @@ echo "Building wheelhouse..."
 cd "$ROOT_DIR"
 python -m pip install --upgrade pip build wheel
 python -m build --wheel --outdir "$ASSET_DIR/wheelhouse"
-python -m pip wheel --wheel-dir "$ASSET_DIR/wheelhouse" "./[preprocess,eval]"
+
+if [[ -n "$BUNDLED_EXTRAS" ]]; then
+  LOCAL_WHEEL_TARGET="./[$BUNDLED_EXTRAS]"
+  BUNDLED_INSTALL_SPEC="tollama[$BUNDLED_EXTRAS]==$TOLLAMA_VERSION"
+else
+  LOCAL_WHEEL_TARGET="./"
+  BUNDLED_INSTALL_SPEC="tollama==$TOLLAMA_VERSION"
+fi
+
+python -m pip wheel --wheel-dir "$ASSET_DIR/wheelhouse" "$LOCAL_WHEEL_TARGET"
 
 python - <<PY
 from pathlib import Path
 import json
 
 payload = {
+    "install_spec": "$BUNDLED_INSTALL_SPEC",
     "tollama_version": "$TOLLAMA_VERSION",
     "starter_model": "$STARTER_MODEL",
     "python_archive": "python-runtime.tar.gz",

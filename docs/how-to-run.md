@@ -106,6 +106,9 @@ If you prefer a drag-and-drop macOS app instead of a Python-first setup:
 2. drag `Tollama.app` into `Applications`
 3. open the app and let it bootstrap its private runtime
 
+For installer-flow testing, you can use the Apple Silicon PKG instead. The PKG
+installs the same `Tollama.app` bundle into `/Applications`.
+
 The app stores its own runtime and state under:
 
 - `~/Library/Application Support/Tollama/runtime`

@@ -316,6 +316,7 @@ Canonical inventories:
     SwiftUI + `WKWebView` 기반 `Tollama.app` shell 추가
   - 현재: 앱은 app-local runtime/state/log 경로를 사용하고, demo/starter-model/log/repair/reset 액션을 제공
   - 현재: GitHub Releases용 macOS app workflow(`.github/workflows/macos-app.yml`) 추가
+  - 현재: install-flow 테스트용 Apple Silicon PKG 빌드 경로(`build_pkg.sh`, `build_release_artifacts.sh`) 추가
   - TODO: 아이콘/브랜딩 polish, clean-machine smoke 자동화, Universal/Intel 확장 검토
 - [x] (P1) 탐색성/배포 편의 1차
   - 현재: 노트북 추가(`examples/quickstart.ipynb`, `examples/agent_demo.ipynb`)

@@ -81,10 +81,12 @@ installed.
 - Confirm `/api/info` redaction and capability visibility are stable.
 - Smoke test pull/list/show/run/ps/rm lifecycle end-to-end.
 - If publishing the macOS app DMG:
-  - build `packaging/macos/build_dmg.sh` on Apple Silicon or `macos-14`
+  - build `packaging/macos/build_release_artifacts.sh` on Apple Silicon or `macos-14`
   - verify `codesign --verify --deep --strict` passes on `Tollama.app`
   - verify notarization and stapling succeed for both `Tollama.app` and the DMG
+  - if a PKG is published, verify `pkgutil --check-signature` and stapling succeed for the PKG
   - mount the DMG and confirm it contains only `Tollama.app` plus the `Applications` shortcut
+  - install the PKG on a clean user account and confirm `Tollama.app` lands in `/Applications`
   - validate first-launch bootstrap on a clean user account with no preinstalled Python
   - validate the app can attach to an existing daemon on `127.0.0.1:11435`
 - Validate the concrete-solution path:

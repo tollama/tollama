@@ -34,6 +34,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Daemon (`tollamad`) with FastAPI-based HTTP API surface
 - macOS app distribution scaffold under `packaging/macos/`:
   - `build_dmg.sh` end-to-end DMG build/sign/notarize/checksum flow
+  - `build_pkg.sh` installable PKG build/sign/notarize/checksum flow
+  - `build_release_artifacts.sh` combined DMG + PKG build path
   - `prepare_runtime_assets.sh` bundled runtime/wheelhouse preparation
   - `Tollama.app` SwiftUI + `WKWebView` shell with first-launch runtime bootstrap,
     child daemon lifecycle management, demo/starter-model actions, and inline log-tail view

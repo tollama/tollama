@@ -41,16 +41,17 @@ jobs:
           security list-keychains -d user -s "$KEYCHAIN_PATH"
           security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
 
-      - name: Build signed DMG
+      - name: Build signed macOS release artifacts
         env:
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           MACOS_SIGNING_IDENTITY: ${{ secrets.MACOS_SIGNING_IDENTITY }}
+          MACOS_INSTALLER_SIGNING_IDENTITY: ${{ secrets.MACOS_INSTALLER_SIGNING_IDENTITY }}
           TOLLAMA_PYTHON_STANDALONE_SHA256: ${{ vars.MACOS_PYTHON_STANDALONE_SHA256 }}
           TOLLAMA_PYTHON_STANDALONE_URL: ${{ vars.MACOS_PYTHON_STANDALONE_URL }}
           TOLLAMA_STARTER_MODEL: ${{ vars.MACOS_STARTER_MODEL }}
-        run: packaging/macos/build_dmg.sh
+        run: packaging/macos/build_release_artifacts.sh
 
       - name: Upload macOS app artifacts
         uses: actions/upload-artifact@v7

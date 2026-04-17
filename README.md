@@ -46,10 +46,10 @@ The precise meaning of "Ollama for Time Series Forecasting" is documented in
 
 ### macOS App Preview
 
-If you want a more user-friendly macOS experience, use the DMG release:
+If you want a more user-friendly macOS experience, use the macOS release artifacts:
 
-1. Download `Tollama-<version>-arm64.dmg` from GitHub Releases
-2. Drag `Tollama.app` into `Applications`
+1. Download `Tollama-<version>-arm64.dmg` for drag-and-drop install, or `Tollama-<version>-arm64.pkg` for install-flow testing
+2. Install `Tollama.app` into `Applications`
 3. Open the app and let it bootstrap the bundled runtime once
 
 The app embeds the web dashboard and manages a private app-local daemon under
