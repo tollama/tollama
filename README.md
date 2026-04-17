@@ -53,7 +53,9 @@ If you want a more user-friendly macOS experience, use the macOS release artifac
 3. Open the app and let it bootstrap the bundled runtime once
 
 The app embeds the web dashboard and manages a private app-local daemon under
-`~/Library/Application Support/Tollama/`. See [macOS App Guide](docs/macos-app.md).
+`~/Library/Application Support/Tollama/`. The default starter flow bundles the
+`runner_sundial` extra so `sundial-base-128m` can forecast immediately after
+pull inside the app. See [macOS App Guide](docs/macos-app.md).
 
 ---
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import yaml
@@ -18,6 +19,8 @@ from pydantic import (
 NonEmptyStr = StrictStr
 
 DEFAULT_REGISTRY_PATH = Path(__file__).resolve().parents[3] / "model-registry" / "registry.yaml"
+PACKAGED_REGISTRY_PATH = Path(__file__).resolve().parents[1] / "model_registry" / "registry.yaml"
+MODEL_REGISTRY_ENV_VAR = "TOLLAMA_MODEL_REGISTRY_PATH"
 
 
 class ModelSource(BaseModel):
@@ -78,9 +81,24 @@ class RegistryFile(BaseModel):
     models: list[ModelSpec] = Field(min_length=1)
 
 
+def resolve_default_registry_path() -> Path:
+    """Resolve the default registry file for source and installed package layouts."""
+    override = os.environ.get(MODEL_REGISTRY_ENV_VAR, "").strip()
+    if override:
+        return Path(override).expanduser()
+
+    # Prefer the repository-local registry during source checkout so local edits are
+    # reflected immediately. Installed wheels fall back to the packaged copy.
+    for candidate in (DEFAULT_REGISTRY_PATH, PACKAGED_REGISTRY_PATH):
+        if candidate.is_file():
+            return candidate
+
+    return DEFAULT_REGISTRY_PATH
+
+
 def load_registry(path: str | Path | None = None) -> dict[str, ModelSpec]:
     """Load and validate registry specs keyed by model name."""
-    registry_path = Path(path) if path is not None else DEFAULT_REGISTRY_PATH
+    registry_path = Path(path) if path is not None else resolve_default_registry_path()
     raw = registry_path.read_text(encoding="utf-8")
     payload = yaml.safe_load(raw)
     if not isinstance(payload, dict):

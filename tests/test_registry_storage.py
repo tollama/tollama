@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import pytest
 
+from tollama.core import registry as registry_module
 from tollama.core.registry import list_registry_models, load_registry
 from tollama.core.storage import (
     TollamaPaths,
@@ -14,6 +16,45 @@ from tollama.core.storage import (
     list_installed,
     remove_model,
 )
+
+
+def test_load_registry_falls_back_to_packaged_copy_when_repo_registry_is_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    packaged_registry = tmp_path / "package" / "model_registry" / "registry.yaml"
+    packaged_registry.parent.mkdir(parents=True, exist_ok=True)
+    packaged_registry.write_text(
+        "\n".join(
+            [
+                "models:",
+                "  - name: mock",
+                "    family: mock",
+                "    source:",
+                "      type: local",
+                "      repo_id: tollama/mock-runner",
+                "      revision: main",
+                "    license:",
+                "      type: mit",
+                "      needs_acceptance: false",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(registry_module, "DEFAULT_REGISTRY_PATH", tmp_path / "missing-registry.yaml")
+    monkeypatch.setattr(registry_module, "PACKAGED_REGISTRY_PATH", packaged_registry)
+
+    registry = registry_module.load_registry()
+
+    assert set(registry) == {"mock"}
+
+
+def test_packaged_registry_copy_matches_repo_registry() -> None:
+    assert registry_module.PACKAGED_REGISTRY_PATH.read_text(
+        encoding="utf-8"
+    ) == registry_module.DEFAULT_REGISTRY_PATH.read_text(encoding="utf-8")
 
 
 def test_registry_loads_required_model_specs() -> None:

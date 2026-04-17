@@ -1,6 +1,21 @@
 import AppKit
 import Foundation
 
+private struct ListeningProcess {
+    let command: String
+    let pid: Int32
+}
+
+private struct RuntimePreparationStatus {
+    let installSpecMatches: Bool
+    let runtimeReady: Bool
+    let versionMatches: Bool
+
+    var requiresRepair: Bool {
+        !(versionMatches && installSpecMatches && runtimeReady)
+    }
+}
+
 @MainActor
 final class AppViewModel: ObservableObject {
     @Published var banner: ActionBanner?
@@ -138,6 +153,25 @@ final class AppViewModel: ObservableObject {
         busyLabel = "Starting Tollama"
         logTail = LogTailReader.read(url: AppConfig.daemonLogURL)
 
+        let runtimeStatus = currentRuntimePreparationStatus()
+        let daemonHealthyAtLaunch = await healthCheck()
+
+        do {
+            if
+                let listener = try listeningProcess(),
+                isManagedAppDaemon(listener),
+                (forceRuntimeRepair || runtimeStatus.requiresRepair || !daemonHealthyAtLaunch)
+            {
+                statusTitle = "Refreshing runtime"
+                statusDetail = daemonHealthyAtLaunch
+                    ? "Stopping an older bundled daemon before refreshing Tollama."
+                    : "Stopping an unresponsive bundled daemon before restarting Tollama."
+                try await terminateManagedDaemon(listener)
+            }
+        } catch {
+            statusDetail = "Unable to inspect port ownership: \(error.localizedDescription)"
+        }
+
         if await healthCheck() {
             dashboardReady = true
             modeLabel = "Connected to existing daemon"
@@ -161,7 +195,7 @@ final class AppViewModel: ObservableObject {
             statusDetail = "Unable to inspect port ownership: \(error.localizedDescription)"
         }
 
-        try await prepareRuntimeIfNeeded(forceRepair: forceRuntimeRepair)
+        try await prepareRuntimeIfNeeded(forceRepair: forceRuntimeRepair || runtimeStatus.requiresRepair)
         try startManagedDaemon()
         try await waitForHealthyDaemon(timeoutSeconds: 30)
 
@@ -201,11 +235,9 @@ final class AppViewModel: ObservableObject {
         statusDetail = "Bootstrapping a private Python environment in Application Support."
 
         let fileManager = FileManager.default
-        let currentMarker = try? readRuntimeMarker()
-        let versionMatches = currentMarker?.tollamaVersion == AppConfig.bundleVersion
-        let runtimeReady = fileManager.isExecutableFile(atPath: AppConfig.venvPythonExecutable.path)
+        let runtimeStatus = currentRuntimePreparationStatus()
 
-        if !forceRepair && versionMatches && runtimeReady {
+        if !forceRepair && !runtimeStatus.requiresRepair {
             return
         }
 
@@ -257,6 +289,7 @@ final class AppViewModel: ObservableObject {
         }
 
         try writeRuntimeMarker(RuntimeMarker(
+            installSpec: AppConfig.bundledInstallSpec,
             preparedAt: ISO8601DateFormatter().string(from: Date()),
             tollamaVersion: AppConfig.bundleVersion
         ))
@@ -283,6 +316,9 @@ final class AppViewModel: ObservableObject {
         environment["TOLLAMA_HOME"] = AppConfig.stateRoot.path
         environment["TOLLAMA_HOST"] = "\(AppConfig.daemonHost):\(AppConfig.daemonPort)"
         environment["TOLLAMA_LOG_LEVEL"] = "info"
+        if let wheelhouseURL = AppConfig.wheelhouseURL {
+            environment["TOLLAMA_RUNTIME_WHEELHOUSE"] = wheelhouseURL.path
+        }
         process.environment = environment
         process.standardOutput = fileHandle
         process.standardError = fileHandle
@@ -415,6 +451,81 @@ final class AppViewModel: ObservableObject {
             return fallback
         }
         return "Installed \(model). You can now run it from the embedded dashboard."
+    }
+
+    private func currentRuntimePreparationStatus() -> RuntimePreparationStatus {
+        let currentMarker = try? readRuntimeMarker()
+        return RuntimePreparationStatus(
+            installSpecMatches: currentMarker?.installSpec == AppConfig.bundledInstallSpec,
+            runtimeReady: FileManager.default.isExecutableFile(atPath: AppConfig.venvPythonExecutable.path),
+            versionMatches: currentMarker?.tollamaVersion == AppConfig.bundleVersion
+        )
+    }
+
+    private func listeningProcess() throws -> ListeningProcess? {
+        let pidResult = try CommandRunner.run(
+            executable: "/usr/sbin/lsof",
+            arguments: [
+                "-nP",
+                "-t",
+                "-iTCP:\(AppConfig.daemonPort)",
+                "-sTCP:LISTEN",
+            ]
+        )
+
+        guard pidResult.status == 0 else {
+            return nil
+        }
+
+        guard
+            let pidLine = pidResult.stdout
+                .split(separator: "\n")
+                .map(String.init)
+                .first(where: { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }),
+            let pid = Int32(pidLine.trimmingCharacters(in: .whitespacesAndNewlines))
+        else {
+            return nil
+        }
+
+        let commandResult = try CommandRunner.run(
+            executable: "/bin/ps",
+            arguments: ["-p", String(pid), "-o", "command="]
+        )
+
+        let command = commandResult.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
+        return ListeningProcess(command: command, pid: pid)
+    }
+
+    private func isManagedAppDaemon(_ process: ListeningProcess) -> Bool {
+        process.command.contains(AppConfig.runtimeRoot.path) || process.command.contains(AppConfig.appSupportRoot.path)
+    }
+
+    private func terminateManagedDaemon(_ process: ListeningProcess) async throws {
+        _ = try CommandRunner.run(
+            executable: "/bin/kill",
+            arguments: ["-TERM", String(process.pid)]
+        )
+
+        for _ in 0..<20 {
+            try await Task.sleep(nanoseconds: 250_000_000)
+            if try listeningProcess()?.pid != process.pid {
+                return
+            }
+        }
+
+        _ = try CommandRunner.run(
+            executable: "/bin/kill",
+            arguments: ["-KILL", String(process.pid)]
+        )
+
+        for _ in 0..<20 {
+            try await Task.sleep(nanoseconds: 250_000_000)
+            if try listeningProcess()?.pid != process.pid {
+                return
+            }
+        }
+
+        throw AppRuntimeError.message("Timed out while stopping the older bundled daemon.")
     }
 
     private func conflictingProcessDescription() throws -> String? {

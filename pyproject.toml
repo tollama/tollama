@@ -212,7 +212,7 @@ package-dir = { "" = "src" }
 where = ["src"]
 
 [tool.setuptools.package-data]
-"tollama" = ["py.typed"]
+"tollama" = ["py.typed", "model_registry/*.yaml"]
 "tollama.dashboard" = ["static/**/*"]
 "tollama.tui" = ["styles/*.tcss"]
 

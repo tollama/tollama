@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import platform
 import shutil
 import subprocess
@@ -81,6 +82,7 @@ FAMILY_RUNNER_MODULES: dict[str, str] = {
 }
 
 _STATE_FILENAME = "installed.json"
+BOOTSTRAP_WHEELHOUSE_ENV_NAME = "TOLLAMA_RUNTIME_WHEELHOUSE"
 
 
 class BootstrapError(RuntimeError):
@@ -325,8 +327,9 @@ def _install_extras(python_path: Path, family: str) -> None:
         "pip",
         "install",
         "--upgrade",
-        install_spec,
     ]
+    cmd.extend(_wheelhouse_install_args())
+    cmd.append(install_spec)
     logger.info("installing %s: %s", extra, " ".join(cmd))
     result = subprocess.run(
         cmd,
@@ -338,6 +341,26 @@ def _install_extras(python_path: Path, family: str) -> None:
         raise BootstrapError(
             f"pip install failed for family {family!r} (exit {result.returncode}):\n{stderr_tail}"
         )
+
+
+def _wheelhouse_install_args() -> list[str]:
+    """Return optional pip args for an offline wheelhouse when configured."""
+    raw_path = os.environ.get(BOOTSTRAP_WHEELHOUSE_ENV_NAME, "").strip()
+    if not raw_path:
+        return []
+
+    wheelhouse = Path(raw_path).expanduser()
+    if not wheelhouse.is_dir():
+        logger.warning(
+            "ignoring %s=%r because the directory does not exist",
+            BOOTSTRAP_WHEELHOUSE_ENV_NAME,
+            raw_path,
+        )
+        return []
+
+    # Prefer bundled/local wheels when available without blocking index fallback
+    # for families whose extras are not present in the wheelhouse.
+    return ["--find-links", str(wheelhouse)]
 
 
 def _resolve_install_spec(extra: str) -> str:

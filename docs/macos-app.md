@@ -16,8 +16,9 @@ The app includes:
 - the bundled dashboard UI loaded from `http://127.0.0.1:11435/dashboard`
 - a first-launch bootstrap flow for a private Python runtime and bundled wheelhouse
 
-The app does **not** bundle heavy runner extras or model checkpoints. Those
-remain on-demand and install when the user pulls a model.
+The app bundles the Tollama core plus the default starter-model runner extra
+(`runner_sundial`) so the built-in starter flow can forecast immediately after
+pull. Other heavy runner extras and model checkpoints remain on-demand.
 
 ## First launch behavior
 
@@ -28,6 +29,7 @@ On the first launch, the app:
 3. starts `tollamad` as a child process with:
    - `TOLLAMA_HOME=~/Library/Application Support/Tollama/state`
    - `TOLLAMA_HOST=127.0.0.1:11435`
+   - `TOLLAMA_RUNTIME_WHEELHOUSE=<bundled wheelhouse path>` for wheelhouse-backed family-runtime bootstrap
 4. opens the embedded dashboard
 
 Subsequent launches reuse the prepared runtime and existing app-local state.
@@ -59,13 +61,17 @@ Optional integrity and release-signing inputs:
 
 ```bash
 export TOLLAMA_PYTHON_STANDALONE_SHA256="..."
-export TOLLAMA_MACOS_BUNDLED_EXTRAS="preprocess"
+export TOLLAMA_MACOS_BUNDLED_EXTRAS="preprocess,eval,runner_sundial"
 export MACOS_SIGNING_IDENTITY="Developer ID Application: Example, Inc. (TEAMID)"
 export MACOS_INSTALLER_SIGNING_IDENTITY="Developer ID Installer: Example, Inc. (TEAMID)"
 export APPLE_ID="release-bot@example.com"
 export APPLE_APP_SPECIFIC_PASSWORD="xxxx-xxxx-xxxx-xxxx"
 export APPLE_TEAM_ID="TEAMID"
 ```
+
+When overriding `TOLLAMA_STARTER_MODEL`, keep `TOLLAMA_MACOS_BUNDLED_EXTRAS`
+in sync with that model's runner family if you want the starter flow to stay
+forecast-ready in the bundled app.
 
 Build locally from the repository root:
 

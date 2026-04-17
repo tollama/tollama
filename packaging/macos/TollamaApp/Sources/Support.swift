@@ -8,6 +8,7 @@ struct ShellResult {
 }
 
 struct RuntimeMarker: Codable {
+    let installSpec: String?
     let preparedAt: String
     let tollamaVersion: String
 }

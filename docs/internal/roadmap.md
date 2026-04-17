@@ -65,7 +65,8 @@ Canonical inventories live in:
   (launch optional Textual TUI dashboard).
 - A macOS app distribution scaffold now exists under `packaging/macos/` for a
   signed/notarized Apple Silicon DMG with `Tollama.app`, a bundled runtime
-  wheelhouse, and a SwiftUI + `WKWebView` shell for `/dashboard`.
+  wheelhouse, starter-model runner bootstrap support, and a SwiftUI +
+  `WKWebView` shell for `/dashboard`.
 - The same scaffold can now also emit an installable Apple Silicon PKG that
   installs `Tollama.app` into `/Applications` for test/admin flows.
 - CLI now includes `tollama dev scaffold <family>` with optional `--register` for runner skeleton onboarding.

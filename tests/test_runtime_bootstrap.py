@@ -11,10 +11,12 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from tollama.core.runtime_bootstrap import (
+    BOOTSTRAP_WHEELHOUSE_ENV_NAME,
     FAMILY_EXTRAS,
     FAMILY_RUNNER_MODULES,
     BootstrapError,
     _create_venv,
+    _install_extras,
     _resolve_install_spec,
     ensure_family_runtime,
     get_runtime_status,
@@ -442,3 +444,48 @@ def test_resolve_install_spec_pins_current_version_for_pypi_fallback() -> None:
         spec = _resolve_install_spec("runner_timesfm")
 
     assert spec == f"tollama[runner-timesfm]=={__version__}"
+
+
+@patch("tollama.core.runtime_bootstrap.subprocess.run")
+def test_install_extras_uses_configured_wheelhouse(mock_run: MagicMock, tmp_path: Path) -> None:
+    wheelhouse = tmp_path / "wheelhouse"
+    wheelhouse.mkdir()
+    python_path = tmp_path / "venv" / "bin" / "python"
+    python_path.parent.mkdir(parents=True, exist_ok=True)
+    python_path.write_text("#!/bin/sh\n", encoding="utf-8")
+
+    mock_run.return_value = MagicMock(returncode=0, stderr="", stdout="")
+
+    with patch.dict("os.environ", {BOOTSTRAP_WHEELHOUSE_ENV_NAME: str(wheelhouse)}):
+        _install_extras(python_path, "sundial")
+
+    command = mock_run.call_args.args[0]
+    assert command[:6] == [
+        str(python_path),
+        "-m",
+        "pip",
+        "install",
+        "--upgrade",
+        "--find-links",
+    ]
+    assert command[6] == str(wheelhouse)
+    assert command[7].endswith("[runner-sundial]") or "runner-sundial" in command[7]
+
+
+@patch("tollama.core.runtime_bootstrap.subprocess.run")
+def test_install_extras_ignores_missing_configured_wheelhouse(
+    mock_run: MagicMock,
+    tmp_path: Path,
+) -> None:
+    python_path = tmp_path / "venv" / "bin" / "python"
+    python_path.parent.mkdir(parents=True, exist_ok=True)
+    python_path.write_text("#!/bin/sh\n", encoding="utf-8")
+
+    mock_run.return_value = MagicMock(returncode=0, stderr="", stdout="")
+    missing = tmp_path / "missing-wheelhouse"
+
+    with patch.dict("os.environ", {BOOTSTRAP_WHEELHOUSE_ENV_NAME: str(missing)}):
+        _install_extras(python_path, "sundial")
+
+    command = mock_run.call_args.args[0]
+    assert "--find-links" not in command

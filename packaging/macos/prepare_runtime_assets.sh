@@ -8,7 +8,10 @@ DOWNLOAD_DIR="$BUILD_DIR/downloads"
 PYTHON_ARCHIVE_URL="${TOLLAMA_PYTHON_STANDALONE_URL:?Set TOLLAMA_PYTHON_STANDALONE_URL to a relocatable Python 3.11 archive URL.}"
 PYTHON_ARCHIVE_SHA256="${TOLLAMA_PYTHON_STANDALONE_SHA256:-}"
 STARTER_MODEL="${TOLLAMA_STARTER_MODEL:-sundial-base-128m}"
-BUNDLED_EXTRAS="${TOLLAMA_MACOS_BUNDLED_EXTRAS:-preprocess,eval}"
+# Bundle the default starter-model runner so a first forecast works offline
+# inside the app. Override TOLLAMA_MACOS_BUNDLED_EXTRAS explicitly for custom
+# build footprints or when changing the starter model family.
+BUNDLED_EXTRAS="${TOLLAMA_MACOS_BUNDLED_EXTRAS:-preprocess,eval,runner_sundial}"
 
 mkdir -p "$ASSET_DIR" "$DOWNLOAD_DIR"
 rm -rf "$ASSET_DIR"

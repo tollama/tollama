@@ -315,6 +315,7 @@ Canonical inventories:
   - 현재: `packaging/macos/`에 DMG build scaffold, bundled runtime asset 준비 스크립트,
     SwiftUI + `WKWebView` 기반 `Tollama.app` shell 추가
   - 현재: 앱은 app-local runtime/state/log 경로를 사용하고, demo/starter-model/log/repair/reset 액션을 제공
+  - 현재: starter model(`sundial-base-128m`)용 runner extra/wheelhouse bootstrap을 번들 앱에서 바로 사용할 수 있도록 연결
   - 현재: GitHub Releases용 macOS app workflow(`.github/workflows/macos-app.yml`) 추가
   - 현재: install-flow 테스트용 Apple Silicon PKG 빌드 경로(`build_pkg.sh`, `build_release_artifacts.sh`) 추가
   - TODO: 아이콘/브랜딩 polish, clean-machine smoke 자동화, Universal/Intel 확장 검토

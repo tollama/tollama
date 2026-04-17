@@ -115,8 +115,10 @@ The app stores its own runtime and state under:
 - `~/Library/Application Support/Tollama/state`
 - `~/Library/Logs/Tollama/daemon.log`
 
-The macOS app bundles only the Tollama core. Heavy runner extras and model
-weights are still installed on demand after launch.
+The macOS app bundles the Tollama core plus the default starter-model runner
+extra (`runner_sundial`) so the built-in starter flow can forecast immediately
+after pull. Other runner extras and model weights are still installed on
+demand after launch.
 
 ## Dependency Matrix
 

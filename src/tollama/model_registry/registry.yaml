@@ -1,0 +1,328 @@
+models:
+  - name: mock
+    family: mock
+    source:
+      type: local
+      repo_id: tollama/mock-runner
+      revision: main
+    license:
+      type: mit
+      needs_acceptance: false
+    defaults:
+      runner: mock
+    capabilities:
+      past_covariates_numeric: false
+      past_covariates_categorical: false
+      future_covariates_numeric: false
+      future_covariates_categorical: false
+      static_covariates: false
+
+  - name: chronos2
+    family: torch
+    source:
+      type: huggingface
+      repo_id: amazon/chronos-2
+      revision: main
+    license:
+      type: apache-2.0
+      needs_acceptance: false
+    capabilities:
+      past_covariates_numeric: true
+      past_covariates_categorical: true
+      future_covariates_numeric: true
+      future_covariates_categorical: true
+      static_covariates: false
+
+  - name: timesfm-2.5-200m
+    family: timesfm
+    source:
+      type: huggingface
+      repo_id: google/timesfm-2.5-200m-pytorch
+      revision: main
+    license:
+      id: apache-2.0
+      needs_acceptance: false
+    metadata:
+      implementation: timesfm_2p5_torch
+      max_context: 1024
+      max_horizon: 256
+      use_quantiles_by_default: true
+    capabilities:
+      past_covariates_numeric: true
+      past_covariates_categorical: false
+      future_covariates_numeric: true
+      future_covariates_categorical: false
+      static_covariates: false
+
+  - name: moirai-2.0-R-small
+    family: uni2ts
+    source:
+      type: huggingface
+      repo_id: Salesforce/moirai-2.0-R-small
+      revision: main
+    license:
+      type: cc-by-nc-4.0
+      needs_acceptance: true
+      notice: Non-commercial; research-only weight license. You must accept before pulling.
+    metadata:
+      implementation: moirai_2p0
+      default_context_length: 1680
+    capabilities:
+      past_covariates_numeric: true
+      past_covariates_categorical: false
+      future_covariates_numeric: true
+      future_covariates_categorical: false
+      static_covariates: false
+
+  - name: sundial-base-128m
+    family: sundial
+    source:
+      type: huggingface
+      repo_id: thuml/sundial-base-128m
+      revision: main
+    license:
+      type: apache-2.0
+      needs_acceptance: false
+    metadata:
+      implementation: sundial_base
+      max_context: 2880
+      max_horizon: 720
+      min_vram_gb: 4.0
+      default_num_samples: 100
+    capabilities:
+      past_covariates_numeric: false
+      past_covariates_categorical: false
+      future_covariates_numeric: false
+      future_covariates_categorical: false
+      static_covariates: false
+
+  - name: toto-open-base-1.0
+    family: toto
+    source:
+      type: huggingface
+      repo_id: Datadog/Toto-Open-Base-1.0
+      revision: main
+    license:
+      type: apache-2.0
+      needs_acceptance: false
+    metadata:
+      implementation: toto_open_base
+      max_context: 4096
+      max_horizon: 720
+      min_vram_gb: 8.0
+      default_num_samples: 256
+      default_samples_per_batch: 256
+      default_use_kv_cache: true
+    capabilities:
+      past_covariates_numeric: true
+      past_covariates_categorical: false
+      future_covariates_numeric: false
+      future_covariates_categorical: false
+      static_covariates: false
+
+  - name: granite-ttm-r2
+    family: torch
+    source:
+      type: huggingface
+      repo_id: ibm-granite/granite-timeseries-ttm-r2
+      revision: 512-96-ft-l1-r2.1
+    license:
+      type: apache-2.0
+      needs_acceptance: false
+    metadata:
+      implementation: granite_ttm
+      context_length: 512
+      prediction_length: 96
+      license: apache-2.0
+    capabilities:
+      past_covariates_numeric: true
+      past_covariates_categorical: false
+      future_covariates_numeric: true
+      future_covariates_categorical: false
+      static_covariates: false
+
+  - name: lag-llama
+    family: lag_llama
+    source:
+      type: huggingface
+      repo_id: time-series-foundation-models/Lag-Llama
+      revision: main
+    license:
+      type: apache-2.0
+      needs_acceptance: false
+    metadata:
+      implementation: lag_llama
+      default_context_length: 1024
+      default_num_samples: 100
+      default_batch_size: 32
+      checkpoint_filename: lag-llama.ckpt
+    capabilities:
+      past_covariates_numeric: false
+      past_covariates_categorical: false
+      future_covariates_numeric: false
+      future_covariates_categorical: false
+      static_covariates: false
+
+  - name: patchtst
+    family: patchtst
+    source:
+      type: huggingface
+      repo_id: ibm-granite/granite-timeseries-patchtst
+      revision: main
+    license:
+      type: apache-2.0
+      needs_acceptance: false
+    metadata:
+      implementation: patchtst
+      status: phase2_inference
+      support_level: baseline
+      default_context_length: 512
+      install_extra: runner_patchtst
+      install_command: python -m pip install -e ".[dev,runner_patchtst]"
+      notes: PatchTST runner supports canonical point forecasts (single/multi series) with optional quantiles when the backend exposes them; covariates are currently ignored.
+    capabilities:
+      past_covariates_numeric: false
+      past_covariates_categorical: false
+      future_covariates_numeric: false
+      future_covariates_categorical: false
+      static_covariates: false
+
+
+  - name: tide
+    family: tide
+    source:
+      type: local
+      repo_id: tollama/tide-runner
+      revision: main
+    license:
+      type: apache-2.0
+      needs_acceptance: false
+    metadata:
+      implementation: tide
+      status: phase3_probabilistic
+      support_level: baseline
+      install_extra: runner_tide
+      install_command: python -m pip install -e ".[dev,runner_tide]"
+      notes: TiDE runner supports deterministic forecasts and best-effort requested quantiles when runtime probabilistic outputs are available. Covariates and static features are currently unsupported; when quantiles cannot be produced, responses explicitly fall back to mean-only forecasts with warnings.
+    capabilities:
+      past_covariates_numeric: false
+      past_covariates_categorical: false
+      future_covariates_numeric: false
+      future_covariates_categorical: false
+      static_covariates: false
+
+  - name: nhits
+    family: nhits
+    source:
+      type: local
+      repo_id: tollama/nhits-runner
+      revision: main
+    license:
+      type: apache-2.0
+      needs_acceptance: false
+    metadata:
+      implementation: nhits
+      status: phase2_inference
+      support_level: baseline
+      install_extra: runner_nhits
+      install_command: python -m pip install -e ".[dev,runner_nhits]"
+      notes: N-HiTS runner supports canonical point forecasts (single/multi series) via runtime NeuralForecast inference with numeric past/future/static exogenous inputs in practical best-effort mode. Pull is manifest-only (local source, no Hugging Face snapshot/auth required). Requested quantiles use backend outputs when available and otherwise fall back to calibrated residual-based estimates with explicit warnings.
+    capabilities:
+      past_covariates_numeric: true
+      past_covariates_categorical: false
+      future_covariates_numeric: true
+      future_covariates_categorical: false
+      static_covariates: true
+
+  - name: nbeatsx
+    family: nbeatsx
+    source:
+      type: local
+      repo_id: tollama/nbeatsx-runner
+      revision: main
+    license:
+      type: apache-2.0
+      needs_acceptance: false
+    metadata:
+      implementation: nbeatsx
+      status: phase3_hardened
+      support_level: baseline
+      install_extra: runner_nbeatsx
+      install_command: python -m pip install -e ".[dev,runner_nbeatsx]"
+      notes: N-BEATSx runner supports canonical single/multi-series forecasts via runtime NeuralForecast inference with stricter input validation and numeric past/future/static exogenous inputs in practical best-effort mode. Pull is manifest-only (local source, no Hugging Face snapshot/auth required). Requested quantiles are best-effort (returned when backend probabilistic outputs are exposed, otherwise omitted with explicit warnings).
+    capabilities:
+      past_covariates_numeric: true
+      past_covariates_categorical: false
+      future_covariates_numeric: true
+      future_covariates_categorical: false
+      static_covariates: true
+
+  - name: timer-base
+    family: timer
+    source:
+      type: huggingface
+      repo_id: thuml/timer-base-84m
+      revision: main
+    license:
+      type: apache-2.0
+      needs_acceptance: false
+    metadata:
+      implementation: timer_base
+      max_context: 2880
+      max_horizon: 720
+      min_vram_gb: 4.0
+      install_extra: runner_timer
+      install_command: python -m pip install -e ".[dev,runner_timer]"
+      notes: Timer is a generative pre-trained Transformer for time series (ICML 2024). Strong zero-shot transfer across domains.
+    capabilities:
+      past_covariates_numeric: false
+      past_covariates_categorical: false
+      future_covariates_numeric: false
+      future_covariates_categorical: false
+      static_covariates: false
+
+  - name: timemixer-base
+    family: timemixer
+    source:
+      type: huggingface
+      repo_id: thuml/timemixer
+      revision: main
+    license:
+      type: apache-2.0
+      needs_acceptance: false
+    metadata:
+      implementation: timemixer_base
+      max_context: 1536
+      max_horizon: 720
+      install_extra: runner_timemixer
+      install_command: python -m pip install -e ".[dev,runner_timemixer]"
+      notes: TimeMixer uses channel-mixing architecture, excels at multivariate forecasting with dedicated mixing of temporal and channel dimensions.
+    capabilities:
+      past_covariates_numeric: false
+      past_covariates_categorical: false
+      future_covariates_numeric: false
+      future_covariates_categorical: false
+      static_covariates: false
+
+  - name: forecastpfn
+    family: forecastpfn
+    source:
+      type: huggingface
+      repo_id: abacusai/ForecastPFN
+      revision: main
+    license:
+      type: apache-2.0
+      needs_acceptance: false
+    metadata:
+      implementation: forecastpfn
+      max_context: 1000
+      max_horizon: 300
+      install_extra: runner_forecastpfn
+      install_command: python -m pip install -e ".[dev,runner_forecastpfn]"
+      notes: ForecastPFN is a zero-shot Bayesian forecaster producing well-calibrated probabilistic predictions without training data. Instant probabilistic baseline.
+    capabilities:
+      past_covariates_numeric: false
+      past_covariates_categorical: false
+      future_covariates_numeric: false
+      future_covariates_categorical: false
+      static_covariates: false

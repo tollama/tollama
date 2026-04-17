@@ -37,8 +37,11 @@ export TOLLAMA_PYTHON_STANDALONE_SHA256="..."
 Optional bundle contents override for local/test builds:
 
 ```bash
-export TOLLAMA_MACOS_BUNDLED_EXTRAS="preprocess"
+export TOLLAMA_MACOS_BUNDLED_EXTRAS="preprocess,eval,runner_sundial"
 ```
+
+By default the build also bundles the current starter-model runner extra so the
+starter flow is forecast-ready inside `Tollama.app`.
 
 ## Signing / Notarization Inputs
 
@@ -81,5 +84,6 @@ At runtime, `Tollama.app`:
 3. starts `tollamad` with `TOLLAMA_HOME=~/Library/Application Support/Tollama/state`
 4. loads `http://127.0.0.1:11435/dashboard` in an embedded `WKWebView`
 
-Heavy runner extras and model checkpoints remain on-demand and are not bundled
-in the DMG.
+Most heavy runner extras and model checkpoints remain on-demand and are not
+bundled in the DMG. The default starter-model runner extra is bundled so the
+starter flow can forecast immediately after pull.
