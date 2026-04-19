@@ -15,7 +15,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   child runtimes from drifting away from the parent app version
 - macOS app runtime bootstrap now passes its bundled wheelhouse into family
   runtime installation, and the default app bundle includes the starter-model
-  `runner_sundial` extra so `sundial-base-128m` forecasts work out of the box
+  `runner_sundial` extra so `sundial-base-128m` forecasts work out of the box;
+  the macOS packaging default no longer forces the optional `eval` extra
 - Synced documentation with the current registry and runner surface, including
   Lag-Llama, PatchTST, TiDE, N-HiTS, N-BEATSx, Timer, TimeMixer, and ForecastPFN
 - Synced documentation with the current API surface, including dashboard bootstrap

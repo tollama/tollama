@@ -37,11 +37,13 @@ export TOLLAMA_PYTHON_STANDALONE_SHA256="..."
 Optional bundle contents override for local/test builds:
 
 ```bash
-export TOLLAMA_MACOS_BUNDLED_EXTRAS="preprocess,eval,runner_sundial"
+export TOLLAMA_MACOS_BUNDLED_EXTRAS="preprocess,runner_sundial"
 ```
 
 By default the build also bundles the current starter-model runner extra so the
 starter flow is forecast-ready inside `Tollama.app`.
+Add `eval` explicitly only when you also need `tollama-eval` available inside
+the bundled app runtime.
 
 ## Signing / Notarization Inputs
 

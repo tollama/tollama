@@ -61,7 +61,7 @@ Optional integrity and release-signing inputs:
 
 ```bash
 export TOLLAMA_PYTHON_STANDALONE_SHA256="..."
-export TOLLAMA_MACOS_BUNDLED_EXTRAS="preprocess,eval,runner_sundial"
+export TOLLAMA_MACOS_BUNDLED_EXTRAS="preprocess,runner_sundial"
 export MACOS_SIGNING_IDENTITY="Developer ID Application: Example, Inc. (TEAMID)"
 export MACOS_INSTALLER_SIGNING_IDENTITY="Developer ID Installer: Example, Inc. (TEAMID)"
 export APPLE_ID="release-bot@example.com"
@@ -72,6 +72,9 @@ export APPLE_TEAM_ID="TEAMID"
 When overriding `TOLLAMA_STARTER_MODEL`, keep `TOLLAMA_MACOS_BUNDLED_EXTRAS`
 in sync with that model's runner family if you want the starter flow to stay
 forecast-ready in the bundled app.
+
+`eval` is no longer bundled by default; add it explicitly only if your release
+artifact needs `tollama-eval` inside the app-local runtime.
 
 Build locally from the repository root:
 
