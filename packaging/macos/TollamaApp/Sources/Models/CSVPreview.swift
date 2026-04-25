@@ -52,7 +52,14 @@ enum CSVSniffer {
         "gdp",
         "close",
         "actual",
+        "pm2.5",
+        "pm25",
+        "pm10",
+        "no2",
+        "so2",
+        "co",
     ]
+    static let targetSuffixCandidates = ["_load_actual_entsoe_transparency"]
     static let freqCandidates = ["freq", "frequency"]
 
     static func scanCSVFiles(in folder: URL, limit: Int = 500) throws -> [CSVFileItem] {
@@ -108,6 +115,7 @@ enum CSVSniffer {
         let seriesIDColumn = firstExistingColumn(columns: columns, candidates: seriesIDCandidates)
         let freqColumn = firstExistingColumn(columns: columns, candidates: freqCandidates)
         let targetColumn = firstExistingColumn(columns: columns, candidates: targetCandidates)
+            ?? firstColumnWithSuffix(columns: columns, suffixes: targetSuffixCandidates)
             ?? firstNumericColumn(columns: columns, rows: dataRows, excluding: [
                 timestampColumn,
                 seriesIDColumn,
@@ -238,6 +246,16 @@ enum CSVSniffer {
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .trimmingCharacters(in: CharacterSet(charactersIn: "\u{feff}"))
             .lowercased()
+    }
+
+    private static func firstColumnWithSuffix(columns: [String], suffixes: [String]) -> String? {
+        for column in columns {
+            let normalized = normalizedColumnName(column)
+            if suffixes.contains(where: { normalized.hasSuffix(normalizedColumnName($0)) }) {
+                return column
+            }
+        }
+        return nil
     }
 
     private static func firstNumericColumn(

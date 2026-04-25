@@ -54,7 +54,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `capabilities`, and license notice fields for native clients
 - CSV ingest and the macOS CSV preview sniffer now auto-detect additional common
   timestamp and target aliases, including `date`, `Date`, `datetime`, `OT`,
-  `demand`, and `users`
+  `demand`, `users`, air-quality targets, and OPSD load-actual columns
+- CSV ingest now omits rows with null target values after resolving the target
+  column, while still rejecting entirely null targets
+- macOS per-family runtime bootstrap now creates symlinked virtualenv
+  interpreters so bundled Python runtimes can locate `libpython` correctly
 
 ### Added
 

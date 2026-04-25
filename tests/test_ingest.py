@@ -71,6 +71,62 @@ def test_load_series_inputs_from_bytes_handles_bom_date_header() -> None:
     assert series[0].target == [10, 11]
 
 
+def test_series_inputs_from_frame_detects_air_quality_pm25_target() -> None:
+    frame = pd.DataFrame(
+        {
+            "datetime": ["2025-01-01 00:00:00", "2025-01-01 01:00:00"],
+            "so2": [4.0, 5.0],
+            "co": [0.2, 0.3],
+            "pm2.5": [12.0, 13.0],
+        }
+    )
+
+    series = series_inputs_from_frame(frame)
+
+    assert series[0].target == [12.0, 13.0]
+
+
+def test_series_inputs_from_frame_detects_opsd_load_actual_target() -> None:
+    frame = pd.DataFrame(
+        {
+            "utc_timestamp": ["2025-01-01T00:00:00Z", "2025-01-01T01:00:00Z"],
+            "AT_load_actual_entsoe_transparency": [100.0, 101.0],
+            "AT_solar_generation_actual": [10.0, 11.0],
+            "DE_load_actual_entsoe_transparency": [200.0, 201.0],
+        }
+    )
+
+    series = series_inputs_from_frame(frame)
+
+    assert series[0].target == [100.0, 101.0]
+
+
+def test_series_inputs_from_frame_drops_null_target_rows() -> None:
+    frame = pd.DataFrame(
+        {
+            "observation_date": ["2025-01-01", "2025-01-02", "2025-01-03"],
+            "CPIAUCSL": [300.0, None, 302.0],
+        }
+    )
+
+    series = series_inputs_from_frame(frame)
+
+    assert series[0].timestamps == ["2025-01-01", "2025-01-03"]
+    assert series[0].target == [300.0, 302.0]
+
+
+def test_series_inputs_from_frame_rejects_all_null_target_column() -> None:
+    frame = pd.DataFrame(
+        {
+            "timestamp": ["2025-01-01", "2025-01-02"],
+            "target": [None, None],
+        }
+    )
+
+    with pytest.raises(IngestError, match="only null"):
+        series_inputs_from_frame(frame)
+
+
 def test_series_inputs_from_frame_requires_explicit_target_when_ambiguous() -> None:
     frame = pd.DataFrame(
         {

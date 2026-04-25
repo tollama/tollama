@@ -319,7 +319,10 @@ time-series column names case-insensitively. Timestamp aliases include `timestam
 `ds`, `time`, `date`, `datetime`, `date_time`, `observation_date`,
 `utc_timestamp`, `year`, and `fecha`. Target aliases include `target`, `value`,
 `y`, `OT`, `demand`, `users`, `number of flights`, `total electricity`, `GDP`,
-`close`, and `actual`.
+`close`, `actual`, `pm2.5`, `pm10`, `no2`, `so2`, and `co`; OPSD-style
+`*_load_actual_entsoe_transparency` columns are also detected.
+Rows where the resolved target value is null are omitted during ingest; files
+whose resolved target column is entirely null are rejected.
 
 ---
 

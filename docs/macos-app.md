@@ -44,7 +44,8 @@ The detail pane exposes four native tabs:
 - `Data`: chooses a local folder, scans up to 500 visible `.csv` files, previews
   the selected file, and shows inferred timestamp/target/series/frequency
   columns before forecasting. The CSV sniffer recognizes common aliases such as
-  `date`, `Date`, `datetime`, `observation_date`, `OT`, `demand`, and `users`.
+  `date`, `Date`, `datetime`, `observation_date`, `OT`, `demand`, `users`,
+  `pm2.5`, and OPSD-style `*_load_actual_entsoe_transparency` columns.
 - `Forecast`: runs one selected CSV against one installed model via
   `/api/forecast/upload`, clamps the horizon to registry metadata when
   available, and renders native Swift Charts output plus a forecast table.

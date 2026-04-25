@@ -40,7 +40,14 @@ TARGET_COLUMN_CANDIDATES = (
     "gdp",
     "close",
     "actual",
+    "pm2.5",
+    "pm25",
+    "pm10",
+    "no2",
+    "so2",
+    "co",
 )
+TARGET_COLUMN_SUFFIX_CANDIDATES = ("_load_actual_entsoe_transparency",)
 FREQ_COLUMN_CANDIDATES = ("freq", "frequency")
 
 
@@ -204,6 +211,7 @@ def series_inputs_from_frame(
             group,
             timestamp_column=resolved_timestamp,
         )
+        sorted_group = _drop_null_target_rows(sorted_group, target_column=resolved_target)
         timestamps = _extract_timestamps(
             sorted_group,
             timestamp_column=resolved_timestamp,
@@ -304,6 +312,10 @@ def _resolve_target_column(
     if candidate is not None:
         return candidate
 
+    candidate = _first_column_with_suffix(frame, TARGET_COLUMN_SUFFIX_CANDIDATES)
+    if candidate is not None:
+        return candidate
+
     excluded = {
         column for column in (timestamp_column, series_id_column, freq_column) if column is not None
     }
@@ -344,10 +356,32 @@ def _normalize_column_name(value: str) -> str:
     return value.strip().lstrip("\ufeff").casefold()
 
 
+def _first_column_with_suffix(frame: pd.DataFrame, suffixes: Sequence[str]) -> str | None:
+    normalized_suffixes = tuple(_normalize_column_name(suffix) for suffix in suffixes)
+    for column in frame.columns:
+        if not isinstance(column, str):
+            continue
+        normalized = _normalize_column_name(column)
+        if normalized.endswith(normalized_suffixes):
+            return column
+    return None
+
+
 def _sort_group(group: pd.DataFrame, *, timestamp_column: str | None) -> pd.DataFrame:
     if timestamp_column is not None:
         return group.sort_values(by=timestamp_column, kind="stable")
     return group.sort_index(kind="stable")
+
+
+def _drop_null_target_rows(group: pd.DataFrame, *, target_column: str) -> pd.DataFrame:
+    null_mask = group[target_column].isna()
+    if not bool(null_mask.any()):
+        return group
+
+    filtered = group.loc[~null_mask]
+    if filtered.empty:
+        raise IngestError("target column contains only null values")
+    return filtered
 
 
 def _extract_timestamps(group: pd.DataFrame, *, timestamp_column: str | None) -> list[str]:

@@ -279,7 +279,12 @@ def _create_venv(venv_dir: Path) -> None:
     venv_dir.parent.mkdir(parents=True, exist_ok=True)
     logger.debug("creating venv at %s", venv_dir)
     try:
-        venv.create(str(venv_dir), with_pip=True, clear=True)
+        venv.create(
+            str(venv_dir),
+            with_pip=True,
+            clear=True,
+            symlinks=platform.system() != "Windows",
+        )
         return
     except Exception as exc:
         uv_binary = shutil.which("uv")

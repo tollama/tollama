@@ -308,6 +308,23 @@ def test_pip_failure_raises_bootstrap_error(
         ensure_family_runtime("torch", paths=paths)
 
 
+@patch("tollama.core.runtime_bootstrap.venv.create")
+def test_create_venv_uses_symlinked_python_on_posix(
+    mock_venv_create: MagicMock,
+    tmp_path: Path,
+) -> None:
+    venv_dir = tmp_path / "runtime" / "venv"
+
+    _create_venv(venv_dir)
+
+    mock_venv_create.assert_called_once_with(
+        str(venv_dir),
+        with_pip=True,
+        clear=True,
+        symlinks=platform.system() != "Windows",
+    )
+
+
 @patch("tollama.core.runtime_bootstrap.subprocess.run")
 @patch("tollama.core.runtime_bootstrap.shutil.which")
 @patch("tollama.core.runtime_bootstrap.venv.create")

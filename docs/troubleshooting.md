@@ -97,6 +97,8 @@ tollama run <model> --input examples/request.json --dry-run
 
 Symptoms:
 - `tollama runtime install` fails with dependency or Python-version errors.
+- macOS app logs show `ensurepip` aborts or a family runtime Python cannot load
+  `@executable_path/../lib/libpython3.11.dylib`.
 
 Fix:
 ```bash
@@ -107,6 +109,8 @@ tollama runtime install --all
 For Uni2TS/Moirai stack, prefer Python 3.11 if wheel/build constraints fail on newer interpreters.
 If stdlib `venv` / `ensurepip` is broken on the host interpreter, install `uv`
 and retry; Tollama falls back to `uv venv` automatically during runtime bootstrap.
+For bundled macOS runtimes, Tollama creates family virtualenvs with symlinked
+interpreters so relocated Python builds can resolve their shared library.
 
 ## 7) Wrong frequency detected
 
