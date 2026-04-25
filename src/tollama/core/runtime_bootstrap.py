@@ -21,8 +21,10 @@ import platform
 import shutil
 import subprocess
 import sys
+import tomllib
 import venv
 from datetime import UTC, datetime
+from hashlib import sha256
 from pathlib import Path
 from typing import Any
 
@@ -83,6 +85,7 @@ FAMILY_RUNNER_MODULES: dict[str, str] = {
 
 _STATE_FILENAME = "installed.json"
 BOOTSTRAP_WHEELHOUSE_ENV_NAME = "TOLLAMA_RUNTIME_WHEELHOUSE"
+_DEPENDENCY_FINGERPRINT_ALGORITHM = "sha256"
 
 
 class BootstrapError(RuntimeError):
@@ -178,6 +181,9 @@ def get_runtime_status(
             "venv_path": str(family_dir / "venv"),
             "tollama_version": None,
             "extra": FAMILY_EXTRAS.get(family),
+            "dependency_fingerprint": None,
+            "dependency_fingerprint_algorithm": _DEPENDENCY_FINGERPRINT_ALGORITHM,
+            "extra_dependencies": None,
             "python_version": None,
             "python_constraint": python_constraint,
             "installed_at": None,
@@ -191,6 +197,9 @@ def get_runtime_status(
         "venv_path": str(family_dir / "venv"),
         "tollama_version": state.get("tollama_version"),
         "extra": state.get("extra"),
+        "dependency_fingerprint": state.get("dependency_fingerprint"),
+        "dependency_fingerprint_algorithm": state.get("dependency_fingerprint_algorithm"),
+        "extra_dependencies": state.get("extra_dependencies"),
         "python_version": state.get("python_version"),
         "python_constraint": python_constraint,
         "installed_at": state.get("installed_at"),
@@ -256,6 +265,16 @@ def _is_runtime_valid(family_dir: Path, family: str) -> bool:
             family,
             state.get("schema_version"),
             _RUNTIME_STATE_SCHEMA_VERSION,
+        )
+        return False
+
+    expected_dependency_fingerprint = _runtime_dependency_fingerprint(family)
+    if state.get("dependency_fingerprint") != expected_dependency_fingerprint:
+        logger.debug(
+            "runtime for %r has dependency_fingerprint=%s (expected %s); will re-bootstrap",
+            family,
+            state.get("dependency_fingerprint"),
+            expected_dependency_fingerprint,
         )
         return False
 
@@ -440,9 +459,13 @@ def _resolve_local_project_root() -> str | None:
 
 def _write_runtime_state(family_dir: Path, family: str) -> None:
     """Persist metadata about the bootstrap so we can detect staleness."""
+    extra_dependencies = _extra_dependency_specs(FAMILY_EXTRAS[family])
     state = {
         "tollama_version": _tollama_version,
         "extra": FAMILY_EXTRAS[family],
+        "dependency_fingerprint": _dependency_fingerprint(extra_dependencies),
+        "dependency_fingerprint_algorithm": _DEPENDENCY_FINGERPRINT_ALGORITHM,
+        "extra_dependencies": extra_dependencies,
         "python_version": platform.python_version(),
         "installed_at": datetime.now(UTC).isoformat(),
         "schema_version": _RUNTIME_STATE_SCHEMA_VERSION,
@@ -450,3 +473,72 @@ def _write_runtime_state(family_dir: Path, family: str) -> None:
     state_path = family_dir / _STATE_FILENAME
     state_path.parent.mkdir(parents=True, exist_ok=True)
     state_path.write_text(json.dumps(state, indent=2) + "\n", encoding="utf-8")
+
+
+def _runtime_dependency_fingerprint(family: str) -> str:
+    return _dependency_fingerprint(_extra_dependency_specs(FAMILY_EXTRAS[family]))
+
+
+def _dependency_fingerprint(dependencies: list[str]) -> str:
+    payload = json.dumps(dependencies, separators=(",", ":"), sort_keys=True)
+    return sha256(payload.encode("utf-8")).hexdigest()
+
+
+def _extra_dependency_specs(extra: str) -> list[str]:
+    local_root = _resolve_local_project_root()
+    if local_root is not None:
+        pyproject = Path(local_root) / "pyproject.toml"
+        try:
+            data = tomllib.loads(pyproject.read_text(encoding="utf-8"))
+        except (OSError, tomllib.TOMLDecodeError):
+            data = {}
+        optional_dependencies = data.get("project", {}).get("optional-dependencies", {})
+        if isinstance(optional_dependencies, dict):
+            for extra_key in _extra_key_candidates(extra):
+                if extra_key in optional_dependencies:
+                    return _normalize_dependency_specs(optional_dependencies.get(extra_key))
+
+    try:
+        from importlib.metadata import distribution
+
+        dist = distribution("tollama")
+        requirements = dist.requires or []
+    except Exception:
+        return []
+
+    normalized_extra = extra.replace("_", "-").lower()
+    specs: list[str] = []
+    for requirement in requirements:
+        dependency, separator, marker = requirement.partition(";")
+        if not separator:
+            continue
+        normalized_marker = marker.replace('"', "'").replace("_", "-").lower()
+        if f"extra == '{normalized_extra}'" in normalized_marker:
+            specs.append(_normalize_dependency_spec(dependency))
+    return sorted(spec for spec in specs if spec)
+
+
+def _extra_key_candidates(extra: str) -> tuple[str, ...]:
+    normalized = extra.replace("_", "-")
+    underscored = extra.replace("-", "_")
+    candidates: list[str] = []
+    for candidate in (extra, normalized, underscored):
+        if candidate not in candidates:
+            candidates.append(candidate)
+    return tuple(candidates)
+
+
+def _normalize_dependency_specs(raw_specs: object) -> list[str]:
+    if not isinstance(raw_specs, list):
+        return []
+    return sorted(
+        spec
+        for spec in (_normalize_dependency_spec(raw_spec) for raw_spec in raw_specs)
+        if spec
+    )
+
+
+def _normalize_dependency_spec(raw_spec: object) -> str:
+    if not isinstance(raw_spec, str):
+        return ""
+    return " ".join(raw_spec.strip().split())

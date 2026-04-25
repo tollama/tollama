@@ -16,8 +16,10 @@ from tollama.core.runtime_bootstrap import (
     FAMILY_RUNNER_MODULES,
     BootstrapError,
     _create_venv,
+    _extra_dependency_specs,
     _install_extras,
     _resolve_install_spec,
+    _runtime_dependency_fingerprint,
     ensure_family_runtime,
     get_runtime_status,
     list_runtime_statuses,
@@ -40,6 +42,9 @@ def _write_fake_state(paths: TollamaPaths, family: str, **overrides: object) -> 
     state = {
         "tollama_version": __version__,
         "extra": FAMILY_EXTRAS[family],
+        "dependency_fingerprint": _runtime_dependency_fingerprint(family),
+        "dependency_fingerprint_algorithm": "sha256",
+        "extra_dependencies": _extra_dependency_specs(FAMILY_EXTRAS[family]),
         "python_version": platform.python_version(),
         "installed_at": "2026-01-01T00:00:00+00:00",
         "schema_version": 4,
@@ -232,6 +237,9 @@ def test_get_status_installed(tmp_path: Path) -> None:
     assert status["family"] == "sundial"
     assert status["extra"] == "runner_sundial"
     assert status["tollama_version"] is not None
+    assert status["dependency_fingerprint"] is not None
+    assert status["dependency_fingerprint_algorithm"] == "sha256"
+    assert isinstance(status["extra_dependencies"], list)
     assert status["python_constraint"] is None  # sundial has no constraint
 
 
@@ -266,6 +274,11 @@ def test_list_statuses_covers_all_families(tmp_path: Path) -> None:
     statuses = list_runtime_statuses(paths=paths)
     families = {s["family"] for s in statuses}
     assert families == set(FAMILY_EXTRAS.keys())
+
+
+def test_runtime_dependency_specs_include_tide_lightning() -> None:
+    specs = _extra_dependency_specs("runner_tide")
+    assert any(spec.startswith("pytorch-lightning") for spec in specs)
 
 
 # ---------------------------------------------------------------------------
@@ -424,6 +437,38 @@ def test_missing_schema_version_triggers_reinstall(tmp_path: Path) -> None:
     ):
         mock_create.side_effect = lambda vd: _write_fake_python(paths, "torch")
         ensure_family_runtime("torch", paths=paths)
+        mock_create.assert_called_once()
+
+
+def test_missing_dependency_fingerprint_triggers_reinstall(tmp_path: Path) -> None:
+    paths = _paths(tmp_path)
+    _write_fake_state(paths, "tide")
+    state_path = paths.runtimes_dir / "tide" / "installed.json"
+    payload = json.loads(state_path.read_text(encoding="utf-8"))
+    payload.pop("dependency_fingerprint", None)
+    state_path.write_text(json.dumps(payload), encoding="utf-8")
+    _write_fake_python(paths, "tide")
+
+    with (
+        patch("tollama.core.runtime_bootstrap._create_venv") as mock_create,
+        patch("tollama.core.runtime_bootstrap._install_extras"),
+    ):
+        mock_create.side_effect = lambda vd: _write_fake_python(paths, "tide")
+        ensure_family_runtime("tide", paths=paths)
+        mock_create.assert_called_once()
+
+
+def test_dependency_fingerprint_change_triggers_reinstall(tmp_path: Path) -> None:
+    paths = _paths(tmp_path)
+    _write_fake_state(paths, "tide", dependency_fingerprint="old")
+    _write_fake_python(paths, "tide")
+
+    with (
+        patch("tollama.core.runtime_bootstrap._create_venv") as mock_create,
+        patch("tollama.core.runtime_bootstrap._install_extras"),
+    ):
+        mock_create.side_effect = lambda vd: _write_fake_python(paths, "tide")
+        ensure_family_runtime("tide", paths=paths)
         mock_create.assert_called_once()
 
 

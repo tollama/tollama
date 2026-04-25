@@ -259,6 +259,9 @@ tollama/
   - stdlib `venv` failures now retry through `uv venv --seed --clear ... --python <current-interpreter>`
     when `uv` is present.
   - Staleness detection compares `tollama_version` in `installed.json` state file.
+  - Runtime state also records an optional-extra dependency fingerprint so a
+    family venv is rebuilt when runner dependencies change without a package
+    version bump.
   - Manual override via `config.json` `daemon.runner_commands` takes precedence.
 - CLI `tollama runtime` subcommand group:
   - `tollama runtime install <family>` / `--all` — eagerly create isolated venvs.

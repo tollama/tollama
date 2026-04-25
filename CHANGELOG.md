@@ -59,6 +59,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   column, while still rejecting entirely null targets
 - macOS per-family runtime bootstrap now creates symlinked virtualenv
   interpreters so bundled Python runtimes can locate `libpython` correctly
+- Per-family runtime bootstrap now records an optional-extra dependency
+  fingerprint and rebuilds stale family venvs when runner dependencies change
 - Registry loading now falls back to editable-install source metadata if an
   in-place runtime hotfix removes packaged registry data while a daemon is live
 - CSV/data-url forecasts for single-series model implementations now
