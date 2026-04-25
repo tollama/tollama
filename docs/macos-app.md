@@ -48,7 +48,9 @@ The detail pane exposes four native tabs:
   `pm2.5`, and OPSD-style `*_load_actual_entsoe_transparency` columns.
 - `Forecast`: runs one selected CSV against one installed model via
   `/api/forecast/upload`, clamps the horizon to registry metadata when
-  available, and renders native Swift Charts output plus a forecast table.
+  available, down-selects CSVs with multiple inferred series for single-series
+  models with a response warning, and renders native Swift Charts output plus a
+  forecast table.
 - `Logs`: shows the daemon log tail in the main pane.
 
 ## Built-in app actions

@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 
 _FORECASTPFN_MODELS: dict[str, dict[str, Any]] = {
     "forecastpfn": {
-        "repo_id": "abacusai/ForecastPFN",
+        "repo_id": "tollama/forecastpfn-runner",
         "revision": "main",
         "implementation": "forecastpfn",
         "max_context": 1000,

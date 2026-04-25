@@ -369,6 +369,41 @@ def test_forecast_upload_endpoint_detects_date_and_ot_columns(monkeypatch, tmp_p
     assert len(body["forecasts"][0]["mean"]) == 2
 
 
+def test_forecast_upload_downselects_granite_multi_series_csv(monkeypatch, tmp_path) -> None:
+    _install_model(monkeypatch, tmp_path, name="granite-ttm-r2")
+    runner_manager = _CapturingRunnerManager()
+    app = create_app(runner_manager=runner_manager)  # type: ignore[arg-type]
+    payload = {
+        "model": "granite-ttm-r2",
+        "horizon": 2,
+        "options": {},
+    }
+    file_content = (
+        "date,entity,value\n"
+        "2025-01-01,A,1.0\n"
+        "2025-01-02,A,2.0\n"
+        "2025-01-03,A,3.0\n"
+        "2025-01-01,B,10.0\n"
+        "2025-01-02,B,20.0\n"
+        "2025-01-03,B,30.0\n"
+    )
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/forecast/upload",
+            data={"payload": json.dumps(payload)},
+            files={"file": ("panel.csv", file_content, "text/csv")},
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["forecasts"][0]["id"] == "A"
+    assert "supports one input series" in body["warnings"][0]
+    captured_series = runner_manager.captured["params"]["series"]
+    assert len(captured_series) == 1
+    assert captured_series[0]["id"] == "A"
+
+
 def test_api_info_returns_redacted_diagnostics(monkeypatch, tmp_path) -> None:
     paths = TollamaPaths(base_dir=tmp_path / ".tollama")
     monkeypatch.setenv("TOLLAMA_HOME", str(paths.base_dir))
@@ -584,6 +619,37 @@ def test_ollama_pull_non_stream_and_delete_flow(monkeypatch, tmp_path) -> None:
         assert deleted_again.status_code == 404
 
 
+def test_ollama_pull_forecastpfn_is_manifest_only(monkeypatch, tmp_path) -> None:
+    paths = TollamaPaths(base_dir=tmp_path / ".tollama")
+    monkeypatch.setenv("TOLLAMA_HOME", str(paths.base_dir))
+
+    def _fail_hf_call(**_: Any) -> None:
+        raise AssertionError("forecastpfn pull should not call Hugging Face")
+
+    monkeypatch.setattr("tollama.core.hf_pull._hf_model_info", _fail_hf_call)
+    monkeypatch.setattr("tollama.core.hf_pull._hf_snapshot_download", _fail_hf_call)
+
+    with TestClient(create_app()) as client:
+        response = client.post("/api/pull", json={"model": "forecastpfn", "stream": False})
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "status": "success",
+        "model": "forecastpfn",
+        "digest": "local",
+        "size": 0,
+    }
+
+    manifest = json.loads(paths.manifest_path("forecastpfn").read_text(encoding="utf-8"))
+    assert manifest["source"] == {
+        "type": "local",
+        "repo_id": "tollama/forecastpfn-runner",
+        "revision": "main",
+    }
+    assert manifest["resolved"]["commit_sha"] == "local"
+    assert manifest["size_bytes"] == 0
+
+
 @pytest.mark.parametrize(
     ("path", "request_kwargs"),
     [
@@ -734,6 +800,7 @@ def test_ollama_pull_granite_uses_registry_repo_and_revision(monkeypatch, tmp_pa
         "implementation": "granite_ttm",
         "context_length": 512,
         "prediction_length": 96,
+        "input_series_limit": 1,
         "license": "apache-2.0",
     }
     assert manifest["resolved"]["commit_sha"] == "fake-commit-sha"
@@ -1875,6 +1942,7 @@ def test_forecast_passes_manifest_source_and_metadata_to_runner(monkeypatch, tmp
         "implementation": "granite_ttm",
         "context_length": 512,
         "prediction_length": 96,
+        "input_series_limit": 1,
         "license": "apache-2.0",
     }
 

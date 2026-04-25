@@ -76,6 +76,9 @@ actor TollamaHTTPClient {
                 guard !trimmed.isEmpty else {
                     continue
                 }
+                if let streamError = pullStreamErrorMessage(from: trimmed) {
+                    throw TollamaHTTPClientError(message: streamError)
+                }
                 didEmit = true
                 await onProgress(trimmed)
             }
@@ -89,6 +92,24 @@ actor TollamaHTTPClient {
         } catch {
             throw TollamaHTTPClientError(message: error.localizedDescription)
         }
+    }
+
+    private func pullStreamErrorMessage(from line: String) -> String? {
+        guard let data = line.data(using: .utf8),
+              let payload = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let error = payload["error"] else {
+            return nil
+        }
+
+        if let message = error as? String, !message.isEmpty {
+            return message
+        }
+        if let errorObject = error as? [String: Any],
+           let message = errorObject["message"] as? String,
+           !message.isEmpty {
+            return message
+        }
+        return "Model pull failed."
     }
 
     func uploadAndForecast(

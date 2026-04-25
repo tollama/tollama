@@ -10,7 +10,7 @@ This guide targets the current TSFM-capable registry entries in `model-registry/
 > **Prerequisites before you start**
 > - Python **3.11** recommended (3.12/3.13 work for most families; Uni2TS/Moirai may have issues on 3.12+)
 > - ~**5 GB** free disk space per model family under `~/.tollama/models/`
-> - Internet access for pulling model snapshots from Hugging Face
+> - Internet access for pulling model snapshots from Hugging Face, except for manifest-only local-source entries
 > - A [Hugging Face token](https://huggingface.co/settings/tokens) (`TOLLAMA_HF_TOKEN`) for gated models such as Moirai
 
 ## Notebooks
@@ -33,7 +33,7 @@ Additional docs:
 
 ## Forecast Model Matrix
 
-| Model name | Family | Hugging Face repo | Revision | License | `--accept-license` required | Runner extra |
+| Model name | Family | Source repo | Revision | License | `--accept-license` required | Runner extra |
 |---|---|---|---|---|---|---|
 | `chronos2` | `torch` | `amazon/chronos-2` | `main` | `apache-2.0` | No | `runner_torch` |
 | `granite-ttm-r2` | `torch` | `ibm-granite/granite-timeseries-ttm-r2` | `512-96-ft-l1-r2.1` | `apache-2.0` | No | `runner_torch` |
@@ -48,7 +48,7 @@ Additional docs:
 | `nbeatsx` | `nbeatsx` | `tollama/nbeatsx-runner` (local source manifest) | `main` | `apache-2.0` | No | `runner_nbeatsx` |
 | `timer-base` | `timer` | `thuml/timer-base-84m` | `main` | `apache-2.0` | No | `runner_timer` |
 | `timemixer-base` | `timemixer` | `thuml/timemixer` | `main` | `apache-2.0` | No | `runner_timemixer` |
-| `forecastpfn` | `forecastpfn` | `abacusai/ForecastPFN` | `main` | `apache-2.0` | No | `runner_forecastpfn` |
+| `forecastpfn` | `forecastpfn` | `tollama/forecastpfn-runner` (local source manifest) | `main` | `apache-2.0` | No | `runner_forecastpfn` |
 
 > [!NOTE]
 > `timesfm` models may take several minutes to compile on the first run. The default timeout has been increased to 5 minutes to accommodate this, but slower machines may require even more time.
@@ -75,9 +75,9 @@ Use these signatures when triaging smoke failures:
   - install hint includes the family extra (for example `runner_patchtst`, `runner_tide`, `runner_nhits`, `runner_nbeatsx`)
 - **Regression** (runtime registration/config issue):
   - detail contains `runner family '<family>' is not supported`
-  - or pull fails for local-source models (`tide`, `nhits`, `nbeatsx`) that should be manifest-only
+- or pull fails for local-source models (`tide`, `nhits`, `nbeatsx`, `forecastpfn`) that should be manifest-only
 
-For `tide`, `nhits`, and `nbeatsx`, `tollama pull` is manifest-only (`source.type=local`), so pull should succeed without Hugging Face auth/network snapshot fetches.
+For `tide`, `nhits`, `nbeatsx`, and `forecastpfn`, `tollama pull` is manifest-only (`source.type=local`), so pull should succeed without Hugging Face auth/network snapshot fetches.
 
 ## Requirements
 

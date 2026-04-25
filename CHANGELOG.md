@@ -61,6 +61,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   interpreters so bundled Python runtimes can locate `libpython` correctly
 - Registry loading now falls back to editable-install source metadata if an
   in-place runtime hotfix removes packaged registry data while a daemon is live
+- CSV/data-url forecasts for single-series model implementations now
+  down-select to the first ingested series with a warning instead of failing in
+  the runner; Granite TTM declares this one-series input limit in registry
+  metadata
+- ForecastPFN registry pulls are now manifest-only local-source installs, and
+  the macOS app surfaces streamed pull errors instead of treating them as
+  successful progress events
 
 ### Added
 

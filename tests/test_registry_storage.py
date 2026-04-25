@@ -146,6 +146,7 @@ def test_registry_loads_required_model_specs() -> None:
         "implementation": "granite_ttm",
         "context_length": 512,
         "prediction_length": 96,
+        "input_series_limit": 1,
         "license": "apache-2.0",
     }
 
@@ -328,6 +329,30 @@ def test_registry_loads_required_model_specs() -> None:
     assert nbeatsx.capabilities.past_covariates_numeric is True
     assert nbeatsx.capabilities.future_covariates_numeric is True
     assert nbeatsx.capabilities.static_covariates is True
+
+    forecastpfn = registry["forecastpfn"]
+    assert forecastpfn.family == "forecastpfn"
+    assert forecastpfn.source.type == "local"
+    assert forecastpfn.source.repo_id == "tollama/forecastpfn-runner"
+    assert forecastpfn.source.revision == "main"
+    assert forecastpfn.metadata == {
+        "implementation": "forecastpfn",
+        "max_context": 1000,
+        "max_horizon": 300,
+        "install_extra": "runner_forecastpfn",
+        "install_command": 'python -m pip install -e ".[dev,runner_forecastpfn]"',
+        "notes": (
+            "ForecastPFN is a zero-shot Bayesian forecaster producing well-calibrated "
+            "probabilistic predictions without training data. Pull is manifest-only "
+            "(local source, no Hugging Face snapshot/auth required) because the upstream "
+            "ForecastPFN project does not publish a Hugging Face model snapshot consumed "
+            "by this runner."
+        ),
+    }
+    assert forecastpfn.capabilities is not None
+    assert forecastpfn.capabilities.past_covariates_numeric is False
+    assert forecastpfn.capabilities.future_covariates_numeric is False
+    assert forecastpfn.capabilities.static_covariates is False
 
     lag_llama = registry["lag-llama"]
     assert lag_llama.family == "lag_llama"

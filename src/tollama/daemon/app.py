@@ -179,6 +179,8 @@ AUTO_ENSEMBLE_MAX_WORKERS = 4
 AUTO_FORECAST_MEMBER_TIMEOUT_SECONDS = 10.0
 DEFAULT_MODIFIED_AT = "1970-01-01T00:00:00Z"
 MIN_READY_DISK_FREE_BYTES = 100 * 1024 * 1024
+SINGLE_SERIES_MODEL_NAMES = frozenset({"granite-ttm-r2"})
+SINGLE_SERIES_IMPLEMENTATIONS = frozenset({"granite_ttm"})
 INFO_ENV_KEYS = (
     "TOLLAMA_HOME",
     "TOLLAMA_HOST",
@@ -1014,7 +1016,12 @@ def create_app(*, runner_manager: RunnerManager | None = None) -> FastAPI:
         except (IngestError, ValidationError, UnicodeDecodeError) as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-        return _execute_forecast(app, payload=forecast_payload, request=request)
+        return _execute_forecast(
+            app,
+            payload=forecast_payload,
+            request=request,
+            allow_single_series_downselect=True,
+        )
 
     @app.get(
         "/api/info",
@@ -2077,7 +2084,9 @@ def _execute_forecast(
     payload: ForecastRequestWithKeepAlive,
     request: Request | None = None,
     extra_exclude: set[str] | None = None,
+    allow_single_series_downselect: bool = False,
 ) -> ForecastResponse:
+    allow_input_series_downselect = allow_single_series_downselect or payload.data_url is not None
     try:
         payload = _prepare_forecast_payload(payload)
     except FileNotFoundError as exc:
@@ -2129,7 +2138,13 @@ def _execute_forecast(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     forecast_payload = payload.model_copy(update={"series": compatible_series})
-    request_warnings = [*normalize_warnings, *capability_warnings]
+    series_limit_warnings: list[str] = []
+    if allow_input_series_downselect:
+        forecast_payload, series_limit_warnings = _downselect_input_series_for_model(
+            forecast_payload,
+            model_metadata=model_metadata,
+        )
+    request_warnings = [*normalize_warnings, *capability_warnings, *series_limit_warnings]
 
     try:
         keep_alive_policy = parse_keep_alive(forecast_payload.keep_alive, now=request_now)
@@ -2279,6 +2294,57 @@ def _execute_forecast(
         device=_extract_usage_device(response.usage),
     )
     return response
+
+
+def _downselect_input_series_for_model(
+    payload: ForecastRequestWithKeepAlive,
+    *,
+    model_metadata: dict[str, Any] | None,
+) -> tuple[ForecastRequestWithKeepAlive, list[str]]:
+    input_series_limit = _input_series_limit_for_model(
+        payload.model,
+        model_metadata=model_metadata,
+    )
+    if input_series_limit is None or len(payload.series) <= input_series_limit:
+        return payload, []
+
+    limited_series = payload.series[:input_series_limit]
+    ignored_count = len(payload.series) - input_series_limit
+    if input_series_limit == 1:
+        warning = (
+            f"model {payload.model!r} supports one input series; "
+            f"using series {limited_series[0].id!r} and ignoring "
+            f"{ignored_count} additional series"
+        )
+    else:
+        warning = (
+            f"model {payload.model!r} supports at most {input_series_limit} input series; "
+            f"using the first {input_series_limit} series and ignoring "
+            f"{ignored_count} additional series"
+        )
+    return payload.model_copy(update={"series": limited_series}), [warning]
+
+
+def _input_series_limit_for_model(
+    model_name: str,
+    *,
+    model_metadata: dict[str, Any] | None,
+) -> int | None:
+    metadata_limit = _metadata_positive_int(
+        model_metadata,
+        ("input_series_limit", "max_input_series"),
+    )
+    if metadata_limit is not None:
+        return metadata_limit
+
+    implementation = None
+    if isinstance(model_metadata, dict):
+        implementation = model_metadata.get("implementation")
+    if implementation in SINGLE_SERIES_IMPLEMENTATIONS:
+        return 1
+    if model_name in SINGLE_SERIES_MODEL_NAMES:
+        return 1
+    return None
 
 
 def _prepare_forecast_payload(

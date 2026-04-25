@@ -26,7 +26,7 @@ model browser and forecast controls.
 | `nbeatsx` | `nbeatsx` | `tollama/nbeatsx-runner` | Past + Future + Static |
 | `timer-base` | `timer` | `thuml/Timer` | Target only |
 | `timemixer-base` | `timemixer` | `thuml/timemixer` | Target only |
-| `forecastpfn` | `forecastpfn` | `abacusai/ForecastPFN` | Target only |
+| `forecastpfn` | `forecastpfn` | `tollama/forecastpfn-runner` (local source manifest) | Target only |
 
 ## Chronos2 Forecasting
 
@@ -228,6 +228,8 @@ tollama pull <private-model>
 ## Granite TTM Forecasting (torch runner)
 
 `runner_torch` includes optional Chronos and Granite TTM dependencies.
+Granite TTM currently accepts one input series per request; CSV/data-url ingest
+that yields multiple series is down-selected to the first series with a warning.
 
 ```bash
 # install optional torch runner dependencies
@@ -586,7 +588,7 @@ ForecastPFN is integrated for inference via the dedicated `forecastpfn` runner f
 - model name: `forecastpfn`
 - runner family: `forecastpfn`
 - install extra: `runner_forecastpfn`
-- pull behavior: pulls a Hugging Face snapshot from `abacusai/ForecastPFN`
+- pull behavior: registry pull is manifest-only (local source), so `tollama pull forecastpfn` does not require Hugging Face auth/snapshot download
 - current runner behavior:
   - returns `DEPENDENCY_MISSING` when optional dependencies are absent
   - runs the current target-only adapter path

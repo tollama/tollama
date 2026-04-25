@@ -264,6 +264,11 @@ into a unified Decision Explanation.
 
 \* Exactly one of `series` or `data_url` must be provided.
 
+When `data_url` or `/api/forecast/upload` ingestion produces multiple series
+for a model that declares a one-series input limit, the daemon forecasts the
+first ingested series and returns a warning. Explicit JSON `series` requests are
+left unchanged.
+
 #### `SeriesInput`
 
 | Field | Type | Required | Default | Description |
