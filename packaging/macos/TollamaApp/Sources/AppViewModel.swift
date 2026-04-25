@@ -307,6 +307,12 @@ final class AppViewModel: ObservableObject {
         }
 
         let fileHandle = try FileHandle(forWritingTo: logURL)
+        try fileHandle.truncate(atOffset: 0)
+        if let header = "Starting Tollama daemon at \(ISO8601DateFormatter().string(from: Date()))\n"
+            .data(using: .utf8)
+        {
+            fileHandle.write(header)
+        }
         try fileHandle.seekToEnd()
 
         let process = Process()

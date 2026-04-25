@@ -38,6 +38,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - macOS app runtime bootstrap now verifies that `tollama.daemon.main` is
   importable before reusing a cached venv, and failed install commands no longer
   write a successful runtime marker
+- macOS app managed daemon starts now reset the daemon log tail so stale
+  bootstrap errors are not shown as current launch failures
 - macOS runtime asset builds now resolve and verify the bundled wheelhouse with
   the bundled Python runtime, preventing host-Python wheels from breaking first
   launch installs
