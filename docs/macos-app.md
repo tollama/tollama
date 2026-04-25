@@ -17,7 +17,7 @@ The app includes:
 - a first-launch bootstrap flow for a private Python runtime and bundled wheelhouse
 
 The app bundles the Tollama core plus the default starter-model runner extra
-(`runner_sundial`) so the built-in starter flow can forecast immediately after
+(`runner-sundial`) so the built-in starter flow can forecast immediately after
 pull. Other heavy runner extras and model checkpoints remain on-demand.
 
 ## First launch behavior
@@ -76,7 +76,7 @@ Optional integrity and release-signing inputs:
 
 ```bash
 export TOLLAMA_PYTHON_STANDALONE_SHA256="..."
-export TOLLAMA_MACOS_BUNDLED_EXTRAS="preprocess,runner_sundial"
+export TOLLAMA_MACOS_BUNDLED_EXTRAS="preprocess,runner-sundial"
 export MACOS_SIGNING_IDENTITY="Developer ID Application: Example, Inc. (TEAMID)"
 export MACOS_INSTALLER_SIGNING_IDENTITY="Developer ID Installer: Example, Inc. (TEAMID)"
 export APPLE_ID="release-bot@example.com"
@@ -87,6 +87,9 @@ export APPLE_TEAM_ID="TEAMID"
 When overriding `TOLLAMA_STARTER_MODEL`, keep `TOLLAMA_MACOS_BUNDLED_EXTRAS`
 in sync with that model's runner family if you want the starter flow to stay
 forecast-ready in the bundled app.
+The asset builder accepts underscore extra names but writes the runtime manifest
+with pip's canonical hyphen spelling and verifies the bundled wheelhouse using
+the same Python runtime that ships in the app.
 
 `eval` is no longer bundled by default; add it explicitly only if your release
 artifact needs `tollama-eval` inside the app-local runtime.

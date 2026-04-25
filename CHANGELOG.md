@@ -15,7 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   child runtimes from drifting away from the parent app version
 - macOS app runtime bootstrap now passes its bundled wheelhouse into family
   runtime installation, and the default app bundle includes the starter-model
-  `runner_sundial` extra so `sundial-base-128m` forecasts work out of the box;
+  `runner-sundial` extra so `sundial-base-128m` forecasts work out of the box;
   the macOS packaging default no longer forces the optional `eval` extra
 - Synced documentation with the current registry and runner surface, including
   Lag-Llama, PatchTST, TiDE, N-HiTS, N-BEATSx, Timer, TimeMixer, and ForecastPFN
@@ -38,6 +38,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - macOS app runtime bootstrap now verifies that `tollama.daemon.main` is
   importable before reusing a cached venv, and failed install commands no longer
   write a successful runtime marker
+- macOS runtime asset builds now resolve and verify the bundled wheelhouse with
+  the bundled Python runtime, preventing host-Python wheels from breaking first
+  launch installs
 - `GET /v1/models` now includes public registry `source`, `metadata`,
   `capabilities`, and license notice fields for native clients
 

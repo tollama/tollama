@@ -9,8 +9,8 @@ admin-style deployment, the same app bundle can also be wrapped as an installabl
 PKG.
 
 The app bootstraps a private Python runtime on first launch, starts `tollamad`
-as a child process, and renders the bundled `/dashboard` UI inside a native
-`WKWebView` shell.
+as a child process, and exposes native SwiftUI tabs for model management, CSV
+preview, forecasting, and logs.
 
 ## Layout
 
@@ -18,7 +18,7 @@ as a child process, and renders the bundled `/dashboard` UI inside a native
 - `build_pkg.sh`: builds an installable macOS PKG that installs `Tollama.app` into `/Applications`
 - `build_release_artifacts.sh`: builds both DMG and PKG from one app-bundle build
 - `prepare_runtime_assets.sh`: prepares the bundled Python runtime archive and wheelhouse
-- `TollamaApp/`: SwiftUI + `WKWebView` thin native shell sources
+- `TollamaApp/`: SwiftUI native app shell sources
 
 ## Required Build Inputs
 
@@ -37,13 +37,16 @@ export TOLLAMA_PYTHON_STANDALONE_SHA256="..."
 Optional bundle contents override for local/test builds:
 
 ```bash
-export TOLLAMA_MACOS_BUNDLED_EXTRAS="preprocess,runner_sundial"
+export TOLLAMA_MACOS_BUNDLED_EXTRAS="preprocess,runner-sundial"
 ```
 
 By default the build also bundles the current starter-model runner extra so the
 starter flow is forecast-ready inside `Tollama.app`.
 Add `eval` explicitly only when you also need `tollama-eval` available inside
 the bundled app runtime.
+The asset builder normalizes underscore extras to pip's canonical hyphen form
+and verifies the wheelhouse with the same bundled Python runtime that the app
+uses at first launch.
 
 ## Signing / Notarization Inputs
 

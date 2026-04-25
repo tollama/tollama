@@ -73,7 +73,7 @@ enum AppConfig {
     }
 
     static var bundledInstallSpec: String {
-        runtimeManifest?.installSpec ?? "tollama[preprocess,eval]==\(bundleVersion)"
+        runtimeManifest?.installSpec ?? "tollama[preprocess,runner-sundial]==\(bundleVersion)"
     }
 
     static var appSupportRoot: URL {
