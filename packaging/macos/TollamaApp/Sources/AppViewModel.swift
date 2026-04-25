@@ -8,11 +8,12 @@ private struct ListeningProcess {
 
 private struct RuntimePreparationStatus {
     let installSpecMatches: Bool
+    let packageImportReady: Bool
     let runtimeReady: Bool
     let versionMatches: Bool
 
     var requiresRepair: Bool {
-        !(versionMatches && installSpecMatches && runtimeReady)
+        !(versionMatches && installSpecMatches && runtimeReady && packageImportReady)
     }
 }
 
@@ -256,7 +257,7 @@ final class AppViewModel: ObservableObject {
         try fileManager.createDirectoryIfNeeded(at: AppConfig.runtimePythonRoot)
 
         try await runDetached {
-            _ = try CommandRunner.run(
+            try CommandRunner.runRequired(
                 executable: "/usr/bin/tar",
                 arguments: [
                     "-xzf",
@@ -266,7 +267,7 @@ final class AppViewModel: ObservableObject {
                 ]
             )
 
-            _ = try CommandRunner.run(
+            try CommandRunner.runRequired(
                 executable: AppConfig.runtimePythonExecutable.path,
                 arguments: [
                     "-m",
@@ -275,7 +276,7 @@ final class AppViewModel: ObservableObject {
                 ]
             )
 
-            _ = try CommandRunner.run(
+            try CommandRunner.runRequired(
                 executable: AppConfig.venvPythonExecutable.path,
                 arguments: [
                     "-m",
@@ -314,6 +315,8 @@ final class AppViewModel: ObservableObject {
 
         var environment = ProcessInfo.processInfo.environment
         environment["PYTHONUNBUFFERED"] = "1"
+        environment.removeValue(forKey: "PYTHONHOME")
+        environment.removeValue(forKey: "PYTHONPATH")
         environment["TOLLAMA_HOME"] = AppConfig.stateRoot.path
         environment["TOLLAMA_HOST"] = "\(AppConfig.daemonHost):\(AppConfig.daemonPort)"
         environment["TOLLAMA_LOG_LEVEL"] = "info"
@@ -456,11 +459,33 @@ final class AppViewModel: ObservableObject {
 
     private func currentRuntimePreparationStatus() -> RuntimePreparationStatus {
         let currentMarker = try? readRuntimeMarker()
+        let runtimeReady = FileManager.default.isExecutableFile(atPath: AppConfig.venvPythonExecutable.path)
         return RuntimePreparationStatus(
             installSpecMatches: currentMarker?.installSpec == AppConfig.bundledInstallSpec,
-            runtimeReady: FileManager.default.isExecutableFile(atPath: AppConfig.venvPythonExecutable.path),
+            packageImportReady: runtimeReady && tollamaPackageImportReady(),
+            runtimeReady: runtimeReady,
             versionMatches: currentMarker?.tollamaVersion == AppConfig.bundleVersion
         )
+    }
+
+    private func tollamaPackageImportReady() -> Bool {
+        var environment = ProcessInfo.processInfo.environment
+        environment.removeValue(forKey: "PYTHONHOME")
+        environment.removeValue(forKey: "PYTHONPATH")
+
+        do {
+            let result = try CommandRunner.run(
+                executable: AppConfig.venvPythonExecutable.path,
+                arguments: [
+                    "-c",
+                    "import tollama.daemon.main",
+                ],
+                environment: environment
+            )
+            return result.status == 0
+        } catch {
+            return false
+        }
     }
 
     private func listeningProcess() throws -> ListeningProcess? {

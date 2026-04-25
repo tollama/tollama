@@ -35,6 +35,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - macOS app detail pane now uses native SwiftUI `Models`, `Data`, `Forecast`,
   and `Logs` tabs instead of the embedded WebKit dashboard, while keeping the
   existing daemon lifecycle/sidebar actions
+- macOS app runtime bootstrap now verifies that `tollama.daemon.main` is
+  importable before reusing a cached venv, and failed install commands no longer
+  write a successful runtime marker
 - `GET /v1/models` now includes public registry `source`, `metadata`,
   `capabilities`, and license notice fields for native clients
 

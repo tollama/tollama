@@ -69,6 +69,31 @@ enum CommandRunner {
             stderr: String(decoding: stderrData, as: UTF8.self)
         )
     }
+
+    @discardableResult
+    static func runRequired(
+        executable: String,
+        arguments: [String],
+        environment: [String: String]? = nil,
+        currentDirectory: URL? = nil
+    ) throws -> ShellResult {
+        let result = try run(
+            executable: executable,
+            arguments: arguments,
+            environment: environment,
+            currentDirectory: currentDirectory
+        )
+        guard result.status == 0 else {
+            let output = result.stderr.trimmingCharacters(in: .whitespacesAndNewlines)
+            let fallback = result.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
+            let detail = output.isEmpty ? fallback : output
+            let suffix = detail.isEmpty ? "" : ": \(detail)"
+            throw AppRuntimeError.commandFailure(
+                "\(executable) failed with status \(result.status)\(suffix)"
+            )
+        }
+        return result
+    }
 }
 
 extension FileManager {
