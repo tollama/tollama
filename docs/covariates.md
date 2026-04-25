@@ -164,7 +164,9 @@ TimesFM knobs live under `parameters.timesfm`:
 
 ### ForecastPFN (forecastpfn runner)
 
-- ForecastPFN is target-only in the current runner implementation.
+- ForecastPFN is target-only in the runner contract, but the built-in registry
+  entry is currently manifest-only and returns `MODEL_UNSUPPORTED` until an
+  installable upstream package or runner-consumable model snapshot is available.
 - `past_covariates`, `future_covariates`, and `static_covariates` are unsupported.
 - In `best_effort`, unsupported covariates are ignored and surfaced as warnings.
 - In `strict`, covariate usage is rejected with HTTP 400.

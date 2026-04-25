@@ -26,7 +26,7 @@ model browser and forecast controls.
 | `nbeatsx` | `nbeatsx` | `tollama/nbeatsx-runner` | Past + Future + Static |
 | `timer-base` | `timer` | `thuml/Timer` | Target only |
 | `timemixer-base` | `timemixer` | `tollama/timemixer-runner` (local source manifest) | Target only |
-| `forecastpfn` | `forecastpfn` | `tollama/forecastpfn-runner` (local source manifest) | Target only |
+| `forecastpfn` | `forecastpfn` | `tollama/forecastpfn-runner` (local source manifest) | Target only; manifest-only |
 
 ## Chronos2 Forecasting
 
@@ -583,25 +583,26 @@ tollama run timemixer-base --input examples/request.json --no-stream
 
 ## ForecastPFN Forecasting
 
-ForecastPFN is integrated for inference via the dedicated `forecastpfn` runner family.
+ForecastPFN is registered through the dedicated `forecastpfn` runner family, but the
+default registry entry is currently manifest-only.
 
 - model name: `forecastpfn`
 - runner family: `forecastpfn`
 - install extra: `runner_forecastpfn`
 - pull behavior: registry pull is manifest-only (local source), so `tollama pull forecastpfn` does not require Hugging Face auth/snapshot download
 - current runner behavior:
-  - returns `DEPENDENCY_MISSING` when optional dependencies are absent
-  - runs the current target-only adapter path
+  - returns `MODEL_UNSUPPORTED` for the built-in `forecastpfn` registry entry until an installable upstream ForecastPFN package or runner-consumable model snapshot is available
+  - returns `DEPENDENCY_MISSING` instead of a generic forecast failure if a custom ForecastPFN source path cannot import the Python module
   - truncates long histories to the declared `max_context`
-  - returns canonical mean forecasts; quantiles are currently omitted
+  - target-only canonical mean forecast shaping is present for future runner-compatible sources; quantiles are currently omitted
 
 ```bash
-# install ForecastPFN runner dependencies
+# install ForecastPFN runner extra; no upstream ForecastPFN package is installed today
 python -m pip install -e ".[dev,runner_forecastpfn]"
 
-# pull model snapshot
+# pull manifest-only registry entry
 tollama pull forecastpfn
 
-# run forecast
+# forecast currently returns MODEL_UNSUPPORTED for the built-in registry entry
 tollama run forecastpfn --input examples/request.json --no-stream
 ```

@@ -329,8 +329,10 @@ tollama/
   - `nhits`, `nbeatsx`: canonical forecasting paths with numeric past/future/static covariate
     support plus family-specific quantile fallback
   - `tide`: target-only deterministic mean forecasts with best-effort quantile extraction
-  - `timer`, `timemixer`, `forecastpfn`: target-only canonical forecasting paths, mean forecasts
-    first, quantiles omitted in the current adapters
+  - `timer`: target-only canonical forecasting path, mean forecasts first, quantiles omitted
+    in the current adapter
+  - `timemixer`, `forecastpfn`: manifest-only default registry entries that return
+    `MODEL_UNSUPPORTED` until runner-consumable snapshots or installable upstream packages are wired
 
 ### Planned work / TODO
 - Add cache policy controls (LRU, max loaded models, memory thresholds).

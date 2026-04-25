@@ -38,6 +38,10 @@ _FORECASTPFN_MODELS: dict[str, dict[str, Any]] = {
     },
 }
 
+_MANIFEST_ONLY_REPO_IDS = {
+    "tollama/forecastpfn-runner",
+}
+
 
 class ForecastPFNAdapter:
     """Inference adapter for ForecastPFN models."""
@@ -54,7 +58,7 @@ class ForecastPFNAdapter:
     ) -> None:
         """Pre-load a ForecastPFN model into memory."""
         config = _resolve_runtime_config(model_name, model_source, model_metadata)
-        if _is_manifest_only_source(model_source):
+        if _is_manifest_only_runtime(config, model_source):
             raise UnsupportedModelError(_MANIFEST_ONLY_ERROR)
 
         if model_name in self._loaded_models:
@@ -89,7 +93,7 @@ class ForecastPFNAdapter:
         """Run ForecastPFN inference and return canonical forecast response."""
         model_name = request.model
         config = _resolve_runtime_config(model_name, model_source, model_metadata)
-        if _is_manifest_only_source(model_source):
+        if _is_manifest_only_runtime(config, model_source):
             raise UnsupportedModelError(_MANIFEST_ONLY_ERROR)
 
         try:
@@ -121,8 +125,7 @@ class ForecastPFNAdapter:
             try:
                 loaded = self._loaded_models.get(model_name, {})
                 if "model" not in loaded:
-                    from ForecastPFN import ForecastPFN as ForecastPFNModel
-
+                    ForecastPFNModel = _import_forecastpfn_model()
                     model = ForecastPFNModel()
                     if model_name not in self._loaded_models:
                         self._loaded_models[model_name] = {"config": config, "repo_id": repo_id}
@@ -141,6 +144,8 @@ class ForecastPFNAdapter:
                     predicted = output[0][: request.horizon].tolist()
                 else:
                     predicted = list(output)[: request.horizon]
+            except DependencyMissingError:
+                raise
             except Exception as exc:
                 raise ValueError(
                     f"ForecastPFN inference failed for series {series.id!r}: {exc}"
@@ -189,3 +194,25 @@ def _is_manifest_only_source(model_source: dict[str, Any] | None) -> bool:
     if not isinstance(model_source, dict):
         return False
     return model_source.get("type") == "local"
+
+
+def _is_manifest_only_runtime(
+    config: dict[str, Any],
+    model_source: dict[str, Any] | None,
+) -> bool:
+    if _is_manifest_only_source(model_source):
+        return True
+    return config.get("repo_id") in _MANIFEST_ONLY_REPO_IDS
+
+
+def _import_forecastpfn_model() -> Any:
+    try:
+        from ForecastPFN import ForecastPFN as ForecastPFNModel
+    except ImportError as exc:
+        raise DependencyMissingError(
+            "ForecastPFN Python module is not installed or importable. "
+            "The built-in forecastpfn registry entry is manifest-only until an "
+            "installable upstream ForecastPFN package or runner-consumable model "
+            "snapshot is available."
+        ) from exc
+    return ForecastPFNModel

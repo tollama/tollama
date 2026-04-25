@@ -55,8 +55,10 @@ Additional docs:
 
 Sundial and TiDE are target-only in the current runners; do not include covariates or static features in those requests.
 Toto supports target + past numeric covariates; known-future/static/categorical covariates are unsupported.
-Timer, TimeMixer, and ForecastPFN are currently target-only runner integrations and return
-canonical mean forecasts without quantiles.
+Timer is currently target-only and returns canonical mean forecasts without quantiles.
+TimeMixer and ForecastPFN are manifest-only default registry entries; forecast calls return
+`MODEL_UNSUPPORTED` until runner-consumable model snapshots or installable upstream packages
+are wired.
 
 > [!IMPORTANT]
 > `patchtst` is a **Phase-2 baseline integration**: it is discoverable/pullable and now executes canonical target-only forecasts via the dedicated runner family. Quantiles are returned when the backend exposes them; otherwise the runner returns mean-only forecasts with a warning. If dependencies are missing, the runner returns `DEPENDENCY_MISSING` with the install command `python -m pip install -e ".[dev,runner_patchtst]"`.
@@ -145,7 +147,7 @@ Optional extras:
 | `runner_nbeatsx` | N-BEATSx runner dependencies | `neuralforecast`, `pytorch-lightning`, `torch` |
 | `runner_timer` | Timer runner dependencies | `transformers`, `torch`, `numpy`, `pandas`, `huggingface_hub` |
 | `runner_timemixer` | TimeMixer runner dependencies | `transformers`, `torch`, `numpy`, `pandas`, `huggingface_hub` |
-| `runner_forecastpfn` | ForecastPFN runner dependencies | `ForecastPFN`, `torch`, `numpy` |
+| `runner_forecastpfn` | ForecastPFN runner dependencies | None currently; the default registry entry is manifest-only until an installable upstream package or runner-consumable snapshot is available |
 
 ## One-Time Environment Setup (Default: Per-Family Runtime Isolation)
 
@@ -512,8 +514,7 @@ tollama run tide --input examples/request.json --no-stream
 tollama run nhits --input examples/request.json --no-stream
 tollama run nbeatsx --input examples/request.json --no-stream
 tollama run timer-base --input examples/request.json --no-stream
-tollama run timemixer-base --input examples/request.json --no-stream
-tollama run forecastpfn --input examples/request.json --no-stream
+# TimeMixer and ForecastPFN are manifest-only today; forecast calls return MODEL_UNSUPPORTED.
 ```
 
 ## Real-Data E2E Matrix (Kaggle + Open Data)
