@@ -18,8 +18,10 @@ struct ForecastTab: View {
             form
             Divider()
             resultPane
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .padding(24)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .task {
             if workspace.models.isEmpty {
                 await workspace.refreshModels(client: client)
@@ -133,7 +135,10 @@ struct ForecastTab: View {
                     ForecastChart(history: workspace.historyPoints, forecast: forecast)
                     ForecastTable(forecast: forecast)
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.bottom, 24)
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
             VStack(alignment: .leading, spacing: 10) {
                 Text("No forecast yet")

@@ -19,6 +19,7 @@ struct ContentView: View {
             Group {
                 if model.dashboardReady {
                     NativeWorkspaceTabs(model: model)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
                     VStack(alignment: .leading, spacing: 16) {
                         Text(model.statusTitle)
@@ -139,5 +140,6 @@ struct NativeWorkspaceTabs: View {
                 .tabItem { Text("Logs") }
                 .tag(WorkspaceTab.logs)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }

@@ -34,9 +34,11 @@ struct ModelsTab: View {
                     }
                 }
                 .listStyle(.inset)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
         .padding(24)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .task {
             if workspace.models.isEmpty {
                 await workspace.refreshModels(client: client)

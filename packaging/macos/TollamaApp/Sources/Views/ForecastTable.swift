@@ -28,7 +28,7 @@ struct ForecastTable: View {
                 Text(row.q90.map(format) ?? "—")
             }
         }
-        .frame(minHeight: 220)
+        .frame(height: 240)
     }
 
     private func format(_ value: Double) -> String {

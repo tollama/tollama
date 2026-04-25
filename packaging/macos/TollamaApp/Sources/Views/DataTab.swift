@@ -34,16 +34,18 @@ struct DataTab: View {
                         }
                     }
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
-            .frame(minWidth: 360)
+            .frame(minWidth: 320, idealWidth: 380, maxWidth: 460, maxHeight: .infinity)
             .padding(24)
 
             ScrollView {
                 previewPane
                     .padding(24)
             }
-            .frame(minWidth: 520)
+            .frame(minWidth: 480, maxWidth: .infinity, maxHeight: .infinity)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     @ViewBuilder
@@ -154,6 +156,7 @@ struct DataTab: View {
                     }
                 }
                 .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
     }

@@ -4,10 +4,9 @@ struct LogsTab: View {
     @ObservedObject var model: AppViewModel
 
     var body: some View {
-        ScrollView {
-            LogsTailView(logTail: model.logTail, minHeight: 520)
-                .padding(24)
-        }
+        LogsTailView(logTail: model.logTail, minHeight: 520)
+            .padding(24)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 }
 

@@ -41,7 +41,7 @@ struct ForecastChart: View {
         }
         .chartXAxisLabel("Step")
         .chartYAxisLabel("Value")
-        .frame(minHeight: 320)
+        .frame(height: 320)
     }
 
     private func forecastX(_ step: Int) -> Int {
