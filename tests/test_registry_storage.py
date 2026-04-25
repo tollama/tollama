@@ -55,6 +55,54 @@ def test_load_registry_falls_back_to_packaged_copy_when_repo_registry_is_unavail
     assert set(registry) == {"mock"}
 
 
+def test_load_registry_falls_back_to_editable_install_source(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    source_registry = tmp_path / "source" / "model-registry" / "registry.yaml"
+    source_registry.parent.mkdir(parents=True, exist_ok=True)
+    source_registry.write_text(
+        "\n".join(
+            [
+                "models:",
+                "  - name: mock",
+                "    family: mock",
+                "    source:",
+                "      type: local",
+                "      repo_id: tollama/mock-runner",
+                "      revision: main",
+                "    license:",
+                "      type: mit",
+                "      needs_acceptance: false",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    class _FakeDistribution:
+        def read_text(self, name: str) -> str | None:
+            if name != "direct_url.json":
+                return None
+            return json.dumps({"url": f"file://{source_registry.parents[1]}"})
+
+    monkeypatch.setattr(
+        registry_module,
+        "DEFAULT_REGISTRY_PATH",
+        tmp_path / "missing-repo-registry.yaml",
+    )
+    monkeypatch.setattr(
+        registry_module,
+        "PACKAGED_REGISTRY_PATH",
+        tmp_path / "missing-packaged-registry.yaml",
+    )
+    monkeypatch.setattr(registry_module, "distribution", lambda name: _FakeDistribution())
+
+    registry = registry_module.load_registry()
+
+    assert set(registry) == {"mock"}
+
+
 def test_packaged_registry_copy_matches_repo_registry() -> None:
     assert registry_module.PACKAGED_REGISTRY_PATH.read_text(
         encoding="utf-8"

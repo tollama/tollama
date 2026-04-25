@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import json
 import os
+from importlib.metadata import distribution
 from pathlib import Path
 
 import yaml
@@ -93,7 +95,34 @@ def resolve_default_registry_path() -> Path:
         if candidate.is_file():
             return candidate
 
+    editable_registry = _editable_registry_path()
+    if editable_registry is not None:
+        return editable_registry
+
     return DEFAULT_REGISTRY_PATH
+
+
+def _editable_registry_path() -> Path | None:
+    """Resolve registry.yaml from editable-install metadata when package data moved."""
+    try:
+        direct_url_text = distribution("tollama").read_text("direct_url.json")
+    except Exception:
+        return None
+    if not direct_url_text:
+        return None
+    try:
+        direct_url = json.loads(direct_url_text)
+    except json.JSONDecodeError:
+        return None
+
+    url = direct_url.get("url")
+    if not isinstance(url, str) or not url.startswith("file://"):
+        return None
+
+    candidate = Path(url[len("file://") :]) / "model-registry" / "registry.yaml"
+    if candidate.is_file():
+        return candidate
+    return None
 
 
 def load_registry(path: str | Path | None = None) -> dict[str, ModelSpec]:
