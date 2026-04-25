@@ -32,6 +32,29 @@ def test_load_series_inputs_from_csv_path_groups_by_series_id(tmp_path) -> None:
     assert [item.target for item in series] == [[1.0, 2.0], [3.0, 4.0]]
 
 
+def test_series_inputs_from_frame_detects_series_column_as_series_id() -> None:
+    frame = pd.DataFrame(
+        {
+            "timestamp": [
+                "2025-01-01T00:00:00",
+                "2025-01-01T01:00:00",
+                "2025-01-01T02:00:00",
+                "2025-01-01T00:00:00",
+                "2025-01-01T01:00:00",
+                "2025-01-01T02:00:00",
+            ],
+            "series": ["north", "north", "north", "south", "south", "south"],
+            "target": [1.0, 2.0, 3.0, 4.0, 5.0, 6.0],
+        }
+    )
+
+    series = series_inputs_from_frame(frame)
+
+    assert [item.id for item in series] == ["north", "south"]
+    assert [item.freq for item in series] == ["h", "h"]
+    assert [item.target for item in series] == [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]
+
+
 def test_load_series_inputs_from_data_url_rejects_remote_by_default() -> None:
     with pytest.raises(IngestError):
         load_series_inputs_from_data_url("https://example.com/history.csv")

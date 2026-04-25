@@ -39,7 +39,7 @@ enum CSVSniffer {
         "year",
         "fecha",
     ]
-    static let seriesIDCandidates = ["id", "series_id", "unique_id", "entity", "country"]
+    static let seriesIDCandidates = ["id", "series", "series_id", "unique_id", "entity", "country"]
     static let targetCandidates = [
         "target",
         "value",

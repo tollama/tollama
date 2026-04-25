@@ -27,7 +27,7 @@ TIMESTAMP_COLUMN_CANDIDATES = (
     "year",
     "fecha",
 )
-SERIES_ID_COLUMN_CANDIDATES = ("id", "series_id", "unique_id", "entity", "country")
+SERIES_ID_COLUMN_CANDIDATES = ("id", "series", "series_id", "unique_id", "entity", "country")
 TARGET_COLUMN_CANDIDATES = (
     "target",
     "value",

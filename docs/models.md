@@ -230,6 +230,10 @@ tollama pull <private-model>
 `runner_torch` includes optional Chronos and Granite TTM dependencies.
 Granite TTM currently accepts one input series per request; CSV/data-url ingest
 that yields multiple series is down-selected to the first series with a warning.
+The pinned Granite TTM revision uses a 512-point context window. Shorter input
+histories are left-padded with the earliest observed target and covariate values
+so app/demo forecasts can run; the response includes a warning with the padding
+count.
 
 ```bash
 # install optional torch runner dependencies

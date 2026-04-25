@@ -64,9 +64,18 @@ class _FakePandas:
         return parsed
 
     @staticmethod
-    def date_range(*, start: datetime, periods: int, freq: str) -> list[datetime]:
+    def date_range(
+        *,
+        start: datetime | None = None,
+        end: datetime | None = None,
+        periods: int,
+        freq: str,
+    ) -> list[datetime]:
         if freq != "D":
             raise ValueError("unsupported freq in fake pandas")
+        if end is not None:
+            return [end - timedelta(days=periods - offset - 1) for offset in range(periods)]
+        assert start is not None
         return [start + timedelta(days=offset) for offset in range(periods)]
 
 
@@ -170,6 +179,28 @@ def _build_request_with_covariates(*, horizon: int) -> ForecastRequest:
     return ForecastRequest.model_validate(request)
 
 
+def _build_short_request(*, horizon: int) -> ForecastRequest:
+    start = datetime(2025, 1, 1, tzinfo=UTC)
+    timestamps = [(start + timedelta(days=index)).date().isoformat() for index in range(12)]
+    target = [100.0 + float(index) for index in range(12)]
+    return ForecastRequest.model_validate(
+        {
+            "model": "granite-ttm-r2",
+            "horizon": horizon,
+            "quantiles": [],
+            "series": [
+                {
+                    "id": "s0",
+                    "freq": "D",
+                    "timestamps": timestamps,
+                    "target": target,
+                }
+            ],
+            "options": {"device": "cpu"},
+        },
+    )
+
+
 def _fake_dependencies() -> _GraniteDependencies:
     return _GraniteDependencies(
         torch=_FakeTorch(),
@@ -206,6 +237,43 @@ def test_granite_adapter_slices_to_horizon_and_sets_start_timestamp(monkeypatch)
     assert forecast.mean == [float(index) for index in range(12)]
     assert forecast.start_timestamp == "2025-05-01T00:00:00Z"
     assert forecast.quantiles is None
+
+
+def test_granite_adapter_pads_short_history_to_context_length(monkeypatch) -> None:
+    adapter = GraniteTTMAdapter()
+    monkeypatch.setattr(adapter, "_resolve_dependencies", _fake_dependencies)
+    _FakePreprocessor.last_train_payload = None
+    _FakePipeline.last_payload = None
+
+    response = adapter.forecast(
+        _build_short_request(horizon=6),
+        model_local_dir=None,
+        model_source={
+            "type": "huggingface",
+            "repo_id": "ibm-granite/granite-timeseries-ttm-r2",
+            "revision": "90-30-ft-l1-r2.1",
+        },
+        model_metadata={
+            "implementation": "granite_ttm",
+            "context_length": 90,
+            "prediction_length": 30,
+        },
+    )
+
+    assert response.forecasts[0].mean == [float(index) for index in range(6)]
+    assert response.usage is not None
+    assert response.usage["context_padding"] == 78
+    assert response.warnings == [
+        "Granite TTM padded series 's0' from 12 to context_length 90 "
+        "by repeating earliest observed values",
+    ]
+    assert _FakePreprocessor.last_train_payload is not None
+    assert len(_FakePreprocessor.last_train_payload._rows) == 90
+    assert _FakePipeline.last_payload is not None
+    assert len(_FakePipeline.last_payload._rows) == 90
+    assert _FakePipeline.last_payload._rows[0]["timestamp"] == datetime(2024, 10, 15, tzinfo=UTC)
+    assert _FakePipeline.last_payload._rows[0]["target"] == 100.0
+    assert _FakePipeline.last_payload._rows[-1]["target"] == 111.0
 
 
 def test_granite_adapter_errors_when_horizon_exceeds_prediction_length(monkeypatch) -> None:

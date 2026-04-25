@@ -162,16 +162,12 @@ export TOLLAMA_API_KEY="your-key"
 [{"id":"s1","freq":"D","timestamps":["2025-01-01","2025-01-02"],"target":[10,11]}]
 ```
 
-### 4.2 Common error: context length
+### 4.2 Short histories
 
-If you see an error like:
-
-- `input series length is shorter than model context_length (...)`
-
-then:
-
-- provide a longer `target` history
-- or switch to a demo-friendly model such as `mock`
+Some model families use a fixed context window. Granite TTM pads shorter
+histories with the earliest observed values and returns a warning; for best
+quality, provide as much real history as the selected model's context window
+allows.
 
 ## 5) Troubleshooting
 

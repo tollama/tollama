@@ -328,10 +328,12 @@ warning emission, and macro aggregation across series with defined values.
 When `timestamp_column` or `target_column` is omitted, ingest auto-detects common
 time-series column names case-insensitively. Timestamp aliases include `timestamp`,
 `ds`, `time`, `date`, `datetime`, `date_time`, `observation_date`,
-`utc_timestamp`, `year`, and `fecha`. Target aliases include `target`, `value`,
-`y`, `OT`, `demand`, `users`, `number of flights`, `total electricity`, `GDP`,
-`close`, `actual`, `pm2.5`, `pm10`, `no2`, `so2`, and `co`; OPSD-style
-`*_load_actual_entsoe_transparency` columns are also detected.
+`utc_timestamp`, `year`, and `fecha`. Series identifier aliases include `id`,
+`series`, `series_id`, `unique_id`, `entity`, and `country`. Target aliases
+include `target`, `value`, `y`, `OT`, `demand`, `users`, `number of flights`,
+`total electricity`, `GDP`, `close`, `actual`, `pm2.5`, `pm10`, `no2`, `so2`,
+and `co`; OPSD-style `*_load_actual_entsoe_transparency` columns are also
+detected.
 Rows where the resolved target value is null are omitted during ingest; files
 whose resolved target column is entirely null are rejected.
 

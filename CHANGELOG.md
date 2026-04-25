@@ -53,8 +53,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `GET /v1/models` now includes public registry `source`, `metadata`,
   `capabilities`, and license notice fields for native clients
 - CSV ingest and the macOS CSV preview sniffer now auto-detect additional common
-  timestamp and target aliases, including `date`, `Date`, `datetime`, `OT`,
-  `demand`, `users`, air-quality targets, and OPSD load-actual columns
+  timestamp, series identifier, and target aliases, including `date`, `Date`,
+  `datetime`, `series`, `OT`, `demand`, `users`, air-quality targets, and OPSD
+  load-actual columns
 - CSV ingest now omits rows with null target values after resolving the target
   column, while still rejecting entirely null targets
 - macOS per-family runtime bootstrap now creates symlinked virtualenv
@@ -76,6 +77,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   runtime import path used by Darts' `TiDEModel`
 - Timer runner now restores legacy Transformers cache APIs expected by THUML's
   remote model code, fixing inference with newer `transformers` releases
+- Granite TTM now left-pads histories shorter than its 512-point context window
+  instead of rejecting app/demo forecasts with a context-length error
 
 ### Added
 

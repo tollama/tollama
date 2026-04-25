@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -116,15 +116,6 @@ class GraniteTTMAdapter:
                 "Requested horizon exceeds model prediction_length. Pull a different TTM revision.",
             )
 
-        if (
-            len(series.timestamps) < loaded.context_length
-            or len(series.target) < loaded.context_length
-        ):
-            raise AdapterInputError(
-                "input series length is shorter than model context_length "
-                f"({loaded.context_length})",
-            )
-
         timestamps = dependencies.pandas.to_datetime(series.timestamps, utc=True, errors="raise")
         past_covariates = series.past_covariates or {}
         future_covariates = series.future_covariates or {}
@@ -150,6 +141,22 @@ class GraniteTTMAdapter:
             }
             for index in range(len(series.timestamps))
         ]
+        original_history_length = len(context_rows)
+        context_padding = max(0, loaded.context_length - original_history_length)
+        warnings: list[str] = []
+        if context_padding > 0:
+            context_rows = _build_context_padding_rows(
+                series=series,
+                pandas=dependencies.pandas,
+                timestamps=timestamps,
+                past_covariates=past_covariates,
+                pad_length=context_padding,
+            ) + context_rows
+            warnings.append(
+                f"Granite TTM padded series {series.id!r} from {original_history_length} "
+                f"to context_length {loaded.context_length} by repeating earliest observed values",
+            )
+
         context_df = dependencies.pandas.DataFrame(context_rows)
         context_tail = context_df.tail(loaded.context_length).copy()
 
@@ -223,9 +230,12 @@ class GraniteTTMAdapter:
                 "implementation": "granite_ttm",
                 "series_count": 1,
                 "horizon": request.horizon,
+                "context_length": loaded.context_length,
+                "context_padding": context_padding,
                 "control_columns": known_future_columns,
                 "conditional_columns": past_only_columns,
             },
+            warnings=warnings or None,
         )
 
     def _resolve_dependencies(self) -> _GraniteDependencies:
@@ -444,6 +454,82 @@ def _build_future_time_series(
                 row[name] = 0.0
         rows.append(row)
     return pandas.DataFrame(rows)
+
+
+def _build_context_padding_rows(
+    *,
+    series: Any,
+    pandas: Any,
+    timestamps: Any,
+    past_covariates: dict[str, Any],
+    pad_length: int,
+) -> list[dict[str, Any]]:
+    padding_timestamps = _padding_timestamps(
+        pandas=pandas,
+        first_timestamp=timestamps[0],
+        freq=series.freq,
+        pad_length=pad_length,
+    )
+    first_target = float(series.target[0])
+    first_covariates = {
+        name: _to_numeric_covariate(values[0], covariate=name)
+        for name, values in sorted(past_covariates.items())
+    }
+    return [
+        {
+            "id": series.id,
+            "timestamp": timestamp,
+            "target": first_target,
+            **first_covariates,
+        }
+        for timestamp in padding_timestamps
+    ]
+
+
+def _padding_timestamps(
+    *,
+    pandas: Any,
+    first_timestamp: Any,
+    freq: str,
+    pad_length: int,
+) -> list[Any]:
+    try:
+        generated = pandas.date_range(end=first_timestamp, periods=pad_length + 1, freq=freq)
+        return list(generated[:-1])
+    except Exception:  # noqa: BLE001
+        step = _timedelta_from_frequency(freq)
+        if step is None:
+            raise AdapterInputError(
+                f"unable to pad Granite TTM context for frequency {freq!r}; "
+                "provide at least context_length history points",
+            ) from None
+        return [first_timestamp - (step * offset) for offset in range(pad_length, 0, -1)]
+
+
+def _timedelta_from_frequency(freq: str) -> timedelta | None:
+    normalized = freq.strip()
+    if not normalized:
+        return None
+
+    digits = ""
+    unit = ""
+    for character in normalized:
+        if character.isdigit() and not unit:
+            digits += character
+            continue
+        unit += character
+
+    multiple = int(digits) if digits else 1
+    token = unit.lower()
+    if token in {"d", "day", "days"}:
+        return timedelta(days=multiple)
+    if token in {"h", "hour", "hours"}:
+        return timedelta(hours=multiple)
+    if token in {"min", "t", "minute", "minutes"}:
+        return timedelta(minutes=multiple)
+    if token in {"s", "sec", "second", "seconds"}:
+        return timedelta(seconds=multiple)
+    return None
 
 
 def _to_numeric_covariate(value: Any, *, covariate: str) -> float:
