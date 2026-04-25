@@ -12,8 +12,8 @@ installable PKG that copies `Tollama.app` into `/Applications`.
 
 The app includes:
 
-- a thin native shell built with SwiftUI + `WKWebView`
-- the bundled dashboard UI loaded from `http://127.0.0.1:11435/dashboard`
+- a native SwiftUI forecast workspace with `Models`, `Data`, `Forecast`, and
+  `Logs` tabs
 - a first-launch bootstrap flow for a private Python runtime and bundled wheelhouse
 
 The app bundles the Tollama core plus the default starter-model runner extra
@@ -30,9 +30,24 @@ On the first launch, the app:
    - `TOLLAMA_HOME=~/Library/Application Support/Tollama/state`
    - `TOLLAMA_HOST=127.0.0.1:11435`
    - `TOLLAMA_RUNTIME_WHEELHOUSE=<bundled wheelhouse path>` for wheelhouse-backed family-runtime bootstrap
-4. opens the embedded dashboard
+4. opens the native forecast workspace
 
 Subsequent launches reuse the prepared runtime and existing app-local state.
+
+## Native forecast workspace
+
+The detail pane exposes four native tabs:
+
+- `Models`: lists the curated registry-backed TSFM inventory, grouped by
+  family, with Hugging Face source metadata, license notices, install/remove
+  actions, and streamed `/api/pull` progress.
+- `Data`: chooses a local folder, scans up to 500 visible `.csv` files, previews
+  the selected file, and shows inferred timestamp/target/series/frequency
+  columns before forecasting.
+- `Forecast`: runs one selected CSV against one installed model via
+  `/api/forecast/upload`, clamps the horizon to registry metadata when
+  available, and renders native Swift Charts output plus a forecast table.
+- `Logs`: shows the daemon log tail in the main pane.
 
 ## Built-in app actions
 

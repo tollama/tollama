@@ -1250,7 +1250,10 @@ def create_app(*, runner_manager: RunnerManager | None = None) -> FastAPI:
         response_model=dict[str, list[dict[str, Any]]],
         tags=["models"],
         summary="List available and installed models",
-        description="Return registry model inventory and currently installed local models.",
+        description=(
+            "Return registry model inventory and currently installed local models, "
+            "including public source, metadata, capability, and license details."
+        ),
     )
     def models() -> dict[str, list[dict[str, Any]]]:
         installed_manifests = list_installed()
@@ -1267,6 +1270,8 @@ def create_app(*, runner_manager: RunnerManager | None = None) -> FastAPI:
                 "type": spec.license.type,
                 "needs_acceptance": spec.license.needs_acceptance,
             }
+            if spec.license.notice is not None:
+                license_info["notice"] = spec.license.notice
             if manifest is not None:
                 manifest_license = manifest.get("license")
                 if isinstance(manifest_license, dict) and "accepted" in manifest_license:
@@ -1275,24 +1280,21 @@ def create_app(*, runner_manager: RunnerManager | None = None) -> FastAPI:
                 license_info["accepted"] = not spec.license.needs_acceptance
 
             available.append(
-                {
-                    "name": spec.name,
-                    "family": spec.family,
-                    "installed": spec.name in installed_by_name,
-                    "license": license_info,
-                },
+                _v1_model_entry_from_spec(
+                    spec,
+                    installed=manifest is not None,
+                    license_info=license_info,
+                ),
             )
 
         installed = []
         for manifest in installed_manifests:
             manifest_license = manifest.get("license")
             installed.append(
-                {
-                    "name": manifest.get("name"),
-                    "family": manifest.get("family"),
-                    "installed": True,
-                    "license": _public_license_view(manifest_license),
-                },
+                _v1_model_entry_from_manifest(
+                    manifest,
+                    license_info=_public_license_view(manifest_license),
+                ),
             )
         return {"available": available, "installed": installed}
 
@@ -4345,6 +4347,59 @@ def _public_license_view(license_payload: Any) -> dict[str, Any]:
     if "notice" in license_payload:
         normalized["notice"] = license_payload["notice"]
     return normalized
+
+
+def _v1_model_entry_from_spec(
+    spec: ModelSpec,
+    *,
+    installed: bool,
+    license_info: dict[str, Any],
+) -> dict[str, Any]:
+    normalized_license = dict(license_info)
+    if spec.license.notice is not None and "notice" not in normalized_license:
+        normalized_license["notice"] = spec.license.notice
+
+    return {
+        "name": spec.name,
+        "family": spec.family,
+        "installed": installed,
+        "license": normalized_license,
+        "source": spec.source.model_dump(mode="json"),
+        "metadata": dict(spec.metadata or {}),
+        "capabilities": (
+            spec.capabilities.model_dump(mode="json") if spec.capabilities is not None else {}
+        ),
+    }
+
+
+def _v1_model_entry_from_manifest(
+    manifest: dict[str, Any],
+    *,
+    license_info: dict[str, Any],
+) -> dict[str, Any]:
+    model_name = _optional_nonempty_str(manifest.get("name"))
+    if model_name is not None:
+        try:
+            spec = get_model_spec(model_name)
+        except (KeyError, OSError, ValueError):
+            spec = None
+        if spec is not None:
+            return _v1_model_entry_from_spec(
+                spec,
+                installed=True,
+                license_info=license_info,
+            )
+
+    capabilities = _manifest_capabilities(manifest)
+    return {
+        "name": manifest.get("name"),
+        "family": manifest.get("family"),
+        "installed": True,
+        "license": license_info,
+        "source": _manifest_source(manifest) or {},
+        "metadata": _manifest_metadata(manifest) or {},
+        "capabilities": capabilities.model_dump(mode="json") if capabilities is not None else {},
+    }
 
 
 def _merge_warnings(

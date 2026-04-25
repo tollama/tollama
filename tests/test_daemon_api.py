@@ -1565,6 +1565,7 @@ def test_models_endpoint_returns_available_and_installed(monkeypatch, tmp_path) 
 
     assert response.status_code == 200
     body = response.json()
+    assert len(body["available"]) == 15
     mock_available = next(spec for spec in body["available"] if spec["name"] == "mock")
     assert mock_available["family"] == "mock"
     assert mock_available["installed"] is True
@@ -1573,10 +1574,29 @@ def test_models_endpoint_returns_available_and_installed(monkeypatch, tmp_path) 
         "needs_acceptance": False,
         "accepted": True,
     }
+    assert mock_available["source"] == {
+        "type": "local",
+        "repo_id": "tollama/mock-runner",
+        "revision": "main",
+    }
+    assert mock_available["metadata"] == {}
+    assert mock_available["capabilities"] == {
+        "past_covariates_numeric": False,
+        "past_covariates_categorical": False,
+        "future_covariates_numeric": False,
+        "future_covariates_categorical": False,
+        "static_covariates": False,
+    }
 
     chronos = next(spec for spec in body["available"] if spec["name"] == "chronos2")
     assert chronos["installed"] is False
     assert chronos["license"]["needs_acceptance"] is False
+    assert chronos["source"]["repo_id"] == "amazon/chronos-2"
+
+    moirai = next(spec for spec in body["available"] if spec["name"] == "moirai-2.0-R-small")
+    assert moirai["license"]["needs_acceptance"] is True
+    assert "Non-commercial" in moirai["license"]["notice"]
+    assert moirai["metadata"]["implementation"] == "moirai_2p0"
 
     assert body["installed"] == [
         {
@@ -1587,6 +1607,19 @@ def test_models_endpoint_returns_available_and_installed(monkeypatch, tmp_path) 
                 "type": "mit",
                 "needs_acceptance": False,
                 "accepted": True,
+            },
+            "source": {
+                "type": "local",
+                "repo_id": "tollama/mock-runner",
+                "revision": "main",
+            },
+            "metadata": {},
+            "capabilities": {
+                "past_covariates_numeric": False,
+                "past_covariates_categorical": False,
+                "future_covariates_numeric": False,
+                "future_covariates_categorical": False,
+                "static_covariates": False,
             },
         }
     ]

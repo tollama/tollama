@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ContentView: View {
     @ObservedObject var model: AppViewModel
+    @EnvironmentObject private var workspace: ForecastWorkspace
 
     var body: some View {
         NavigationSplitView {
@@ -17,7 +18,7 @@ struct ContentView: View {
         } detail: {
             Group {
                 if model.dashboardReady {
-                    DashboardWebView(url: model.dashboardURL, reloadID: model.webReloadID)
+                    NativeWorkspaceTabs(model: model)
                 } else {
                     VStack(alignment: .leading, spacing: 16) {
                         Text(model.statusTitle)
@@ -34,13 +35,23 @@ struct ContentView: View {
                 }
             }
         }
-        .alert(item: $model.banner) { banner in
+        .alert(item: activeBanner) { banner in
             Alert(
                 title: Text(banner.title),
                 message: Text(banner.detail),
                 dismissButton: .default(Text("OK"))
             )
         }
+    }
+
+    private var activeBanner: Binding<ActionBanner?> {
+        Binding(
+            get: { model.banner ?? workspace.banner },
+            set: { _ in
+                model.banner = nil
+                workspace.banner = nil
+            }
+        )
     }
 
     private var statusCard: some View {
@@ -102,20 +113,31 @@ struct ContentView: View {
     }
 
     private var logCard: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("Daemon Log Tail")
-                .font(.headline)
-            ScrollView {
-                Text(model.logTail)
-                    .font(.system(.footnote, design: .monospaced))
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .textSelection(.enabled)
-            }
-            .frame(minHeight: 220)
+        LogsTailView(logTail: model.logTail, minHeight: 220)
+    }
+}
+
+struct NativeWorkspaceTabs: View {
+    @ObservedObject var model: AppViewModel
+    @EnvironmentObject private var workspace: ForecastWorkspace
+
+    var body: some View {
+        TabView(selection: $workspace.selectedTab) {
+            ModelsTab(client: model.httpClient)
+                .tabItem { Text("Models") }
+                .tag(WorkspaceTab.models)
+
+            DataTab()
+                .tabItem { Text("Data") }
+                .tag(WorkspaceTab.data)
+
+            ForecastTab(client: model.httpClient)
+                .tabItem { Text("Forecast") }
+                .tag(WorkspaceTab.forecast)
+
+            LogsTab(model: model)
+                .tabItem { Text("Logs") }
+                .tag(WorkspaceTab.logs)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(16)
-        .background(.thinMaterial)
-        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
 }

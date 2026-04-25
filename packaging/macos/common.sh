@@ -69,13 +69,19 @@ build_app_bundle() {
 
   ditto "$ASSET_DIR" "$APP_BUNDLE/Contents/Resources/RuntimeAssets"
 
+  local swift_sources=()
+  while IFS= read -r -d '' source_path; do
+    swift_sources+=("$source_path")
+  done < <(find "$SWIFT_SOURCES_DIR" -name '*.swift' -print0 | sort -z)
+
   echo "Compiling SwiftUI app bundle..."
   xcrun swiftc \
     -target "$TARGET_ARCH-apple-macos13" \
     -module-cache-path "$MODULE_CACHE_DIR" \
     -parse-as-library \
-    "$SWIFT_SOURCES_DIR"/*.swift \
+    "${swift_sources[@]}" \
     -framework AppKit \
+    -framework Charts \
     -framework SwiftUI \
     -framework WebKit \
     -o "$APP_BUNDLE/Contents/MacOS/$APP_NAME"

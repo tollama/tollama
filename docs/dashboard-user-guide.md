@@ -1,4 +1,4 @@
-# Dashboard User Guide (Web GUI + TUI)
+# Dashboard User Guide (Web GUI + TUI + macOS App)
 
 This guide explains how to use Tollama's dashboard interfaces:
 
@@ -79,15 +79,26 @@ Shortcuts are ignored while typing in input/textarea/select fields.
 
 ### 2.6 macOS App Shell
 
-The GitHub Releases DMG bundles `Tollama.app`, which embeds the same dashboard
-inside a native macOS window.
+The GitHub Releases DMG bundles `Tollama.app`, which starts or attaches to a
+local daemon and presents a native SwiftUI forecast workspace.
 
 The app shell adds:
 
 - first-launch runtime bootstrap
 - child-process daemon lifecycle management
 - built-in actions for demo forecast, starter-model install, log access, repair, and reset
-- inline daemon log-tail visibility
+- native model browsing/install, local CSV folder preview, forecast charts, and
+  inline daemon log-tail visibility
+
+Native app tabs:
+
+- `Models`: curated registry-backed model list with install/remove actions and
+  streamed pull progress.
+- `Data`: local folder picker, visible `.csv` scan, selected-file preview, and
+  inferred schema badges.
+- `Forecast`: installed-model picker, horizon/quantile controls, native chart,
+  and forecast table.
+- `Logs`: daemon log tail.
 
 See `docs/macos-app.md` for the packaging and first-launch details.
 

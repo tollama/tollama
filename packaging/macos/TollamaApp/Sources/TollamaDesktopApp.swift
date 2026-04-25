@@ -4,10 +4,12 @@ import SwiftUI
 @main
 struct TollamaDesktopApp: App {
     @StateObject private var model = AppViewModel()
+    @StateObject private var workspace = ForecastWorkspace()
 
     var body: some Scene {
         WindowGroup {
             ContentView(model: model)
+                .environmentObject(workspace)
                 .frame(minWidth: 1280, minHeight: 800)
                 .task {
                     await model.bootstrap()

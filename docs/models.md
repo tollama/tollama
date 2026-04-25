@@ -4,6 +4,10 @@ This page is the canonical human-facing model and family guide. The
 machine-readable source of truth is `model-registry/registry.yaml`, and overview
 docs should link here instead of repeating model counts or long support tables.
 
+`GET /v1/models` exposes the curated registry inventory for clients, including
+public source, metadata, capability, and license fields used by the macOS native
+model browser and forecast controls.
+
 ## Registry-Backed Model Inventory
 
 | Model | Family | Source | Covariates |

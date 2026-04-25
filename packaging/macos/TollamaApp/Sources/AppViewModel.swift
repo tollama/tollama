@@ -28,6 +28,7 @@ final class AppViewModel: ObservableObject {
     @Published private(set) var webReloadID = UUID()
 
     let dashboardURL = AppConfig.dashboardURL
+    let httpClient = TollamaHTTPClient(baseURL: AppConfig.baseURL)
 
     private var daemonProcess: Process?
     private var didBootstrap = false

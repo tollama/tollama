@@ -9195,7 +9195,7 @@
     },
     "/v1/models": {
       "get": {
-        "description": "Return registry model inventory and currently installed local models.",
+        "description": "Return registry model inventory and currently installed local models, including public source, metadata, capability, and license details.",
         "operationId": "models_v1_models_get",
         "responses": {
           "200": {

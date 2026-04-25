@@ -98,7 +98,7 @@ Authorization: Bearer <api-key>
 | POST | `/api/pull` | Pull model snapshot (JSON or NDJSON stream) |
 | DELETE | `/api/delete` | Delete installed model |
 | GET | `/api/ps` | List loaded models |
-| GET | `/v1/models` | List available + installed models |
+| GET | `/v1/models` | List available + installed models with public source, metadata, capabilities, and license details |
 | POST | `/v1/models/pull` | Pull model (v1 route) |
 | DELETE | `/v1/models/{name}` | Delete model (v1 route) |
 

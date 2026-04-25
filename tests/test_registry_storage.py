@@ -43,7 +43,11 @@ def test_load_registry_falls_back_to_packaged_copy_when_repo_registry_is_unavail
         encoding="utf-8",
     )
 
-    monkeypatch.setattr(registry_module, "DEFAULT_REGISTRY_PATH", tmp_path / "missing-registry.yaml")
+    monkeypatch.setattr(
+        registry_module,
+        "DEFAULT_REGISTRY_PATH",
+        tmp_path / "missing-registry.yaml",
+    )
     monkeypatch.setattr(registry_module, "PACKAGED_REGISTRY_PATH", packaged_registry)
 
     registry = registry_module.load_registry()

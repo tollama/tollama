@@ -32,6 +32,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Added phased Python 3.11 quality gates for scoped mypy, blocking coverage at the initial 64% baseline, pre-commit, medium+ severity Bandit, pip-audit, and compiled dev-lock freshness
 - Extended daemon observability with additive `/health/live` and `/health/ready` probes and per-runner metrics derived from forecast timing/usage metadata
 - Centralized daemon/core/cli-owned `TOLLAMA_*` environment access under `src/tollama/core/env.py`
+- macOS app detail pane now uses native SwiftUI `Models`, `Data`, `Forecast`,
+  and `Logs` tabs instead of the embedded WebKit dashboard, while keeping the
+  existing daemon lifecycle/sidebar actions
+- `GET /v1/models` now includes public registry `source`, `metadata`,
+  `capabilities`, and license notice fields for native clients
 
 ### Added
 
