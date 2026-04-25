@@ -330,6 +330,29 @@ def test_registry_loads_required_model_specs() -> None:
     assert nbeatsx.capabilities.future_covariates_numeric is True
     assert nbeatsx.capabilities.static_covariates is True
 
+    timemixer = registry["timemixer-base"]
+    assert timemixer.family == "timemixer"
+    assert timemixer.source.type == "local"
+    assert timemixer.source.repo_id == "tollama/timemixer-runner"
+    assert timemixer.source.revision == "main"
+    assert timemixer.metadata == {
+        "implementation": "timemixer_base",
+        "max_context": 1536,
+        "max_horizon": 720,
+        "install_extra": "runner_timemixer",
+        "install_command": 'python -m pip install -e ".[dev,runner_timemixer]"',
+        "notes": (
+            "TimeMixer uses channel-mixing architecture for multiscale forecasting. "
+            "Pull is manifest-only (local source, no Hugging Face snapshot/auth required) "
+            "because THUML does not publish a dedicated TimeMixer Hugging Face model "
+            "snapshot consumed by this runner."
+        ),
+    }
+    assert timemixer.capabilities is not None
+    assert timemixer.capabilities.past_covariates_numeric is False
+    assert timemixer.capabilities.future_covariates_numeric is False
+    assert timemixer.capabilities.static_covariates is False
+
     forecastpfn = registry["forecastpfn"]
     assert forecastpfn.family == "forecastpfn"
     assert forecastpfn.source.type == "local"

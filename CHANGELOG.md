@@ -65,9 +65,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   down-select to the first ingested series with a warning instead of failing in
   the runner; Granite TTM declares this one-series input limit in registry
   metadata
-- ForecastPFN registry pulls are now manifest-only local-source installs, and
-  the macOS app surfaces streamed pull errors instead of treating them as
-  successful progress events
+- TimeMixer and ForecastPFN registry pulls are now manifest-only local-source
+  installs, and the macOS app surfaces streamed pull errors instead of treating
+  them as successful progress events
 
 ### Added
 

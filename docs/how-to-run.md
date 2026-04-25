@@ -47,7 +47,7 @@ Additional docs:
 | `nhits` | `nhits` | `tollama/nhits-runner` (local source manifest) | `main` | `apache-2.0` | No | `runner_nhits` |
 | `nbeatsx` | `nbeatsx` | `tollama/nbeatsx-runner` (local source manifest) | `main` | `apache-2.0` | No | `runner_nbeatsx` |
 | `timer-base` | `timer` | `thuml/timer-base-84m` | `main` | `apache-2.0` | No | `runner_timer` |
-| `timemixer-base` | `timemixer` | `thuml/timemixer` | `main` | `apache-2.0` | No | `runner_timemixer` |
+| `timemixer-base` | `timemixer` | `tollama/timemixer-runner` (local source manifest) | `main` | `apache-2.0` | No | `runner_timemixer` |
 | `forecastpfn` | `forecastpfn` | `tollama/forecastpfn-runner` (local source manifest) | `main` | `apache-2.0` | No | `runner_forecastpfn` |
 
 > [!NOTE]
@@ -75,9 +75,9 @@ Use these signatures when triaging smoke failures:
   - install hint includes the family extra (for example `runner_patchtst`, `runner_tide`, `runner_nhits`, `runner_nbeatsx`)
 - **Regression** (runtime registration/config issue):
   - detail contains `runner family '<family>' is not supported`
-- or pull fails for local-source models (`tide`, `nhits`, `nbeatsx`, `forecastpfn`) that should be manifest-only
+- or pull fails for local-source models (`tide`, `nhits`, `nbeatsx`, `timemixer-base`, `forecastpfn`) that should be manifest-only
 
-For `tide`, `nhits`, `nbeatsx`, and `forecastpfn`, `tollama pull` is manifest-only (`source.type=local`), so pull should succeed without Hugging Face auth/network snapshot fetches.
+For `tide`, `nhits`, `nbeatsx`, `timemixer-base`, and `forecastpfn`, `tollama pull` is manifest-only (`source.type=local`), so pull should succeed without Hugging Face auth/network snapshot fetches.
 
 ## Requirements
 

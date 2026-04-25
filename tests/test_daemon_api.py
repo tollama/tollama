@@ -619,31 +619,43 @@ def test_ollama_pull_non_stream_and_delete_flow(monkeypatch, tmp_path) -> None:
         assert deleted_again.status_code == 404
 
 
-def test_ollama_pull_forecastpfn_is_manifest_only(monkeypatch, tmp_path) -> None:
+@pytest.mark.parametrize(
+    ("model", "repo_id"),
+    [
+        ("timemixer-base", "tollama/timemixer-runner"),
+        ("forecastpfn", "tollama/forecastpfn-runner"),
+    ],
+)
+def test_ollama_pull_manifest_only_models_do_not_call_hf(
+    monkeypatch,
+    tmp_path,
+    model: str,
+    repo_id: str,
+) -> None:
     paths = TollamaPaths(base_dir=tmp_path / ".tollama")
     monkeypatch.setenv("TOLLAMA_HOME", str(paths.base_dir))
 
     def _fail_hf_call(**_: Any) -> None:
-        raise AssertionError("forecastpfn pull should not call Hugging Face")
+        raise AssertionError(f"{model} pull should not call Hugging Face")
 
     monkeypatch.setattr("tollama.core.hf_pull._hf_model_info", _fail_hf_call)
     monkeypatch.setattr("tollama.core.hf_pull._hf_snapshot_download", _fail_hf_call)
 
     with TestClient(create_app()) as client:
-        response = client.post("/api/pull", json={"model": "forecastpfn", "stream": False})
+        response = client.post("/api/pull", json={"model": model, "stream": False})
 
     assert response.status_code == 200
     assert response.json() == {
         "status": "success",
-        "model": "forecastpfn",
+        "model": model,
         "digest": "local",
         "size": 0,
     }
 
-    manifest = json.loads(paths.manifest_path("forecastpfn").read_text(encoding="utf-8"))
+    manifest = json.loads(paths.manifest_path(model).read_text(encoding="utf-8"))
     assert manifest["source"] == {
         "type": "local",
-        "repo_id": "tollama/forecastpfn-runner",
+        "repo_id": repo_id,
         "revision": "main",
     }
     assert manifest["resolved"]["commit_sha"] == "local"

@@ -7,6 +7,7 @@ import tollama.runners.timemixer_runner.adapter as timemixer_adapter
 import tollama.runners.timer_runner.adapter as timer_adapter
 from tollama.core.schemas import ForecastRequest, SeriesInput
 from tollama.runners.timemixer_runner.adapter import TimeMixerAdapter
+from tollama.runners.timemixer_runner.errors import UnsupportedModelError
 from tollama.runners.timer_runner.adapter import TimerAdapter
 
 
@@ -90,6 +91,31 @@ def test_timemixer_uses_revision_for_remote_pretrained_load(monkeypatch) -> None
     assert captured["repo_id"] == "org/timemixer"
     assert captured["revision"] == "abc123"
     assert captured["trust_remote_code"] is True
+
+
+def test_timemixer_manifest_only_source_raises_clear_error() -> None:
+    adapter = TimeMixerAdapter()
+    request = ForecastRequest(
+        model="timemixer-base",
+        horizon=2,
+        series=[_series_input()],
+    )
+
+    try:
+        adapter.forecast(
+            request,
+            model_local_dir="/tmp/tollama-empty-timemixer",
+            model_source={
+                "type": "local",
+                "repo_id": "tollama/timemixer-runner",
+                "revision": "main",
+            },
+        )
+    except UnsupportedModelError as exc:
+        assert "manifest-only" in str(exc)
+        assert "timer-base" in str(exc)
+    else:
+        raise AssertionError("expected TimeMixer manifest-only source to be unsupported")
 
 
 def test_timer_uses_revision_for_remote_pretrained_load(monkeypatch) -> None:

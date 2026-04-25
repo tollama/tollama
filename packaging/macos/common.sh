@@ -68,6 +68,7 @@ build_app_bundle() {
     > "$APP_BUNDLE/Contents/Info.plist"
 
   ditto "$ASSET_DIR" "$APP_BUNDLE/Contents/Resources/RuntimeAssets"
+  cp "$RESOURCE_TEMPLATE_DIR/AppIcon.icns" "$APP_BUNDLE/Contents/Resources/"
 
   local swift_sources=()
   while IFS= read -r -d '' source_path; do

@@ -25,7 +25,7 @@ model browser and forecast controls.
 | `nhits` | `nhits` | `tollama/nhits-runner` | Past + Future + Static |
 | `nbeatsx` | `nbeatsx` | `tollama/nbeatsx-runner` | Past + Future + Static |
 | `timer-base` | `timer` | `thuml/Timer` | Target only |
-| `timemixer-base` | `timemixer` | `thuml/timemixer` | Target only |
+| `timemixer-base` | `timemixer` | `tollama/timemixer-runner` (local source manifest) | Target only |
 | `forecastpfn` | `forecastpfn` | `tollama/forecastpfn-runner` (local source manifest) | Target only |
 
 ## Chronos2 Forecasting
@@ -563,10 +563,10 @@ TimeMixer is integrated for inference via the dedicated `timemixer` runner famil
 - model name: `timemixer-base`
 - runner family: `timemixer`
 - install extra: `runner_timemixer`
-- pull behavior: pulls a Hugging Face snapshot from `thuml/timemixer`
+- pull behavior: registry pull is manifest-only (local source), so `tollama pull timemixer-base` does not require Hugging Face auth/snapshot download
 - current runner behavior:
   - returns `DEPENDENCY_MISSING` when optional dependencies are absent
-  - runs the current target-only adapter path
+  - returns `MODEL_UNSUPPORTED` for the manifest-only registry source until a dedicated TimeMixer model snapshot is published and wired
   - truncates long histories to the declared `max_context`
   - returns canonical mean forecasts; quantiles are currently omitted
 

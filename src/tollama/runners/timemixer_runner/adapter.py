@@ -15,13 +15,13 @@ from tollama.core.schemas import (
     SeriesForecast,
 )
 
-from .errors import AdapterInputError, DependencyMissingError
+from .errors import AdapterInputError, DependencyMissingError, UnsupportedModelError
 
 logger = logging.getLogger(__name__)
 
 _TIMEMIXER_MODELS: dict[str, dict[str, Any]] = {
     "timemixer-base": {
-        "repo_id": "thuml/timemixer",
+        "repo_id": "tollama/timemixer-runner",
         "revision": "main",
         "implementation": "timemixer_base",
         "max_context": 1536,
@@ -77,6 +77,12 @@ class TimeMixerAdapter:
         """Run TimeMixer inference and return canonical forecast response."""
         model_name = request.model
         config = _resolve_runtime_config(model_name, model_source, model_metadata)
+        if _is_manifest_only_source(model_source):
+            raise UnsupportedModelError(
+                "TimeMixer is registered as manifest-only because no dedicated "
+                "TimeMixer Hugging Face model snapshot is published for this runner. "
+                "Use timer-base or sundial-base-128m for downloadable THUML models."
+            )
 
         try:
             import torch
@@ -170,3 +176,9 @@ def _resolve_runtime_config(
     if model_metadata:
         config.update(model_metadata)
     return config
+
+
+def _is_manifest_only_source(model_source: dict[str, Any] | None) -> bool:
+    if not isinstance(model_source, dict):
+        return False
+    return model_source.get("type") == "local"

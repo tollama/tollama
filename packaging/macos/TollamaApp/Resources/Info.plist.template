@@ -6,6 +6,8 @@
   <string>en</string>
   <key>CFBundleDisplayName</key>
   <string>__APP_NAME__</string>
+  <key>CFBundleIconFile</key>
+  <string>AppIcon.icns</string>
   <key>CFBundleExecutable</key>
   <string>__APP_NAME__</string>
   <key>CFBundleIdentifier</key>
