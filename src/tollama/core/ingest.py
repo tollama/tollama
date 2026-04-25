@@ -14,9 +14,33 @@ from .schemas import SeriesInput
 
 TabularFormat = Literal["csv", "parquet"]
 
-TIMESTAMP_COLUMN_CANDIDATES = ("timestamp", "timestamps", "ds", "time")
-SERIES_ID_COLUMN_CANDIDATES = ("id", "series_id", "unique_id")
-TARGET_COLUMN_CANDIDATES = ("target", "value", "y")
+TIMESTAMP_COLUMN_CANDIDATES = (
+    "timestamp",
+    "timestamps",
+    "ds",
+    "time",
+    "date",
+    "datetime",
+    "date_time",
+    "observation_date",
+    "utc_timestamp",
+    "year",
+    "fecha",
+)
+SERIES_ID_COLUMN_CANDIDATES = ("id", "series_id", "unique_id", "entity", "country")
+TARGET_COLUMN_CANDIDATES = (
+    "target",
+    "value",
+    "y",
+    "ot",
+    "demand",
+    "users",
+    "number of flights",
+    "total electricity",
+    "gdp",
+    "close",
+    "actual",
+)
 FREQ_COLUMN_CANDIDATES = ("freq", "frequency")
 
 
@@ -225,7 +249,7 @@ def _resolve_format(*, path: Path, format_hint: TabularFormat | None) -> Tabular
 
 def _read_frame_from_path(*, path: Path, tabular_format: TabularFormat) -> pd.DataFrame:
     if tabular_format == "csv":
-        return pd.read_csv(path)
+        return pd.read_csv(path, encoding="utf-8-sig")
     return _read_parquet(path)
 
 
@@ -247,7 +271,7 @@ def _load_series_inputs_from_remote_url(
 ) -> list[SeriesInput]:
     tabular_format = _resolve_format(path=Path(urlparse(data_url).path), format_hint=format_hint)
     if tabular_format == "csv":
-        frame = pd.read_csv(data_url)
+        frame = pd.read_csv(data_url, encoding="utf-8-sig")
     else:
         frame = _read_parquet(data_url)
     return series_inputs_from_frame(
@@ -304,7 +328,20 @@ def _first_existing_column(frame: pd.DataFrame, candidates: Sequence[str]) -> st
     for candidate in candidates:
         if candidate in frame.columns:
             return candidate
+
+    normalized_columns: dict[str, str] = {}
+    for column in frame.columns:
+        if isinstance(column, str):
+            normalized_columns.setdefault(_normalize_column_name(column), column)
+    for candidate in candidates:
+        match = normalized_columns.get(_normalize_column_name(candidate))
+        if match is not None:
+            return match
     return None
+
+
+def _normalize_column_name(value: str) -> str:
+    return value.strip().lstrip("\ufeff").casefold()
 
 
 def _sort_group(group: pd.DataFrame, *, timestamp_column: str | None) -> pd.DataFrame:

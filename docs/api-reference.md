@@ -314,6 +314,13 @@ warning emission, and macro aggregation across series with defined values.
 | `target_column` | string | `null` | Column name to use as forecast target |
 | `freq_column` | string | `null` | Column name that contains the frequency alias |
 
+When `timestamp_column` or `target_column` is omitted, ingest auto-detects common
+time-series column names case-insensitively. Timestamp aliases include `timestamp`,
+`ds`, `time`, `date`, `datetime`, `date_time`, `observation_date`,
+`utc_timestamp`, `year`, and `fecha`. Target aliases include `target`, `value`,
+`y`, `OT`, `demand`, `users`, `number of flights`, `total electricity`, `GDP`,
+`close`, and `actual`.
+
 ---
 
 ### `POST /api/forecast` — Response fields

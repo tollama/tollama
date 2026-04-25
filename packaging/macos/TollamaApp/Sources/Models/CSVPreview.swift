@@ -26,9 +26,33 @@ struct CSVPreview: Equatable, Sendable {
 }
 
 enum CSVSniffer {
-    static let timestampCandidates = ["timestamp", "timestamps", "ds", "time"]
-    static let seriesIDCandidates = ["id", "series_id", "unique_id"]
-    static let targetCandidates = ["target", "value", "y"]
+    static let timestampCandidates = [
+        "timestamp",
+        "timestamps",
+        "ds",
+        "time",
+        "date",
+        "datetime",
+        "date_time",
+        "observation_date",
+        "utc_timestamp",
+        "year",
+        "fecha",
+    ]
+    static let seriesIDCandidates = ["id", "series_id", "unique_id", "entity", "country"]
+    static let targetCandidates = [
+        "target",
+        "value",
+        "y",
+        "ot",
+        "demand",
+        "users",
+        "number of flights",
+        "total electricity",
+        "gdp",
+        "close",
+        "actual",
+    ]
     static let freqCandidates = ["freq", "frequency"]
 
     static func scanCSVFiles(in folder: URL, limit: Int = 500) throws -> [CSVFileItem] {
@@ -198,15 +222,22 @@ enum CSVSniffer {
 
     private static func firstExistingColumn(columns: [String], candidates: [String]) -> String? {
         var lookup: [String: String] = [:]
-        for column in columns where lookup[column.lowercased()] == nil {
-            lookup[column.lowercased()] = column
+        for column in columns where lookup[normalizedColumnName(column)] == nil {
+            lookup[normalizedColumnName(column)] = column
         }
         for candidate in candidates {
-            if let match = lookup[candidate] {
+            if let match = lookup[normalizedColumnName(candidate)] {
                 return match
             }
         }
         return nil
+    }
+
+    private static func normalizedColumnName(_ value: String) -> String {
+        value
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .trimmingCharacters(in: CharacterSet(charactersIn: "\u{feff}"))
+            .lowercased()
     }
 
     private static func firstNumericColumn(

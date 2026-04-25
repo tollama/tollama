@@ -52,6 +52,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   launch installs
 - `GET /v1/models` now includes public registry `source`, `metadata`,
   `capabilities`, and license notice fields for native clients
+- CSV ingest and the macOS CSV preview sniffer now auto-detect additional common
+  timestamp and target aliases, including `date`, `Date`, `datetime`, `OT`,
+  `demand`, and `users`
 
 ### Added
 

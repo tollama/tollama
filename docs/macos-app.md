@@ -43,7 +43,8 @@ The detail pane exposes four native tabs:
   actions, and streamed `/api/pull` progress.
 - `Data`: chooses a local folder, scans up to 500 visible `.csv` files, previews
   the selected file, and shows inferred timestamp/target/series/frequency
-  columns before forecasting.
+  columns before forecasting. The CSV sniffer recognizes common aliases such as
+  `date`, `Date`, `datetime`, `observation_date`, `OT`, `demand`, and `users`.
 - `Forecast`: runs one selected CSV against one installed model via
   `/api/forecast/upload`, clamps the horizon to registry metadata when
   available, and renders native Swift Charts output plus a forecast table.

@@ -341,6 +341,34 @@ def test_forecast_upload_endpoint(monkeypatch, tmp_path) -> None:
     assert len(body["forecasts"][0]["mean"]) == 2
 
 
+def test_forecast_upload_endpoint_detects_date_and_ot_columns(monkeypatch, tmp_path) -> None:
+    _install_model(monkeypatch, tmp_path, name="mock")
+    payload = {
+        "model": "mock",
+        "horizon": 2,
+        "options": {},
+    }
+    file_content = (
+        "Date,HUFL,HULL,OT\n"
+        "2025-01-01,10.0,20.0,1.0\n"
+        "2025-01-02,11.0,21.0,2.0\n"
+        "2025-01-03,12.0,22.0,3.0\n"
+    )
+
+    with TestClient(create_app()) as client:
+        response = client.post(
+            "/api/forecast/upload",
+            data={"payload": json.dumps(payload)},
+            files={"file": ("ETTh1.csv", file_content, "text/csv")},
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["model"] == "mock"
+    assert body["forecasts"][0]["id"] == "series_0"
+    assert len(body["forecasts"][0]["mean"]) == 2
+
+
 def test_api_info_returns_redacted_diagnostics(monkeypatch, tmp_path) -> None:
     paths = TollamaPaths(base_dir=tmp_path / ".tollama")
     monkeypatch.setenv("TOLLAMA_HOME", str(paths.base_dir))

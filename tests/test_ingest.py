@@ -46,6 +46,31 @@ def test_load_series_inputs_from_bytes_csv() -> None:
     assert series[0].target == [1.0, 2.0]
 
 
+def test_series_inputs_from_frame_detects_date_and_ot_columns() -> None:
+    frame = pd.DataFrame(
+        {
+            "Date": ["2025-01-01", "2025-01-02", "2025-01-03"],
+            "HUFL": [10.0, 11.0, 12.0],
+            "OT": [1.0, 2.0, 3.0],
+        }
+    )
+
+    series = series_inputs_from_frame(frame)
+
+    assert len(series) == 1
+    assert series[0].timestamps == ["2025-01-01", "2025-01-02", "2025-01-03"]
+    assert series[0].target == [1.0, 2.0, 3.0]
+
+
+def test_load_series_inputs_from_bytes_handles_bom_date_header() -> None:
+    payload = "\ufeffDate,Number of flights\n2025-01-01,10\n2025-01-02,11\n".encode()
+
+    series = load_series_inputs_from_bytes(payload, filename="flights.csv")
+
+    assert series[0].timestamps == ["2025-01-01", "2025-01-02"]
+    assert series[0].target == [10, 11]
+
+
 def test_series_inputs_from_frame_requires_explicit_target_when_ambiguous() -> None:
     frame = pd.DataFrame(
         {

@@ -45,6 +45,7 @@ load_models*.py
 .daemon.log
 artifacts/realdata/
 data/raw/
+data/csv/raw/
 hf_data/
 lightning_logs/
 
