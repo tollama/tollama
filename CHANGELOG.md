@@ -68,6 +68,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - TimeMixer and ForecastPFN registry pulls are now manifest-only local-source
   installs, and the macOS app surfaces streamed pull errors instead of treating
   them as successful progress events
+- TiDE runner installs now explicitly include `pytorch-lightning`, matching the
+  runtime import path used by Darts' `TiDEModel`
+- Timer runner now restores legacy Transformers cache APIs expected by THUML's
+  remote model code, fixing inference with newer `transformers` releases
 
 ### Added
 

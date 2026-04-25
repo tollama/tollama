@@ -140,7 +140,7 @@ Optional extras:
 | `runner_toto` | Toto runner dependencies | `toto-ts`, `torch`, `numpy`, `pandas` |
 | `runner_lag_llama` | Lag-Llama runner dependencies | `lag-llama`, `gluonts`, `lightning`, `huggingface_hub`, `numpy`, `pandas`, `wandb` |
 | `runner_patchtst` | PatchTST runner dependencies | `transformers`, `torch` |
-| `runner_tide` | TiDE runner dependencies | `u8darts`, `torch` |
+| `runner_tide` | TiDE runner dependencies | `u8darts`, `pytorch-lightning`, `torch` |
 | `runner_nhits` | N-HiTS runner dependencies | `neuralforecast`, `pytorch-lightning`, `torch` |
 | `runner_nbeatsx` | N-BEATSx runner dependencies | `neuralforecast`, `pytorch-lightning`, `torch` |
 | `runner_timer` | Timer runner dependencies | `transformers`, `torch`, `numpy`, `pandas`, `huggingface_hub` |

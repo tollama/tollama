@@ -365,11 +365,10 @@ def test_registry_loads_required_model_specs() -> None:
         "install_extra": "runner_forecastpfn",
         "install_command": 'python -m pip install -e ".[dev,runner_forecastpfn]"',
         "notes": (
-            "ForecastPFN is a zero-shot Bayesian forecaster producing well-calibrated "
-            "probabilistic predictions without training data. Pull is manifest-only "
-            "(local source, no Hugging Face snapshot/auth required) because the upstream "
-            "ForecastPFN project does not publish a Hugging Face model snapshot consumed "
-            "by this runner."
+            "ForecastPFN is tracked as a manifest-only local-source entry. Pull does not "
+            "require Hugging Face auth/snapshot download, but forecast calls return "
+            "MODEL_UNSUPPORTED until an installable upstream ForecastPFN package or "
+            "runner-consumable model snapshot is available."
         ),
     }
     assert forecastpfn.capabilities is not None

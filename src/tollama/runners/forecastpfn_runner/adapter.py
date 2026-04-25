@@ -17,9 +17,16 @@ from tollama.core.schemas import (
     SeriesForecast,
 )
 
-from .errors import AdapterInputError, DependencyMissingError
+from .errors import AdapterInputError, DependencyMissingError, UnsupportedModelError
 
 logger = logging.getLogger(__name__)
+
+_MANIFEST_ONLY_ERROR = (
+    "ForecastPFN is registered as manifest-only because the upstream ForecastPFN "
+    "project does not publish an installable Python package or Hugging Face model "
+    "snapshot consumed by this runner. Use timer-base or sundial-base-128m for "
+    "downloadable zero-shot forecasting models."
+)
 
 _FORECASTPFN_MODELS: dict[str, dict[str, Any]] = {
     "forecastpfn": {
@@ -47,6 +54,9 @@ class ForecastPFNAdapter:
     ) -> None:
         """Pre-load a ForecastPFN model into memory."""
         config = _resolve_runtime_config(model_name, model_source, model_metadata)
+        if _is_manifest_only_source(model_source):
+            raise UnsupportedModelError(_MANIFEST_ONLY_ERROR)
+
         if model_name in self._loaded_models:
             return
 
@@ -79,6 +89,8 @@ class ForecastPFNAdapter:
         """Run ForecastPFN inference and return canonical forecast response."""
         model_name = request.model
         config = _resolve_runtime_config(model_name, model_source, model_metadata)
+        if _is_manifest_only_source(model_source):
+            raise UnsupportedModelError(_MANIFEST_ONLY_ERROR)
 
         try:
             import numpy as np
@@ -171,3 +183,9 @@ def _resolve_runtime_config(
     if model_metadata:
         config.update(model_metadata)
     return config
+
+
+def _is_manifest_only_source(model_source: dict[str, Any] | None) -> bool:
+    if not isinstance(model_source, dict):
+        return False
+    return model_source.get("type") == "local"

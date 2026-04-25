@@ -122,6 +122,15 @@ def test_timer_uses_revision_for_remote_pretrained_load(monkeypatch) -> None:
     _install_fake_torch(monkeypatch)
     captured: dict[str, object] = {}
 
+    class _NewDynamicCache:
+        def get_seq_length(self, layer_idx: int = 0) -> int:
+            assert layer_idx == 0
+            return 3
+
+        def get_max_cache_shape(self, layer_idx: int = 0) -> int:
+            assert layer_idx == 0
+            return -1
+
     class _FakeOutput:
         def __getitem__(self, key):
             if isinstance(key, tuple):
@@ -139,6 +148,10 @@ def test_timer_uses_revision_for_remote_pretrained_load(monkeypatch) -> None:
 
         def generate(self, input_tensor, max_new_tokens: int):
             captured["max_new_tokens"] = max_new_tokens
+            cache = _NewDynamicCache()
+            captured["seen_tokens"] = cache.seen_tokens
+            captured["max_length"] = cache.get_max_length()
+            captured["usable_length"] = cache.get_usable_length(2)
             return _FakeOutput()
 
     class _AutoModelForCausalLM:
@@ -150,7 +163,10 @@ def test_timer_uses_revision_for_remote_pretrained_load(monkeypatch) -> None:
 
     fake_transformers = types.ModuleType("transformers")
     fake_transformers.AutoModelForCausalLM = _AutoModelForCausalLM
+    fake_cache_utils = types.ModuleType("transformers.cache_utils")
+    fake_cache_utils.DynamicCache = _NewDynamicCache
     monkeypatch.setitem(sys.modules, "transformers", fake_transformers)
+    monkeypatch.setitem(sys.modules, "transformers.cache_utils", fake_cache_utils)
     monkeypatch.setattr(
         timer_adapter,
         "SeriesForecast",
@@ -179,3 +195,6 @@ def test_timer_uses_revision_for_remote_pretrained_load(monkeypatch) -> None:
     assert captured["revision"] == "def456"
     assert captured["trust_remote_code"] is True
     assert captured["max_new_tokens"] == 2
+    assert captured["seen_tokens"] == 3
+    assert captured["max_length"] is None
+    assert captured["usable_length"] == 3

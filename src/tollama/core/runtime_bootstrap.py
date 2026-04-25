@@ -52,7 +52,7 @@ FAMILY_EXTRAS: dict[str, str] = {
 
 # Increment when runtime state compatibility changes even without a package
 # version bump (for example, extra-name normalization or bootstrap semantics).
-_RUNTIME_STATE_SCHEMA_VERSION = 3
+_RUNTIME_STATE_SCHEMA_VERSION = 4
 
 # Families that require specific Python versions.
 # uni2ts and timesfm have build-time or runtime failures on Python 3.12+.

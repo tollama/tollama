@@ -88,6 +88,7 @@ class TimerAdapter:
             raise DependencyMissingError(
                 "Timer runner requires torch, numpy, and transformers"
             ) from exc
+        _ensure_transformers_cache_compatibility()
 
         max_horizon = config.get("max_horizon", 720)
         if request.horizon > max_horizon:
@@ -171,3 +172,52 @@ def _resolve_runtime_config(
     if model_metadata:
         config.update(model_metadata)
     return config
+
+
+def _ensure_transformers_cache_compatibility() -> None:
+    """Restore legacy cache APIs expected by Timer's remote model code."""
+    try:
+        from transformers.cache_utils import DynamicCache
+    except ImportError:
+        return
+
+    if not hasattr(DynamicCache, "seen_tokens"):
+        DynamicCache.seen_tokens = property(_dynamic_cache_seen_tokens)  # type: ignore[attr-defined]
+    if not hasattr(DynamicCache, "get_max_length"):
+        DynamicCache.get_max_length = _dynamic_cache_get_max_length  # type: ignore[attr-defined]
+    if not hasattr(DynamicCache, "get_usable_length"):
+        DynamicCache.get_usable_length = _dynamic_cache_get_usable_length  # type: ignore[attr-defined]
+
+
+def _dynamic_cache_seen_tokens(cache: Any) -> int:
+    get_seq_length = getattr(cache, "get_seq_length", None)
+    if not callable(get_seq_length):
+        return 0
+    return int(get_seq_length())
+
+
+def _dynamic_cache_get_max_length(cache: Any) -> int | None:
+    get_max_cache_shape = getattr(cache, "get_max_cache_shape", None)
+    if not callable(get_max_cache_shape):
+        return None
+    max_cache_shape = get_max_cache_shape()
+    if max_cache_shape is None or int(max_cache_shape) < 0:
+        return None
+    return int(max_cache_shape)
+
+
+def _dynamic_cache_get_usable_length(
+    cache: Any,
+    new_seq_length: int,
+    layer_idx: int = 0,
+) -> int:
+    get_seq_length = getattr(cache, "get_seq_length", None)
+    if not callable(get_seq_length):
+        return 0
+
+    previous_seq_length = int(get_seq_length(layer_idx))
+    get_max_length = getattr(cache, "get_max_length", None)
+    max_length = get_max_length() if callable(get_max_length) else None
+    if max_length is not None and previous_seq_length + new_seq_length > int(max_length):
+        return int(max_length) - new_seq_length
+    return previous_seq_length

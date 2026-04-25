@@ -42,7 +42,7 @@ def _write_fake_state(paths: TollamaPaths, family: str, **overrides: object) -> 
         "extra": FAMILY_EXTRAS[family],
         "python_version": platform.python_version(),
         "installed_at": "2026-01-01T00:00:00+00:00",
-        "schema_version": 3,
+        "schema_version": 4,
     }
     state.update(overrides)
     (family_dir / "installed.json").write_text(json.dumps(state), encoding="utf-8")

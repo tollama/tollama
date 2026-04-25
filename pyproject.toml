@@ -143,6 +143,7 @@ runner_patchtst = [
 ]
 runner_tide = [
   "u8darts>=0.30.0",
+  "pytorch-lightning>=2.0,<3.0",
   "torch>=2.0",
 ]
 runner_nhits = [
@@ -174,9 +175,6 @@ runner_timemixer = [
   "huggingface_hub>=0.20,<1.10.2",
 ]
 runner_forecastpfn = [
-  "ForecastPFN>=0.1",
-  "torch>=2.0",
-  "numpy>=1.26,<3.0",
 ]
 preprocess = [
   "scipy>=1.11,<2.0",
