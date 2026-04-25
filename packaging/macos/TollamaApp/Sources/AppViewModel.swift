@@ -181,6 +181,7 @@ final class AppViewModel: ObservableObject {
             statusDetail = "Using the daemon already listening on 127.0.0.1:11435."
             busyLabel = nil
             webReloadID = UUID()
+            startLogLoop()
             return
         }
 

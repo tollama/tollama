@@ -40,6 +40,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   write a successful runtime marker
 - macOS app managed daemon starts now reset the daemon log tail so stale
   bootstrap errors are not shown as current launch failures
+- macOS app attached-daemon mode now refreshes and trims the log tail from the
+  latest daemon run, avoiding stale bootstrap errors in the native Logs UI
+- macOS native workspace navigation now uses an explicit segmented tab bar and
+  fixed split-view sizing to avoid blank or collapsed detail layouts after
+  repeated navigation
+- macOS Data tab now uses a fixed-width native file browser pane instead of a
+  nested split view, preventing the left pane from collapsing during tab changes
 - macOS runtime asset builds now resolve and verify the bundled wheelhouse with
   the bundled Python runtime, preventing host-Python wheels from breaking first
   launch installs

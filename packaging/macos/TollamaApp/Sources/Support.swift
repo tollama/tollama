@@ -114,10 +114,24 @@ enum LogTailReader {
             return "No daemon logs yet."
         }
         let tail = data.suffix(maxBytes)
-        let text = String(decoding: tail, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
+        let text = trimToCurrentDaemonRun(
+            String(decoding: tail, as: UTF8.self)
+        ).trimmingCharacters(in: .whitespacesAndNewlines)
         if text.isEmpty {
             return "No daemon logs yet."
         }
         return text
+    }
+
+    private static func trimToCurrentDaemonRun(_ text: String) -> String {
+        let lines = text.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
+        let currentRunIndex = lines.lastIndex { line in
+            line.hasPrefix("Starting Tollama daemon at ")
+                || line.hasPrefix("INFO:     Started server process ")
+        }
+        guard let currentRunIndex else {
+            return text
+        }
+        return lines[currentRunIndex...].joined(separator: "\n")
     }
 }

@@ -19,5 +19,7 @@ struct TollamaDesktopApp: App {
                 }
         }
         .windowStyle(.hiddenTitleBar)
+        .defaultSize(width: 1280, height: 800)
+        .windowResizability(.contentMinSize)
     }
 }

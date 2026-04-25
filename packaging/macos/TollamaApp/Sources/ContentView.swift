@@ -3,9 +3,10 @@ import SwiftUI
 struct ContentView: View {
     @ObservedObject var model: AppViewModel
     @EnvironmentObject private var workspace: ForecastWorkspace
+    @State private var columnVisibility: NavigationSplitViewVisibility = .all
 
     var body: some View {
-        NavigationSplitView {
+        NavigationSplitView(columnVisibility: $columnVisibility) {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
                     statusCard
@@ -15,6 +16,7 @@ struct ContentView: View {
                 .padding(20)
             }
             .navigationTitle("Tollama")
+            .navigationSplitViewColumnWidth(min: 280, ideal: 320, max: 360)
         } detail: {
             Group {
                 if model.dashboardReady {
@@ -36,6 +38,7 @@ struct ContentView: View {
                 }
             }
         }
+        .navigationSplitViewStyle(.balanced)
         .alert(item: activeBanner) { banner in
             Alert(
                 title: Text(banner.title),
@@ -123,22 +126,40 @@ struct NativeWorkspaceTabs: View {
     @EnvironmentObject private var workspace: ForecastWorkspace
 
     var body: some View {
-        TabView(selection: $workspace.selectedTab) {
-            ModelsTab(client: model.httpClient)
-                .tabItem { Text("Models") }
-                .tag(WorkspaceTab.models)
+        VStack(spacing: 0) {
+            HStack {
+                Picker("Workspace", selection: $workspace.selectedTab) {
+                    Text("Models").tag(WorkspaceTab.models)
+                    Text("Data").tag(WorkspaceTab.data)
+                    Text("Forecast").tag(WorkspaceTab.forecast)
+                    Text("Logs").tag(WorkspaceTab.logs)
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .frame(width: 520)
 
-            DataTab()
-                .tabItem { Text("Data") }
-                .tag(WorkspaceTab.data)
+                Spacer()
+            }
+            .padding(.horizontal, 24)
+            .padding(.top, 18)
+            .padding(.bottom, 12)
 
-            ForecastTab(client: model.httpClient)
-                .tabItem { Text("Forecast") }
-                .tag(WorkspaceTab.forecast)
+            Divider()
 
-            LogsTab(model: model)
-                .tabItem { Text("Logs") }
-                .tag(WorkspaceTab.logs)
+            Group {
+                switch workspace.selectedTab {
+                case .models:
+                    ModelsTab(client: model.httpClient)
+                case .data:
+                    DataTab()
+                case .forecast:
+                    ForecastTab(client: model.httpClient)
+                case .logs:
+                    LogsTab(model: model)
+                }
+            }
+            .id(workspace.selectedTab)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }

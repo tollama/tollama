@@ -5,47 +5,68 @@ struct DataTab: View {
     @EnvironmentObject private var workspace: ForecastWorkspace
 
     var body: some View {
-        HSplitView {
-            VStack(alignment: .leading, spacing: 16) {
-                HStack {
-                    Text("Data")
-                        .font(.largeTitle.bold())
-                    Spacer()
-                    Button("Choose Folder") {
-                        chooseFolder()
-                    }
-                }
+        GeometryReader { proxy in
+            HStack(spacing: 0) {
+                fileBrowserPane
+                    .frame(width: sidebarWidth(for: proxy.size.width))
+                    .frame(maxHeight: .infinity)
+                    .background(Color(nsColor: .windowBackgroundColor))
+                    .clipped()
 
-                if let selectedFolder = workspace.selectedFolder {
-                    Text(selectedFolder.path)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(2)
-                }
-
-                if workspace.isScanningFolder {
-                    ProgressView("Scanning CSV files")
-                }
+                Divider()
 
                 ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 6) {
-                        ForEach(workspace.csvFiles) { file in
-                            fileRow(file)
-                        }
-                    }
+                    previewPane
+                        .padding(24)
+                        .frame(maxWidth: .infinity, alignment: .topLeading)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(Color(nsColor: .textBackgroundColor).opacity(0.45))
             }
-            .frame(minWidth: 320, idealWidth: 380, maxWidth: 460, maxHeight: .infinity)
-            .padding(24)
-
-            ScrollView {
-                previewPane
-                    .padding(24)
-            }
-            .frame(minWidth: 480, maxWidth: .infinity, maxHeight: .infinity)
+            .frame(width: proxy.size.width, height: proxy.size.height)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private var fileBrowserPane: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack(spacing: 12) {
+                Text("Data")
+                    .font(.largeTitle.bold())
+                    .lineLimit(1)
+                Spacer(minLength: 12)
+                Button("Choose Folder") {
+                    chooseFolder()
+                }
+            }
+
+            if let selectedFolder = workspace.selectedFolder {
+                Text(selectedFolder.path)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+                    .truncationMode(.middle)
+            }
+
+            if workspace.isScanningFolder {
+                ProgressView("Scanning CSV files")
+            }
+
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 6) {
+                    ForEach(workspace.csvFiles) { file in
+                        fileRow(file)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .topLeading)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .padding(24)
+    }
+
+    private func sidebarWidth(for totalWidth: CGFloat) -> CGFloat {
+        min(420, max(320, totalWidth * 0.34))
     }
 
     @ViewBuilder
