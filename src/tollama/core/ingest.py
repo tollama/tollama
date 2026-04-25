@@ -66,6 +66,7 @@ def load_series_inputs_from_data_url(
     timestamp_column: str | None = None,
     series_id_column: str | None = None,
     target_column: str | None = None,
+    freq: str | None = None,
     freq_column: str | None = None,
     allow_remote: bool = False,
 ) -> list[SeriesInput]:
@@ -86,6 +87,7 @@ def load_series_inputs_from_data_url(
             timestamp_column=timestamp_column,
             series_id_column=series_id_column,
             target_column=target_column,
+            freq=freq,
             freq_column=freq_column,
         )
 
@@ -100,6 +102,7 @@ def load_series_inputs_from_data_url(
             timestamp_column=timestamp_column,
             series_id_column=series_id_column,
             target_column=target_column,
+            freq=freq,
             freq_column=freq_column,
         )
 
@@ -115,6 +118,7 @@ def load_series_inputs_from_path(
     timestamp_column: str | None = None,
     series_id_column: str | None = None,
     target_column: str | None = None,
+    freq: str | None = None,
     freq_column: str | None = None,
 ) -> list[SeriesInput]:
     """Load canonical series inputs from a local CSV or Parquet file."""
@@ -134,6 +138,7 @@ def load_series_inputs_from_path(
         timestamp_column=timestamp_column,
         series_id_column=series_id_column,
         target_column=target_column,
+        freq=freq,
         freq_column=freq_column,
     )
 
@@ -146,6 +151,7 @@ def load_series_inputs_from_bytes(
     timestamp_column: str | None = None,
     series_id_column: str | None = None,
     target_column: str | None = None,
+    freq: str | None = None,
     freq_column: str | None = None,
 ) -> list[SeriesInput]:
     """Load canonical series inputs from uploaded CSV/Parquet bytes."""
@@ -159,6 +165,7 @@ def load_series_inputs_from_bytes(
         timestamp_column=timestamp_column,
         series_id_column=series_id_column,
         target_column=target_column,
+        freq=freq,
         freq_column=freq_column,
     )
 
@@ -169,6 +176,7 @@ def series_inputs_from_frame(
     timestamp_column: str | None = None,
     series_id_column: str | None = None,
     target_column: str | None = None,
+    freq: str | None = None,
     freq_column: str | None = None,
 ) -> list[SeriesInput]:
     """Transform a tabular DataFrame into canonical SeriesInput payloads."""
@@ -183,12 +191,13 @@ def series_inputs_from_frame(
         frame,
         SERIES_ID_COLUMN_CANDIDATES,
     )
-    resolved_freq = freq_column or _first_existing_column(frame, FREQ_COLUMN_CANDIDATES)
+    resolved_freq = _normalize_optional_text(freq)
+    resolved_freq_column = freq_column or _first_existing_column(frame, FREQ_COLUMN_CANDIDATES)
     resolved_target = target_column or _resolve_target_column(
         frame,
         timestamp_column=resolved_timestamp,
         series_id_column=resolved_series_id,
-        freq_column=resolved_freq,
+        freq_column=resolved_freq_column,
     )
 
     if resolved_timestamp is None and not isinstance(frame.index, pd.DatetimeIndex):
@@ -219,7 +228,8 @@ def series_inputs_from_frame(
         target = _extract_target_values(sorted_group, target_column=resolved_target)
         resolved_series_freq = _extract_freq(
             sorted_group,
-            freq_column=resolved_freq,
+            freq=resolved_freq,
+            freq_column=resolved_freq_column,
             timestamps=timestamps,
         )
 
@@ -275,6 +285,7 @@ def _load_series_inputs_from_remote_url(
     timestamp_column: str | None,
     series_id_column: str | None,
     target_column: str | None,
+    freq: str | None,
     freq_column: str | None,
 ) -> list[SeriesInput]:
     tabular_format = _resolve_format(path=Path(urlparse(data_url).path), format_hint=format_hint)
@@ -287,6 +298,7 @@ def _load_series_inputs_from_remote_url(
         timestamp_column=timestamp_column,
         series_id_column=series_id_column,
         target_column=target_column,
+        freq=freq,
         freq_column=freq_column,
     )
 
@@ -430,9 +442,13 @@ def _extract_target_values(group: pd.DataFrame, *, target_column: str) -> list[i
 def _extract_freq(
     group: pd.DataFrame,
     *,
+    freq: str | None,
     freq_column: str | None,
     timestamps: Sequence[str],
 ) -> str:
+    if freq is not None:
+        return freq
+
     if freq_column is not None and freq_column in group.columns:
         for raw in group[freq_column].tolist():
             if isinstance(raw, str):
@@ -452,6 +468,13 @@ def _extract_freq(
     if inferred is None:
         return "auto"
     return str(inferred)
+
+
+def _normalize_optional_text(value: str | None) -> str | None:
+    if value is None:
+        return None
+    normalized = value.strip()
+    return normalized or None
 
 
 def _stringify_timestamp(value: Any) -> str:

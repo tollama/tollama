@@ -45,7 +45,9 @@ The detail pane exposes four native tabs:
   the selected file, and shows inferred timestamp/target/series/frequency
   columns before forecasting. The CSV sniffer recognizes common aliases such as
   `date`, `Date`, `datetime`, `observation_date`, `OT`, `demand`, `users`,
-  `pm2.5`, and OPSD-style `*_load_actual_entsoe_transparency` columns.
+  `pm2.5`, and OPSD-style `*_load_actual_entsoe_transparency` columns. When
+  timestamp cadence cannot be inferred, the Data tab can send an explicit
+  pandas frequency alias such as `D`, `h`, or `min`.
 - `Forecast`: runs one selected CSV against one installed model via
   `/api/forecast/upload`, clamps the horizon to registry metadata when
   available, down-selects CSVs with multiple inferred series for single-series

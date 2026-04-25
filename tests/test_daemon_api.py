@@ -341,6 +341,29 @@ def test_forecast_upload_endpoint(monkeypatch, tmp_path) -> None:
     assert len(body["forecasts"][0]["mean"]) == 2
 
 
+def test_forecast_upload_endpoint_accepts_explicit_frequency(monkeypatch, tmp_path) -> None:
+    _install_model(monkeypatch, tmp_path, name="mock")
+    runner_manager = _CapturingRunnerManager()
+    app = create_app(runner_manager=runner_manager)  # type: ignore[arg-type]
+    payload = {
+        "model": "mock",
+        "horizon": 2,
+        "options": {},
+    }
+    file_content = "timestamp,target\n2025-01-01,1.0\n2025-01-03,2.0\n2025-01-04,3.0\n"
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/forecast/upload",
+            data={"payload": json.dumps(payload), "freq": "D"},
+            files={"file": ("history.csv", file_content, "text/csv")},
+        )
+
+    assert response.status_code == 200
+    captured_series = runner_manager.captured["params"]["series"]
+    assert captured_series[0]["freq"] == "D"
+
+
 def test_forecast_upload_endpoint_detects_date_and_ot_columns(monkeypatch, tmp_path) -> None:
     _install_model(monkeypatch, tmp_path, name="mock")
     payload = {

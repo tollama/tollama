@@ -120,6 +120,7 @@ actor TollamaHTTPClient {
         timestampColumn: String?,
         seriesIDColumn: String?,
         targetColumn: String?,
+        freq: String?,
         freqColumn: String?
     ) async throws -> ForecastResponseDTO {
         let requestPayload: [String: Any] = [
@@ -140,6 +141,7 @@ actor TollamaHTTPClient {
         appendOptionalFormField(name: "timestamp_column", value: timestampColumn, boundary: boundary, to: &body)
         appendOptionalFormField(name: "series_id_column", value: seriesIDColumn, boundary: boundary, to: &body)
         appendOptionalFormField(name: "target_column", value: targetColumn, boundary: boundary, to: &body)
+        appendOptionalFormField(name: "freq", value: freq, boundary: boundary, to: &body)
         appendOptionalFormField(name: "freq_column", value: freqColumn, boundary: boundary, to: &body)
         try appendFileField(name: "file", fileURL: fileURL, boundary: boundary, to: &body)
         body.appendUTF8("--\(boundary)--\r\n")

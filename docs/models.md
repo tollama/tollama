@@ -480,7 +480,7 @@ N-HiTS is integrated for real inference via the dedicated `nhits` runner family.
 Runtime tuning & limitations (N-HiTS):
 
 - requests with multiple series must currently use one shared resolved frequency
-- `series[].freq: "auto"` is accepted, but frequency inference can fail for irregular timestamps (provide explicit `freq` when possible)
+- `series[].freq: "auto"` is accepted; mostly regular gaps use dominant-interval fallback, but truly irregular timestamps still need explicit `freq`
 - if backend quantile columns are unavailable, fallback quantiles are generated from robust residual scale; warnings will identify this path
 - covariates/static features are numeric-only for this runner path; in `best_effort` mode non-numeric values are dropped/zero-filled with warnings, and in `strict` mode they raise `BAD_REQUEST`
 - `model_local_dir` is currently metadata-only for this runner path (runtime trains from request history) and is ignored with warning when present
@@ -515,7 +515,7 @@ N-BEATSx is integrated for real inference via the dedicated `nbeatsx` runner fam
 Runtime tuning & limitations (N-BEATSx):
 
 - requests with multiple series must currently use one shared resolved frequency
-- `series[].freq: "auto"` is accepted, but frequency inference can fail for irregular timestamps (provide explicit `freq` when possible)
+- `series[].freq: "auto"` is accepted; mostly regular gaps use dominant-interval fallback, but truly irregular timestamps still need explicit `freq`
 - if backend quantile columns are unavailable, fallback quantiles are generated from robust residual scale; warnings will identify this path
 - covariates/static features are numeric-only for this runner path; in `best_effort` mode non-numeric values are dropped/zero-filled with warnings, and in `strict` mode they raise `BAD_REQUEST`
 - `model_local_dir` is currently metadata-only for this runner path (runtime trains from request history) and is ignored with warning when present

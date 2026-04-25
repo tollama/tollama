@@ -46,6 +46,19 @@ def test_load_series_inputs_from_bytes_csv() -> None:
     assert series[0].target == [1.0, 2.0]
 
 
+def test_series_inputs_from_frame_applies_explicit_frequency() -> None:
+    frame = pd.DataFrame(
+        {
+            "timestamp": ["2025-01-01", "2025-01-03", "2025-01-04"],
+            "target": [1.0, 2.0, 3.0],
+        }
+    )
+
+    series = series_inputs_from_frame(frame, freq="D")
+
+    assert series[0].freq == "D"
+
+
 def test_series_inputs_from_frame_detects_date_and_ot_columns() -> None:
     frame = pd.DataFrame(
         {

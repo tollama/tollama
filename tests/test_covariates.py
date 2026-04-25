@@ -49,6 +49,50 @@ def test_normalize_covariates_infers_hourly_frequency_when_freq_auto() -> None:
     assert normalized[0].freq.lower() == "h"
 
 
+def test_normalize_covariates_infers_dominant_daily_frequency_with_gap() -> None:
+    series = _series(
+        timestamps=[
+            "2025-01-01",
+            "2025-01-02",
+            "2025-01-03",
+            "2025-01-04",
+            "2025-01-06",
+            "2025-01-07",
+            "2025-01-08",
+            "2025-01-09",
+            "2025-01-10",
+        ],
+        freq="auto",
+    )
+
+    normalized, warnings = normalize_covariates([series], prediction_length=1)
+
+    assert normalized[0].freq == "D"
+    assert warnings == [
+        "series 's1': freq='auto' was resolved from the dominant timestamp interval "
+        "(regularity=0.88); provide explicit freq to override",
+    ]
+
+
+def test_normalize_covariates_infers_business_daily_frequency_with_weekend_gap() -> None:
+    series = _series(
+        timestamps=[
+            "2025-01-06",
+            "2025-01-07",
+            "2025-01-08",
+            "2025-01-09",
+            "2025-01-10",
+            "2025-01-13",
+        ],
+        freq="auto",
+    )
+
+    normalized, warnings = normalize_covariates([series], prediction_length=1)
+
+    assert normalized[0].freq == "B"
+    assert warnings == []
+
+
 def test_normalize_covariates_fails_when_freq_auto_for_irregular_timestamps() -> None:
     series = _series(
         timestamps=["2025-01-01", "2025-01-03", "2025-01-04"],

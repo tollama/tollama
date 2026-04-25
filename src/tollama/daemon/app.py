@@ -901,6 +901,10 @@ def create_app(*, runner_manager: RunnerManager | None = None) -> FastAPI:
             default=None,
             description="Optional target column name override.",
         ),
+        freq: str | None = Form(
+            default=None,
+            description="Optional explicit frequency alias for all ingested series.",
+        ),
         freq_column: str | None = Form(
             default=None,
             description="Optional frequency column name override.",
@@ -915,6 +919,7 @@ def create_app(*, runner_manager: RunnerManager | None = None) -> FastAPI:
                     "timestamp_column": timestamp_column,
                     "series_id_column": series_id_column,
                     "target_column": target_column,
+                    "freq": freq,
                     "freq_column": freq_column,
                 },
             )
@@ -925,6 +930,7 @@ def create_app(*, runner_manager: RunnerManager | None = None) -> FastAPI:
                 timestamp_column=ingest_options.timestamp_column,
                 series_id_column=ingest_options.series_id_column,
                 target_column=ingest_options.target_column,
+                freq=ingest_options.freq,
                 freq_column=ingest_options.freq_column,
             )
         except IngestDependencyError as exc:
@@ -972,6 +978,10 @@ def create_app(*, runner_manager: RunnerManager | None = None) -> FastAPI:
             default=None,
             description="Optional target column name override.",
         ),
+        freq: str | None = Form(
+            default=None,
+            description="Optional explicit frequency alias for all ingested series.",
+        ),
         freq_column: str | None = Form(
             default=None,
             description="Optional frequency column name override.",
@@ -997,6 +1007,7 @@ def create_app(*, runner_manager: RunnerManager | None = None) -> FastAPI:
                     "timestamp_column": timestamp_column,
                     "series_id_column": series_id_column,
                     "target_column": target_column,
+                    "freq": freq,
                     "freq_column": freq_column,
                 },
             )
@@ -1007,6 +1018,7 @@ def create_app(*, runner_manager: RunnerManager | None = None) -> FastAPI:
                 timestamp_column=ingest_options.timestamp_column,
                 series_id_column=ingest_options.series_id_column,
                 target_column=ingest_options.target_column,
+                freq=ingest_options.freq,
                 freq_column=ingest_options.freq_column,
             )
             parsed_payload["series"] = [item.model_dump(mode="python") for item in series]
@@ -2362,6 +2374,7 @@ def _prepare_forecast_payload(
         timestamp_column=ingest_options.timestamp_column,
         series_id_column=ingest_options.series_id_column,
         target_column=ingest_options.target_column,
+        freq=ingest_options.freq,
         freq_column=ingest_options.freq_column,
         allow_remote=allow_remote,
     )

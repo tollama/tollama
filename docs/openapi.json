@@ -1184,6 +1184,18 @@
             "description": "Optional format override such as 'csv' or 'parquet'.",
             "title": "Format Hint"
           },
+          "freq": {
+            "anyOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "description": "Optional explicit frequency alias for all ingested series.",
+            "title": "Freq"
+          },
           "freq_column": {
             "anyOf": [
               {
@@ -1264,6 +1276,18 @@
             ],
             "description": "Optional format override such as 'csv' or 'parquet'.",
             "title": "Format Hint"
+          },
+          "freq": {
+            "anyOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "description": "Optional explicit frequency alias for all ingested series.",
+            "title": "Freq"
           },
           "freq_column": {
             "anyOf": [
@@ -3837,6 +3861,19 @@
             ],
             "description": "Format.",
             "title": "Format"
+          },
+          "freq": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Freq.",
+            "title": "Freq"
           },
           "freq_column": {
             "anyOf": [

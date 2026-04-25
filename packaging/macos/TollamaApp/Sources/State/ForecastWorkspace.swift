@@ -21,6 +21,7 @@ final class ForecastWorkspace: ObservableObject {
     @Published var timestampColumnOverride = ""
     @Published var seriesIDColumnOverride = ""
     @Published var targetColumnOverride = ""
+    @Published var frequencyOverride = ""
     @Published var freqColumnOverride = ""
     @Published private(set) var lastResponse: ForecastResponseDTO?
     @Published private(set) var recentForecasts: [ForecastResponseDTO] = []
@@ -99,6 +100,7 @@ final class ForecastWorkspace: ObservableObject {
             timestampColumnOverride = preview.timestampColumn ?? ""
             seriesIDColumnOverride = preview.seriesIDColumn ?? ""
             targetColumnOverride = preview.targetColumn ?? ""
+            frequencyOverride = ""
             freqColumnOverride = preview.freqColumn ?? ""
         } catch {
             csvPreview = nil
@@ -144,6 +146,7 @@ final class ForecastWorkspace: ObservableObject {
                 timestampColumn: optionalOverride(timestampColumnOverride),
                 seriesIDColumn: optionalOverride(seriesIDColumnOverride),
                 targetColumn: optionalOverride(targetColumnOverride),
+                freq: optionalOverride(frequencyOverride),
                 freqColumn: optionalOverride(freqColumnOverride)
             )
             lastResponse = response

@@ -269,6 +269,11 @@ for a model that declares a one-series input limit, the daemon forecasts the
 first ingested series and returns a warning. Explicit JSON `series` requests are
 left unchanged.
 
+When `freq` is omitted and no frequency column is found, `freq="auto"` first uses
+strict pandas frequency inference and then falls back to a dominant timestamp
+interval for mostly regular data with gaps. Truly irregular timestamps still
+require an explicit `freq` alias.
+
 #### `SeriesInput`
 
 | Field | Type | Required | Default | Description |
@@ -317,6 +322,7 @@ warning emission, and macro aggregation across series with defined values.
 | `timestamp_column` | string | `null` | Column name to use as timestamps |
 | `series_id_column` | string | `null` | Column name to use as series identifier |
 | `target_column` | string | `null` | Column name to use as forecast target |
+| `freq` | string | `null` | Explicit pandas offset alias to apply to every ingested series |
 | `freq_column` | string | `null` | Column name that contains the frequency alias |
 
 When `timestamp_column` or `target_column` is omitted, ingest auto-detects common

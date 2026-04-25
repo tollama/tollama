@@ -138,6 +138,7 @@ class IngestOptions(CanonicalModel):
     timestamp_column: NonEmptyStr | None = None
     series_id_column: NonEmptyStr | None = None
     target_column: NonEmptyStr | None = None
+    freq: NonEmptyStr | None = None
     freq_column: NonEmptyStr | None = None
 
 

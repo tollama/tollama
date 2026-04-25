@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+from collections import Counter
 from collections.abc import Sequence
 from dataclasses import dataclass
+from typing import Any
 
 from tollama.core.registry import ModelCapabilities
 from tollama.core.schemas import CovariateValues, SeriesInput
@@ -31,13 +33,15 @@ def normalize_covariates(
     for series in inputs:
         resolved_freq = series.freq
         if resolved_freq == "auto":
-            inferred_freq = _infer_freq_from_timestamps(series.timestamps)
+            inferred_freq, inference_warning = _infer_freq_from_timestamps(series.timestamps)
             if inferred_freq is None:
                 raise ValueError(
                     f"series {series.id!r}: freq='auto' but could not infer frequency from "
                     f"{len(series.timestamps)} timestamps. Provide an explicit freq value.",
                 )
             resolved_freq = inferred_freq
+            if inference_warning is not None:
+                warnings.append(f"series {series.id!r}: {inference_warning}")
 
         expected_history = len(series.target)
         past_covariates = {
@@ -283,7 +287,7 @@ def _covariate_kind(values: CovariateValues) -> str:
     return "numeric"
 
 
-def _infer_freq_from_timestamps(timestamps: list[str]) -> str | None:
+def _infer_freq_from_timestamps(timestamps: list[str]) -> tuple[str | None, str | None]:
     try:
         import pandas as pd
     except ImportError as exc:
@@ -292,14 +296,97 @@ def _infer_freq_from_timestamps(timestamps: list[str]) -> str | None:
         ) from exc
 
     try:
-        index = pd.DatetimeIndex(timestamps)
+        index = pd.DatetimeIndex(pd.to_datetime(timestamps, utc=True, errors="raise"))
+        if not index.is_monotonic_increasing:
+            index = index.sort_values()
         inferred = pd.infer_freq(index)
     except Exception:  # noqa: BLE001
-        return None
+        return None, None
 
     if isinstance(inferred, str) and inferred:
-        return inferred
+        return inferred, None
+
+    fallback_freq, regularity_score = _dominant_interval_frequency(index)
+    if fallback_freq is None:
+        return None, None
+    return (
+        fallback_freq,
+        "freq='auto' was resolved from the dominant timestamp interval "
+        f"(regularity={regularity_score:.2f}); provide explicit freq to override",
+    )
+
+
+def _dominant_interval_frequency(index: Any) -> tuple[str | None, float]:
+    if len(index) < 3:
+        return None, 0.0
+
+    deltas: list[float] = []
+    for previous, current in zip(index[:-1], index[1:], strict=True):
+        delta = round((current - previous).total_seconds(), 6)
+        deltas.append(delta)
+
+    positive_deltas = [delta for delta in deltas if delta > 0.0]
+    if not positive_deltas:
+        return None, 0.0
+
+    dominant_seconds, dominant_count = Counter(positive_deltas).most_common(1)[0]
+    regularity_score = dominant_count / len(deltas)
+    if regularity_score < 0.8:
+        return None, regularity_score
+
+    if _looks_like_business_daily(index, dominant_seconds=dominant_seconds):
+        return "B", regularity_score
+
+    alias = _offset_alias_from_seconds(dominant_seconds)
+    if alias is None:
+        return None, regularity_score
+    return alias, regularity_score
+
+
+def _offset_alias_from_seconds(seconds: float) -> str | None:
+    if seconds <= 0.0:
+        return None
+
+    whole_seconds = round(seconds)
+    if abs(seconds - whole_seconds) > 1e-6:
+        return None
+
+    units = (
+        ("D", 86_400),
+        ("h", 3_600),
+        ("min", 60),
+        ("s", 1),
+    )
+    for alias, unit_seconds in units:
+        if whole_seconds % unit_seconds != 0:
+            continue
+        multiple = whole_seconds // unit_seconds
+        return alias if multiple == 1 else f"{multiple}{alias}"
     return None
+
+
+def _looks_like_business_daily(index: Any, *, dominant_seconds: float) -> bool:
+    if abs(dominant_seconds - 86_400.0) > 1e-6:
+        return False
+
+    weekdays = [getattr(timestamp, "weekday")() for timestamp in index]
+    if not weekdays or any(day >= 5 for day in weekdays):
+        return False
+
+    observed_gap = False
+    checked = 0
+    allowed_gaps = 0
+    for previous, current in zip(index[:-1], index[1:], strict=True):
+        delta_days = round((current - previous).total_seconds() / 86_400.0)
+        if delta_days <= 0:
+            continue
+        checked += 1
+        if delta_days in {1, 3, 4}:
+            allowed_gaps += 1
+        if delta_days >= 3:
+            observed_gap = True
+
+    return observed_gap and checked > 0 and allowed_gaps / checked >= 0.95
 
 
 def _append_covariate_issue(

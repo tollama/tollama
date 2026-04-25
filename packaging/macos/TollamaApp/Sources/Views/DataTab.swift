@@ -124,7 +124,7 @@ struct DataTab: View {
             roleBadge("timestamp", preview.timestampColumn)
             roleBadge("target", preview.targetColumn)
             roleBadge("series_id", preview.seriesIDColumn)
-            roleBadge("freq", preview.freqColumn)
+            roleBadge("freq column", preview.freqColumn)
         }
     }
 
@@ -155,7 +155,11 @@ struct DataTab: View {
                     TextField("auto", text: $workspace.seriesIDColumnOverride)
                 }
                 GridRow {
-                    Text("Freq")
+                    Text("Frequency")
+                    TextField("auto", text: $workspace.frequencyOverride)
+                }
+                GridRow {
+                    Text("Freq Column")
                     TextField("auto", text: $workspace.freqColumnOverride)
                 }
             }
