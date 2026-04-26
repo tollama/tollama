@@ -379,6 +379,9 @@ Runtime notes:
 - `lag-llama` is installed from GitHub (git must be available in your environment)
 - first run downloads checkpoint artifacts from Hugging Face during `tollama pull`
 - covariates/static features are unsupported (ignored in `best_effort`, rejected in `strict`)
+- timestamps are normalized to UTC-naive indexes before GluonTS dataset creation,
+  and backend runtime failures are returned as structured forecast errors instead
+  of terminating the runner process
 
 ```bash
 # install optional Lag-Llama runner dependencies

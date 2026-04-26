@@ -79,6 +79,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   remote model code, fixing inference with newer `transformers` releases
 - Granite TTM now left-pads histories shorter than its 512-point context window
   instead of rejecting app/demo forecasts with a context-length error
+- Lag-Llama now normalizes dataset indexes before GluonTS ingestion and returns
+  structured forecast errors for backend runtime failures instead of letting the
+  runner process exit
 
 ### Added
 

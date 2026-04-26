@@ -65,6 +65,19 @@ class _MissingDependencyAdapter(_CapturingAdapter):
         )
 
 
+class _RuntimeErrorAdapter(_CapturingAdapter):
+    def forecast(
+        self,
+        request,
+        *,
+        model_local_dir: str | None = None,
+        model_source: dict[str, object] | None = None,
+        model_metadata: dict[str, object] | None = None,
+    ) -> ForecastResponse:
+        del request, model_local_dir, model_source, model_metadata
+        raise RuntimeError("backend exploded")
+
+
 def _valid_forecast_params() -> dict[str, Any]:
     return {
         "model": "lag-llama",
@@ -120,6 +133,23 @@ def test_lag_llama_runner_forecast_returns_dependency_missing_error() -> None:
     assert payload["id"] == "req-2"
     assert payload["error"]["code"] == "DEPENDENCY_MISSING"
     assert "runner_lag_llama" in payload["error"]["message"]
+
+
+def test_lag_llama_runner_forecast_returns_runtime_error_without_crashing() -> None:
+    response = handle_request_line(
+        json.dumps(
+            {
+                "id": "req-runtime",
+                "method": "forecast",
+                "params": _valid_forecast_params(),
+            },
+        ),
+        _RuntimeErrorAdapter(),
+    )
+    payload = response.model_dump(mode="json", exclude_none=True)
+    assert payload["id"] == "req-runtime"
+    assert payload["error"]["code"] == "FORECAST_ERROR"
+    assert payload["error"]["message"] == "RuntimeError: backend exploded"
 
 
 def test_lag_llama_runner_validates_runner_specific_optional_params() -> None:

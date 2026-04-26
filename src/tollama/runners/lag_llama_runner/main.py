@@ -96,6 +96,18 @@ def _handle_forecast(request: ProtocolRequest, adapter: LagLlamaAdapter) -> Prot
         return error_response(request.id, code="BAD_REQUEST", message=str(exc))
     except ValueError as exc:
         return error_response(request.id, code="FORECAST_ERROR", message=str(exc))
+    except RuntimeError as exc:
+        return error_response(
+            request.id,
+            code="FORECAST_ERROR",
+            message=f"{type(exc).__name__}: {exc}",
+        )
+    except Exception as exc:  # noqa: BLE001
+        return error_response(
+            request.id,
+            code="FORECAST_ERROR",
+            message=f"{type(exc).__name__}: {exc}",
+        )
 
     response = enrich_forecast_response(
         response=response,

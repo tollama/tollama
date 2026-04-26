@@ -167,6 +167,7 @@ def test_build_pandas_dataset_sets_freq() -> None:
 
     assert dataset.target == "target"
     assert dataset.freq == "D"
+    assert dataset.frames["s1"].index.tz is None
 
 
 def test_build_pandas_dataset_rejects_mixed_freq() -> None:

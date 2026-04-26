@@ -507,7 +507,9 @@ def build_pandas_dataset(
         elif series.freq != dataset_freq:
             raise AdapterInputError("all input series must use the same frequency for lag-llama")
 
-        timestamps = pandas_module.to_datetime(series.timestamps, utc=True, errors="raise")
+        timestamps = _to_gluonts_index(
+            pandas_module.to_datetime(series.timestamps, utc=True, errors="raise"),
+        )
         frame = pandas_module.DataFrame(
             {"target": [float(value) for value in series.target]},
             index=timestamps,
@@ -521,7 +523,11 @@ def build_pandas_dataset(
         key = _unique_column_name(series.id, index, frames)
         frames[key] = frame
 
-    return pandas_dataset_cls(frames, target="target", freq=dataset_freq), list(series_list)
+    try:
+        dataset = pandas_dataset_cls(frames, target="target", freq=dataset_freq)
+    except Exception as exc:  # noqa: BLE001
+        raise AdapterInputError(f"failed to build Lag-Llama dataset: {exc}") from exc
+    return dataset, list(series_list)
 
 
 def resolve_positive_int(*, option_value: Any, default_value: int, field_name: str) -> int:
@@ -728,6 +734,25 @@ def _unique_column_name(series_id: str, index: int, existing: dict[str, Any]) ->
     if series_id not in existing:
         return series_id
     return f"{series_id}__{index}"
+
+
+def _to_gluonts_index(timestamps: Any) -> Any:
+    """Return a timezone-naive UTC index for GluonTS PeriodIndex conversion."""
+    tz_convert = getattr(timestamps, "tz_convert", None)
+    if callable(tz_convert):
+        try:
+            return tz_convert(None)
+        except (AttributeError, TypeError, ValueError):
+            pass
+
+    tz_localize = getattr(timestamps, "tz_localize", None)
+    if callable(tz_localize):
+        try:
+            return tz_localize(None)
+        except (AttributeError, TypeError, ValueError):
+            pass
+
+    return timestamps
 
 
 def _dict_str(payload: dict[str, Any] | None, key: str) -> str | None:

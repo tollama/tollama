@@ -39,12 +39,11 @@ struct ContentView: View {
             }
         }
         .navigationSplitViewStyle(.balanced)
-        .alert(item: activeBanner) { banner in
-            Alert(
-                title: Text(banner.title),
-                message: Text(banner.detail),
-                dismissButton: .default(Text("OK"))
-            )
+        .sheet(item: activeBanner) { banner in
+            ActionBannerSheet(banner: banner) {
+                model.banner = nil
+                workspace.banner = nil
+            }
         }
     }
 
@@ -118,6 +117,38 @@ struct ContentView: View {
 
     private var logCard: some View {
         LogsTailView(logTail: model.logTail, minHeight: 220)
+    }
+}
+
+struct ActionBannerSheet: View {
+    let banner: ActionBanner
+    let dismiss: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text(banner.title)
+                .font(.title2.bold())
+
+            ScrollView {
+                Text(banner.detail)
+                    .font(.body)
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.trailing, 8)
+            }
+            .frame(minHeight: 120, maxHeight: 360)
+
+            HStack {
+                Spacer()
+                Button("OK") {
+                    dismiss()
+                }
+                .buttonStyle(.borderedProminent)
+                .keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding(24)
+        .frame(minWidth: 420, idealWidth: 560, maxWidth: 720)
     }
 }
 
