@@ -2212,7 +2212,7 @@ def _execute_forecast(
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     except RunnerCallError as exc:
         status_code = 503 if exc.code == "DEPENDENCY_MISSING" else 502
-        if exc.code == "BAD_REQUEST":
+        if exc.code in {"BAD_REQUEST", "MODEL_UNSUPPORTED"}:
             status_code = 400
         raise HTTPException(status_code=status_code, detail=_runner_error_detail(exc)) from exc
     except RunnerProtocolError as exc:
@@ -3893,6 +3893,8 @@ def _http_error_hint(*, status_code: int, detail: Any) -> str | None:
     detail_text = _http_error_detail_text(detail).lower()
 
     if status_code == 400:
+        if "manifest-only" in detail_text or "model_unsupported" in detail_text:
+            return "Choose a forecast-ready model, for example `timer-base` or `sundial-base-128m`."
         return "Fix request payload or parameters and retry."
 
     if status_code == 404:

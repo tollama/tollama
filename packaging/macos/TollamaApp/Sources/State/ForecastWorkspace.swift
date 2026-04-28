@@ -36,6 +36,10 @@ final class ForecastWorkspace: ObservableObject {
             .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
     }
 
+    var installedForecastModels: [RegistryModel] {
+        installedModels.filter(\.forecastReady)
+    }
+
     var selectedModel: RegistryModel? {
         guard let selectedModelName else {
             return nil
@@ -59,8 +63,10 @@ final class ForecastWorkspace: ObservableObject {
         do {
             let response = try await client.listModels()
             models = response.available
-            if selectedModelName == nil || !installedModels.contains(where: { $0.name == selectedModelName }) {
-                selectedModelName = installedModels.first?.name
+            if selectedModelName == nil
+                || !installedForecastModels.contains(where: { $0.name == selectedModelName })
+            {
+                selectedModelName = installedForecastModels.first?.name
             }
             clampHorizonToSelectedModel()
         } catch {
@@ -127,6 +133,14 @@ final class ForecastWorkspace: ObservableObject {
         }
         guard let selectedModelName, !selectedModelName.isEmpty else {
             banner = ActionBanner(title: "No model selected", detail: "Install and select a model first.")
+            selectedTab = .models
+            return
+        }
+        guard selectedModel?.forecastReady != false else {
+            banner = ActionBanner(
+                title: "Model is manifest-only",
+                detail: "Select a forecast-ready model such as timer-base or sundial-base-128m."
+            )
             selectedTab = .models
             return
         }

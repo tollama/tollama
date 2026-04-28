@@ -49,11 +49,13 @@ The detail pane exposes four native tabs:
   `*_load_actual_entsoe_transparency` columns. When timestamp cadence cannot be
   inferred, the Data tab can send an explicit pandas frequency alias such as
   `D`, `h`, or `min`.
-- `Forecast`: runs one selected CSV against one installed model via
+- `Forecast`: runs one selected CSV against one installed forecast-ready model via
   `/api/forecast/upload`, clamps the horizon to registry metadata when
   available, down-selects CSVs with multiple inferred series for single-series
   models with a response warning, and renders native Swift Charts output plus a
-  forecast table.
+  forecast table. Manifest-only registry entries such as TimeMixer and
+  ForecastPFN are shown in `Models`, but are omitted from this forecast picker
+  until runner-consumable weights or installable upstream packages are wired.
 - `Logs`: shows the daemon log tail in the main pane.
 
 ## Built-in app actions

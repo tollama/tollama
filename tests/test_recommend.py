@@ -131,6 +131,21 @@ def test_recommend_models_include_models_filters_candidates() -> None:
     assert all(item["model"] == "mock" for item in payload["recommendations"])
 
 
+def test_recommend_models_excludes_forecast_not_ready_manifest_entries() -> None:
+    payload = recommend_models(
+        horizon=12,
+        include_models=["forecastpfn", "timemixer-base", "timer-base"],
+        top_k=5,
+    )
+
+    recommended_models = [item["model"] for item in payload["recommendations"]]
+    excluded_models = {item["model"]: item["reasons"] for item in payload["excluded"]}
+
+    assert recommended_models == ["timer-base"]
+    assert excluded_models["forecastpfn"] == ["forecast_not_ready"]
+    assert excluded_models["timemixer-base"] == ["forecast_not_ready"]
+
+
 def test_mcp_tollama_recommend_invalid_request_maps_to_mcp_error() -> None:
     with pytest.raises(MCPToolError) as exc_info:
         tollama_recommend(horizon=12, top_k=0)

@@ -1866,6 +1866,28 @@ class _BadRequestRunnerManager:
         return None
 
 
+class _UnsupportedModelRunnerManager:
+    def call(
+        self,
+        family: str,
+        method: str,
+        params: dict[str, Any],
+        timeout: float,
+        request_id: str | None = None,
+    ) -> dict[str, Any]:
+        del family, method, params, timeout, request_id
+        raise RunnerCallError(
+            code="MODEL_UNSUPPORTED",
+            message="ForecastPFN is registered as manifest-only.",
+        )
+
+    def stop(self, family: str | None = None) -> None:
+        return None
+
+    def unload(self, family: str, *, model: str | None = None, timeout: float) -> None:
+        return None
+
+
 class _CapturingRunnerManager:
     def __init__(self) -> None:
         self.captured: dict[str, Any] = {}
@@ -1940,6 +1962,26 @@ def test_forecast_returns_400_when_runner_returns_bad_request(monkeypatch, tmp_p
         "code": "BAD_REQUEST",
         "message": "Requested horizon exceeds model prediction_length.",
     }
+
+
+def test_forecast_returns_400_when_runner_reports_unsupported_model(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    _install_model(monkeypatch, tmp_path, "forecastpfn")
+    app = create_app(runner_manager=_UnsupportedModelRunnerManager())  # type: ignore[arg-type]
+    payload = _sample_forecast_payload()
+    payload["model"] = "forecastpfn"
+
+    with TestClient(app) as client:
+        response = client.post("/v1/forecast", json=payload)
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == {
+        "code": "MODEL_UNSUPPORTED",
+        "message": "ForecastPFN is registered as manifest-only.",
+    }
+    assert "forecast-ready model" in response.json()["hint"]
 
 
 def test_forecast_passes_manifest_source_and_metadata_to_runner(monkeypatch, tmp_path) -> None:

@@ -58,7 +58,8 @@ Toto supports target + past numeric covariates; known-future/static/categorical 
 Timer is currently target-only and returns canonical mean forecasts without quantiles.
 TimeMixer and ForecastPFN are manifest-only default registry entries; forecast calls return
 `MODEL_UNSUPPORTED` until runner-consumable model snapshots or installable upstream packages
-are wired.
+are wired. They are marked with `metadata.forecast_ready=false`, so recommend,
+auto-forecast, and the macOS Forecast picker skip them for executable forecasts.
 
 > [!IMPORTANT]
 > `patchtst` is a **Phase-2 baseline integration**: it is discoverable/pullable and now executes canonical target-only forecasts via the dedicated runner family. Quantiles are returned when the backend exposes them; otherwise the runner returns mean-only forecasts with a warning. If dependencies are missing, the runner returns `DEPENDENCY_MISSING` with the install command `python -m pip install -e ".[dev,runner_patchtst]"`.

@@ -46,6 +46,19 @@ def test_select_auto_models_ranks_candidates_for_fastest_strategy() -> None:
     assert selection.selected_models == ("mock",)
 
 
+def test_select_auto_models_skips_forecast_not_ready_candidates() -> None:
+    series = [SeriesInput.model_validate(_series_payload()[0])]
+    selection = select_auto_models(
+        series=series,
+        horizon=2,
+        strategy="auto",
+        include_models=["forecastpfn", "timer-base"],
+    )
+
+    assert [item.model for item in selection.ranked_candidates] == ["timer-base"]
+    assert selection.selected_models == ("timer-base",)
+
+
 def test_daemon_auto_forecast_selects_installed_model(monkeypatch, tmp_path) -> None:
     paths = TollamaPaths(base_dir=tmp_path / ".tollama")
     monkeypatch.setenv("TOLLAMA_HOME", str(paths.base_dir))

@@ -74,13 +74,15 @@ pull inside the app. See [macOS App Guide](docs/macos-app.md).
 | TiDE               | Unit8 / Darts           | Neural Baseline | Target only   |
 | N-HiTS             | Nixtla / NeuralForecast | Neural Baseline | Past + Future + Static |
 | N-BEATSx           | Nixtla / NeuralForecast | Neural Baseline | Past + Future + Static |
-| TimeMixer          | Tsinghua / THUML        | Neural Baseline | Target only   |
+| TimeMixer          | Tsinghua / THUML        | Neural Baseline (manifest-only) | Target only   |
 | Timer              | Tsinghua / THUML        | Neural Baseline | Target only   |
-| ForecastPFN        | PFN Research            | Neural Baseline | Target only   |
+| ForecastPFN        | PFN Research            | Neural Baseline (manifest-only) | Target only   |
 
 TimesFM 2.5 and Moirai keep dynamic covariates in practical best-effort mode:
 when `parameters.covariates_mode` remains at the default `best_effort`, runtime
 covariate-path failures degrade to target-only forecasts with warnings.
+TimeMixer and ForecastPFN are registry-visible manifest-only entries today; use
+`timer-base` or `sundial-base-128m` for downloadable zero-shot forecasts.
 
 > **TSFM vs Neural Baseline — what's the difference?**
 >

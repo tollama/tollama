@@ -25,7 +25,7 @@ model browser and forecast controls.
 | `nhits` | `nhits` | `tollama/nhits-runner` | Past + Future + Static |
 | `nbeatsx` | `nbeatsx` | `tollama/nbeatsx-runner` | Past + Future + Static |
 | `timer-base` | `timer` | `thuml/Timer` | Target only |
-| `timemixer-base` | `timemixer` | `tollama/timemixer-runner` (local source manifest) | Target only |
+| `timemixer-base` | `timemixer` | `tollama/timemixer-runner` (local source manifest) | Target only; manifest-only |
 | `forecastpfn` | `forecastpfn` | `tollama/forecastpfn-runner` (local source manifest) | Target only; manifest-only |
 
 ## Chronos2 Forecasting

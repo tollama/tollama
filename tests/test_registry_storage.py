@@ -337,6 +337,7 @@ def test_registry_loads_required_model_specs() -> None:
     assert timemixer.source.revision == "main"
     assert timemixer.metadata == {
         "implementation": "timemixer_base",
+        "forecast_ready": False,
         "max_context": 1536,
         "max_horizon": 720,
         "install_extra": "runner_timemixer",
@@ -360,6 +361,7 @@ def test_registry_loads_required_model_specs() -> None:
     assert forecastpfn.source.revision == "main"
     assert forecastpfn.metadata == {
         "implementation": "forecastpfn",
+        "forecast_ready": False,
         "max_context": 1000,
         "max_horizon": 300,
         "install_extra": "runner_forecastpfn",

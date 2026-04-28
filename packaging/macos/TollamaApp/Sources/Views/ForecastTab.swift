@@ -36,10 +36,10 @@ struct ForecastTab: View {
                     Text("Model")
                         .font(.headline)
                     Picker("Model", selection: selectedModelBinding) {
-                        if workspace.installedModels.isEmpty {
-                            Text("No installed models").tag("")
+                        if workspace.installedForecastModels.isEmpty {
+                            Text("No forecast-ready models").tag("")
                         }
-                        ForEach(workspace.installedModels) { model in
+                        ForEach(workspace.installedForecastModels) { model in
                             Text(model.name).tag(model.name)
                         }
                     }
@@ -96,6 +96,12 @@ struct ForecastTab: View {
                 Text("Selected model max horizon: \(maxHorizon)")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+            }
+
+            if workspace.installedForecastModels.isEmpty && !workspace.installedModels.isEmpty {
+                Text("Installed manifest-only models are not shown in this forecast picker.")
+                    .font(.caption)
+                    .foregroundStyle(.orange)
             }
         }
     }

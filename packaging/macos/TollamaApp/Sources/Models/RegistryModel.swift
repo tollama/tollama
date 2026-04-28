@@ -70,6 +70,24 @@ indirect enum JSONValue: Codable, Equatable, CustomStringConvertible, Sendable {
         return nil
     }
 
+    var boolValue: Bool? {
+        switch self {
+        case .bool(let value):
+            return value
+        case .string(let value):
+            let normalized = value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            if ["true", "yes", "1"].contains(normalized) {
+                return true
+            }
+            if ["false", "no", "0"].contains(normalized) {
+                return false
+            }
+            return nil
+        default:
+            return nil
+        }
+    }
+
     var description: String {
         switch self {
         case .string(let value):
@@ -112,6 +130,10 @@ struct RegistryModel: Decodable, Identifiable, Equatable, Sendable {
 
     var implementation: String? {
         metadata["implementation"]?.stringValue
+    }
+
+    var forecastReady: Bool {
+        metadata["forecast_ready"]?.boolValue ?? true
     }
 
     var isDemoModel: Bool {

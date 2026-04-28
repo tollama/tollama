@@ -73,6 +73,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   them as successful progress events
 - ForecastPFN now reports the built-in manifest-only model as `MODEL_UNSUPPORTED`
   instead of falling through to a generic missing-module inference error
+- Manifest-only TimeMixer and ForecastPFN entries are now marked
+  `forecast_ready=false`; recommend, auto-forecast, and the macOS Forecast
+  picker skip them for executable forecasts, and `MODEL_UNSUPPORTED` maps to
+  HTTP `400`
 - TiDE runner installs now explicitly include `pytorch-lightning`, matching the
   runtime import path used by Darts' `TiDEModel`
 - Timer runner now restores legacy Transformers cache APIs expected by THUML's

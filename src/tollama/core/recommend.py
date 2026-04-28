@@ -129,6 +129,9 @@ def _collect_exclusion_reasons(
     reasons: list[str] = []
     capabilities = spec.capabilities or ModelCapabilities()
 
+    if not _is_forecast_ready(spec):
+        reasons.append("forecast_not_ready")
+
     if _is_restricted_license(spec) and not allow_restricted_license:
         reasons.append("restricted_license")
 
@@ -231,6 +234,13 @@ def _horizon_limit(spec: ModelSpec) -> int | None:
         if isinstance(raw, float) and raw > 0 and raw.is_integer():
             return int(raw)
     return None
+
+
+def _is_forecast_ready(spec: ModelSpec) -> bool:
+    metadata = spec.metadata
+    if not isinstance(metadata, dict):
+        return True
+    return metadata.get("forecast_ready") is not False
 
 
 def _is_restricted_license(spec: ModelSpec) -> bool:

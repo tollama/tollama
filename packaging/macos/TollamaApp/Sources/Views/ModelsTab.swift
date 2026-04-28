@@ -82,6 +82,14 @@ struct ModelsTab: View {
                                 .background(Color.secondary.opacity(0.16))
                                 .clipShape(RoundedRectangle(cornerRadius: 5))
                         }
+                        if !model.forecastReady {
+                            Text("Manifest-only")
+                                .font(.caption)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(Color.orange.opacity(0.16))
+                                .clipShape(RoundedRectangle(cornerRadius: 5))
+                        }
                         if model.installed {
                             Text("Installed")
                                 .font(.caption)
@@ -104,7 +112,11 @@ struct ModelsTab: View {
                     .font(.caption)
             }
 
-            if !model.installed && model.family != "mock" {
+            if !model.forecastReady {
+                Text("This registry entry can be installed, but forecast calls are disabled until runner-consumable weights are available.")
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+            } else if !model.installed && model.family != "mock" {
                 Text("Runtime dependencies install lazily on first forecast when auto-bootstrap is enabled.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -135,6 +147,9 @@ struct ModelsTab: View {
 
     private func modelDetailLine(_ model: RegistryModel) -> String {
         var parts = ["family \(model.family)"]
+        if !model.forecastReady {
+            parts.append("not forecast-ready")
+        }
         if let maxHorizon = model.maxHorizon {
             parts.append("max horizon \(maxHorizon)")
         }

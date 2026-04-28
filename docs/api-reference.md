@@ -419,12 +419,12 @@ Response (abbreviated):
 | Status | Meaning | Example cause |
 |---|---|---|
 | `200` | Success | Forecast completed |
-| `400` | Bad request | Missing `horizon`, field type mismatch, extra fields, covariate shape mismatch, invalid `quantiles` order, `series` + `data_url` both set |
+| `400` | Bad request | Missing `horizon`, field type mismatch, extra fields, covariate shape mismatch, invalid `quantiles` order, `series` + `data_url` both set, runner `MODEL_UNSUPPORTED` |
 | `401` | Unauthorized | Missing or invalid `Authorization: Bearer` header |
 | `403` | Forbidden | Model requires license acceptance (`accept_license` not provided) |
 | `404` | Not found | Model not installed — run `tollama pull <model>` first |
 | `409` | Conflict | Runner process conflict during concurrent operation |
-| `502` | Bad gateway | Runner returned an execution error or invalid upstream response |
+| `502` | Bad gateway | Runner returned an execution error other than request/model incompatibility, or an invalid upstream response |
 | `500` | Internal error | Unhandled exception in runner process |
 | `503` | Service unavailable | Runner process crashed or daemon unreachable |
 
