@@ -55,7 +55,9 @@ The detail pane exposes four native tabs:
   models with a response warning, and renders native Swift Charts output plus a
   forecast table. Manifest-only registry entries such as TimeMixer and
   ForecastPFN are shown in `Models`, but are omitted from this forecast picker
-  until runner-consumable weights or installable upstream packages are wired.
+  until runner-consumable weights or installable upstream packages are wired;
+  the daemon also rejects direct forecast calls for those entries before runner
+  startup.
 - `Logs`: shows the daemon log tail in the main pane.
 
 ## Built-in app actions

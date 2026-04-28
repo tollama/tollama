@@ -12,7 +12,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from tollama.core.config import TollamaConfig, save_config
-from tollama.core.storage import TollamaPaths, install_from_registry
+from tollama.core.storage import TollamaPaths, install_from_registry, write_manifest
 from tollama.daemon.app import create_app
 from tollama.daemon.supervisor import RunnerCallError, RunnerUnavailableError
 
@@ -1878,8 +1878,27 @@ class _UnsupportedModelRunnerManager:
         del family, method, params, timeout, request_id
         raise RunnerCallError(
             code="MODEL_UNSUPPORTED",
-            message="ForecastPFN is registered as manifest-only.",
+            message="runner reported an unsupported model.",
         )
+
+    def stop(self, family: str | None = None) -> None:
+        return None
+
+    def unload(self, family: str, *, model: str | None = None, timeout: float) -> None:
+        return None
+
+
+class _FailIfCalledRunnerManager:
+    def call(
+        self,
+        family: str,
+        method: str,
+        params: dict[str, Any],
+        timeout: float,
+        request_id: str | None = None,
+    ) -> dict[str, Any]:
+        del family, method, params, timeout, request_id
+        raise AssertionError("runner should not be called")
 
     def stop(self, family: str | None = None) -> None:
         return None
@@ -1968,10 +1987,9 @@ def test_forecast_returns_400_when_runner_reports_unsupported_model(
     monkeypatch,
     tmp_path,
 ) -> None:
-    _install_model(monkeypatch, tmp_path, "forecastpfn")
+    _install_model(monkeypatch, tmp_path, "mock")
     app = create_app(runner_manager=_UnsupportedModelRunnerManager())  # type: ignore[arg-type]
     payload = _sample_forecast_payload()
-    payload["model"] = "forecastpfn"
 
     with TestClient(app) as client:
         response = client.post("/v1/forecast", json=payload)
@@ -1979,9 +1997,55 @@ def test_forecast_returns_400_when_runner_reports_unsupported_model(
     assert response.status_code == 400
     assert response.json()["detail"] == {
         "code": "MODEL_UNSUPPORTED",
-        "message": "ForecastPFN is registered as manifest-only.",
+        "message": "runner reported an unsupported model.",
     }
-    assert "forecast-ready model" in response.json()["hint"]
+    assert response.json()["hint"] == "Fix request payload or parameters and retry."
+
+
+def test_forecast_preflights_forecast_not_ready_model_before_runner(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    paths = TollamaPaths(base_dir=tmp_path / ".tollama")
+    monkeypatch.setenv("TOLLAMA_HOME", str(paths.base_dir))
+    write_manifest(
+        "forecastpfn",
+        {
+            "name": "forecastpfn",
+            "family": "forecastpfn",
+            "source": {
+                "type": "local",
+                "repo_id": "tollama/forecastpfn-runner",
+                "revision": "main",
+            },
+            "resolved": {"commit_sha": None, "snapshot_path": None},
+            "size_bytes": 0,
+            "pulled_at": None,
+            "installed_at": "2026-01-01T00:00:00Z",
+            "license": {
+                "type": "apache-2.0",
+                "needs_acceptance": False,
+                "accepted": True,
+                "accepted_at": "2026-01-01T00:00:00Z",
+            },
+            "metadata": {
+                "implementation": "forecastpfn",
+                "max_context": 1000,
+                "max_horizon": 300,
+            },
+        },
+        paths=paths,
+    )
+    app = create_app(runner_manager=_FailIfCalledRunnerManager())  # type: ignore[arg-type]
+    payload = _sample_forecast_payload()
+    payload["model"] = "forecastpfn"
+
+    with TestClient(app) as client:
+        response = client.post("/v1/forecast", json=payload)
+
+    assert response.status_code == 400
+    assert response.json()["detail"]["code"] == "MODEL_UNSUPPORTED"
+    assert "not forecast-ready" in response.json()["detail"]["message"]
 
 
 def test_forecast_passes_manifest_source_and_metadata_to_runner(monkeypatch, tmp_path) -> None:

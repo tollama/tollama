@@ -76,7 +76,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Manifest-only TimeMixer and ForecastPFN entries are now marked
   `forecast_ready=false`; recommend, auto-forecast, and the macOS Forecast
   picker skip them for executable forecasts, and `MODEL_UNSUPPORTED` maps to
-  HTTP `400`
+  HTTP `400`; direct forecast calls are preflighted against the current registry
+  before runner startup, even when an older installed manifest lacks the flag
 - TiDE runner installs now explicitly include `pytorch-lightning`, matching the
   runtime import path used by Darts' `TiDEModel`
 - Timer runner now restores legacy Transformers cache APIs expected by THUML's

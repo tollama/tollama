@@ -2119,6 +2119,7 @@ def _execute_forecast(
     model_source = _manifest_source(model_manifest)
     model_metadata = _manifest_metadata(model_manifest)
     model_capabilities = _resolve_model_capabilities(payload.model, model_manifest)
+    _enforce_forecast_ready(payload.model, model_manifest)
     key_id = _event_key_id(request)
     _publish_event(
         app=app,
@@ -4166,6 +4167,38 @@ def _resolve_model_capabilities(
     if spec.capabilities is not None:
         return spec.capabilities
     return _manifest_capabilities(manifest)
+
+
+def _enforce_forecast_ready(model_name: str, manifest: dict[str, Any]) -> None:
+    if _model_forecast_ready(model_name, manifest):
+        return
+
+    raise HTTPException(
+        status_code=400,
+        detail={
+            "code": "MODEL_UNSUPPORTED",
+            "message": (
+                f"model {model_name!r} is manifest-only and not forecast-ready. "
+                "Use timer-base or sundial-base-128m for downloadable zero-shot "
+                "forecasting models."
+            ),
+        },
+    )
+
+
+def _model_forecast_ready(model_name: str, manifest: dict[str, Any]) -> bool:
+    try:
+        spec = get_model_spec(model_name)
+    except KeyError:
+        spec = None
+
+    if spec is not None and isinstance(spec.metadata, dict):
+        return spec.metadata.get("forecast_ready") is not False
+
+    metadata = _manifest_metadata(manifest)
+    if metadata is None:
+        return True
+    return metadata.get("forecast_ready") is not False
 
 
 def _dedupe_preserve_order(values: list[str]) -> list[str]:
