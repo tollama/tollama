@@ -550,6 +550,7 @@ Timer is integrated for inference via the dedicated `timer` runner family.
   - returns `DEPENDENCY_MISSING` when optional dependencies are absent
   - performs target-only forecasting in the current adapter path
   - truncates long histories to the declared `max_context`
+  - trims histories to Timer token boundaries before inference
   - returns canonical mean forecasts; quantiles are currently omitted
 
 ```bash

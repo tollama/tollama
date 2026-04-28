@@ -262,6 +262,8 @@ tollama/
   - Runtime state also records an optional-extra dependency fingerprint so a
     family venv is rebuilt when runner dependencies change without a package
     version bump.
+  - Local source checkout runs also record a source fingerprint so runner code
+    changes rebuild stale family venvs without waiting for a package version bump.
   - Manual override via `config.json` `daemon.runner_commands` takes precedence.
 - CLI `tollama runtime` subcommand group:
   - `tollama runtime install <family>` / `--all` — eagerly create isolated venvs.

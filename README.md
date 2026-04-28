@@ -111,7 +111,9 @@ TimeMixer and ForecastPFN are registry-visible manifest-only entries today; use
 ```
 
 Family runtimes auto-bootstrap on first use, and fall back to `uv venv` when
-stdlib `venv` / `ensurepip` fails on the host interpreter.
+stdlib `venv` / `ensurepip` fails on the host interpreter. Runtime state tracks
+version, dependency, and local-source fingerprints so stale family venvs rebuild
+automatically after relevant code or dependency changes.
 
 ---
 

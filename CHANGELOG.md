@@ -62,6 +62,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   interpreters so bundled Python runtimes can locate `libpython` correctly
 - Per-family runtime bootstrap now records an optional-extra dependency
   fingerprint and rebuilds stale family venvs when runner dependencies change
+- Per-family runtime bootstrap now records local source fingerprints when running
+  from a checkout, so runner code fixes rebuild stale family venvs even when the
+  package version and optional dependencies are unchanged
 - Registry loading now falls back to editable-install source metadata if an
   in-place runtime hotfix removes packaged registry data while a daemon is live
 - CSV/data-url forecasts for single-series model implementations now
@@ -82,6 +85,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   runtime import path used by Darts' `TiDEModel`
 - Timer runner now restores legacy Transformers cache APIs expected by THUML's
   remote model code, fixing inference with newer `transformers` releases
+- Timer inference now uses the remote model's direct `max_output_length`
+  prediction path first and trims histories to Timer token boundaries, avoiding
+  raw-length vs patch-length tensor mismatches on long CSV histories
 - Granite TTM now left-pads histories shorter than its 512-point context window
   instead of rejecting app/demo forecasts with a context-length error
 - Lag-Llama now normalizes dataset indexes before GluonTS ingestion and returns

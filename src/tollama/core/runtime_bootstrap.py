@@ -86,6 +86,16 @@ FAMILY_RUNNER_MODULES: dict[str, str] = {
 _STATE_FILENAME = "installed.json"
 BOOTSTRAP_WHEELHOUSE_ENV_NAME = "TOLLAMA_RUNTIME_WHEELHOUSE"
 _DEPENDENCY_FINGERPRINT_ALGORITHM = "sha256"
+_SOURCE_FINGERPRINT_ALGORITHM = "sha256"
+_SOURCE_FINGERPRINT_EXCLUDED_DIRS = frozenset(
+    {
+        ".git",
+        ".mypy_cache",
+        ".pytest_cache",
+        ".ruff_cache",
+        "__pycache__",
+    }
+)
 
 
 class BootstrapError(RuntimeError):
@@ -184,6 +194,8 @@ def get_runtime_status(
             "dependency_fingerprint": None,
             "dependency_fingerprint_algorithm": _DEPENDENCY_FINGERPRINT_ALGORITHM,
             "extra_dependencies": None,
+            "source_fingerprint": None,
+            "source_fingerprint_algorithm": _SOURCE_FINGERPRINT_ALGORITHM,
             "python_version": None,
             "python_constraint": python_constraint,
             "installed_at": None,
@@ -200,6 +212,8 @@ def get_runtime_status(
         "dependency_fingerprint": state.get("dependency_fingerprint"),
         "dependency_fingerprint_algorithm": state.get("dependency_fingerprint_algorithm"),
         "extra_dependencies": state.get("extra_dependencies"),
+        "source_fingerprint": state.get("source_fingerprint"),
+        "source_fingerprint_algorithm": state.get("source_fingerprint_algorithm"),
         "python_version": state.get("python_version"),
         "python_constraint": python_constraint,
         "installed_at": state.get("installed_at"),
@@ -275,6 +289,19 @@ def _is_runtime_valid(family_dir: Path, family: str) -> bool:
             family,
             state.get("dependency_fingerprint"),
             expected_dependency_fingerprint,
+        )
+        return False
+
+    expected_source_fingerprint = _runtime_source_fingerprint()
+    if (
+        expected_source_fingerprint is not None
+        and state.get("source_fingerprint") != expected_source_fingerprint
+    ):
+        logger.debug(
+            "runtime for %r has source_fingerprint=%s (expected %s); will re-bootstrap",
+            family,
+            state.get("source_fingerprint"),
+            expected_source_fingerprint,
         )
         return False
 
@@ -460,6 +487,7 @@ def _resolve_local_project_root() -> str | None:
 def _write_runtime_state(family_dir: Path, family: str) -> None:
     """Persist metadata about the bootstrap so we can detect staleness."""
     extra_dependencies = _extra_dependency_specs(FAMILY_EXTRAS[family])
+    source_fingerprint = _runtime_source_fingerprint()
     state = {
         "tollama_version": _tollama_version,
         "extra": FAMILY_EXTRAS[family],
@@ -470,6 +498,9 @@ def _write_runtime_state(family_dir: Path, family: str) -> None:
         "installed_at": datetime.now(UTC).isoformat(),
         "schema_version": _RUNTIME_STATE_SCHEMA_VERSION,
     }
+    if source_fingerprint is not None:
+        state["source_fingerprint"] = source_fingerprint
+        state["source_fingerprint_algorithm"] = _SOURCE_FINGERPRINT_ALGORITHM
     state_path = family_dir / _STATE_FILENAME
     state_path.parent.mkdir(parents=True, exist_ok=True)
     state_path.write_text(json.dumps(state, indent=2) + "\n", encoding="utf-8")
@@ -477,6 +508,45 @@ def _write_runtime_state(family_dir: Path, family: str) -> None:
 
 def _runtime_dependency_fingerprint(family: str) -> str:
     return _dependency_fingerprint(_extra_dependency_specs(FAMILY_EXTRAS[family]))
+
+
+def _runtime_source_fingerprint() -> str | None:
+    local_root = _resolve_local_project_root()
+    if local_root is None:
+        return None
+
+    root = Path(local_root)
+    candidates = (root / "pyproject.toml", root / "src" / "tollama")
+    digest = sha256()
+    hashed_any = False
+
+    for candidate in candidates:
+        if candidate.is_file():
+            hashed_any = _update_source_digest(digest, root, candidate) or hashed_any
+            continue
+        if not candidate.is_dir():
+            continue
+        for source_path in sorted(candidate.rglob("*.py")):
+            relative_parts = source_path.relative_to(root).parts
+            if any(part in _SOURCE_FINGERPRINT_EXCLUDED_DIRS for part in relative_parts):
+                continue
+            hashed_any = _update_source_digest(digest, root, source_path) or hashed_any
+
+    return digest.hexdigest() if hashed_any else None
+
+
+def _update_source_digest(digest: Any, root: Path, source_path: Path) -> bool:
+    try:
+        relative = source_path.relative_to(root).as_posix()
+        content = source_path.read_bytes()
+    except OSError:
+        return False
+
+    digest.update(relative.encode("utf-8"))
+    digest.update(b"\0")
+    digest.update(content)
+    digest.update(b"\0")
+    return True
 
 
 def _dependency_fingerprint(dependencies: list[str]) -> str:

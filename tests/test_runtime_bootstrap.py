@@ -20,6 +20,7 @@ from tollama.core.runtime_bootstrap import (
     _install_extras,
     _resolve_install_spec,
     _runtime_dependency_fingerprint,
+    _runtime_source_fingerprint,
     ensure_family_runtime,
     get_runtime_status,
     list_runtime_statuses,
@@ -49,6 +50,10 @@ def _write_fake_state(paths: TollamaPaths, family: str, **overrides: object) -> 
         "installed_at": "2026-01-01T00:00:00+00:00",
         "schema_version": 4,
     }
+    source_fingerprint = _runtime_source_fingerprint()
+    if source_fingerprint is not None:
+        state["source_fingerprint"] = source_fingerprint
+        state["source_fingerprint_algorithm"] = "sha256"
     state.update(overrides)
     (family_dir / "installed.json").write_text(json.dumps(state), encoding="utf-8")
 
@@ -240,6 +245,8 @@ def test_get_status_installed(tmp_path: Path) -> None:
     assert status["dependency_fingerprint"] is not None
     assert status["dependency_fingerprint_algorithm"] == "sha256"
     assert isinstance(status["extra_dependencies"], list)
+    assert "source_fingerprint" in status
+    assert status["source_fingerprint_algorithm"] == "sha256"
     assert status["python_constraint"] is None  # sundial has no constraint
 
 
@@ -250,6 +257,8 @@ def test_get_status_not_installed(tmp_path: Path) -> None:
 
     assert status["installed"] is False
     assert status["family"] == "sundial"
+    assert status["source_fingerprint"] is None
+    assert status["source_fingerprint_algorithm"] == "sha256"
     assert status["python_constraint"] is None
 
 
@@ -469,6 +478,49 @@ def test_dependency_fingerprint_change_triggers_reinstall(tmp_path: Path) -> Non
     ):
         mock_create.side_effect = lambda vd: _write_fake_python(paths, "tide")
         ensure_family_runtime("tide", paths=paths)
+        mock_create.assert_called_once()
+
+
+def test_missing_source_fingerprint_triggers_reinstall_when_running_from_source(
+    tmp_path: Path,
+) -> None:
+    paths = _paths(tmp_path)
+    _write_fake_state(paths, "timer")
+    state_path = paths.runtimes_dir / "timer" / "installed.json"
+    payload = json.loads(state_path.read_text(encoding="utf-8"))
+    payload.pop("source_fingerprint", None)
+    payload.pop("source_fingerprint_algorithm", None)
+    state_path.write_text(json.dumps(payload), encoding="utf-8")
+    _write_fake_python(paths, "timer")
+
+    with (
+        patch(
+            "tollama.core.runtime_bootstrap._runtime_source_fingerprint",
+            return_value="current-source",
+        ),
+        patch("tollama.core.runtime_bootstrap._create_venv") as mock_create,
+        patch("tollama.core.runtime_bootstrap._install_extras"),
+    ):
+        mock_create.side_effect = lambda vd: _write_fake_python(paths, "timer")
+        ensure_family_runtime("timer", paths=paths)
+        mock_create.assert_called_once()
+
+
+def test_source_fingerprint_change_triggers_reinstall(tmp_path: Path) -> None:
+    paths = _paths(tmp_path)
+    _write_fake_state(paths, "timer", source_fingerprint="old-source")
+    _write_fake_python(paths, "timer")
+
+    with (
+        patch(
+            "tollama.core.runtime_bootstrap._runtime_source_fingerprint",
+            return_value="current-source",
+        ),
+        patch("tollama.core.runtime_bootstrap._create_venv") as mock_create,
+        patch("tollama.core.runtime_bootstrap._install_extras"),
+    ):
+        mock_create.side_effect = lambda vd: _write_fake_python(paths, "timer")
+        ensure_family_runtime("timer", paths=paths)
         mock_create.assert_called_once()
 
 

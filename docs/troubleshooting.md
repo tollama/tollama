@@ -260,22 +260,25 @@ Fix:
   ```
 - After the first successful run, normal timeout values (120–300 s) are safe.
 
-## 14) Runtime re-installs once after upgrade (schema version mismatch)
+## 14) Runtime re-installs once after upgrade or source change
 
 Symptoms:
 - Right after upgrading Tollama, the first run/pull for a model family is slower than usual.
-- Logs mention runtime re-bootstrap due to `schema_version` mismatch.
+- Logs mention runtime re-bootstrap due to `schema_version`, `dependency_fingerprint`,
+  or `source_fingerprint` mismatch.
 - It only happens once per family, then normal speed returns.
 
 Explanation:
-- Tollama stores per-family runtime metadata (including `schema_version`) in runtime state.
-- After an upgrade that bumps runtime state schema, Tollama intentionally rebuilds the affected runtime once so the environment matches the current code.
+- Tollama stores per-family runtime metadata, including `schema_version` and
+  dependency/source fingerprints, in runtime state.
+- After an upgrade, dependency change, or local source checkout change, Tollama
+  intentionally rebuilds the affected runtime once so the environment matches
+  the current code.
 - This is expected migration behavior, not runtime corruption.
 
 Quick verification:
 ```bash
-# Check runtime state, including schema_version
-# (look at schema_version and tollama_version per family)
+# Check runtime state, including schema_version and fingerprints
 tollama runtime list --json
 
 # Trigger one run for the affected family/model

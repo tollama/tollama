@@ -55,7 +55,8 @@ Additional docs:
 
 Sundial and TiDE are target-only in the current runners; do not include covariates or static features in those requests.
 Toto supports target + past numeric covariates; known-future/static/categorical covariates are unsupported.
-Timer is currently target-only and returns canonical mean forecasts without quantiles.
+Timer is currently target-only, trims histories to Timer token boundaries, and
+returns canonical mean forecasts without quantiles.
 TimeMixer and ForecastPFN are manifest-only default registry entries; forecast calls return
 `MODEL_UNSUPPORTED` until runner-consumable model snapshots or installable upstream packages
 are wired. They are marked with `metadata.forecast_ready=false`, so recommend,
@@ -333,10 +334,11 @@ Families with explicit `runner_commands` entries skip auto-bootstrap.
     └── ...
 ```
 
-Each `installed.json` records the tollama version, extra name, Python version,
-and install timestamp.  When tollama is upgraded, runtimes are automatically
-re-bootstrapped on next use (or can be updated manually with
-`tollama runtime update --all`).
+Each `installed.json` records the tollama version, extra name, dependency
+fingerprint, Python version, and install timestamp. When Tollama runs from a
+local source checkout, it also records a source fingerprint so runner code
+changes automatically re-bootstrap stale family runtimes on next use. Runtimes
+can also be updated manually with `tollama runtime update --all`.
 
 ## Environment Variables and Paths
 

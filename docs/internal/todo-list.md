@@ -48,6 +48,7 @@ Canonical inventories:
   - 현재 family: `torch`, `timesfm`, `uni2ts`, `sundial`, `toto`, `lag_llama`, `patchtst`, `tide`, `nhits`, `nbeatsx`, `timer`, `timemixer`, `forecastpfn` (+ `mock`)
 - [~] (P1) 런너별 종속성 충돌 방지 정책(버전 pin, lockfile, 독립 venv) 확립
   - 현재: optional extras 분리 + family별 독립 runtime venv 자동화 구현(`~/.tollama/runtimes/<family>/venv/`, `tollama runtime install/list/update/remove`)
+  - 현재: runtime state가 dependency/source fingerprint를 기록해 runner dependency나 local source 변경 시 stale family venv를 자동 재생성
   - 현재: stdlib `venv`/`ensurepip` 실패 시 `uv venv` fallback 경로 복구
   - 현재: 개발 surface 재현성을 위한 compiled lock artifact `requirements-dev.lock` 추가 + CI freshness/install 검증 도입
   - TODO: runner-family별 lock/install 재현성까지 확장

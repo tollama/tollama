@@ -67,7 +67,8 @@ The app shell exposes:
 - `Try Demo Forecast`: installs `mock` locally and runs a network-free demo forecast
 - `Install Starter Model`: pulls the default starter model (`sundial-base-128m`)
 - `Open Logs`: reveals `~/Library/Logs/Tollama/daemon.log`
-- `Repair Runtime`: rebuilds the bundled runtime environment
+- `Repair Runtime`: rebuilds the bundled runtime environment and refreshes
+  stale family runner environments on next use
 - `Reset Local Data`: clears app-local runtime/state/logs and bootstraps again
 
 If another Tollama daemon is already listening on `127.0.0.1:11435`, the app

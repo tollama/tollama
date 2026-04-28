@@ -103,34 +103,39 @@ class TimerAdapter:
         forecasts: list[SeriesForecast] = []
         warnings: list[str] = []
 
+        model = self._get_or_load_model(
+            model_name=model_name,
+            repo_id=repo_id,
+            revision=revision,
+            config=config,
+            model_cls=AutoModelForCausalLM,
+        )
+        input_token_len = _model_input_token_len(model)
+
         for series in request.series:
             target = [float(v) for v in series.target]
             if len(target) > max_context:
                 target = target[-max_context:]
                 warnings.append(f"series {series.id!r}: truncated to last {max_context} points")
+            target = _trim_to_timer_token_boundary(
+                target=target,
+                input_token_len=input_token_len,
+                series_id=series.id,
+                warnings=warnings,
+            )
 
-            # Timer generates via autoregressive decoding
             input_tensor = torch.tensor([target], dtype=torch.float32)
 
             try:
-                loaded = self._loaded_models.get(model_name, {})
-                if "model" not in loaded:
-                    model = AutoModelForCausalLM.from_pretrained(
-                        repo_id,
-                        revision=revision,
-                        trust_remote_code=True,
-                    )
-                    model.eval()
-                    if model_name not in self._loaded_models:
-                        self._loaded_models[model_name] = {"config": config, "repo_id": repo_id}
-                    self._loaded_models[model_name]["model"] = model
-                else:
-                    model = self._loaded_models[model_name]["model"]
-
                 with torch.no_grad():
-                    output = model.generate(input_tensor, max_new_tokens=request.horizon)
-
-                predicted = output[0, len(target) : len(target) + request.horizon].tolist()
+                    predicted = _predict_timer_values(
+                        model=model,
+                        input_tensor=input_tensor,
+                        context_length=len(target),
+                        horizon=request.horizon,
+                        torch_module=torch,
+                        input_token_len=input_token_len,
+                    )
             except Exception as exc:
                 raise ValueError(f"Timer inference failed for series {series.id!r}: {exc}") from exc
 
@@ -145,7 +150,7 @@ class TimerAdapter:
                 SeriesForecast(
                     id=series.id,
                     freq=series.freq,
-                    start_timestamp=None,
+                    start_timestamp=_forecast_start_timestamp(series),
                     mean=mean_values,
                     quantiles=None,
                 )
@@ -156,6 +161,30 @@ class TimerAdapter:
             forecasts=forecasts,
             warnings=warnings or None,
         )
+
+    def _get_or_load_model(
+        self,
+        *,
+        model_name: str,
+        repo_id: str,
+        revision: str | None,
+        config: dict[str, Any],
+        model_cls: Any,
+    ) -> Any:
+        loaded = self._loaded_models.get(model_name, {})
+        if "model" in loaded:
+            return loaded["model"]
+
+        model = model_cls.from_pretrained(
+            repo_id,
+            revision=revision,
+            trust_remote_code=True,
+        )
+        model.eval()
+        if model_name not in self._loaded_models:
+            self._loaded_models[model_name] = {"config": config, "repo_id": repo_id}
+        self._loaded_models[model_name]["model"] = model
+        return model
 
 
 def _resolve_runtime_config(
@@ -174,6 +203,110 @@ def _resolve_runtime_config(
     return config
 
 
+def _model_input_token_len(model: Any) -> int:
+    config = getattr(model, "config", None)
+    raw = getattr(config, "input_token_len", 1)
+    if isinstance(raw, bool):
+        return 1
+    if isinstance(raw, int) and raw > 0:
+        return raw
+    return 1
+
+
+def _trim_to_timer_token_boundary(
+    *,
+    target: list[float],
+    input_token_len: int,
+    series_id: str,
+    warnings: list[str],
+) -> list[float]:
+    if input_token_len <= 1:
+        return target
+    usable_length = (len(target) // input_token_len) * input_token_len
+    if usable_length <= 0:
+        raise AdapterInputError(
+            f"series {series_id!r}: Timer requires at least {input_token_len} history points"
+        )
+    if usable_length != len(target):
+        warnings.append(
+            f"series {series_id!r}: truncated to last {usable_length} points "
+            f"to match Timer input_token_len {input_token_len}"
+        )
+    return target[-usable_length:]
+
+
+def _forecast_start_timestamp(series: Any) -> str:
+    timestamps = getattr(series, "timestamps", None)
+    if timestamps:
+        return str(timestamps[-1])
+    return "1970-01-01T00:00:00Z"
+
+
+def _predict_timer_values(
+    *,
+    model: Any,
+    input_tensor: Any,
+    context_length: int,
+    horizon: int,
+    torch_module: Any,
+    input_token_len: int,
+) -> list[float]:
+    if callable(model):
+        try:
+            output = model(input_tensor, max_output_length=horizon, revin=True)
+        except TypeError:
+            output = None
+        else:
+            return _extract_prediction_values(
+                output,
+                context_length=context_length,
+                horizon=horizon,
+            )
+
+    attention_mask = torch_module.ones((1, context_length // max(input_token_len, 1)))
+    output = model.generate(
+        input_tensor,
+        max_new_tokens=horizon,
+        attention_mask=attention_mask,
+    )
+    return _extract_prediction_values(
+        output,
+        context_length=context_length,
+        horizon=horizon,
+    )
+
+
+def _extract_prediction_values(
+    output: Any,
+    *,
+    context_length: int,
+    horizon: int,
+) -> list[float]:
+    values = _coerce_prediction_values(getattr(output, "logits", output))
+    if len(values) >= context_length + horizon:
+        return values[context_length : context_length + horizon]
+    return values[:horizon]
+
+
+def _coerce_prediction_values(payload: Any) -> list[float]:
+    if hasattr(payload, "detach"):
+        payload = payload.detach()
+    if hasattr(payload, "cpu"):
+        payload = payload.cpu()
+    if hasattr(payload, "tolist"):
+        payload = payload.tolist()
+    if isinstance(payload, list):
+        return _flatten_numeric_values(payload)
+    return list(payload)
+
+
+def _flatten_numeric_values(values: list[Any]) -> list[float]:
+    flattened = values
+    while flattened and isinstance(flattened[0], list):
+        flattened = flattened[0]
+    return [float(value) for value in flattened]
+
+
 def _ensure_transformers_cache_compatibility() -> None:
     """Restore legacy cache APIs expected by Timer's remote model code."""
     try:
@@ -183,6 +316,10 @@ def _ensure_transformers_cache_compatibility() -> None:
 
     if not hasattr(DynamicCache, "seen_tokens"):
         DynamicCache.seen_tokens = property(_dynamic_cache_seen_tokens)  # type: ignore[attr-defined]
+    if not hasattr(DynamicCache, "from_legacy_cache"):
+        DynamicCache.from_legacy_cache = classmethod(_dynamic_cache_from_legacy_cache)  # type: ignore[attr-defined]
+    if not hasattr(DynamicCache, "to_legacy_cache"):
+        DynamicCache.to_legacy_cache = _dynamic_cache_to_legacy_cache  # type: ignore[attr-defined]
     if not hasattr(DynamicCache, "get_max_length"):
         DynamicCache.get_max_length = _dynamic_cache_get_max_length  # type: ignore[attr-defined]
     if not hasattr(DynamicCache, "get_usable_length"):
@@ -194,6 +331,22 @@ def _dynamic_cache_seen_tokens(cache: Any) -> int:
     if not callable(get_seq_length):
         return 0
     return int(get_seq_length())
+
+
+def _dynamic_cache_from_legacy_cache(cls: Any, past_key_values: Any = None) -> Any:
+    if past_key_values is None:
+        return cls()
+    return cls(past_key_values)
+
+
+def _dynamic_cache_to_legacy_cache(cache: Any) -> tuple[Any, ...]:
+    legacy_cache: list[tuple[Any, Any]] = []
+    for layer in getattr(cache, "layers", ()):
+        key_states = getattr(layer, "keys", None)
+        value_states = getattr(layer, "values", None)
+        if key_states is not None and value_states is not None:
+            legacy_cache.append((key_states, value_states))
+    return tuple(legacy_cache)
 
 
 def _dynamic_cache_get_max_length(cache: Any) -> int | None:
