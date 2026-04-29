@@ -74,6 +74,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `data_url` and upload forecasts via `ingest.preprocessing.missing`, with
   linear, seasonal, auto, and B-spline interpolation, regular-grid diagnostics,
   and response warnings when values are imputed
+- Opt-in missing-value preprocessing now collapses duplicate timestamps within
+  each resolved series by averaging non-null target values and emits a response
+  warning instead of failing macOS/CSV forecasts with a duplicate timestamp error
 - macOS Data tab now exposes an opt-in Missing Values control and previews
   sampled null target/cadence-gap signals before sending missing preprocessing
   options through `ingest.preprocessing.missing`

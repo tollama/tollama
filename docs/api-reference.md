@@ -358,8 +358,10 @@ controls also include `max_missing_ratio` (default `0.30`), `max_gap`
 (default `24`), `edge_strategy` (`nearest` or `reject`), and optional
 `seasonal_period`.
 When enabled, ingest resolves a frequency, builds a regular timestamp grid,
-marks null targets and missing timestamps as gaps, validates limits, then
-imputes target values before forecasting. B-spline requires
+collapses duplicate timestamps within a series by averaging their non-null
+target values, marks null targets and missing timestamps as gaps, validates
+limits, then imputes target values before forecasting. Duplicate timestamp
+collapses are reported as response warnings. B-spline requires
 `tollama[preprocess]`; `method="bspline"` returns HTTP `503` when SciPy is not
 available, while `method="auto"` falls back to linear interpolation with a
 warning.

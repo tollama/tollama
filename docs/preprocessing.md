@@ -56,11 +56,13 @@ rows are omitted unless missing preprocessing is explicitly enabled. For
 
 Supported methods are `auto`, `bspline`, `linear`, and `seasonal`. When enabled,
 ingest resolves the series frequency, builds a regular timestamp grid, treats
-null targets and missing timestamps as gaps, validates missing-ratio/gap limits,
-and returns preprocessing diagnostics on forecast responses. B-spline uses the
-optional `tollama[preprocess]` SciPy dependency; explicit `bspline` fails with a
-dependency error when unavailable, while `auto` falls back to linear with a
-warning.
+duplicate timestamps within a series as repeated measurements to collapse by
+averaging non-null target values, treats null targets and missing timestamps as
+gaps, validates missing-ratio/gap limits, and returns preprocessing diagnostics
+on forecast responses. Duplicate timestamp collapses are surfaced as response
+warnings. B-spline uses the optional `tollama[preprocess]` SciPy dependency;
+explicit `bspline` fails with a dependency error when unavailable, while `auto`
+falls back to linear with a warning.
 
 ## Pipeline Stages
 

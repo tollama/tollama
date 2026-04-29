@@ -430,9 +430,16 @@ def _regularize_and_impute_group(
             "missing preprocessing requires parseable datetime timestamps",
         ) from exc
 
+    warnings: list[str] = []
     if index.has_duplicates:
-        raise IngestError(
-            "missing preprocessing requires unique timestamps; duplicate timestamps found",
+        duplicate_timestamp_count = int(index.duplicated(keep="first").sum())
+        collapsed = pd.Series(target, index=index).groupby(level=0, sort=True).mean()
+        index = pd.DatetimeIndex(collapsed.index)
+        target = collapsed.to_numpy(dtype=float)
+        timestamps = [_stringify_timestamp(value) for value in index.tolist()]
+        warnings.append(
+            f"collapsed {duplicate_timestamp_count} duplicate timestamp rows by "
+            "averaging target values"
         )
 
     resolved_series_freq = _extract_freq(
@@ -477,7 +484,8 @@ def _regularize_and_impute_group(
     if options.max_gap is not None and max_gap > options.max_gap:
         raise IngestError(f"target max missing gap {max_gap} exceeds limit {options.max_gap}")
 
-    imputed, used_method, warnings = _impute_missing_values(values, options=options)
+    imputed, used_method, imputation_warnings = _impute_missing_values(values, options=options)
+    warnings.extend(imputation_warnings)
     missing_timestamp_count = int((~regular_index.isin(index)).sum())
 
     diagnostics = SeriesPreprocessingDiagnostics.model_validate(

@@ -357,6 +357,38 @@ def test_series_inputs_result_linear_preprocessing_regularizes_missing_values() 
     assert diagnostic.used_method == "linear"
 
 
+def test_series_inputs_result_missing_preprocessing_collapses_duplicate_timestamps() -> None:
+    frame = pd.DataFrame(
+        {
+            "timestamp": [
+                "2025-01-01 00:00:00",
+                "2025-01-01 00:00:00",
+                "2025-01-01 01:00:00",
+                "2025-01-01 03:00:00",
+            ],
+            "target": [1.0, 3.0, None, 8.0],
+        }
+    )
+
+    result = series_inputs_result_from_frame(
+        frame,
+        preprocessing=_missing_preprocessing(method="linear", max_missing_ratio=0.5),
+    )
+
+    series = result.series[0]
+    assert series.freq == "h"
+    assert series.target == [2.0, 4.0, 6.0, 8.0]
+    diagnostic = result.preprocessing[0]
+    assert diagnostic.original_row_count == 4
+    assert diagnostic.regularized_row_count == 4
+    assert diagnostic.raw_null_target_count == 1
+    assert diagnostic.missing_timestamp_count == 1
+    assert diagnostic.imputed_point_count == 2
+    assert diagnostic.warnings == [
+        "collapsed 1 duplicate timestamp rows by averaging target values"
+    ]
+
+
 def test_series_inputs_result_bspline_preprocessing_fills_internal_gap() -> None:
     pytest.importorskip("scipy")
     frame = pd.DataFrame(

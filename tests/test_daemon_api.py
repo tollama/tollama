@@ -316,6 +316,49 @@ def test_forecast_data_url_opt_in_missing_preprocessing(monkeypatch, tmp_path) -
     assert captured_series["target"] == [1.0, 2.0, 3.0, 4.0]
 
 
+def test_forecast_data_url_missing_preprocessing_collapses_duplicate_timestamps(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    _install_model(monkeypatch, tmp_path, name="mock")
+    runner_manager = _CapturingRunnerManager()
+    app = create_app(runner_manager=runner_manager)  # type: ignore[arg-type]
+    data_path = tmp_path / "history.csv"
+    data_path.write_text(
+        "timestamp,target\n"
+        "2025-01-01 00:00:00,1.0\n"
+        "2025-01-01 00:00:00,3.0\n"
+        "2025-01-01 01:00:00,\n"
+        "2025-01-01 03:00:00,8.0\n",
+        encoding="utf-8",
+    )
+
+    payload = {
+        "model": "mock",
+        "horizon": 2,
+        "data_url": str(data_path),
+        "ingest": {
+            "format": "csv",
+            "preprocessing": {
+                "missing": {
+                    "enabled": True,
+                    "method": "linear",
+                    "max_missing_ratio": 0.5,
+                }
+            },
+        },
+        "options": {},
+    }
+    with TestClient(app) as client:
+        response = client.post("/v1/forecast", json=payload)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert any("collapsed 1 duplicate timestamp rows" in item for item in body["warnings"])
+    captured_series = runner_manager.captured["params"]["series"][0]
+    assert captured_series["target"] == [2.0, 4.0, 6.0, 8.0]
+
+
 def test_forecast_data_url_accepts_ingest_hints_and_freq_auto(monkeypatch, tmp_path) -> None:
     _install_model(monkeypatch, tmp_path, name="mock")
     runner_manager = _CapturingRunnerManager()
