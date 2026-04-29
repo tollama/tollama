@@ -91,6 +91,52 @@ def test_load_series_inputs_from_bytes_csv() -> None:
     assert series[0].target == [1.0, 2.0]
 
 
+def test_load_series_inputs_from_bytes_reads_semicolon_csv() -> None:
+    payload = (
+        b'"timestamp";"target"\n'
+        b'"2025-01-01 00:00:00";1.0\n'
+        b'"2025-01-01 01:00:00";2.0\n'
+        b'"2025-01-01 02:00:00";3.0\n'
+    )
+
+    series = load_series_inputs_from_bytes(payload, filename="upload.csv")
+
+    assert series[0].freq == "h"
+    assert series[0].target == [1.0, 2.0, 3.0]
+
+
+def test_load_series_inputs_from_bytes_skips_world_bank_preamble_csv() -> None:
+    payload = (
+        b'"Data Source","World Development Indicators"\n'
+        b"\n"
+        b'"Last Updated Date","2026-04-08"\n'
+        b"\n"
+        b'"Country Name","Country Code","Indicator Name","Indicator Code","1960","1961","1962"\n'
+        b'"Aruba","ABW","GDP per capita","NY.GDP.PCAP.CD","1.0","2.0","3.0"\n'
+        b'"Afghanistan","AFG","GDP per capita","NY.GDP.PCAP.CD","","5.0","6.0"\n'
+    )
+
+    series = load_series_inputs_from_bytes(payload, filename="world_bank.csv")
+
+    assert [item.id for item in series] == ["ABW", "AFG"]
+    assert series[0].timestamps == ["1960-01-01", "1961-01-01", "1962-01-01"]
+    assert series[0].target == [1.0, 2.0, 3.0]
+    assert series[1].timestamps == ["1961-01-01", "1962-01-01"]
+    assert series[1].target == [5.0, 6.0]
+
+
+def test_load_series_inputs_from_bytes_reports_malformed_csv() -> None:
+    payload = (
+        b"timestamp,target,extra\n"
+        b"2025-01-01,1.0,x\n"
+        b"2025-01-02,2.0,y\n"
+        b"broken,row,with,too,many,fields\n"
+    )
+
+    with pytest.raises(IngestError, match="unable to parse CSV uploaded CSV"):
+        load_series_inputs_from_bytes(payload, filename="upload.csv")
+
+
 def test_series_inputs_from_frame_applies_explicit_frequency() -> None:
     frame = pd.DataFrame(
         {
@@ -170,6 +216,70 @@ def test_series_inputs_from_frame_infers_dominant_frequency_after_null_target_dr
         "2025-01-01 05:00:00",
         "2025-01-01 06:00:00",
     ]
+    assert series[0].freq == "h"
+
+
+def test_series_inputs_from_frame_infers_frequency_before_null_target_drop() -> None:
+    frame = pd.DataFrame(
+        {
+            "datetime": [
+                "2025-01-01 00:00:00",
+                "2025-01-01 01:00:00",
+                "2025-01-01 02:00:00",
+                "2025-01-01 03:00:00",
+                "2025-01-01 04:00:00",
+                "2025-01-01 05:00:00",
+                "2025-01-01 06:00:00",
+            ],
+            "pm2.5": [10.0, None, 12.0, None, 14.0, None, 16.0],
+        }
+    )
+
+    series = series_inputs_from_frame(frame)
+
+    assert series[0].timestamps == [
+        "2025-01-01 00:00:00",
+        "2025-01-01 02:00:00",
+        "2025-01-01 04:00:00",
+        "2025-01-01 06:00:00",
+    ]
+    assert series[0].freq == "h"
+
+
+def test_series_inputs_from_frame_treats_freq_auto_as_infer_request() -> None:
+    frame = pd.DataFrame(
+        {
+            "datetime": [
+                "2025-01-01 00:00:00",
+                "2025-01-01 01:00:00",
+                "2025-01-01 02:00:00",
+                "2025-01-01 03:00:00",
+            ],
+            "pm2.5": [10.0, None, 12.0, 13.0],
+        }
+    )
+
+    series = series_inputs_from_frame(frame, freq="auto")
+
+    assert series[0].freq == "h"
+
+
+def test_series_inputs_from_frame_infers_large_mostly_regular_frequency() -> None:
+    timestamps = []
+    current = pd.Timestamp("2025-01-01 00:00:00")
+    for index in range(1_201):
+        timestamps.append(current.strftime("%Y-%m-%d %H:%M:%S"))
+        step_hours = 2 if index % 3 == 2 else 1
+        current += pd.Timedelta(hours=step_hours)
+    frame = pd.DataFrame(
+        {
+            "datetime": timestamps,
+            "pm2.5": [float(index) for index in range(len(timestamps))],
+        }
+    )
+
+    series = series_inputs_from_frame(frame)
+
     assert series[0].freq == "h"
 
 

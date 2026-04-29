@@ -360,14 +360,29 @@ enum CSVSniffer {
     ) -> String? {
         guard
             let timestampColumn,
+            let timestampIndex = columns.firstIndex(of: timestampColumn)
+        else {
+            return nil
+        }
+
+        let rawDates = rows.compactMap { row -> Date? in
+            guard let rawTimestamp = row[safe: timestampIndex] else {
+                return nil
+            }
+            return parseTimestamp(rawTimestamp)
+        }.sorted()
+        if let alias = frequencyAlias(dates: rawDates) {
+            return alias
+        }
+
+        guard
             let targetColumn,
-            let timestampIndex = columns.firstIndex(of: timestampColumn),
             let targetIndex = columns.firstIndex(of: targetColumn)
         else {
             return nil
         }
 
-        let dates = rows.compactMap { row -> Date? in
+        let targetPresentDates = rows.compactMap { row -> Date? in
             guard
                 let rawTarget = row[safe: targetIndex]?.trimmingCharacters(in: .whitespacesAndNewlines),
                 Double(rawTarget) != nil,
@@ -377,32 +392,8 @@ enum CSVSniffer {
             }
             return parseTimestamp(rawTimestamp)
         }.sorted()
-        guard dates.count >= 3 else {
-            return nil
-        }
 
-        let deltas = zip(dates.dropLast(), dates.dropFirst())
-            .map { previous, current in current.timeIntervalSince(previous) }
-            .filter { $0 > 0 }
-        guard !deltas.isEmpty else {
-            return nil
-        }
-
-        var counts: [Int: Int] = [:]
-        for delta in deltas {
-            let seconds = Int(delta.rounded())
-            guard abs(delta - Double(seconds)) <= 0.000001 else {
-                continue
-            }
-            counts[seconds, default: 0] += 1
-        }
-        guard
-            let dominant = counts.max(by: { left, right in left.value < right.value }),
-            Double(dominant.value) / Double(deltas.count) >= 0.8
-        else {
-            return nil
-        }
-        return frequencyAlias(seconds: dominant.key)
+        return frequencyAlias(dates: targetPresentDates)
     }
 
     private static func countNullTargets(
@@ -480,11 +471,37 @@ enum CSVSniffer {
         }
         guard
             let dominant = counts.max(by: { left, right in left.value < right.value }),
-            Double(dominant.value) / Double(deltas.count) >= 0.8
+            dominantIntervalShare(count: dominant.value, total: deltas.count) >= 0.8
+                || isLargeMostlyRegularInterval(count: dominant.value, total: deltas.count)
         else {
             return nil
         }
         return dominant.key
+    }
+
+    private static func frequencyAlias(dates: [Date]) -> String? {
+        guard dates.count >= 3 else {
+            return nil
+        }
+
+        let deltas = zip(dates.dropLast(), dates.dropFirst())
+            .map { previous, current in current.timeIntervalSince(previous) }
+            .filter { $0 > 0 }
+        guard let dominant = dominantIntervalSeconds(deltas) else {
+            return nil
+        }
+        return frequencyAlias(seconds: dominant)
+    }
+
+    private static func dominantIntervalShare(count: Int, total: Int) -> Double {
+        guard total > 0 else {
+            return 0.0
+        }
+        return Double(count) / Double(total)
+    }
+
+    private static func isLargeMostlyRegularInterval(count: Int, total: Int) -> Bool {
+        total >= 1_000 && dominantIntervalShare(count: count, total: total) >= 0.5
     }
 
     private static func parseTimestamp(_ rawValue: String) -> Date? {

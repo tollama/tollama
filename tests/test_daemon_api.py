@@ -407,6 +407,68 @@ def test_forecast_upload_endpoint_accepts_explicit_frequency(monkeypatch, tmp_pa
     assert captured_series[0]["freq"] == "D"
 
 
+def test_forecast_upload_endpoint_treats_freq_auto_as_infer(monkeypatch, tmp_path) -> None:
+    _install_model(monkeypatch, tmp_path, name="mock")
+    runner_manager = _CapturingRunnerManager()
+    app = create_app(runner_manager=runner_manager)  # type: ignore[arg-type]
+    payload = {
+        "model": "mock",
+        "horizon": 2,
+        "options": {},
+    }
+    file_content = (
+        "datetime,pm2.5\n"
+        "2025-01-01 00:00:00,10.0\n"
+        "2025-01-01 01:00:00,\n"
+        "2025-01-01 02:00:00,12.0\n"
+        "2025-01-01 03:00:00,13.0\n"
+    )
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/forecast/upload",
+            data={"payload": json.dumps(payload), "freq": "auto"},
+            files={"file": ("history.csv", file_content, "text/csv")},
+        )
+
+    assert response.status_code == 200
+    captured_series = runner_manager.captured["params"]["series"]
+    assert captured_series[0]["freq"] == "h"
+
+
+def test_forecast_upload_endpoint_accepts_world_bank_preamble_csv(monkeypatch, tmp_path) -> None:
+    _install_model(monkeypatch, tmp_path, name="mock")
+    runner_manager = _CapturingRunnerManager()
+    app = create_app(runner_manager=runner_manager)  # type: ignore[arg-type]
+    payload = {
+        "model": "mock",
+        "horizon": 2,
+        "options": {},
+    }
+    file_content = (
+        b'"Data Source","World Development Indicators"\n'
+        b"\n"
+        b'"Last Updated Date","2026-04-08"\n'
+        b"\n"
+        b'"Country Name","Country Code","Indicator Name","Indicator Code","1960","1961","1962"\n'
+        b'"Aruba","ABW","GDP per capita","NY.GDP.PCAP.CD","1.0","2.0","3.0"\n'
+        b'"Afghanistan","AFG","GDP per capita","NY.GDP.PCAP.CD","","5.0","6.0"\n'
+    )
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/forecast/upload",
+            data={"payload": json.dumps(payload)},
+            files={"file": ("world_bank.csv", file_content, "text/csv")},
+        )
+
+    assert response.status_code == 200
+    captured_series = runner_manager.captured["params"]["series"]
+    assert [item["id"] for item in captured_series] == ["ABW", "AFG"]
+    assert captured_series[0]["freq"] == "YS-JAN"
+    assert captured_series[0]["target"] == [1.0, 2.0, 3.0]
+
+
 def test_forecast_upload_endpoint_opt_in_missing_preprocessing(monkeypatch, tmp_path) -> None:
     _install_model(monkeypatch, tmp_path, name="mock")
     runner_manager = _CapturingRunnerManager()

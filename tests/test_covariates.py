@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import builtins
+from datetime import datetime, timedelta
 
 import pytest
 
@@ -71,6 +72,24 @@ def test_normalize_covariates_infers_dominant_daily_frequency_with_gap() -> None
     assert warnings == [
         "series 's1': freq='auto' was resolved from the dominant timestamp interval "
         "(regularity=0.88); provide explicit freq to override",
+    ]
+
+
+def test_normalize_covariates_infers_large_mostly_regular_frequency() -> None:
+    timestamps = []
+    current = datetime.fromisoformat("2025-01-01T00:00:00")
+    for index in range(1_201):
+        timestamps.append(current.isoformat())
+        step_hours = 2 if index % 3 == 2 else 1
+        current += timedelta(hours=step_hours)
+    series = _series(timestamps=timestamps, freq="auto")
+
+    normalized, warnings = normalize_covariates([series], prediction_length=1)
+
+    assert normalized[0].freq == "h"
+    assert warnings == [
+        "series 's1': freq='auto' was resolved from the dominant timestamp interval "
+        "(regularity=0.67); provide explicit freq to override",
     ]
 
 

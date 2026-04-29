@@ -269,10 +269,20 @@ for a model that declares a one-series input limit, the daemon forecasts the
 first ingested series and returns a warning. Explicit JSON `series` requests are
 left unchanged.
 
-When `freq` is omitted and no frequency column is found, `freq="auto"` first uses
+When `freq` is omitted and no frequency column is found, tabular ingest resolves
+cadence from raw timestamp rows before omitting null targets. It first uses
 strict pandas frequency inference and then falls back to a dominant timestamp
 interval for mostly regular data with gaps. Truly irregular timestamps still
 require an explicit `freq` alias.
+
+Direct JSON `series` payloads that keep `freq="auto"` use the same
+mostly-regular dominant interval fallback before the request is dispatched to a
+runner.
+
+CSV upload/data-url ingest detects semicolon, tab, and pipe delimiters and can
+skip common metadata preambles when a later row is clearly the tabular header.
+World Bank yearly indicator exports are reshaped from wide country/year columns
+into canonical `(timestamp, series, target)` rows.
 
 #### `SeriesInput`
 

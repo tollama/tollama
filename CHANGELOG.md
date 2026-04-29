@@ -59,9 +59,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   timestamp, series identifier, and target aliases, including `date`, `Date`,
   `datetime`, `series`, `OT`, `demand`, `users`, air-quality targets, and OPSD
   load-actual columns
-- CSV ingest and the macOS CSV preview sniffer now fall back to dominant
-  timestamp intervals after null target rows are dropped, so mostly-hourly
-  datasets with sparse target gaps can still send explicit `freq` values
+- CSV ingest and the macOS CSV preview sniffer now infer cadence from raw
+  timestamp rows before omitting null targets, then fall back to dominant
+  timestamp intervals for large mostly-regular files so hourly air-quality data
+  with target gaps can still send explicit `freq` values
+- Direct forecast requests with `series[].freq="auto"` now use the same
+  large-file dominant-cadence fallback before runner dispatch
+- CSV ingest now detects semicolon/tab-delimited uploads and skips common
+  metadata preambles such as World Bank indicator CSV headers, reshaping yearly
+  country indicator columns into canonical series
 - CSV ingest now omits rows with null target values after resolving the target
   column, while still rejecting entirely null targets
 - CSV/Parquet ingest now supports opt-in missing-value preprocessing for

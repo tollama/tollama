@@ -331,7 +331,8 @@ def _dominant_interval_frequency(index: Any) -> tuple[str | None, float]:
 
     dominant_seconds, dominant_count = Counter(positive_deltas).most_common(1)[0]
     regularity_score = dominant_count / len(deltas)
-    if regularity_score < 0.8:
+    large_mostly_regular = len(deltas) >= 1_000 and regularity_score >= 0.5
+    if regularity_score < 0.8 and not large_mostly_regular:
         return None, regularity_score
 
     if _looks_like_business_daily(index, dominant_seconds=dominant_seconds):

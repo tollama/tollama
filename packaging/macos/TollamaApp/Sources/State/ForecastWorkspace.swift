@@ -200,7 +200,7 @@ final class ForecastWorkspace: ObservableObject {
                 timestampColumn: optionalOverride(timestampColumnOverride),
                 seriesIDColumn: optionalOverride(seriesIDColumnOverride),
                 targetColumn: optionalOverride(targetColumnOverride),
-                freq: optionalOverride(frequencyOverride),
+                freq: optionalFrequencyOverride(frequencyOverride),
                 freqColumn: optionalOverride(freqColumnOverride),
                 preprocessMissing: missingValueMode != .off,
                 missingMethod: missingValueMode.uploadMethod
@@ -216,5 +216,13 @@ final class ForecastWorkspace: ObservableObject {
     private func optionalOverride(_ value: String) -> String? {
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? nil : trimmed
+    }
+
+    private func optionalFrequencyOverride(_ value: String) -> String? {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty || trimmed.lowercased() == "auto" {
+            return nil
+        }
+        return trimmed
     }
 }

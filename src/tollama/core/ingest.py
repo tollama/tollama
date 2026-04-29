@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import csv
 from collections import Counter
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -21,6 +22,8 @@ from .schemas import (
 )
 
 TabularFormat = Literal["csv", "parquet"]
+CSV_DELIMITERS = (",", ";", "\t", "|")
+CSV_SAMPLE_BYTES = 64 * 1024
 
 TIMESTAMP_COLUMN_CANDIDATES = (
     "timestamp",
@@ -343,18 +346,29 @@ def series_inputs_result_from_frame(
             timestamp_column=resolved_timestamp,
         )
         if missing_options is None:
+            raw_timestamps = _extract_timestamps(
+                sorted_group,
+                timestamp_column=resolved_timestamp,
+            )
+            resolved_series_freq = _extract_freq(
+                sorted_group,
+                freq=resolved_freq,
+                freq_column=resolved_freq_column,
+                timestamps=raw_timestamps,
+            )
             sorted_group = _drop_null_target_rows(sorted_group, target_column=resolved_target)
             timestamps = _extract_timestamps(
                 sorted_group,
                 timestamp_column=resolved_timestamp,
             )
             target = _extract_target_values(sorted_group, target_column=resolved_target)
-            resolved_series_freq = _extract_freq(
-                sorted_group,
-                freq=resolved_freq,
-                freq_column=resolved_freq_column,
-                timestamps=timestamps,
-            )
+            if resolved_series_freq == "auto" and timestamps != raw_timestamps:
+                resolved_series_freq = _extract_freq(
+                    sorted_group,
+                    freq=resolved_freq,
+                    freq_column=resolved_freq_column,
+                    timestamps=timestamps,
+                )
         else:
             timestamps, target, resolved_series_freq, diagnostics = _regularize_and_impute_group(
                 sorted_group,
@@ -691,15 +705,173 @@ def _resolve_format(*, path: Path, format_hint: TabularFormat | None) -> Tabular
 
 def _read_frame_from_path(*, path: Path, tabular_format: TabularFormat) -> pd.DataFrame:
     if tabular_format == "csv":
-        return pd.read_csv(path, encoding="utf-8-sig")
+        sample = _read_csv_sample_from_path(path)
+        return _read_csv_with_fallback(
+            lambda **kwargs: pd.read_csv(
+                path,
+                encoding="utf-8-sig",
+                low_memory=False,
+                **kwargs,
+            ),
+            sample=sample,
+            source_label=str(path),
+        )
     return _read_parquet(path)
 
 
 def _read_frame_from_bytes(*, payload: bytes, tabular_format: TabularFormat) -> pd.DataFrame:
     if tabular_format == "csv":
         text = payload.decode("utf-8-sig")
-        return pd.read_csv(StringIO(text))
+        return _read_csv_with_fallback(
+            lambda **kwargs: pd.read_csv(StringIO(text), **kwargs),
+            sample=text[:CSV_SAMPLE_BYTES],
+            source_label="uploaded CSV",
+        )
     return _read_parquet(BytesIO(payload))
+
+
+def _read_csv_sample_from_path(path: Path) -> str:
+    with path.open("r", encoding="utf-8-sig", errors="replace") as handle:
+        return handle.read(CSV_SAMPLE_BYTES)
+
+
+def _read_csv_with_fallback(
+    read_csv: Any,
+    *,
+    sample: str,
+    source_label: str,
+) -> pd.DataFrame:
+    errors: list[str] = []
+    for sep, skiprows in _csv_parse_attempts(sample):
+        try:
+            frame = read_csv(sep=sep, skiprows=skiprows)
+        except pd.errors.ParserError as exc:
+            errors.append(str(exc))
+            continue
+
+        normalized = _normalize_csv_frame(frame)
+        if _looks_like_unparsed_delimited_frame(normalized, sample=sample):
+            errors.append("CSV appears to use a non-comma delimiter")
+            continue
+        return normalized
+
+    detail = errors[-1] if errors else "no parse attempts produced a tabular frame"
+    raise IngestError(f"unable to parse CSV {source_label}: {detail}")
+
+
+def _csv_parse_attempts(sample: str) -> list[tuple[str, int]]:
+    indexed_lines = [
+        (index, line)
+        for index, line in enumerate(sample.splitlines()[:25])
+        if line.strip()
+    ]
+    if not indexed_lines:
+        return [(",", 0)]
+
+    delimiter_counts: dict[str, list[int]] = {
+        delimiter: [_csv_field_count(line, delimiter=delimiter) for _, line in indexed_lines]
+        for delimiter in CSV_DELIMITERS
+    }
+    delimiters = sorted(
+        CSV_DELIMITERS,
+        key=lambda delimiter: (
+            max(delimiter_counts[delimiter]),
+            1 if delimiter == "," else 0,
+        ),
+        reverse=True,
+    )
+
+    attempts: list[tuple[str, int]] = []
+    for delimiter in delimiters:
+        counts = delimiter_counts[delimiter]
+        max_count = max(counts)
+        header_candidates = [
+            original_index
+            for (original_index, _), count in zip(indexed_lines, counts, strict=True)
+            if count == max_count
+        ]
+        skip_candidates = [0]
+        if max_count > 1 and len(header_candidates) >= 2 and header_candidates[0] != 0:
+            skip_candidates.append(header_candidates[0])
+        for skiprows in skip_candidates:
+            attempt = (delimiter, skiprows)
+            if attempt not in attempts:
+                attempts.append(attempt)
+    return attempts
+
+
+def _csv_field_count(line: str, *, delimiter: str) -> int:
+    try:
+        return len(next(csv.reader([line], delimiter=delimiter)))
+    except csv.Error:
+        return line.count(delimiter) + 1
+
+
+def _looks_like_unparsed_delimited_frame(frame: pd.DataFrame, *, sample: str) -> bool:
+    if len(frame.columns) != 1:
+        return False
+    column = str(frame.columns[0])
+    if any(delimiter in column for delimiter in CSV_DELIMITERS):
+        return True
+    sample_lines = [line for line in sample.splitlines()[:5] if line.strip()]
+    if not sample_lines:
+        return False
+    return any(
+        max(_csv_field_count(line, delimiter=delimiter) for line in sample_lines) > 1
+        for delimiter in CSV_DELIMITERS
+    )
+
+
+def _normalize_csv_frame(frame: pd.DataFrame) -> pd.DataFrame:
+    normalized = frame.rename(columns={column: str(column).strip() for column in frame.columns})
+    normalized = _normalize_unnamed_datetime_column(normalized)
+    return _normalize_world_bank_frame(normalized)
+
+
+def _normalize_unnamed_datetime_column(frame: pd.DataFrame) -> pd.DataFrame:
+    if frame.empty or len(frame.columns) == 0:
+        return frame
+    first_column = str(frame.columns[0]).strip()
+    if first_column and not first_column.lower().startswith("unnamed"):
+        return frame
+    parsed = pd.to_datetime(frame.iloc[:, 0], errors="coerce")
+    if parsed.notna().mean() < 0.8:
+        return frame
+    return frame.rename(columns={frame.columns[0]: "timestamp"})
+
+
+def _normalize_world_bank_frame(frame: pd.DataFrame) -> pd.DataFrame:
+    id_columns = ("Country Name", "Country Code", "Indicator Name", "Indicator Code")
+    if not all(column in frame.columns for column in id_columns):
+        return frame
+
+    year_columns = [
+        column
+        for column in frame.columns
+        if len(str(column)) == 4 and str(column).isdigit()
+    ]
+    if len(year_columns) < 3:
+        return frame
+
+    long = frame.melt(
+        id_vars=list(id_columns),
+        value_vars=year_columns,
+        var_name="year",
+        value_name="target",
+    )
+    long["target"] = pd.to_numeric(long["target"], errors="coerce")
+    country_code = long["Country Code"].astype(str).str.strip()
+    country_name = long["Country Name"].astype(str).str.strip()
+    long["series"] = country_code.where(country_code != "", country_name)
+    long["timestamp"] = long["year"].astype(str) + "-01-01"
+
+    has_target = long.groupby("series", dropna=False)["target"].transform(
+        lambda values: values.notna().any()
+    )
+    long = long.loc[has_target, ["timestamp", "series", "target"]]
+    if long.empty:
+        raise IngestError("World Bank CSV contains no numeric yearly values")
+    return long
 
 
 def _load_series_inputs_from_remote_url(
@@ -737,7 +909,12 @@ def _load_series_inputs_result_from_remote_url(
 ) -> SeriesIngestResult:
     tabular_format = _resolve_format(path=Path(urlparse(data_url).path), format_hint=format_hint)
     if tabular_format == "csv":
-        frame = pd.read_csv(data_url, encoding="utf-8-sig")
+        try:
+            frame = _normalize_csv_frame(
+                pd.read_csv(data_url, encoding="utf-8-sig", low_memory=False)
+            )
+        except pd.errors.ParserError as exc:
+            raise IngestError(f"unable to parse CSV {data_url}: {exc}") from exc
     else:
         frame = _read_parquet(data_url)
     return series_inputs_result_from_frame(
@@ -934,7 +1111,9 @@ def _dominant_interval_frequency(index: pd.DatetimeIndex, *, min_share: float = 
         return None
 
     dominant_seconds, dominant_count = Counter(deltas).most_common(1)[0]
-    if dominant_count / len(deltas) < min_share:
+    share = dominant_count / len(deltas)
+    large_mostly_regular = len(deltas) >= 1_000 and share >= 0.5
+    if share < min_share and not large_mostly_regular:
         return None
 
     return _offset_alias_from_seconds(dominant_seconds)
@@ -963,7 +1142,9 @@ def _normalize_optional_text(value: str | None) -> str | None:
     if value is None:
         return None
     normalized = value.strip()
-    return normalized or None
+    if not normalized or normalized.lower() == "auto":
+        return None
+    return normalized
 
 
 def _stringify_timestamp(value: Any) -> str:
