@@ -192,7 +192,7 @@ final class ForecastWorkspace: ObservableObject {
 
         do {
             clampHorizonToSelectedModel()
-            let response = try await client.uploadAndForecast(
+            let response = try await client.forecastLocalCSV(
                 fileURL: selectedCSV.url,
                 model: selectedModelName,
                 horizon: horizon,

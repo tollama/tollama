@@ -61,12 +61,14 @@ The detail pane exposes four native tabs:
   `seasonal` target interpolation settings for sampled null target or cadence
   gap repair.
 - `Forecast`: runs one selected CSV against one installed forecast-ready model via
-  `/api/forecast/upload`, clamps the horizon to registry metadata when
-  available, down-selects CSVs with multiple inferred series for single-series
-  models with a response warning, and renders native Swift Charts output plus a
-  forecast table. Manifest-only registry entries such as TimeMixer and
-  ForecastPFN are shown in `Models`, but are omitted from this forecast picker
-  until runner-consumable weights or installable upstream packages are wired;
+  `/v1/forecast` with a local `data_url`, avoiding multipart request-size
+  limits for large local files such as `electricity.csv`. It clamps the horizon
+  to registry metadata when available, down-selects CSVs with multiple inferred
+  series for single-series models with a response warning, and renders native
+  Swift Charts output plus a forecast table. Manifest-only registry entries
+  such as TimeMixer and ForecastPFN are shown in `Models`, but are omitted from
+  this forecast picker until runner-consumable weights or installable upstream
+  packages are wired;
   the daemon also rejects direct forecast calls for those entries before runner
   startup.
 - `Logs`: shows the daemon log tail in the main pane.

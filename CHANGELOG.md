@@ -76,7 +76,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   and response warnings when values are imputed
 - macOS Data tab now exposes an opt-in Missing Values control and previews
   sampled null target/cadence-gap signals before sending missing preprocessing
-  options to `/api/forecast/upload`
+  options through `ingest.preprocessing.missing`
+- macOS local CSV forecasts now use `/v1/forecast` with `data_url` instead of
+  multipart upload, avoiding the daemon request-body limit for large local files
+  such as `electricity.csv`
 - macOS per-family runtime bootstrap now creates symlinked virtualenv
   interpreters so bundled Python runtimes can locate `libpython` correctly
 - Per-family runtime bootstrap now records an optional-extra dependency

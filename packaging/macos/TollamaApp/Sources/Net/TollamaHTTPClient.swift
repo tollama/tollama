@@ -162,6 +162,56 @@ actor TollamaHTTPClient {
         return try jsonDecoder.decode(ForecastResponseDTO.self, from: data)
     }
 
+    func forecastLocalCSV(
+        fileURL: URL,
+        model: String,
+        horizon: Int,
+        quantiles: [Double],
+        timestampColumn: String?,
+        seriesIDColumn: String?,
+        targetColumn: String?,
+        freq: String?,
+        freqColumn: String?,
+        preprocessMissing: Bool,
+        missingMethod: String?
+    ) async throws -> ForecastResponseDTO {
+        var ingest: [String: Any] = [
+            "format": "csv",
+        ]
+        addOptionalJSONField(name: "timestamp_column", value: timestampColumn, to: &ingest)
+        addOptionalJSONField(name: "series_id_column", value: seriesIDColumn, to: &ingest)
+        addOptionalJSONField(name: "target_column", value: targetColumn, to: &ingest)
+        addOptionalJSONField(name: "freq", value: freq, to: &ingest)
+        addOptionalJSONField(name: "freq_column", value: freqColumn, to: &ingest)
+        if preprocessMissing {
+            var missing: [String: Any] = [
+                "enabled": true,
+            ]
+            addOptionalJSONField(name: "method", value: missingMethod, to: &missing)
+            ingest["preprocessing"] = [
+                "missing": missing,
+            ]
+        }
+
+        let requestPayload: [String: Any] = [
+            "model": model,
+            "horizon": horizon,
+            "quantiles": quantiles,
+            "data_url": fileURL.path,
+            "ingest": ingest,
+            "options": [:],
+        ]
+        let body = try JSONSerialization.data(withJSONObject: requestPayload)
+        let data = try await requestData(
+            path: "/v1/forecast",
+            method: "POST",
+            body: body,
+            contentType: "application/json",
+            timeout: 300
+        )
+        return try jsonDecoder.decode(ForecastResponseDTO.self, from: data)
+    }
+
     private func requestData(
         path: String,
         method: String = "GET",
@@ -312,6 +362,14 @@ private func appendOptionalFormField(
         return
     }
     appendFormField(name: name, value: trimmed, boundary: boundary, to: &data)
+}
+
+private func addOptionalJSONField(name: String, value: String?, to object: inout [String: Any]) {
+    let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    guard !trimmed.isEmpty else {
+        return
+    }
+    object[name] = trimmed
 }
 
 private func appendFileField(name: String, fileURL: URL, boundary: String, to data: inout Data) throws {
