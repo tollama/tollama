@@ -22,7 +22,14 @@ struct CSVPreview: Equatable, Sendable {
     let targetColumn: String?
     let seriesIDColumn: String?
     let freqColumn: String?
+    let inferredFrequency: String?
+    let sampledNullTargetCount: Int
+    let sampledCadenceGapCount: Int
     let history: [ForecastHistoryPoint]
+
+    var hasMissingValueSignals: Bool {
+        sampledNullTargetCount > 0 || sampledCadenceGapCount > 0
+    }
 }
 
 enum CSVSniffer {
@@ -122,6 +129,22 @@ enum CSVSniffer {
                 seriesIDColumn,
                 freqColumn,
             ])
+        let inferredFrequency = inferFrequency(
+            columns: columns,
+            rows: dataRows,
+            timestampColumn: timestampColumn,
+            targetColumn: targetColumn
+        )
+        let sampledNullTargetCount = countNullTargets(
+            columns: columns,
+            rows: dataRows,
+            targetColumn: targetColumn
+        )
+        let sampledCadenceGapCount = countCadenceGaps(
+            columns: columns,
+            rows: dataRows,
+            timestampColumn: timestampColumn
+        )
 
         let history = buildHistory(
             columns: columns,
@@ -139,6 +162,9 @@ enum CSVSniffer {
             targetColumn: targetColumn,
             seriesIDColumn: seriesIDColumn,
             freqColumn: freqColumn,
+            inferredFrequency: inferredFrequency,
+            sampledNullTargetCount: sampledNullTargetCount,
+            sampledCadenceGapCount: sampledCadenceGapCount,
             history: history
         )
     }
@@ -324,5 +350,190 @@ enum CSVSniffer {
                 value: value
             )
         }
+    }
+
+    private static func inferFrequency(
+        columns: [String],
+        rows: [[String]],
+        timestampColumn: String?,
+        targetColumn: String?
+    ) -> String? {
+        guard
+            let timestampColumn,
+            let targetColumn,
+            let timestampIndex = columns.firstIndex(of: timestampColumn),
+            let targetIndex = columns.firstIndex(of: targetColumn)
+        else {
+            return nil
+        }
+
+        let dates = rows.compactMap { row -> Date? in
+            guard
+                let rawTarget = row[safe: targetIndex]?.trimmingCharacters(in: .whitespacesAndNewlines),
+                Double(rawTarget) != nil,
+                let rawTimestamp = row[safe: timestampIndex]
+            else {
+                return nil
+            }
+            return parseTimestamp(rawTimestamp)
+        }.sorted()
+        guard dates.count >= 3 else {
+            return nil
+        }
+
+        let deltas = zip(dates.dropLast(), dates.dropFirst())
+            .map { previous, current in current.timeIntervalSince(previous) }
+            .filter { $0 > 0 }
+        guard !deltas.isEmpty else {
+            return nil
+        }
+
+        var counts: [Int: Int] = [:]
+        for delta in deltas {
+            let seconds = Int(delta.rounded())
+            guard abs(delta - Double(seconds)) <= 0.000001 else {
+                continue
+            }
+            counts[seconds, default: 0] += 1
+        }
+        guard
+            let dominant = counts.max(by: { left, right in left.value < right.value }),
+            Double(dominant.value) / Double(deltas.count) >= 0.8
+        else {
+            return nil
+        }
+        return frequencyAlias(seconds: dominant.key)
+    }
+
+    private static func countNullTargets(
+        columns: [String],
+        rows: [[String]],
+        targetColumn: String?
+    ) -> Int {
+        guard
+            let targetColumn,
+            let targetIndex = columns.firstIndex(of: targetColumn)
+        else {
+            return 0
+        }
+
+        return rows.reduce(0) { count, row in
+            let rawValue = row[safe: targetIndex]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            return count + (isNullToken(rawValue) ? 1 : 0)
+        }
+    }
+
+    private static func countCadenceGaps(
+        columns: [String],
+        rows: [[String]],
+        timestampColumn: String?
+    ) -> Int {
+        guard
+            let timestampColumn,
+            let timestampIndex = columns.firstIndex(of: timestampColumn)
+        else {
+            return 0
+        }
+
+        let dates = rows.compactMap { row -> Date? in
+            guard let rawTimestamp = row[safe: timestampIndex] else {
+                return nil
+            }
+            return parseTimestamp(rawTimestamp)
+        }.sorted()
+        guard dates.count >= 3 else {
+            return 0
+        }
+
+        let deltas = zip(dates.dropLast(), dates.dropFirst())
+            .map { previous, current in current.timeIntervalSince(previous) }
+            .filter { $0 > 0 }
+        guard
+            let dominant = dominantIntervalSeconds(deltas),
+            dominant > 0
+        else {
+            return 0
+        }
+        return deltas.filter { $0 > Double(dominant) * 1.5 }.count
+    }
+
+    private static func isNullToken(_ value: String) -> Bool {
+        if value.isEmpty {
+            return true
+        }
+        switch value.lowercased() {
+        case "null", "none", "nan", "na", "n/a":
+            return true
+        default:
+            return false
+        }
+    }
+
+    private static func dominantIntervalSeconds(_ deltas: [TimeInterval]) -> Int? {
+        var counts: [Int: Int] = [:]
+        for delta in deltas {
+            let seconds = Int(delta.rounded())
+            guard abs(delta - Double(seconds)) <= 0.000001 else {
+                continue
+            }
+            counts[seconds, default: 0] += 1
+        }
+        guard
+            let dominant = counts.max(by: { left, right in left.value < right.value }),
+            Double(dominant.value) / Double(deltas.count) >= 0.8
+        else {
+            return nil
+        }
+        return dominant.key
+    }
+
+    private static func parseTimestamp(_ rawValue: String) -> Date? {
+        let value = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !value.isEmpty else {
+            return nil
+        }
+
+        let isoFormatter = ISO8601DateFormatter()
+        isoFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let date = isoFormatter.date(from: value) {
+            return date
+        }
+        isoFormatter.formatOptions = [.withInternetDateTime]
+        if let date = isoFormatter.date(from: value) {
+            return date
+        }
+
+        for format in [
+            "yyyy-MM-dd HH:mm:ss",
+            "yyyy-MM-dd HH:mm",
+            "yyyy-MM-dd'T'HH:mm:ss",
+            "yyyy-MM-dd'T'HH:mm",
+            "yyyy-MM-dd",
+        ] {
+            let formatter = DateFormatter()
+            formatter.locale = Locale(identifier: "en_US_POSIX")
+            formatter.timeZone = TimeZone(secondsFromGMT: 0)
+            formatter.dateFormat = format
+            if let date = formatter.date(from: value) {
+                return date
+            }
+        }
+        return nil
+    }
+
+    private static func frequencyAlias(seconds: Int) -> String? {
+        guard seconds > 0 else {
+            return nil
+        }
+        for (alias, unitSeconds) in [
+            ("D", 86_400),
+            ("h", 3_600),
+            ("min", 60),
+            ("s", 1),
+        ] where seconds % unitSeconds == 0 {
+            let multiple = seconds / unitSeconds
+            return multiple == 1 ? alias : "\(multiple)\(alias)"
+        }
+        return nil
     }
 }

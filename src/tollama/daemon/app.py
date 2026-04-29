@@ -74,8 +74,8 @@ from tollama.core.hf_pull import (
 from tollama.core.ingest import (
     IngestDependencyError,
     IngestError,
-    load_series_inputs_from_bytes,
-    load_series_inputs_from_data_url,
+    load_series_inputs_result_from_bytes,
+    load_series_inputs_result_from_data_url,
 )
 from tollama.core.modelfile import (
     ModelfileListResponse,
@@ -116,6 +116,7 @@ from tollama.core.schemas import (
     CompareSummary,
     CounterfactualRequest,
     CounterfactualResponse,
+    ForecastPreprocessingMetadata,
     ForecastReport,
     ForecastRequest,
     ForecastResponse,
@@ -129,6 +130,7 @@ from tollama.core.schemas import (
     ReportRequest,
     ScenarioTreeRequest,
     ScenarioTreeResponse,
+    SeriesPreprocessingDiagnostics,
     WhatIfError,
     WhatIfRequest,
     WhatIfResponse,
@@ -386,6 +388,12 @@ class ApiForecastRequest(ForecastRequestWithKeepAlive):
         default=True,
         description="When true, return NDJSON stream output for forecast events.",
     )
+
+
+@dataclass(frozen=True)
+class PreparedForecastPayload:
+    payload: ForecastRequestWithKeepAlive
+    preprocessing: ForecastPreprocessingMetadata | None
 
 
 class ValidateResponse(BaseModel):
@@ -909,21 +917,49 @@ def create_app(*, runner_manager: RunnerManager | None = None) -> FastAPI:
             default=None,
             description="Optional frequency column name override.",
         ),
+        preprocess_missing: bool | None = Form(
+            default=None,
+            description="Enable opt-in missing target preprocessing.",
+        ),
+        missing_method: str | None = Form(
+            default=None,
+            description="Missing target method: auto, bspline, linear, or seasonal.",
+        ),
+        missing_max_ratio: float | None = Form(
+            default=None,
+            description="Maximum allowed missing target ratio before preprocessing fails.",
+        ),
+        missing_max_gap: int | None = Form(
+            default=None,
+            description="Maximum consecutive missing target gap before preprocessing fails.",
+        ),
+        missing_edge_strategy: str | None = Form(
+            default=None,
+            description="How to handle leading/trailing missing values: nearest or reject.",
+        ),
+        missing_seasonal_period: int | None = Form(
+            default=None,
+            description="Optional seasonal period for seasonal missing preprocessing.",
+        ),
     ) -> dict[str, Any]:
         file_payload = await file.read()
         filename = file.filename or "upload.csv"
         try:
-            ingest_options = IngestOptions.model_validate(
-                {
-                    "format": format_hint,
-                    "timestamp_column": timestamp_column,
-                    "series_id_column": series_id_column,
-                    "target_column": target_column,
-                    "freq": freq,
-                    "freq_column": freq_column,
-                },
+            ingest_options = _ingest_options_from_form(
+                format_hint=format_hint,
+                timestamp_column=timestamp_column,
+                series_id_column=series_id_column,
+                target_column=target_column,
+                freq=freq,
+                freq_column=freq_column,
+                preprocess_missing=preprocess_missing,
+                missing_method=missing_method,
+                missing_max_ratio=missing_max_ratio,
+                missing_max_gap=missing_max_gap,
+                missing_edge_strategy=missing_edge_strategy,
+                missing_seasonal_period=missing_seasonal_period,
             )
-            series = load_series_inputs_from_bytes(
+            ingest_result = load_series_inputs_result_from_bytes(
                 file_payload,
                 filename=filename,
                 format_hint=ingest_options.format,
@@ -932,16 +968,25 @@ def create_app(*, runner_manager: RunnerManager | None = None) -> FastAPI:
                 target_column=ingest_options.target_column,
                 freq=ingest_options.freq,
                 freq_column=ingest_options.freq_column,
+                preprocessing=ingest_options.preprocessing,
             )
         except IngestDependencyError as exc:
             raise HTTPException(status_code=503, detail=str(exc)) from exc
         except (IngestError, ValidationError, UnicodeDecodeError) as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-        return {
+        response_payload: dict[str, Any] = {
             "filename": filename,
-            "series": [item.model_dump(mode="json", exclude_none=True) for item in series],
+            "series": [
+                item.model_dump(mode="json", exclude_none=True) for item in ingest_result.series
+            ],
         }
+        if ingest_result.preprocessing:
+            response_payload["preprocessing"] = [
+                item.model_dump(mode="json", exclude_none=True)
+                for item in ingest_result.preprocessing
+            ]
+        return response_payload
 
     @app.post(
         "/api/forecast/upload",
@@ -986,6 +1031,30 @@ def create_app(*, runner_manager: RunnerManager | None = None) -> FastAPI:
             default=None,
             description="Optional frequency column name override.",
         ),
+        preprocess_missing: bool | None = Form(
+            default=None,
+            description="Enable opt-in missing target preprocessing.",
+        ),
+        missing_method: str | None = Form(
+            default=None,
+            description="Missing target method: auto, bspline, linear, or seasonal.",
+        ),
+        missing_max_ratio: float | None = Form(
+            default=None,
+            description="Maximum allowed missing target ratio before preprocessing fails.",
+        ),
+        missing_max_gap: int | None = Form(
+            default=None,
+            description="Maximum consecutive missing target gap before preprocessing fails.",
+        ),
+        missing_edge_strategy: str | None = Form(
+            default=None,
+            description="How to handle leading/trailing missing values: nearest or reject.",
+        ),
+        missing_seasonal_period: int | None = Form(
+            default=None,
+            description="Optional seasonal period for seasonal missing preprocessing.",
+        ),
     ) -> ForecastResponse:
         try:
             parsed_payload = _load_json_object(payload)
@@ -1001,17 +1070,21 @@ def create_app(*, runner_manager: RunnerManager | None = None) -> FastAPI:
         file_payload = await file.read()
         filename = file.filename or "upload.csv"
         try:
-            ingest_options = IngestOptions.model_validate(
-                {
-                    "format": format_hint,
-                    "timestamp_column": timestamp_column,
-                    "series_id_column": series_id_column,
-                    "target_column": target_column,
-                    "freq": freq,
-                    "freq_column": freq_column,
-                },
+            ingest_options = _ingest_options_from_form(
+                format_hint=format_hint,
+                timestamp_column=timestamp_column,
+                series_id_column=series_id_column,
+                target_column=target_column,
+                freq=freq,
+                freq_column=freq_column,
+                preprocess_missing=preprocess_missing,
+                missing_method=missing_method,
+                missing_max_ratio=missing_max_ratio,
+                missing_max_gap=missing_max_gap,
+                missing_edge_strategy=missing_edge_strategy,
+                missing_seasonal_period=missing_seasonal_period,
             )
-            series = load_series_inputs_from_bytes(
+            ingest_result = load_series_inputs_result_from_bytes(
                 file_payload,
                 filename=filename,
                 format_hint=ingest_options.format,
@@ -1020,8 +1093,11 @@ def create_app(*, runner_manager: RunnerManager | None = None) -> FastAPI:
                 target_column=ingest_options.target_column,
                 freq=ingest_options.freq,
                 freq_column=ingest_options.freq_column,
+                preprocessing=ingest_options.preprocessing,
             )
-            parsed_payload["series"] = [item.model_dump(mode="python") for item in series]
+            parsed_payload["series"] = [
+                item.model_dump(mode="python") for item in ingest_result.series
+            ]
             forecast_payload = ForecastRequestWithKeepAlive.model_validate(parsed_payload)
         except IngestDependencyError as exc:
             raise HTTPException(status_code=503, detail=str(exc)) from exc
@@ -1032,6 +1108,7 @@ def create_app(*, runner_manager: RunnerManager | None = None) -> FastAPI:
             app,
             payload=forecast_payload,
             request=request,
+            preprocessing_metadata=_forecast_preprocessing_metadata(ingest_result.preprocessing),
             allow_single_series_downselect=True,
         )
 
@@ -2096,11 +2173,17 @@ def _execute_forecast(
     payload: ForecastRequestWithKeepAlive,
     request: Request | None = None,
     extra_exclude: set[str] | None = None,
+    preprocessing_metadata: ForecastPreprocessingMetadata | None = None,
     allow_single_series_downselect: bool = False,
 ) -> ForecastResponse:
     allow_input_series_downselect = allow_single_series_downselect or payload.data_url is not None
     try:
-        payload = _prepare_forecast_payload(payload)
+        prepared = _prepare_forecast_payload_result(payload)
+        payload = prepared.payload
+        preprocessing_metadata = _merge_preprocessing_metadata(
+            preprocessing_metadata,
+            prepared.preprocessing,
+        )
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except IngestDependencyError as exc:
@@ -2157,7 +2240,12 @@ def _execute_forecast(
             forecast_payload,
             model_metadata=model_metadata,
         )
-    request_warnings = [*normalize_warnings, *capability_warnings, *series_limit_warnings]
+    request_warnings = [
+        *normalize_warnings,
+        *capability_warnings,
+        *series_limit_warnings,
+        *_preprocessing_warning_messages(preprocessing_metadata),
+    ]
 
     try:
         keep_alive_policy = parse_keep_alive(forecast_payload.keep_alive, now=request_now)
@@ -2227,6 +2315,8 @@ def _execute_forecast(
             status_code=502,
             detail=f"runner returned invalid forecast response: {exc}",
         ) from exc
+    if preprocessing_metadata is not None:
+        response = response.model_copy(update={"preprocessing": preprocessing_metadata})
 
     metrics_payload, metrics_warnings = compute_forecast_metrics(
         request=forecast_payload,
@@ -2360,16 +2450,131 @@ def _input_series_limit_for_model(
     return None
 
 
+def _ingest_options_from_form(
+    *,
+    format_hint: str | None,
+    timestamp_column: str | None,
+    series_id_column: str | None,
+    target_column: str | None,
+    freq: str | None,
+    freq_column: str | None,
+    preprocess_missing: bool | None,
+    missing_method: str | None,
+    missing_max_ratio: float | None,
+    missing_max_gap: int | None,
+    missing_edge_strategy: str | None,
+    missing_seasonal_period: int | None,
+) -> IngestOptions:
+    payload: dict[str, Any] = {
+        "format": format_hint,
+        "timestamp_column": timestamp_column,
+        "series_id_column": series_id_column,
+        "target_column": target_column,
+        "freq": freq,
+        "freq_column": freq_column,
+    }
+    preprocessing = _preprocessing_payload_from_form(
+        preprocess_missing=preprocess_missing,
+        missing_method=missing_method,
+        missing_max_ratio=missing_max_ratio,
+        missing_max_gap=missing_max_gap,
+        missing_edge_strategy=missing_edge_strategy,
+        missing_seasonal_period=missing_seasonal_period,
+    )
+    if preprocessing is not None:
+        payload["preprocessing"] = preprocessing
+    return IngestOptions.model_validate(payload)
+
+
+def _preprocessing_payload_from_form(
+    *,
+    preprocess_missing: bool | None,
+    missing_method: str | None,
+    missing_max_ratio: float | None,
+    missing_max_gap: int | None,
+    missing_edge_strategy: str | None,
+    missing_seasonal_period: int | None,
+) -> dict[str, Any] | None:
+    form_values = (
+        preprocess_missing,
+        missing_method,
+        missing_max_ratio,
+        missing_max_gap,
+        missing_edge_strategy,
+        missing_seasonal_period,
+    )
+    if all(value is None for value in form_values):
+        return None
+
+    missing: dict[str, Any] = {
+        "enabled": preprocess_missing if preprocess_missing is not None else True,
+    }
+    if missing_method is not None:
+        missing["method"] = missing_method
+    if missing_max_ratio is not None:
+        missing["max_missing_ratio"] = missing_max_ratio
+    if missing_max_gap is not None:
+        missing["max_gap"] = missing_max_gap
+    if missing_edge_strategy is not None:
+        missing["edge_strategy"] = missing_edge_strategy
+    if missing_seasonal_period is not None:
+        missing["seasonal_period"] = missing_seasonal_period
+    return {"missing": missing}
+
+
+def _forecast_preprocessing_metadata(
+    diagnostics: list[SeriesPreprocessingDiagnostics],
+) -> ForecastPreprocessingMetadata | None:
+    if not diagnostics:
+        return None
+    return ForecastPreprocessingMetadata(series=diagnostics)
+
+
+def _merge_preprocessing_metadata(
+    first: ForecastPreprocessingMetadata | None,
+    second: ForecastPreprocessingMetadata | None,
+) -> ForecastPreprocessingMetadata | None:
+    if first is None:
+        return second
+    if second is None:
+        return first
+    return ForecastPreprocessingMetadata(series=[*first.series, *second.series])
+
+
+def _preprocessing_warning_messages(
+    metadata: ForecastPreprocessingMetadata | None,
+) -> list[str]:
+    if metadata is None:
+        return []
+
+    warnings: list[str] = []
+    for item in metadata.series:
+        if item.imputed_point_count > 0:
+            warnings.append(
+                f"series {item.id!r}: imputed {item.imputed_point_count} missing target "
+                f"values using {item.used_method}",
+            )
+        for warning in item.warnings or []:
+            warnings.append(f"series {item.id!r}: {warning}")
+    return warnings
+
+
 def _prepare_forecast_payload(
     payload: ForecastRequestWithKeepAlive,
 ) -> ForecastRequestWithKeepAlive:
+    return _prepare_forecast_payload_result(payload).payload
+
+
+def _prepare_forecast_payload_result(
+    payload: ForecastRequestWithKeepAlive,
+) -> PreparedForecastPayload:
     resolved = _apply_modelfile_defaults(payload)
     if resolved.data_url is None:
-        return resolved
+        return PreparedForecastPayload(payload=resolved, preprocessing=None)
 
     ingest_options = resolved.ingest or IngestOptions()
     allow_remote = _optional_bool_str(_env_or_none(ALLOW_REMOTE_DATA_URL_ENV_NAME)) is True
-    series = load_series_inputs_from_data_url(
+    ingest_result = load_series_inputs_result_from_data_url(
         resolved.data_url,
         format_hint=ingest_options.format,
         timestamp_column=ingest_options.timestamp_column,
@@ -2378,17 +2583,21 @@ def _prepare_forecast_payload(
         freq=ingest_options.freq,
         freq_column=ingest_options.freq_column,
         allow_remote=allow_remote,
+        preprocessing=ingest_options.preprocessing,
     )
 
     hydrated = resolved.model_copy(
         update={
-            "series": series,
+            "series": ingest_result.series,
             "data_url": None,
             "ingest": None,
         },
     )
-    return ForecastRequestWithKeepAlive.model_validate(
-        hydrated.model_dump(mode="python", exclude_none=True),
+    return PreparedForecastPayload(
+        payload=ForecastRequestWithKeepAlive.model_validate(
+            hydrated.model_dump(mode="python", exclude_none=True),
+        ),
+        preprocessing=_forecast_preprocessing_metadata(ingest_result.preprocessing),
     )
 
 

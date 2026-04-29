@@ -68,6 +68,7 @@ Canonical inventories:
   - 현재: covariates 정규화/strict-best_effort는 daemon 공통 처리
   - 현재: `freq="auto"` 기본 추론(타임스탬프 기반)은 daemon 공통 처리
   - 현재: `src/tollama/preprocess/pipeline.py`에 결측/리샘플링/이상치 처리용 기본 파이프라인 뼈대가 추가됨
+  - 현재: `data_url`/upload ingest의 opt-in target 결측 보정(`auto`/B-spline/linear/seasonal)과 진단 응답 추가
   - TODO: 리샘플링/결측/스케일링/윈도잉/타임존 처리의 공통 유틸 정리
 
 ### 4) 하드웨어 가속 자동 감지: Backend Selection

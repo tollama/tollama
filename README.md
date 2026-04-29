@@ -229,7 +229,7 @@ docker compose --profile gpu up --build tollama-gpu
 | Item                                  | Current Status                      | Goal                                                                                   |
 | ------------------------------------- |:-----------------------------------:| -------------------------------------------------------------------------------------- |
 | **Auto model comparison / selection** | ✅ Basic impl                        | Advanced best-model routing based on data characteristics                              |
-| **Auto data preprocessing**           | ✅ Basic impl                        | Spline interpolation, smoothing, train-fit scaling, windowing via `tollama.preprocess` |
+| **Auto data preprocessing**           | ✅ Basic impl                        | Opt-in ingest imputation plus spline interpolation, smoothing, scaling, and windowing |
 | **Fine-tuning / ensemble**            | ⚠️ Ensemble only                    | Add domain-adaptation fine-tuning workflow                                             |
 | **Local + cloud execution**           | ⚠️ Dockerfile exists, local-centric | K8s manifests, docker-compose, cloud deployment guide                                  |
 

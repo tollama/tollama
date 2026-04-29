@@ -5,12 +5,14 @@ struct ForecastResponseDTO: Decodable, Identifiable, Sendable {
     let model: String
     let forecasts: [SeriesForecastDTO]
     let timing: [String: JSONValue]?
+    let preprocessing: ForecastPreprocessingDTO?
     let warnings: [String]?
 
     enum CodingKeys: String, CodingKey {
         case model
         case forecasts
         case timing
+        case preprocessing
         case warnings
     }
 }
@@ -36,6 +38,38 @@ struct ForecastHistoryPoint: Identifiable, Equatable, Sendable {
     let step: Int
     let timestamp: String?
     let value: Double
+}
+
+struct ForecastPreprocessingDTO: Decodable, Equatable, Sendable {
+    let series: [SeriesPreprocessingDiagnosticsDTO]
+}
+
+struct SeriesPreprocessingDiagnosticsDTO: Decodable, Identifiable, Equatable, Sendable {
+    let id: String
+    let originalRowCount: Int
+    let regularizedRowCount: Int
+    let rawNullTargetCount: Int
+    let missingTimestampCount: Int
+    let imputedPointCount: Int
+    let maxGap: Int
+    let missingRatio: Double
+    let requestedMethod: String
+    let usedMethod: String
+    let warnings: [String]?
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case originalRowCount = "original_row_count"
+        case regularizedRowCount = "regularized_row_count"
+        case rawNullTargetCount = "raw_null_target_count"
+        case missingTimestampCount = "missing_timestamp_count"
+        case imputedPointCount = "imputed_point_count"
+        case maxGap = "max_gap"
+        case missingRatio = "missing_ratio"
+        case requestedMethod = "requested_method"
+        case usedMethod = "used_method"
+        case warnings
+    }
 }
 
 struct ForecastRow: Identifiable, Equatable, Sendable {

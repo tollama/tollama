@@ -169,7 +169,7 @@ tollama/
     - `mase_seasonality` default `1`
     - requires `series.actuals` with length `horizon`
   - optional file ingest:
-    - `data_url` + `ingest` (`format`, `timestamp_column`, `series_id_column`, `target_column`, `freq_column`)
+    - `data_url` + `ingest` (`format`, `timestamp_column`, `series_id_column`, `target_column`, `freq_column`, `preprocessing.missing`)
     - exactly one of `series` or `data_url` is required
 
 ### Planned work / TODO

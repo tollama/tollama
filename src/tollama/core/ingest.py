@@ -2,15 +2,23 @@
 
 from __future__ import annotations
 
+from collections import Counter
 from collections.abc import Sequence
+from dataclasses import dataclass
 from io import BytesIO, StringIO
 from pathlib import Path
 from typing import Any, Literal
 from urllib.parse import unquote, urlparse
 
+import numpy as np
 import pandas as pd
 
-from .schemas import SeriesInput
+from .schemas import (
+    IngestPreprocessingOptions,
+    MissingValuePreprocessingOptions,
+    SeriesInput,
+    SeriesPreprocessingDiagnostics,
+)
 
 TabularFormat = Literal["csv", "parquet"]
 
@@ -59,6 +67,14 @@ class IngestDependencyError(IngestError):
     """Raised when optional runtime dependencies for ingest are unavailable."""
 
 
+@dataclass(frozen=True, slots=True)
+class SeriesIngestResult:
+    """Series plus optional preprocessing diagnostics from tabular ingest."""
+
+    series: list[SeriesInput]
+    preprocessing: list[SeriesPreprocessingDiagnostics]
+
+
 def load_series_inputs_from_data_url(
     data_url: str,
     *,
@@ -69,8 +85,35 @@ def load_series_inputs_from_data_url(
     freq: str | None = None,
     freq_column: str | None = None,
     allow_remote: bool = False,
+    preprocessing: IngestPreprocessingOptions | None = None,
 ) -> list[SeriesInput]:
     """Load canonical series inputs from a local path/file:// URL (or remote URL when enabled)."""
+    return load_series_inputs_result_from_data_url(
+        data_url,
+        format_hint=format_hint,
+        timestamp_column=timestamp_column,
+        series_id_column=series_id_column,
+        target_column=target_column,
+        freq=freq,
+        freq_column=freq_column,
+        allow_remote=allow_remote,
+        preprocessing=preprocessing,
+    ).series
+
+
+def load_series_inputs_result_from_data_url(
+    data_url: str,
+    *,
+    format_hint: TabularFormat | None = None,
+    timestamp_column: str | None = None,
+    series_id_column: str | None = None,
+    target_column: str | None = None,
+    freq: str | None = None,
+    freq_column: str | None = None,
+    allow_remote: bool = False,
+    preprocessing: IngestPreprocessingOptions | None = None,
+) -> SeriesIngestResult:
+    """Load series inputs and preprocessing diagnostics from a data_url."""
     parsed = urlparse(data_url)
     scheme = parsed.scheme.lower()
 
@@ -81,7 +124,7 @@ def load_series_inputs_from_data_url(
             raise IngestError(
                 "data_url path must not contain '..' components",
             )
-        return load_series_inputs_from_path(
+        return load_series_inputs_result_from_path(
             path,
             format_hint=format_hint,
             timestamp_column=timestamp_column,
@@ -89,6 +132,7 @@ def load_series_inputs_from_data_url(
             target_column=target_column,
             freq=freq,
             freq_column=freq_column,
+            preprocessing=preprocessing,
         )
 
     if scheme in {"http", "https"}:
@@ -96,7 +140,7 @@ def load_series_inputs_from_data_url(
             raise IngestError(
                 "remote data_url is disabled for security reasons; use a local path or file:// URL",
             )
-        return _load_series_inputs_from_remote_url(
+        return _load_series_inputs_result_from_remote_url(
             data_url,
             format_hint=format_hint,
             timestamp_column=timestamp_column,
@@ -104,6 +148,7 @@ def load_series_inputs_from_data_url(
             target_column=target_column,
             freq=freq,
             freq_column=freq_column,
+            preprocessing=preprocessing,
         )
 
     raise IngestError(
@@ -120,8 +165,33 @@ def load_series_inputs_from_path(
     target_column: str | None = None,
     freq: str | None = None,
     freq_column: str | None = None,
+    preprocessing: IngestPreprocessingOptions | None = None,
 ) -> list[SeriesInput]:
     """Load canonical series inputs from a local CSV or Parquet file."""
+    return load_series_inputs_result_from_path(
+        path,
+        format_hint=format_hint,
+        timestamp_column=timestamp_column,
+        series_id_column=series_id_column,
+        target_column=target_column,
+        freq=freq,
+        freq_column=freq_column,
+        preprocessing=preprocessing,
+    ).series
+
+
+def load_series_inputs_result_from_path(
+    path: str | Path,
+    *,
+    format_hint: TabularFormat | None = None,
+    timestamp_column: str | None = None,
+    series_id_column: str | None = None,
+    target_column: str | None = None,
+    freq: str | None = None,
+    freq_column: str | None = None,
+    preprocessing: IngestPreprocessingOptions | None = None,
+) -> SeriesIngestResult:
+    """Load canonical series inputs and diagnostics from a local CSV or Parquet file."""
     resolved_path = Path(path).expanduser().resolve()
     if not resolved_path.exists():
         raise IngestError(f"input file does not exist: {resolved_path}")
@@ -133,13 +203,14 @@ def load_series_inputs_from_path(
         format_hint=format_hint,
     )
     frame = _read_frame_from_path(path=resolved_path, tabular_format=tabular_format)
-    return series_inputs_from_frame(
+    return series_inputs_result_from_frame(
         frame,
         timestamp_column=timestamp_column,
         series_id_column=series_id_column,
         target_column=target_column,
         freq=freq,
         freq_column=freq_column,
+        preprocessing=preprocessing,
     )
 
 
@@ -153,20 +224,48 @@ def load_series_inputs_from_bytes(
     target_column: str | None = None,
     freq: str | None = None,
     freq_column: str | None = None,
+    preprocessing: IngestPreprocessingOptions | None = None,
 ) -> list[SeriesInput]:
     """Load canonical series inputs from uploaded CSV/Parquet bytes."""
+    return load_series_inputs_result_from_bytes(
+        payload,
+        filename=filename,
+        format_hint=format_hint,
+        timestamp_column=timestamp_column,
+        series_id_column=series_id_column,
+        target_column=target_column,
+        freq=freq,
+        freq_column=freq_column,
+        preprocessing=preprocessing,
+    ).series
+
+
+def load_series_inputs_result_from_bytes(
+    payload: bytes,
+    *,
+    filename: str,
+    format_hint: TabularFormat | None = None,
+    timestamp_column: str | None = None,
+    series_id_column: str | None = None,
+    target_column: str | None = None,
+    freq: str | None = None,
+    freq_column: str | None = None,
+    preprocessing: IngestPreprocessingOptions | None = None,
+) -> SeriesIngestResult:
+    """Load canonical series inputs and diagnostics from uploaded CSV/Parquet bytes."""
     if not payload:
         raise IngestError("uploaded file is empty")
 
     tabular_format = _resolve_format(path=Path(filename), format_hint=format_hint)
     frame = _read_frame_from_bytes(payload=payload, tabular_format=tabular_format)
-    return series_inputs_from_frame(
+    return series_inputs_result_from_frame(
         frame,
         timestamp_column=timestamp_column,
         series_id_column=series_id_column,
         target_column=target_column,
         freq=freq,
         freq_column=freq_column,
+        preprocessing=preprocessing,
     )
 
 
@@ -180,6 +279,27 @@ def series_inputs_from_frame(
     freq_column: str | None = None,
 ) -> list[SeriesInput]:
     """Transform a tabular DataFrame into canonical SeriesInput payloads."""
+    return series_inputs_result_from_frame(
+        frame,
+        timestamp_column=timestamp_column,
+        series_id_column=series_id_column,
+        target_column=target_column,
+        freq=freq,
+        freq_column=freq_column,
+    ).series
+
+
+def series_inputs_result_from_frame(
+    frame: pd.DataFrame,
+    *,
+    timestamp_column: str | None = None,
+    series_id_column: str | None = None,
+    target_column: str | None = None,
+    freq: str | None = None,
+    freq_column: str | None = None,
+    preprocessing: IngestPreprocessingOptions | None = None,
+) -> SeriesIngestResult:
+    """Transform a tabular DataFrame into canonical series plus diagnostics."""
     if frame.empty:
         raise IngestError("input table is empty")
 
@@ -215,23 +335,37 @@ def series_inputs_from_frame(
             groups.append((series_id, group))
 
     series_inputs: list[SeriesInput] = []
+    preprocessing_diagnostics: list[SeriesPreprocessingDiagnostics] = []
+    missing_options = _enabled_missing_options(preprocessing)
     for series_id, group in groups:
         sorted_group = _sort_group(
             group,
             timestamp_column=resolved_timestamp,
         )
-        sorted_group = _drop_null_target_rows(sorted_group, target_column=resolved_target)
-        timestamps = _extract_timestamps(
-            sorted_group,
-            timestamp_column=resolved_timestamp,
-        )
-        target = _extract_target_values(sorted_group, target_column=resolved_target)
-        resolved_series_freq = _extract_freq(
-            sorted_group,
-            freq=resolved_freq,
-            freq_column=resolved_freq_column,
-            timestamps=timestamps,
-        )
+        if missing_options is None:
+            sorted_group = _drop_null_target_rows(sorted_group, target_column=resolved_target)
+            timestamps = _extract_timestamps(
+                sorted_group,
+                timestamp_column=resolved_timestamp,
+            )
+            target = _extract_target_values(sorted_group, target_column=resolved_target)
+            resolved_series_freq = _extract_freq(
+                sorted_group,
+                freq=resolved_freq,
+                freq_column=resolved_freq_column,
+                timestamps=timestamps,
+            )
+        else:
+            timestamps, target, resolved_series_freq, diagnostics = _regularize_and_impute_group(
+                sorted_group,
+                series_id=series_id,
+                timestamp_column=resolved_timestamp,
+                target_column=resolved_target,
+                freq=resolved_freq,
+                freq_column=resolved_freq_column,
+                options=missing_options,
+            )
+            preprocessing_diagnostics.append(diagnostics)
 
         series_inputs.append(
             SeriesInput.model_validate(
@@ -247,7 +381,297 @@ def series_inputs_from_frame(
     if not series_inputs:
         raise IngestError("no series rows found in input")
 
-    return series_inputs
+    return SeriesIngestResult(series=series_inputs, preprocessing=preprocessing_diagnostics)
+
+
+def _enabled_missing_options(
+    preprocessing: IngestPreprocessingOptions | None,
+) -> MissingValuePreprocessingOptions | None:
+    if preprocessing is None:
+        return None
+    return preprocessing.missing if preprocessing.missing.enabled else None
+
+
+def _regularize_and_impute_group(
+    group: pd.DataFrame,
+    *,
+    series_id: str,
+    timestamp_column: str | None,
+    target_column: str,
+    freq: str | None,
+    freq_column: str | None,
+    options: MissingValuePreprocessingOptions,
+) -> tuple[list[str], list[float], str, SeriesPreprocessingDiagnostics]:
+    original_row_count = len(group)
+    timestamps = _extract_timestamps(group, timestamp_column=timestamp_column)
+    target = _extract_target_values_allowing_nulls(group, target_column=target_column)
+    raw_null_target_count = int(np.isnan(target).sum())
+    if raw_null_target_count == len(target):
+        raise IngestError("target column contains only null values")
+
+    try:
+        index = pd.DatetimeIndex(pd.to_datetime(timestamps, errors="raise"))
+    except Exception as exc:  # noqa: BLE001
+        raise IngestError(
+            "missing preprocessing requires parseable datetime timestamps",
+        ) from exc
+
+    if index.has_duplicates:
+        raise IngestError(
+            "missing preprocessing requires unique timestamps; duplicate timestamps found",
+        )
+
+    resolved_series_freq = _extract_freq(
+        group,
+        freq=freq,
+        freq_column=freq_column,
+        timestamps=timestamps,
+    )
+    if resolved_series_freq == "auto":
+        fallback_freq = _dominant_interval_frequency(index, min_share=0.5)
+        if fallback_freq is None:
+            raise IngestError(
+                "missing preprocessing requires an explicit or inferred frequency; set ingest.freq",
+            )
+        resolved_series_freq = fallback_freq
+
+    try:
+        regular_index = pd.date_range(
+            start=index.min(),
+            end=index.max(),
+            freq=resolved_series_freq,
+        )
+    except ValueError as exc:
+        raise IngestError(
+            f"missing preprocessing could not build regular grid for freq={resolved_series_freq!r}",
+        ) from exc
+
+    if len(regular_index) == 0:
+        raise IngestError("missing preprocessing produced an empty timestamp grid")
+
+    aligned = pd.Series(target, index=index).reindex(regular_index)
+    values = aligned.to_numpy(dtype=float)
+    missing_mask = np.isnan(values)
+    missing_count = int(missing_mask.sum())
+    missing_ratio = float(missing_count / len(values))
+    max_gap = _max_consecutive_true(missing_mask)
+    if missing_ratio > options.max_missing_ratio:
+        raise IngestError(
+            "target missing ratio "
+            f"{missing_ratio:.4f} exceeds limit {options.max_missing_ratio:.4f}",
+        )
+    if options.max_gap is not None and max_gap > options.max_gap:
+        raise IngestError(f"target max missing gap {max_gap} exceeds limit {options.max_gap}")
+
+    imputed, used_method, warnings = _impute_missing_values(values, options=options)
+    missing_timestamp_count = int((~regular_index.isin(index)).sum())
+
+    diagnostics = SeriesPreprocessingDiagnostics.model_validate(
+        {
+            "id": series_id,
+            "original_row_count": original_row_count,
+            "regularized_row_count": len(regular_index),
+            "raw_null_target_count": raw_null_target_count,
+            "missing_timestamp_count": missing_timestamp_count,
+            "imputed_point_count": missing_count,
+            "max_gap": max_gap,
+            "missing_ratio": missing_ratio,
+            "requested_method": options.method,
+            "used_method": used_method,
+            "warnings": warnings or None,
+        }
+    )
+    return (
+        [_stringify_timestamp(value) for value in regular_index.tolist()],
+        [float(value) for value in imputed.tolist()],
+        resolved_series_freq,
+        diagnostics,
+    )
+
+
+def _extract_target_values_allowing_nulls(
+    group: pd.DataFrame,
+    *,
+    target_column: str,
+) -> np.ndarray:
+    values = group[target_column].tolist()
+    if not values:
+        raise IngestError("series contains no target rows")
+
+    normalized: list[float] = []
+    for index, value in enumerate(values):
+        if pd.isna(value):
+            normalized.append(float("nan"))
+            continue
+
+        if hasattr(value, "item"):
+            try:
+                value = value.item()  # numpy scalar -> python scalar
+            except Exception:  # noqa: BLE001
+                pass
+
+        if isinstance(value, bool):
+            raise IngestError(f"target contains boolean value at row index {index}")
+        if isinstance(value, (int, float)):
+            normalized.append(float(value))
+            continue
+
+        raise IngestError(
+            f"target contains non-numeric value {value!r} at row index {index}",
+        )
+
+    return np.asarray(normalized, dtype=float)
+
+
+def _impute_missing_values(
+    values: np.ndarray,
+    *,
+    options: MissingValuePreprocessingOptions,
+) -> tuple[np.ndarray, str, list[str]]:
+    result = np.asarray(values, dtype=float).copy()
+    missing_mask = np.isnan(result)
+    if not missing_mask.any():
+        return result, "none", []
+
+    valid_idx = np.where(~missing_mask)[0]
+    if len(valid_idx) == 0:
+        raise IngestError("target column contains only null values")
+
+    warnings: list[str] = []
+    first_valid = int(valid_idx[0])
+    last_valid = int(valid_idx[-1])
+    has_edge_missing = first_valid > 0 or last_valid < len(result) - 1
+    if has_edge_missing:
+        if options.edge_strategy == "reject":
+            raise IngestError(
+                "target contains leading or trailing missing values; "
+                "set missing edge_strategy='nearest' to fill them",
+            )
+        result[:first_valid] = result[first_valid]
+        result[last_valid + 1 :] = result[last_valid]
+        warnings.append("edge missing values filled with nearest valid target")
+
+    if not np.isnan(result).any():
+        return result, "nearest", warnings
+
+    requested = options.method
+    if requested == "seasonal":
+        return _seasonal_interpolate(result, period=options.seasonal_period), "seasonal", warnings
+    if requested == "linear":
+        return _linear_interpolate(result), "linear", warnings
+
+    valid_count = int(np.count_nonzero(~np.isnan(result)))
+    if requested == "bspline":
+        if valid_count < 4:
+            warnings.append("bspline interpolation requires at least 4 valid points; used linear")
+            return _linear_interpolate(result), "linear", warnings
+        return _bspline_interpolate(result), "bspline", warnings
+
+    if valid_count < 4:
+        warnings.append(
+            "auto missing preprocessing used linear because fewer than 4 points are valid"
+        )
+        return _linear_interpolate(result), "linear", warnings
+
+    try:
+        return _bspline_interpolate(result), "bspline", warnings
+    except IngestDependencyError:
+        warnings.append("scipy unavailable for auto missing preprocessing; used linear")
+        return _linear_interpolate(result), "linear", warnings
+
+
+def _linear_interpolate(values: np.ndarray) -> np.ndarray:
+    result = values.copy()
+    mask = np.isnan(result)
+    if not mask.any():
+        return result
+
+    valid_idx = np.where(~mask)[0]
+    if len(valid_idx) == 0:
+        return result
+    if len(valid_idx) == 1:
+        result[:] = result[valid_idx[0]]
+        return result
+
+    missing_idx = np.where(mask)[0]
+    result[missing_idx] = np.interp(missing_idx, valid_idx, result[valid_idx])
+    return result
+
+
+def _bspline_interpolate(values: np.ndarray) -> np.ndarray:
+    try:
+        from tollama.preprocess.spline import SplinePreprocessor
+    except ImportError as exc:
+        raise IngestDependencyError(
+            "bspline missing preprocessing requires optional dependency scipy; "
+            'install with `pip install -e ".[preprocess]"`',
+        ) from exc
+
+    try:
+        return SplinePreprocessor().interpolate_missing(values)
+    except ImportError as exc:
+        raise IngestDependencyError(str(exc)) from exc
+
+
+def _seasonal_interpolate(values: np.ndarray, *, period: int | None) -> np.ndarray:
+    result = values.copy()
+    mask = np.isnan(result)
+    if not mask.any():
+        return result
+
+    resolved_period = period or _detect_period(result[~mask])
+    if resolved_period is None or resolved_period < 2:
+        return _linear_interpolate(result)
+
+    missing_idx = np.where(mask)[0]
+    for idx in missing_idx:
+        seasonal_values: list[float] = []
+        previous = idx - resolved_period
+        while previous >= 0:
+            if not np.isnan(result[previous]):
+                seasonal_values.append(float(result[previous]))
+            previous -= resolved_period
+
+        following = idx + resolved_period
+        while following < len(result):
+            if not np.isnan(result[following]):
+                seasonal_values.append(float(result[following]))
+            following += resolved_period
+
+        if seasonal_values:
+            result[idx] = float(np.mean(seasonal_values))
+
+    if np.isnan(result).any():
+        result = _linear_interpolate(result)
+    return result
+
+
+def _detect_period(values: np.ndarray) -> int | None:
+    if len(values) < 6:
+        return None
+    centered = values - np.mean(values)
+    fft_values = np.abs(np.fft.rfft(centered))
+    if len(fft_values) < 3:
+        return None
+    fft_values[0] = 0
+    dominant_freq_idx = int(np.argmax(fft_values[1:])) + 1
+    if dominant_freq_idx == 0:
+        return None
+    period = len(values) // dominant_freq_idx
+    if period < 2 or period > len(values) // 2:
+        return None
+    return period
+
+
+def _max_consecutive_true(mask: np.ndarray) -> int:
+    max_len = cur = 0
+    for value in mask.astype(bool):
+        if value:
+            cur += 1
+            max_len = max(max_len, cur)
+        else:
+            cur = 0
+    return int(max_len)
 
 
 def _resolve_format(*, path: Path, format_hint: TabularFormat | None) -> TabularFormat:
@@ -288,18 +712,42 @@ def _load_series_inputs_from_remote_url(
     freq: str | None,
     freq_column: str | None,
 ) -> list[SeriesInput]:
+    return _load_series_inputs_result_from_remote_url(
+        data_url,
+        format_hint=format_hint,
+        timestamp_column=timestamp_column,
+        series_id_column=series_id_column,
+        target_column=target_column,
+        freq=freq,
+        freq_column=freq_column,
+        preprocessing=None,
+    ).series
+
+
+def _load_series_inputs_result_from_remote_url(
+    data_url: str,
+    *,
+    format_hint: TabularFormat | None,
+    timestamp_column: str | None,
+    series_id_column: str | None,
+    target_column: str | None,
+    freq: str | None,
+    freq_column: str | None,
+    preprocessing: IngestPreprocessingOptions | None,
+) -> SeriesIngestResult:
     tabular_format = _resolve_format(path=Path(urlparse(data_url).path), format_hint=format_hint)
     if tabular_format == "csv":
         frame = pd.read_csv(data_url, encoding="utf-8-sig")
     else:
         frame = _read_parquet(data_url)
-    return series_inputs_from_frame(
+    return series_inputs_result_from_frame(
         frame,
         timestamp_column=timestamp_column,
         series_id_column=series_id_column,
         target_column=target_column,
         freq=freq,
         freq_column=freq_column,
+        preprocessing=preprocessing,
     )
 
 
@@ -466,8 +914,49 @@ def _extract_freq(
 
     inferred = pd.infer_freq(index)
     if inferred is None:
-        return "auto"
+        fallback = _dominant_interval_frequency(index)
+        if fallback is None:
+            return "auto"
+        return fallback
     return str(inferred)
+
+
+def _dominant_interval_frequency(index: pd.DatetimeIndex, *, min_share: float = 0.8) -> str | None:
+    if len(index) < 3:
+        return None
+
+    deltas: list[float] = []
+    for previous, current in zip(index[:-1], index[1:], strict=True):
+        delta = round((current - previous).total_seconds(), 6)
+        if delta > 0.0:
+            deltas.append(delta)
+    if not deltas:
+        return None
+
+    dominant_seconds, dominant_count = Counter(deltas).most_common(1)[0]
+    if dominant_count / len(deltas) < min_share:
+        return None
+
+    return _offset_alias_from_seconds(dominant_seconds)
+
+
+def _offset_alias_from_seconds(seconds: float) -> str | None:
+    whole_seconds = round(seconds)
+    if whole_seconds <= 0 or abs(seconds - whole_seconds) > 1e-6:
+        return None
+
+    units = (
+        ("D", 86_400),
+        ("h", 3_600),
+        ("min", 60),
+        ("s", 1),
+    )
+    for alias, unit_seconds in units:
+        if whole_seconds % unit_seconds != 0:
+            continue
+        multiple = whole_seconds // unit_seconds
+        return alias if multiple == 1 else f"{multiple}{alias}"
+    return None
 
 
 def _normalize_optional_text(value: str | None) -> str | None:

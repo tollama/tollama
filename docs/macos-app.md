@@ -49,9 +49,14 @@ The detail pane exposes four native tabs:
   `demand`, `users`, `pm2.5`, and OPSD-style
   `*_load_actual_entsoe_transparency` columns. When timestamp cadence cannot be
   inferred, the Data tab can send an explicit pandas frequency alias such as
-  `D`, `h`, or `min`. Preview text accepts UTF-8 plus common Windows-1252 and
-  Latin-1 CSV headers used by weather datasets, and wide datasets such as
-  `electricity.csv` show a bounded subset of columns in the preview grid.
+  `D`, `h`, or `min`; when cadence is mostly regular after dropping null target
+  rows, the preview pre-fills that frequency override. Preview text accepts
+  UTF-8 plus common Windows-1252 and Latin-1 CSV headers used by weather
+  datasets, and wide datasets such as `electricity.csv` show a bounded subset
+  of columns in the preview grid. The Missing Values control is off by default;
+  when enabled, the app sends opt-in `auto`, `B-spline`, `linear`, or
+  `seasonal` target interpolation settings for sampled null target or cadence
+  gap repair.
 - `Forecast`: runs one selected CSV against one installed forecast-ready model via
   `/api/forecast/upload`, clamps the horizon to registry metadata when
   available, down-selects CSVs with multiple inferred series for single-series

@@ -7,6 +7,35 @@ enum WorkspaceTab: String, Hashable {
     case logs
 }
 
+enum MissingValuePreprocessingMode: String, CaseIterable, Identifiable {
+    case off
+    case auto
+    case bspline
+    case linear
+    case seasonal
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .off:
+            return "Off"
+        case .auto:
+            return "Auto"
+        case .bspline:
+            return "B-spline"
+        case .linear:
+            return "Linear"
+        case .seasonal:
+            return "Seasonal"
+        }
+    }
+
+    var uploadMethod: String? {
+        self == .off ? nil : rawValue
+    }
+}
+
 @MainActor
 final class ForecastWorkspace: ObservableObject {
     @Published var selectedTab: WorkspaceTab = .models
@@ -24,6 +53,7 @@ final class ForecastWorkspace: ObservableObject {
     @Published var targetColumnOverride = ""
     @Published var frequencyOverride = ""
     @Published var freqColumnOverride = ""
+    @Published var missingValueMode: MissingValuePreprocessingMode = .off
     @Published private(set) var lastResponse: ForecastResponseDTO?
     @Published private(set) var recentForecasts: [ForecastResponseDTO] = []
     @Published private(set) var isLoadingModels = false
@@ -115,7 +145,7 @@ final class ForecastWorkspace: ObservableObject {
             timestampColumnOverride = preview.timestampColumn ?? ""
             seriesIDColumnOverride = preview.seriesIDColumn ?? ""
             targetColumnOverride = preview.targetColumn ?? ""
-            frequencyOverride = ""
+            frequencyOverride = preview.freqColumn == nil ? preview.inferredFrequency ?? "" : ""
             freqColumnOverride = preview.freqColumn ?? ""
         } catch {
             csvPreview = nil
@@ -171,7 +201,9 @@ final class ForecastWorkspace: ObservableObject {
                 seriesIDColumn: optionalOverride(seriesIDColumnOverride),
                 targetColumn: optionalOverride(targetColumnOverride),
                 freq: optionalOverride(frequencyOverride),
-                freqColumn: optionalOverride(freqColumnOverride)
+                freqColumn: optionalOverride(freqColumnOverride),
+                preprocessMissing: missingValueMode != .off,
+                missingMethod: missingValueMode.uploadMethod
             )
             lastResponse = response
             recentForecasts.insert(response, at: 0)

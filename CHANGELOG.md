@@ -59,8 +59,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   timestamp, series identifier, and target aliases, including `date`, `Date`,
   `datetime`, `series`, `OT`, `demand`, `users`, air-quality targets, and OPSD
   load-actual columns
+- CSV ingest and the macOS CSV preview sniffer now fall back to dominant
+  timestamp intervals after null target rows are dropped, so mostly-hourly
+  datasets with sparse target gaps can still send explicit `freq` values
 - CSV ingest now omits rows with null target values after resolving the target
   column, while still rejecting entirely null targets
+- CSV/Parquet ingest now supports opt-in missing-value preprocessing for
+  `data_url` and upload forecasts via `ingest.preprocessing.missing`, with
+  linear, seasonal, auto, and B-spline interpolation, regular-grid diagnostics,
+  and response warnings when values are imputed
+- macOS Data tab now exposes an opt-in Missing Values control and previews
+  sampled null target/cadence-gap signals before sending missing preprocessing
+  options to `/api/forecast/upload`
 - macOS per-family runtime bootstrap now creates symlinked virtualenv
   interpreters so bundled Python runtimes can locate `libpython` correctly
 - Per-family runtime bootstrap now records an optional-extra dependency

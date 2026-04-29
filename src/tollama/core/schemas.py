@@ -44,6 +44,8 @@ AnomalySeverity = Literal["low", "medium", "high"]
 AnomalyType = Literal["spike", "dip", "shift", "trend_break"]
 CounterfactualDirection = Literal["above_counterfactual", "below_counterfactual", "neutral"]
 TabularFormat = Literal["csv", "parquet"]
+MissingPreprocessingMethod = Literal["auto", "bspline", "linear", "seasonal"]
+MissingEdgeStrategy = Literal["nearest", "reject"]
 
 
 def _default_branch_quantiles() -> list[float]:
@@ -131,6 +133,25 @@ class ResponseOptions(CanonicalModel):
     explain: StrictBool = False
 
 
+class MissingValuePreprocessingOptions(CanonicalModel):
+    """Opt-in missing target preprocessing controls for tabular ingest."""
+
+    enabled: StrictBool = False
+    method: MissingPreprocessingMethod = "auto"
+    max_missing_ratio: StrictFloat = Field(default=0.30, ge=0.0, le=1.0)
+    max_gap: PositiveInt | None = 24
+    edge_strategy: MissingEdgeStrategy = "nearest"
+    seasonal_period: PositiveInt | None = None
+
+
+class IngestPreprocessingOptions(CanonicalModel):
+    """Opt-in preprocessing controls for tabular ingest."""
+
+    missing: MissingValuePreprocessingOptions = Field(
+        default_factory=MissingValuePreprocessingOptions,
+    )
+
+
 class IngestOptions(CanonicalModel):
     """CSV/Parquet ingest options for data_url based forecasting."""
 
@@ -140,6 +161,7 @@ class IngestOptions(CanonicalModel):
     target_column: NonEmptyStr | None = None
     freq: NonEmptyStr | None = None
     freq_column: NonEmptyStr | None = None
+    preprocessing: IngestPreprocessingOptions | None = None
 
 
 class ForecastRequest(CanonicalModel):
@@ -610,6 +632,28 @@ class ForecastNarrative(CanonicalModel):
     series: list[SeriesForecastNarrative] = Field(min_length=1)
 
 
+class SeriesPreprocessingDiagnostics(CanonicalModel):
+    """Diagnostics for one ingested series after optional preprocessing."""
+
+    id: NonEmptyStr
+    original_row_count: StrictInt = Field(ge=0)
+    regularized_row_count: StrictInt = Field(ge=0)
+    raw_null_target_count: StrictInt = Field(ge=0)
+    missing_timestamp_count: StrictInt = Field(ge=0)
+    imputed_point_count: StrictInt = Field(ge=0)
+    max_gap: StrictInt = Field(ge=0)
+    missing_ratio: StrictFloat = Field(ge=0.0, le=1.0)
+    requested_method: MissingPreprocessingMethod
+    used_method: NonEmptyStr
+    warnings: list[NonEmptyStr] | None = None
+
+
+class ForecastPreprocessingMetadata(CanonicalModel):
+    """Optional preprocessing diagnostics attached to forecast responses."""
+
+    series: list[SeriesPreprocessingDiagnostics] = Field(default_factory=list)
+
+
 class ForecastResponse(CanonicalModel):
     """Unified forecast response payload."""
 
@@ -619,6 +663,7 @@ class ForecastResponse(CanonicalModel):
     timing: ForecastTiming | None = None
     explanation: ForecastExplanation | None = None
     narrative: ForecastNarrative | None = None
+    preprocessing: ForecastPreprocessingMetadata | None = None
     usage: dict[NonEmptyStr, JsonValue] | None = None
     warnings: list[NonEmptyStr] | None = None
 

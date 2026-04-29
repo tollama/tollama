@@ -324,6 +324,7 @@ warning emission, and macro aggregation across series with defined values.
 | `target_column` | string | `null` | Column name to use as forecast target |
 | `freq` | string | `null` | Explicit pandas offset alias to apply to every ingested series |
 | `freq_column` | string | `null` | Column name that contains the frequency alias |
+| `preprocessing` | object | `null` | Optional preprocessing controls for tabular ingest |
 
 When `timestamp_column` or `target_column` is omitted, ingest auto-detects common
 time-series column names case-insensitively. Timestamp aliases include `timestamp`,
@@ -337,6 +338,22 @@ detected.
 Rows where the resolved target value is null are omitted during ingest; files
 whose resolved target column is entirely null are rejected.
 
+Missing-value repair is opt-in. Set
+`ingest.preprocessing.missing.enabled=true` for `data_url` forecasts, or pass
+the equivalent multipart form fields to `/api/forecast/upload`
+(`preprocess_missing`, `missing_method`, `missing_max_ratio`,
+`missing_max_gap`, `missing_edge_strategy`, `missing_seasonal_period`).
+Supported missing methods are `auto`, `bspline`, `linear`, and `seasonal`;
+controls also include `max_missing_ratio` (default `0.30`), `max_gap`
+(default `24`), `edge_strategy` (`nearest` or `reject`), and optional
+`seasonal_period`.
+When enabled, ingest resolves a frequency, builds a regular timestamp grid,
+marks null targets and missing timestamps as gaps, validates limits, then
+imputes target values before forecasting. B-spline requires
+`tollama[preprocess]`; `method="bspline"` returns HTTP `503` when SciPy is not
+available, while `method="auto"` falls back to linear interpolation with a
+warning.
+
 ---
 
 ### `POST /api/forecast` — Response fields
@@ -348,6 +365,7 @@ whose resolved target column is entirely null are rejected.
 | `warnings` | array of string | no | Covariate drops, compatibility notices |
 | `metrics` | object | no | Accuracy metrics per series plus `aggregate` macro averages over defined series (only when `parameters.metrics` is set) |
 | `timing` | object | no | `model_load_ms`, `inference_ms`, `total_ms` |
+| `preprocessing` | object | no | Per-series diagnostics for opt-in tabular missing-value preprocessing |
 | `explanation` | object | no | Explainability summaries (model-dependent) |
 | `narrative` | object | no | Natural-language summary (only when `response_options.narrative=true`) |
 | `usage` | object | no | Runtime telemetry snapshot such as `runner`, `device`, `peak_memory_mb`, plus adapter-specific keys |

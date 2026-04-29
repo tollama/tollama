@@ -121,7 +121,9 @@ actor TollamaHTTPClient {
         seriesIDColumn: String?,
         targetColumn: String?,
         freq: String?,
-        freqColumn: String?
+        freqColumn: String?,
+        preprocessMissing: Bool,
+        missingMethod: String?
     ) async throws -> ForecastResponseDTO {
         let requestPayload: [String: Any] = [
             "model": model,
@@ -143,6 +145,10 @@ actor TollamaHTTPClient {
         appendOptionalFormField(name: "target_column", value: targetColumn, boundary: boundary, to: &body)
         appendOptionalFormField(name: "freq", value: freq, boundary: boundary, to: &body)
         appendOptionalFormField(name: "freq_column", value: freqColumn, boundary: boundary, to: &body)
+        if preprocessMissing {
+            appendFormField(name: "preprocess_missing", value: "true", boundary: boundary, to: &body)
+            appendOptionalFormField(name: "missing_method", value: missingMethod, boundary: boundary, to: &body)
+        }
         try appendFileField(name: "file", fileURL: fileURL, boundary: boundary, to: &body)
         body.appendUTF8("--\(boundary)--\r\n")
 

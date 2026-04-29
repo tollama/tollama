@@ -32,6 +32,36 @@ from tollama.preprocess.bridge import preprocess_series_input
 result = preprocess_series_input(series_input, config=PreprocessConfig(horizon=7))
 ```
 
+## Forecast Ingest Missing-Value Repair
+
+CSV/Parquet forecast ingest keeps its default behavior unchanged: null target
+rows are omitted unless missing preprocessing is explicitly enabled. For
+`data_url` requests, enable opt-in target repair with:
+
+```json
+{
+  "ingest": {
+    "preprocessing": {
+      "missing": {
+        "enabled": true,
+        "method": "auto",
+        "max_missing_ratio": 0.3,
+        "max_gap": 24,
+        "edge_strategy": "nearest"
+      }
+    }
+  }
+}
+```
+
+Supported methods are `auto`, `bspline`, `linear`, and `seasonal`. When enabled,
+ingest resolves the series frequency, builds a regular timestamp grid, treats
+null targets and missing timestamps as gaps, validates missing-ratio/gap limits,
+and returns preprocessing diagnostics on forecast responses. B-spline uses the
+optional `tollama[preprocess]` SciPy dependency; explicit `bspline` fails with a
+dependency error when unavailable, while `auto` falls back to linear with a
+warning.
+
 ## Pipeline Stages
 
 | Stage           | Description                                                        |

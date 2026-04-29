@@ -273,6 +273,49 @@ def test_forecast_accepts_data_url_csv(monkeypatch, tmp_path) -> None:
     assert len(body["forecasts"][0]["mean"]) == 2
 
 
+def test_forecast_data_url_opt_in_missing_preprocessing(monkeypatch, tmp_path) -> None:
+    _install_model(monkeypatch, tmp_path, name="mock")
+    runner_manager = _CapturingRunnerManager()
+    app = create_app(runner_manager=runner_manager)  # type: ignore[arg-type]
+    data_path = tmp_path / "history.csv"
+    data_path.write_text(
+        "timestamp,target\n"
+        "2025-01-01 00:00:00,1.0\n"
+        "2025-01-01 01:00:00,\n"
+        "2025-01-01 03:00:00,4.0\n",
+        encoding="utf-8",
+    )
+
+    payload = {
+        "model": "mock",
+        "horizon": 2,
+        "data_url": str(data_path),
+        "ingest": {
+            "format": "csv",
+            "preprocessing": {
+                "missing": {
+                    "enabled": True,
+                    "method": "linear",
+                    "max_missing_ratio": 0.8,
+                }
+            },
+        },
+        "options": {},
+    }
+    with TestClient(app) as client:
+        response = client.post("/v1/forecast", json=payload)
+
+    assert response.status_code == 200
+    body = response.json()
+    preprocessing = body["preprocessing"]["series"][0]
+    assert preprocessing["raw_null_target_count"] == 1
+    assert preprocessing["missing_timestamp_count"] == 1
+    assert preprocessing["imputed_point_count"] == 2
+    assert "imputed 2 missing target values" in body["warnings"][0]
+    captured_series = runner_manager.captured["params"]["series"][0]
+    assert captured_series["target"] == [1.0, 2.0, 3.0, 4.0]
+
+
 def test_modelfile_endpoints_and_forecast_reference(monkeypatch, tmp_path) -> None:
     _install_model(monkeypatch, tmp_path, name="mock")
     app = create_app()
@@ -362,6 +405,41 @@ def test_forecast_upload_endpoint_accepts_explicit_frequency(monkeypatch, tmp_pa
     assert response.status_code == 200
     captured_series = runner_manager.captured["params"]["series"]
     assert captured_series[0]["freq"] == "D"
+
+
+def test_forecast_upload_endpoint_opt_in_missing_preprocessing(monkeypatch, tmp_path) -> None:
+    _install_model(monkeypatch, tmp_path, name="mock")
+    runner_manager = _CapturingRunnerManager()
+    app = create_app(runner_manager=runner_manager)  # type: ignore[arg-type]
+    payload = {
+        "model": "mock",
+        "horizon": 2,
+        "options": {},
+    }
+    file_content = (
+        "timestamp,target\n"
+        "2025-01-01 00:00:00,1.0\n"
+        "2025-01-01 01:00:00,\n"
+        "2025-01-01 03:00:00,4.0\n"
+    )
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/forecast/upload",
+            data={
+                "payload": json.dumps(payload),
+                "preprocess_missing": "true",
+                "missing_method": "linear",
+                "missing_max_ratio": "0.8",
+            },
+            files={"file": ("history.csv", file_content, "text/csv")},
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["preprocessing"]["series"][0]["imputed_point_count"] == 2
+    captured_series = runner_manager.captured["params"]["series"]
+    assert captured_series[0]["target"] == [1.0, 2.0, 3.0, 4.0]
 
 
 def test_forecast_upload_endpoint_detects_date_and_ot_columns(monkeypatch, tmp_path) -> None:

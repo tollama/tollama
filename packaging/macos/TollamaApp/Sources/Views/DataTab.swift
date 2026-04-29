@@ -82,6 +82,7 @@ struct DataTab: View {
                 roleBadges(preview)
                 sampleRows(preview)
                 overrideControls(preview)
+                missingValueControls(preview)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         } else if workspace.isLoadingCSVPreview {
@@ -157,6 +158,7 @@ struct DataTab: View {
             roleBadge("timestamp", preview.timestampColumn)
             roleBadge("target", preview.targetColumn)
             roleBadge("series_id", preview.seriesIDColumn)
+            roleBadge("freq", preview.inferredFrequency)
             roleBadge("freq column", preview.freqColumn)
         }
     }
@@ -197,6 +199,25 @@ struct DataTab: View {
                 }
             }
             .textFieldStyle(.roundedBorder)
+        }
+    }
+
+    private func missingValueControls(_ preview: CSVPreview) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Missing Values")
+                .font(.headline)
+            Picker("Missing Values", selection: $workspace.missingValueMode) {
+                ForEach(MissingValuePreprocessingMode.allCases) { mode in
+                    Text(mode.label).tag(mode)
+                }
+            }
+            .pickerStyle(.segmented)
+
+            if preview.hasMissingValueSignals && workspace.missingValueMode == .off {
+                Text(missingValueSummary(preview))
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+            }
         }
     }
 
@@ -272,6 +293,17 @@ struct DataTab: View {
     private func previewSummary(_ preview: CSVPreview) -> String {
         let rowLabel = preview.rowCount.map { "\($0) rows" } ?? "Rows not counted for large file"
         return "\(rowLabel) · \(preview.columns.count) columns"
+    }
+
+    private func missingValueSummary(_ preview: CSVPreview) -> String {
+        var parts: [String] = []
+        if preview.sampledNullTargetCount > 0 {
+            parts.append("\(preview.sampledNullTargetCount) sampled null targets")
+        }
+        if preview.sampledCadenceGapCount > 0 {
+            parts.append("\(preview.sampledCadenceGapCount) sampled cadence gaps")
+        }
+        return parts.isEmpty ? "Missing values detected." : "Detected \(parts.joined(separator: ", "))."
     }
 
     private func previewColumnIndexes(_ preview: CSVPreview) -> [Int] {

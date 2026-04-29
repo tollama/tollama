@@ -353,6 +353,34 @@ def test_forecast_request_accepts_data_url_without_series() -> None:
     assert request.series == []
 
 
+def test_forecast_request_accepts_ingest_missing_preprocessing_options() -> None:
+    payload = {
+        "model": "naive",
+        "horizon": 3,
+        "data_url": "file:///tmp/history.csv",
+        "ingest": {
+            "format": "csv",
+            "preprocessing": {
+                "missing": {
+                    "enabled": True,
+                    "method": "bspline",
+                    "max_missing_ratio": 0.5,
+                    "max_gap": 12,
+                    "edge_strategy": "nearest",
+                    "seasonal_period": 24,
+                }
+            },
+        },
+        "options": {},
+    }
+
+    request = ForecastRequest.model_validate(payload)
+
+    assert request.ingest is not None
+    assert request.ingest.preprocessing is not None
+    assert request.ingest.preprocessing.missing.method == "bspline"
+
+
 def test_forecast_request_requires_series_or_data_url() -> None:
     payload = {
         "model": "naive",
