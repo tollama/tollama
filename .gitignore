@@ -46,6 +46,10 @@ load_models*.py
 artifacts/realdata/
 data/raw/
 data/csv/raw/
+data/csv/hf_time_series/
+data/csv/*.csv
+data/csv/*.zip
+data/csv/*.parquet
 hf_data/
 lightning_logs/
 
