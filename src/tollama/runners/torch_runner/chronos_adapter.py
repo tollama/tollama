@@ -269,10 +269,11 @@ def _regularize_timestamps(
         return timestamps
 
     try:
+        chronos_freq = _chronos_safe_frequency(freq)
         regular = pandas.date_range(
             start=timestamps[0],
             periods=length,
-            freq=freq,
+            freq=chronos_freq,
         )
         return regular
     except ValueError:
@@ -289,14 +290,27 @@ def _future_timestamps(
     horizon: int,
 ) -> list[Any]:
     try:
+        chronos_freq = _chronos_safe_frequency(freq)
         date_range = pandas.date_range(
             start=last_timestamp,
             periods=horizon + 1,
-            freq=freq,
+            freq=chronos_freq,
         )
     except ValueError as exc:
         raise ValueError(f"invalid frequency {freq!r} for Chronos forecast") from exc
     return list(date_range[1:])
+
+
+def _chronos_safe_frequency(freq: str) -> str:
+    normalized = freq.strip()
+    upper = normalized.upper()
+    if upper == "MS":
+        return "ME"
+    if upper.startswith(("YS", "AS")):
+        return "YE-DEC"
+    if upper.startswith("QS"):
+        return "QE-DEC"
+    return normalized
 
 
 def _response_forecasts_from_pred_df(

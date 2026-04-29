@@ -59,7 +59,7 @@ The detail pane exposes four native tabs:
   preview grid. The Missing Values control is off by default;
   when enabled, the app sends opt-in `auto`, `B-spline`, `linear`, or
   `seasonal` target interpolation settings for sampled null target or cadence
-  gap repair.
+  gap repair. Selecting a different CSV resets this opt-in control to `Off`.
 - `Forecast`: runs one selected CSV against one installed forecast-ready model via
   `/v1/forecast` with a local `data_url`, avoiding multipart request-size
   limits for large local files such as `electricity.csv`. It clamps the horizon

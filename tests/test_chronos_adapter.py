@@ -9,7 +9,11 @@ from typing import Any
 import pytest
 
 from tollama.core.schemas import ForecastRequest, SeriesForecast
-from tollama.runners.torch_runner.chronos_adapter import ChronosAdapter, _ChronosDependencies
+from tollama.runners.torch_runner.chronos_adapter import (
+    ChronosAdapter,
+    _chronos_safe_frequency,
+    _ChronosDependencies,
+)
 
 
 class _FakeDataFrame:
@@ -122,3 +126,11 @@ def test_chronos_adapter_builds_context_and_future_frames_for_known_future_covar
     assert {"id", "timestamp", "target", "promo", "event", "temperature"} <= context_keys
     assert {"id", "timestamp", "promo", "event"} <= future_keys
     assert "temperature" not in future_keys
+
+
+def test_chronos_safe_frequency_uses_period_compatible_aliases() -> None:
+    assert _chronos_safe_frequency("MS") == "ME"
+    assert _chronos_safe_frequency("YS-JAN") == "YE-DEC"
+    assert _chronos_safe_frequency("AS-JAN") == "YE-DEC"
+    assert _chronos_safe_frequency("QS-JAN") == "QE-DEC"
+    assert _chronos_safe_frequency("h") == "h"

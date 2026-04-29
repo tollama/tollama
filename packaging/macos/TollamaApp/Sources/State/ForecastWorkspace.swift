@@ -147,6 +147,7 @@ final class ForecastWorkspace: ObservableObject {
             targetColumnOverride = preview.targetColumn ?? ""
             frequencyOverride = preview.freqColumn == nil ? preview.inferredFrequency ?? "" : ""
             freqColumnOverride = preview.freqColumn ?? ""
+            missingValueMode = .off
         } catch {
             csvPreview = nil
             csvPreviewError = error.localizedDescription

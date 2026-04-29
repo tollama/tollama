@@ -80,6 +80,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - macOS local CSV forecasts now use `/v1/forecast` with `data_url` instead of
   multipart upload, avoiding the daemon request-body limit for large local files
   such as `electricity.csv`
+- Chronos2 forecasts now normalize pandas begin-offset aliases such as `MS`,
+  `YS-JAN`, and `QS-JAN` before runner dispatch to avoid offset dtype crashes
+- macOS Data tab now resets the opt-in Missing Values mode when a new CSV is
+  selected, preventing a previous file's interpolation setting from being
+  applied unexpectedly to a different dataset
 - macOS per-family runtime bootstrap now creates symlinked virtualenv
   interpreters so bundled Python runtimes can locate `libpython` correctly
 - Per-family runtime bootstrap now records an optional-extra dependency
