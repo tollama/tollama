@@ -3,6 +3,7 @@ import SwiftUI
 
 struct DataTab: View {
     @EnvironmentObject private var workspace: ForecastWorkspace
+    private let previewColumnLimit = 48
 
     var body: some View {
         GeometryReader { proxy in
@@ -75,7 +76,7 @@ struct DataTab: View {
             VStack(alignment: .leading, spacing: 18) {
                 Text(preview.url.lastPathComponent)
                     .font(.title2.bold())
-                Text("\(preview.rowCount.map(String.init) ?? "Unknown") rows · \(preview.columns.count) columns")
+                Text(previewSummary(preview))
                     .foregroundStyle(.secondary)
 
                 roleBadges(preview)
@@ -200,7 +201,8 @@ struct DataTab: View {
     }
 
     private func sampleRows(_ preview: CSVPreview) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
+        let columnIndexes = previewColumnIndexes(preview)
+        return VStack(alignment: .leading, spacing: 8) {
             Text("Preview")
                 .font(.headline)
             if preview.columns.isEmpty {
@@ -210,14 +212,15 @@ struct DataTab: View {
                 ScrollView(.horizontal) {
                     Grid(alignment: .leading, horizontalSpacing: 0, verticalSpacing: 0) {
                         GridRow {
-                            ForEach(Array(preview.columns.enumerated()), id: \.offset) { _, column in
+                            ForEach(columnIndexes, id: \.self) { index in
+                                let column = preview.columns[index]
                                 previewCell(column, isHeader: true)
                                     .help(column)
                             }
                         }
                         ForEach(Array(preview.sampleRows.enumerated()), id: \.offset) { _, row in
                             GridRow {
-                                ForEach(Array(preview.columns.indices), id: \.self) { index in
+                                ForEach(columnIndexes, id: \.self) { index in
                                     let value = row[safe: index] ?? ""
                                     previewCell(value, isHeader: false)
                                         .help(value)
@@ -232,6 +235,11 @@ struct DataTab: View {
                     )
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
+                if columnIndexes.count < preview.columns.count {
+                    Text("Showing \(columnIndexes.count) of \(preview.columns.count) columns.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
                 if preview.sampleRows.isEmpty {
                     Text("No data rows detected.")
                         .foregroundStyle(.secondary)
@@ -259,6 +267,26 @@ struct DataTab: View {
                     .fill(Color.secondary.opacity(0.12))
                     .frame(height: 1)
             }
+    }
+
+    private func previewSummary(_ preview: CSVPreview) -> String {
+        let rowLabel = preview.rowCount.map { "\($0) rows" } ?? "Rows not counted for large file"
+        return "\(rowLabel) · \(preview.columns.count) columns"
+    }
+
+    private func previewColumnIndexes(_ preview: CSVPreview) -> [Int] {
+        var indexes = Set(preview.columns.indices.prefix(previewColumnLimit))
+        for column in [
+            preview.timestampColumn,
+            preview.targetColumn,
+            preview.seriesIDColumn,
+            preview.freqColumn,
+        ] {
+            if let column, let index = preview.columns.firstIndex(of: column) {
+                indexes.insert(index)
+            }
+        }
+        return indexes.sorted()
     }
 
     private func chooseFolder() {

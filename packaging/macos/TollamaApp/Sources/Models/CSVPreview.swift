@@ -26,6 +26,7 @@ struct CSVPreview: Equatable, Sendable {
 }
 
 enum CSVSniffer {
+    static let rowCountByteLimit = 16 * 1024 * 1024
     static let timestampCandidates = [
         "timestamp",
         "timestamps",
@@ -133,7 +134,7 @@ enum CSVSniffer {
             url: url,
             columns: columns,
             sampleRows: Array(dataRows.prefix(10)),
-            rowCount: try? countDataRows(in: url),
+            rowCount: try? countDataRowsIfSmall(in: url),
             timestampColumn: timestampColumn,
             targetColumn: targetColumn,
             seriesIDColumn: seriesIDColumn,
@@ -220,6 +221,14 @@ enum CSVSniffer {
             return text
         }
         return String(decoding: data, as: UTF8.self)
+    }
+
+    private static func countDataRowsIfSmall(in url: URL) throws -> Int? {
+        let values = try url.resourceValues(forKeys: [.fileSizeKey])
+        guard (values.fileSize ?? 0) <= rowCountByteLimit else {
+            return nil
+        }
+        return try countDataRows(in: url)
     }
 
     private static func countDataRows(in url: URL) throws -> Int {

@@ -42,15 +42,16 @@ The detail pane exposes four native tabs:
   family, with Hugging Face source metadata, license notices, install/remove
   actions, and streamed `/api/pull` progress.
 - `Data`: chooses a local folder, scans up to 500 visible `.csv` files without
-  counting every row up front, previews the selected file in a fixed cell grid,
-  and shows inferred timestamp/target/series/frequency columns before
-  forecasting. The CSV sniffer recognizes common aliases such as
+  counting every row up front, previews the selected file in a bounded fixed
+  cell grid, and shows inferred timestamp/target/series/frequency columns
+  before forecasting. The CSV sniffer recognizes common aliases such as
   `date`, `Date`, `datetime`, `observation_date`, `series`, `series_id`, `OT`,
   `demand`, `users`, `pm2.5`, and OPSD-style
   `*_load_actual_entsoe_transparency` columns. When timestamp cadence cannot be
   inferred, the Data tab can send an explicit pandas frequency alias such as
   `D`, `h`, or `min`. Preview text accepts UTF-8 plus common Windows-1252 and
-  Latin-1 CSV headers used by weather datasets.
+  Latin-1 CSV headers used by weather datasets, and wide datasets such as
+  `electricity.csv` show a bounded subset of columns in the preview grid.
 - `Forecast`: runs one selected CSV against one installed forecast-ready model via
   `/api/forecast/upload`, clamps the horizon to registry metadata when
   available, down-selects CSVs with multiple inferred series for single-series
