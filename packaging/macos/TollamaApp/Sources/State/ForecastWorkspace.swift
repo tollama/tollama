@@ -13,6 +13,7 @@ final class ForecastWorkspace: ObservableObject {
     @Published private(set) var models: [RegistryModel] = []
     @Published private(set) var csvFiles: [CSVFileItem] = []
     @Published private(set) var csvPreview: CSVPreview?
+    @Published private(set) var csvPreviewError: String?
     @Published private(set) var selectedFolder: URL?
     @Published var selectedCSV: CSVFileItem?
     @Published var selectedModelName: String?
@@ -27,6 +28,7 @@ final class ForecastWorkspace: ObservableObject {
     @Published private(set) var recentForecasts: [ForecastResponseDTO] = []
     @Published private(set) var isLoadingModels = false
     @Published private(set) var isScanningFolder = false
+    @Published private(set) var isLoadingCSVPreview = false
     @Published private(set) var isRunningForecast = false
     @Published var banner: ActionBanner?
 
@@ -90,6 +92,7 @@ final class ForecastWorkspace: ObservableObject {
             } else {
                 selectedCSV = nil
                 csvPreview = nil
+                csvPreviewError = nil
             }
         } catch {
             banner = ActionBanner(title: "Unable to scan folder", detail: error.localizedDescription)
@@ -98,6 +101,12 @@ final class ForecastWorkspace: ObservableObject {
 
     func selectCSV(_ file: CSVFileItem) async {
         selectedCSV = file
+        csvPreview = nil
+        csvPreviewError = nil
+        isLoadingCSVPreview = true
+        defer {
+            isLoadingCSVPreview = false
+        }
         do {
             let preview = try await Task.detached(priority: .userInitiated) {
                 try CSVSniffer.preview(url: file.url)
@@ -110,6 +119,7 @@ final class ForecastWorkspace: ObservableObject {
             freqColumnOverride = preview.freqColumn ?? ""
         } catch {
             csvPreview = nil
+            csvPreviewError = error.localizedDescription
             banner = ActionBanner(title: "Unable to preview CSV", detail: error.localizedDescription)
         }
     }

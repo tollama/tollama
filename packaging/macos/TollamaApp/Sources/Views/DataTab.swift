@@ -79,10 +79,35 @@ struct DataTab: View {
                     .foregroundStyle(.secondary)
 
                 roleBadges(preview)
-                overrideControls(preview)
                 sampleRows(preview)
+                overrideControls(preview)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
+        } else if workspace.isLoadingCSVPreview {
+            VStack(alignment: .leading, spacing: 12) {
+                ProgressView("Loading CSV preview")
+                    .controlSize(.large)
+                if let selectedCSV = workspace.selectedCSV {
+                    Text(selectedCSV.name)
+                        .font(.headline)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+        } else if let selectedCSV = workspace.selectedCSV {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Preview unavailable")
+                    .font(.title2.bold())
+                Text(selectedCSV.name)
+                    .font(.headline)
+                    .foregroundStyle(.secondary)
+                if let error = workspace.csvPreviewError {
+                    Text(error)
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
         } else {
             VStack(alignment: .leading, spacing: 10) {
                 Text("No CSV selected")
@@ -102,7 +127,7 @@ struct DataTab: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(file.name)
                         .font(.headline)
-                    Text("\(file.sizeLabel) · \(file.rowCount.map(String.init) ?? "Unknown") rows")
+                    Text(fileSubtitle(file))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -117,6 +142,13 @@ struct DataTab: View {
             .clipShape(RoundedRectangle(cornerRadius: 8))
         }
         .buttonStyle(.plain)
+    }
+
+    private func fileSubtitle(_ file: CSVFileItem) -> String {
+        guard let rowCount = file.rowCount else {
+            return file.sizeLabel
+        }
+        return "\(file.sizeLabel) · \(rowCount) rows"
     }
 
     private func roleBadges(_ preview: CSVPreview) -> some View {
@@ -171,19 +203,62 @@ struct DataTab: View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Preview")
                 .font(.headline)
-            ScrollView(.horizontal) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(preview.columns.joined(separator: "  |  "))
-                        .font(.system(.caption, design: .monospaced).bold())
-                    ForEach(Array(preview.sampleRows.enumerated()), id: \.offset) { _, row in
-                        Text(row.joined(separator: "  |  "))
-                            .font(.system(.caption, design: .monospaced))
+            if preview.columns.isEmpty {
+                Text("No columns detected.")
+                    .foregroundStyle(.secondary)
+            } else {
+                ScrollView(.horizontal) {
+                    Grid(alignment: .leading, horizontalSpacing: 0, verticalSpacing: 0) {
+                        GridRow {
+                            ForEach(Array(preview.columns.enumerated()), id: \.offset) { _, column in
+                                previewCell(column, isHeader: true)
+                                    .help(column)
+                            }
+                        }
+                        ForEach(Array(preview.sampleRows.enumerated()), id: \.offset) { _, row in
+                            GridRow {
+                                ForEach(Array(preview.columns.indices), id: \.self) { index in
+                                    let value = row[safe: index] ?? ""
+                                    previewCell(value, isHeader: false)
+                                        .help(value)
+                                }
+                            }
+                        }
                     }
+                    .textSelection(.enabled)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8)
+                            .stroke(Color.secondary.opacity(0.18))
+                    )
                 }
-                .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
+                if preview.sampleRows.isEmpty {
+                    Text("No data rows detected.")
+                        .foregroundStyle(.secondary)
+                }
             }
         }
+    }
+
+    private func previewCell(_ value: String, isHeader: Bool) -> some View {
+        Text(value.isEmpty ? " " : value)
+            .font(.system(.caption, design: .monospaced))
+            .fontWeight(isHeader ? .semibold : .regular)
+            .lineLimit(1)
+            .truncationMode(.middle)
+            .frame(width: 132, height: 28, alignment: .leading)
+            .padding(.horizontal, 8)
+            .background(isHeader ? Color.secondary.opacity(0.12) : Color.clear)
+            .overlay(alignment: .trailing) {
+                Rectangle()
+                    .fill(Color.secondary.opacity(0.18))
+                    .frame(width: 1)
+            }
+            .overlay(alignment: .bottom) {
+                Rectangle()
+                    .fill(Color.secondary.opacity(0.12))
+                    .frame(height: 1)
+            }
     }
 
     private func chooseFolder() {

@@ -47,6 +47,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   repeated navigation
 - macOS Data tab now uses a fixed-width native file browser pane instead of a
   nested split view, preventing the left pane from collapsing during tab changes
+- macOS Data tab CSV scanning no longer blocks on counting every file in large
+  folders, and the selected-file preview now renders wide weather-style CSVs in
+  a fixed cell grid with UTF-8, Windows-1252, and Latin-1 text decoding
 - macOS runtime asset builds now resolve and verify the bundled wheelhouse with
   the bundled Python runtime, preventing host-Python wheels from breaking first
   launch installs

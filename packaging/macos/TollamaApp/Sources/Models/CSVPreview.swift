@@ -96,7 +96,7 @@ enum CSVSniffer {
                     url: fileURL,
                     name: fileURL.lastPathComponent,
                     sizeBytes: Int64(values.fileSize ?? 0),
-                    rowCount: try? countDataRows(in: fileURL)
+                    rowCount: nil
                 )
             )
         }
@@ -107,7 +107,7 @@ enum CSVSniffer {
 
     static func preview(url: URL, maxRows: Int = 200) throws -> CSVPreview {
         let data = try readPrefix(url: url, maxBytes: 512 * 1024)
-        let text = String(decoding: data, as: UTF8.self)
+        let text = decodeCSVText(data)
         let parsedRows = parse(text, maxRows: maxRows + 1)
         let columns = parsedRows.first?.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) } ?? []
         let dataRows = Array(parsedRows.dropFirst())
@@ -207,6 +207,19 @@ enum CSVSniffer {
             try? handle.close()
         }
         return handle.readData(ofLength: maxBytes)
+    }
+
+    private static func decodeCSVText(_ data: Data) -> String {
+        if let text = String(data: data, encoding: .utf8) {
+            return text
+        }
+        if let text = String(data: data, encoding: .windowsCP1252) {
+            return text
+        }
+        if let text = String(data: data, encoding: .isoLatin1) {
+            return text
+        }
+        return String(decoding: data, as: UTF8.self)
     }
 
     private static func countDataRows(in url: URL) throws -> Int {
